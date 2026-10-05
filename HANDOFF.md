@@ -413,7 +413,11 @@ id_ex_reg 的 .flush 也改成 any_redir;    // 原来只写 redirect
 **注意**：中断是电平触发，`mret` 后若 mtimecmp 没被清会无限重入 —— 这是**规范的正常行为**，
 由中断处理程序负责写 mtimecmp 清除。
 
-### P3 · fmax 还债（三项指标里唯一退步的）
+### P3 · fmax 还债（三项指标里唯一大幅退步的）⏸ 进行中：实验 A 已挣回 +4.9%
+
+**当前状态：61.4 → 64.4 MHz（+4.9%），绝对吞吐 145.0 → 152.1。**
+实验 A = 跳转目标专用加法器，零周期代价，详见 `results/p3-fmax.md`。
+**本轮到此暂停**，剩余方案与盈亏平衡账见下。
 
 **根因已定位**（`results/bram-v1.md`）：
 ```
@@ -425,21 +429,39 @@ Destination: u_pc/pc_reg[2]/D
 `BRAM → 字节提取 → 写回 mux → 前递 mux → ALU → 目标 mux → PC` 全压在一拍。
 旧版提取逻辑在 MEM/WB 寄存器**之前**，前递路径从寄存器出发；新版挪到了寄存器**之后**。
 
-**修法（按代价排序）**：
-1. load 结果寄存器 + 专用前递通道 —— 提取结果在 WB 拍末打进 `load_result`，前递从它取。
-   代价：load-use 停顿 1→2 拍，约 +7% 周期
-2. 缩短 PC 目标选择链 —— 给 JALR 目标加法器独立 2:1 操作数 mux（现在要穿 ALU 的 3:1 `ex_a` mux），
-   三级目标 mux 压成一级 LUT6
-3. dmem 保持组合读但缩容 —— 需要先把 log 缓冲从 0x90003000 挪低
+**修法（按代价排序，均已用 `profile` 算出盈亏平衡）**：
 
-### P4 · 上板复跑（评分版重建后）
+> 当前 fmax **64.4 MHz**（实验 A 之后）。`profile` 给出 load-use 停顿的时间代价
+> 为 **6.14%**，即**方案 1 需要 fmax 涨过 68.4 MHz 才不亏**。
+
+1. **load 结果寄存器 + 专用前递通道** —— 提取结果在 WB 拍末打进 `load_result`，前递从它取，
+   切断 `BRAM → 前递/PC` 直连。代价：**load-use 停顿 1→2 拍 = +6.14% 周期**。
+   若 fmax 到 74.6 净赚 +9.7%，到 78.4 净赚 +15.6%。**先确认能否保住 1 拍停顿**——
+   若能（例如把字节提取挤进 MEM 拍、让前递从寄存器出发），就是纯赚。
+2. **缩短 PC 目标选择链** —— 已由实验 A 部分完成（跳转目标专用加法器，+4.9%）。
+3. **dmem 保持组合读但缩容** —— 需要先把 log 缓冲从 0x90003000 挪低。
+
+**当前关键路径（实验 A 之后，位置已变）**：
+```
+Source:      u_dmem/mem_reg_1/CLKBWRCLK
+Destination: u_id_ex/rs1_data_reg[29]/D
+15.427ns  (logic 34.8% | route 65.2%),  19 级
+```
+即 **load 结果 → 写回 mux → 前递 mux → ID/EX 的 rs1**，与方案 1 要解决的
+是同一个根因（load 结果落进前递路径），只是终点从 PC 变成了 ID/EX 输入寄存器。
+
+### P4 · 上板复跑（P3 定稿后一次做）⏳ 待用户操作
+
+`fpga/cpu_a100t.bit` 当前是**含 P1 + P3 实验 A 的全新构建**（LUT 3945 / fmax 64.4），
+**尚未上板验证**。建议**等 RTL 改到满意再烧一次**，避免为中间版本反复烧板。
 
 ```bat
 cmd /c D:\USER\Desktop\FPGA\FPGA\fpga\ila_cap_done.bat   REM 读回 CRC 判定 + tick
 cmd /c D:\USER\Desktop\FPGA\FPGA\fpga\ila_cap_mark.bat   REM 抓流水线波形
 ```
 
-预期 `score_result` 的 bit31 = 1，tick ≈ 508,232,400。
+预期 `score_result` 的 bit31 = 1，tick ≈ 508,232,400（**应与 P1 之前一致** ——
+trap 逻辑与跳转目标加法器都不改变指令数/周期数，仿真 ticks 已确认完全相同）。
 
 ### P5 · Cache / AI 加速单元（工作量大，未开始）
 
@@ -612,19 +634,21 @@ cmd /c fpga\build_ila.bat    REM 带 ILA 调试版 (工程模式, 慢; 产物在
 ```
 1. 读 skills/fpga-riscv-a100t/PITFALLS.md   (10 分钟, 能省你几小时)
 2. 读 skills/fpga-riscv-a100t/SKILL.md      (环境与命令配方)
-3. 读 tools/README.md                       (统一工作流: doctor/check/verify/synth/report)
-4. 跑 cmd /c tools\doctor.bat               (环境自检 + 漂移检测, 2 秒)
-5. 跑 python tools\fpga_workflow.py verify  (确认基线 7 PASS)
-6. 做 P4 (上板复跑含 P1 的评分版)            (你操作, 见第 6 节)
-7. 做 P3 (fmax 还债, 从 61.4 往 74+ 挣回来)   (收益最大, 工具已就绪)
-8. 做 P2 (mtimecmp 定时器中断)
+3. 读 HANDOFF-WORKFLOW.md                   (10 轮优化循环 + 判定阈值 + 建议的子命令)
+4. 读 tools/README.md                       (统一工作流: doctor/check/verify/profile/synth/metrics/report)
+5. 跑 cmd /c tools\doctor.bat               (环境自检 + 漂移检测, 2 秒)
+6. 跑 python tools\fpga_workflow.py verify  (确认基线 7 PASS)
+7. 按剩余时间取舍: P3 剩余方案 / P2 定时器中断 / ILA 波形 + 分析报告 / Cache
+8. P4 上板复跑 (RTL 定稿后一次做)
 ```
 
-> ✅ P0（重建评分版）与 P1（异常/中断接线）**已于上一轮完成**，不要再做一遍。
-> P1 的"完成"判定已经落定：`tb_core_trap` 为 PASS、`check` 不再报未接线模块。
+> ✅ P0（重建评分版）、P1（异常/中断接线）**已完成**；P3 实验 A 已完成（fmax +4.9%）
+> 并**暂停**，剩两个方案见上（盈亏平衡账已算清，不要凭感觉做）。
+> 新优化回合请按 `HANDOFF-WORKFLOW.md` §1.1 的七步循环走，它已固化成
+> `skills/fpga-workflow/SKILL.md` 里的标准动作。
 
-**当前三项指标已是可参赛水平（基础任务 + BTB + 完整异常中断全完成）。
-P3 是把唯一大幅退步的指标（fmax 78.4→61.4）补回来，P2 是再补一个高阶任务。**
+**当前三项指标已是可参赛水平（基础任务全完成 + BTB + 完整异常中断）。
+最大失分点是 fmax（78.4 → 64.4，还差 17.9%）。**
 
 ---
 
