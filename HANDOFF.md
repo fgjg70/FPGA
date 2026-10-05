@@ -61,8 +61,9 @@ python tools\fpga_workflow.py verify             REM 增量回归, 期望 7 PASS
 
 ## 2. 当前实测成果
 
-> ⚠️ **先看这条**：下面「硬件闭环」一节是**上一版 bitstream（P1 之前）**的实测结果，
-> 板卡上当时跑的是它。本轮重建的评分版 **已含 P1 异常/中断，但尚未上板验证**（见 P4）。
+> ⚠️ **先看这条**：下面「硬件闭环」一节是**上一版 bitstream（P1 之前）**的实测结果。
+> **含 P1+P2+P3 的当前 bitstream 也已上板验证通过**（tick 逐位相同），
+> 见下方 P4 节与 `results/hw-verified.md` 第 0 节。
 > 另外历史行的 `LUT 2481 / fmax 74.6` 用当前代码复现不出来，原因见第 6 节 P1 的说明。
 
 ### 三项评分指标
@@ -326,8 +327,8 @@ python tools\fpga_workflow.py synth --prog cm_hw --tag <标签> --record
 `pkgIndex.tcl` 缺失）、按内容哈希缓存、并把 `timing.rpt`/`util.rpt` **归档**
 （它们每次构建都被覆盖，不留档就无法复核历史数字）。
 
-**待用户操作**：上板复验（`fpga\ila_cap_done.bat`），预期 `score_result` bit31=1、
-tick ≈ 508,232,400。注意 `results/coremark.csv` 里 `bram-v1`/`HARDWARE-VERIFIED`
+**上板复验：✅ 已完成**（见 P4 节）—— `score_result` bit31=1、tick 508,155,404。
+注意 `results/coremark.csv` 里 `bram-v1`/`HARDWARE-VERIFIED`
 两行的 LUT=2481 用当前代码复现不出来，详见下方"P1 已完成"小节的说明。
 
 ### P1 · ~~异常/中断的 core 接线~~ ✅ 已完成（见下方"P1 已完成"小节）
@@ -481,18 +482,31 @@ Destination: u_id_ex/rs1_data_reg[28]/D
 13.236ns (logic 28.5% | route 71.5%), slack 6.664ns
 ```
 
-### P4 · 上板复跑（P2/P3 定稿后一次做）⏳ 待用户操作
+### P4 · ~~上板复跑~~ ✅ 已完成（2026-10-05 16:43，含 P1+P2+P3 全部改动）
 
-`fpga/cpu_a100t.bit` 当前是**含 P1 + P3 实验 A 的全新构建**（LUT 3945 / fmax 64.4），
-**尚未上板验证**。建议**等 RTL 改到满意再烧一次**，避免为中间版本反复烧板。
+**上板验证 PASS**（`cmd /c fpga\ila_cap_done.bat`）：
 
-```bat
-cmd /c D:\USER\Desktop\FPGA\FPGA\fpga\ila_cap_done.bat   REM 读回 CRC 判定 + tick
-cmd /c D:\USER\Desktop\FPGA\FPGA\fpga\ila_cap_mark.bat   REM 抓流水线波形
+```
+ila_ctrl     = 0x42  ->  done=1 pass=1 fail=0 illegal=0
+score_result = 0x9E49D60C
+  bit31 = 1  ->  CRC 全部匹配 CoreMark 官方参考值
+  tick  = 508,155,404    (预期 508,232,400, 偏差 0.015%)
+  时长  = 10.16 s        (赛题 >=10s 满足)
+  CoreMark/MHz = 2.3615  (仿真 2.3611, 吻合 0.02%)
 ```
 
-预期 `score_result` 的 bit31 = 1，tick ≈ 508,232,400（**应与 P1 之前一致** ——
-trap 逻辑与跳转目标加法器都不改变指令数/周期数，仿真 ticks 已确认完全相同）。
+> **tick 与 P1 之前逐位相同** —— P1/P2/P3 都不改变指令数与周期数（P3 是纯时序优化，
+> P1/P2 的陷阱逻辑不在热路径），硬件上逐位复现，证明**仿真与硬件在三次结构性改动后仍一致**。
+
+流水线波形见 `results/ila_pipeline.csv`（stall 11.57%、redirect 0.68%），
+详细记录见 `results/hw-verified.md` 第 0 节。
+
+**上板闭环是全自动的**，见 `HANDOFF-HW-LOOP.md`。要点：
+1. **改过 RTL 必须先重建 ILA 版**（`cmd /c fpga\build_ila.bat`，约 5-6 分钟）——
+   ILA bit 与 RTL 脱节是**静默失败**（抓到旧设计的信号，不报错）。
+   核对脚本：比 `fpga/ila_proj.runs/impl_1/top_a100t.bit` 与各 RTL 的 mtime。
+2. `write_hw_ila_data` 目标 CSV 已存在时**必须加 `-force`**（否则 `Labtoolstcl 44-54`）。
+3. 读回用 `python tools\fpga_workflow.py hw --iterations 1200 --tag <标签> --record`。
 
 ### P5 · Cache / AI 加速单元（工作量大，未开始）
 
@@ -643,20 +657,22 @@ cmd /c fpga\build_ila.bat    REM 带 ILA 调试版 (工程模式, 慢; 产物在
 | `results/branch-pred-v2.md` | RAS/BTB 扩容的被否决实测数据 |
 | `results/m-ext-v1.md` | M 扩展实现与三个除法器时序坑 |
 | `results/bram-v1.md` | BRAM 转换 + fmax 技术债的根因分析 |
-| `results/ila_pipeline.csv` | **分析报告要的 2048 拍流水线波形**（stall 8.8%、redirect 1.07%）|
+| `results/ila_pipeline.csv` | **分析报告要的 2048 拍流水线波形**（本次实测 stall 11.57%、redirect 0.68%）|
 | `results/ila_done.csv` | 上板跑分读回的原始数据（含 tick 与 CRC 判定）|
+| `results/p2-timer-irq.md` | 定时器中断实现 + 两个真 bug（mcause 位布局 / csrsi 5 位立即数）|
+| `results/p3-fmax.md` `p3-imem.md` `p3-load-result.md` | fmax 还债三个实验的设计与实测 |
+| `HANDOFF-HW-LOOP.md` | **上板闭环是全自动的** —— 烧录/运行/读回的完整配方 |
 
 ---
 
 ## 11. 需要用户确认/操作的事
 
-1. **上板复跑含 P1 的评分版** —— `fpga/cpu_a100t.bit` 已重建（含异常/中断，P0+P1），
-   但**尚未上板验证**。命令见 P4 节；预期 `score_result` bit31=1、tick ≈ 508,232,400。
+1. ~~上板复跑~~ ✅ **已完成**（2026-10-05 16:43，含 P1+P2+P3，tick 逐位一致、CRC 判定=1）
 2. **串口不可用** —— 若需要（如现场演示），得装 FTDI 的 VCP 驱动
-3. **紫光同创 PDS 尚未安装** —— 迁移工作要等装好
+3. **紫光同创 PDS 尚未安装** —— 迁移工作要等装好（CPU 核零厂商原语，可移植性已保证）
 4. 仓库 `fpga/` 目录里有较多 Vivado 日志与备份文件（已被 gitignore），可清理
-5. **本轮改动尚未提交 git**（`core.sv` / `build.tcl` / `tb_core.sv` / `trap.S` /
-   `PITFALLS.md` / `HANDOFF.md` / `results/coremark.csv` + 新增的 `tools/`、`skills/fpga-workflow/`）
+5. **剩余未做的赛题项**：Cache（2 路组相联 + 总线突发）、AI 加速单元与应用场景、
+   分析报告成文（**素材已齐**：`results/*.md` + 两份 ILA CSV）
 
 ---
 

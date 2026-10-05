@@ -1616,6 +1616,90 @@ def cmd_profile(args) -> int:
 
 
 # ==========================================================================
+# hw: 解析上板 ILA 读回结果 (results/ila_done.csv)
+# ==========================================================================
+def cmd_hw(args) -> int:
+    """解析 ILA over JTAG 读回的跑分结果。
+
+    判据来自 HANDOFF-HW-LOOP.md: ila_ctrl 的位定义与 score_result 的打包方式。
+    这是本板**唯一**能拿到上板结论的通道 (串口无 COM 口)。
+    """
+    path = abspath(args.csv)
+    if not os.path.exists(path):
+        print(f"  [BLOCK] 找不到 {args.csv}")
+        print("          先跑: cmd /c fpga\\ila_cap_done.bat")
+        return 1
+    lines = [l for l in read_text(path).splitlines() if l.strip()]
+    hdr = [h.strip().strip('"') for h in lines[0].split(",")]
+
+    def col(name):
+        for i, h in enumerate(hdr):
+            if name in h:
+                return i
+        return None
+
+    ic, ir = col("ila_ctrl"), col("score_result")
+    if ic is None or ir is None:
+        print(f"  [FAIL] CSV 里找不到 ila_ctrl / score_result 列。实际列: {hdr}")
+        return 1
+
+    def px(s):
+        return int(s.strip().strip('"').replace("0x", ""), 16)
+
+    # 抓到达 done=1 的那一拍 (程序跑完的状态)
+    hit = None
+    for ln in lines[1:]:
+        c = ln.split(",")
+        if len(c) <= max(ic, ir):
+            continue
+        ctrl, res = px(c[ic]), px(c[ir])
+        if (ctrl >> 6) & 1:
+            hit = (ctrl, res)
+            break
+    if hit is None:
+        print("  [FAIL] 没有采到 done=1 —— 程序没跑完 (检查 ITERATIONS 与 after 等待时间)")
+        c = lines[-1].split(",")
+        print(f"         最后一拍: ila_ctrl=0x{px(c[ic]):02x} score_result=0x{px(c[ir]):08X}")
+        return 1
+
+    ctrl, res = hit
+    done, mark = (ctrl >> 6) & 1, (ctrl >> 5) & 1
+    illegal, p, f = (ctrl >> 2) & 1, (ctrl >> 1) & 1, ctrl & 1
+    crc, tick = (res >> 31) & 1, res & 0x7FFFFFFF
+    iters = args.iterations
+    cmmhz = iters * 1e6 / tick if tick else 0
+    secs = tick / args.clk_hz
+
+    print("=" * 74)
+    print("  上板读回结果 (ILA over JTAG)")
+    print("=" * 74)
+    print(f"  ila_ctrl     = 0x{ctrl:02X}  -> done={done} pass={p} fail={f} illegal={illegal}")
+    print(f"  score_result = 0x{res:08X}")
+    print(f"    bit31 = {crc}  -> CRC 判定 {'全部匹配官方参考值' if crc else '不匹配 !!'}")
+    print(f"    tick  = {tick:,}")
+    print(f"    iterations = {iters}")
+    print(f"    CoreMark/MHz = {cmmhz:.4f}")
+    print(f"    时长 = {secs:.2f} s @{args.clk_hz/1e6:.0f}MHz"
+          f"  (赛题要求 >= 10 s: {'满足' if secs >= 10 else '不满足 !!'})")
+    if args.expect_tick:
+        print(f"    对照预期 {args.expect_tick:,}: 偏差 "
+              f"{abs(tick-args.expect_tick)/args.expect_tick*100:.3f}%")
+    ok = done and p and not f and not illegal and crc
+    print(f"\n  => 上板验证 {'PASS' if ok else 'FAIL'}")
+
+    if args.record:
+        res_m = parse_reports()
+        m = {"cm_mhz": cmmhz, "fmax": res_m.get("fmax"), "lut": res_m.get("lut"),
+             "ff": res_m.get("ff"), "bram": res_m.get("bram"), "dsp": res_m.get("dsp"),
+             "cm_lut": (cmmhz / res_m["lut"]) if res_m.get("lut") else None,
+             "throughput": (cmmhz * res_m["fmax"]) if res_m.get("fmax") else None,
+             "iters": iters, "ticks": tick}
+        append_csv(args.tag or "HARDWARE-RERUN", m)
+    print("=" * 74)
+    return 0 if ok else 1
+
+
+# ==========================================================================
 # doctor
 # ==========================================================================
 def cmd_doctor(args) -> int:
@@ -1687,6 +1771,15 @@ def main() -> int:
     p.add_argument("--max-cycles", type=int, default=5000000)
     p.add_argument("--timeout", type=int, default=1200)
     p.set_defaults(func=cmd_profile)
+
+    p = sub.add_parser("hw", help="解析上板 ILA 读回结果 (results/ila_done.csv)")
+    p.add_argument("--csv", default="results/ila_done.csv", help="ILA 抓取的 CSV")
+    p.add_argument("--iterations", type=int, default=1200, help="镜像里的 ITERATIONS")
+    p.add_argument("--clk-hz", type=float, default=50e6, help="板载时钟频率 (默认 50MHz)")
+    p.add_argument("--expect-tick", type=int, help="预期 tick, 用于算偏差")
+    p.add_argument("--tag", help="记录进 coremark.csv 的标签")
+    p.add_argument("--record", action="store_true", help="追加一行到 results/coremark.csv")
+    p.set_defaults(func=cmd_hw)
 
     p = sub.add_parser("synth", help="Vivado 综合 -> 四项指标 (自动串行化 + 缓存)")
     p.add_argument("--prog", default="cm_hw",

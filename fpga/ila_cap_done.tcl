@@ -35,5 +35,6 @@ run_hw_ila $ila
 puts "ARMED"
 wait_on_hw_ila -timeout 60 $ila
 upload_hw_ila_data $ila
-write_hw_ila_data -csv_file {D:/USER/Desktop/FPGA/FPGA/results/ila_done.csv} hw_ila_data_1
+# -force: results/ila_done.csv 已存在时必须显式覆盖 (否则 Labtoolstcl 44-54 报错)
+write_hw_ila_data -force -csv_file {D:/USER/Desktop/FPGA/FPGA/results/ila_done.csv} hw_ila_data_1
 puts "CAPTURE_OK"
