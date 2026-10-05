@@ -155,6 +155,27 @@ MODULE_RE = re.compile(r"^\s*module\s+([A-Za-z_]\w*)", re.M)
 INST_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*(?:#\s*\([^;]*?\)\s*)?([A-Za-z_]\w*)\s*\(", re.M)
 
 
+def synth_inputs_for(args=None) -> list[str]:
+    """本次综合**实际用到**的输入文件清单。
+
+    【为什么需要它】`canonical_rtl()` 是"仓库里所有核 .sv"的全清单, 但有些模块
+    被宏门控、根本不进网表 —— 例如 `gemm_accel.sv` 只在定义 `GEMM_EN` 时才被
+    `mmio_subsys.sv` 例化。若拿它的 mtime 判"bitstream 是否过期", 就会**误报**
+    stale (实测踩过: 明明两个构建都没开 GEMM_EN, check 却报 gemm_accel.sv 过期)。
+
+    所以: 这里把门控模块过滤掉, 得到"真的会被综合"的那一份清单。
+    check 判新鲜度、synth 记录清单, 两边都用它, 保证口径一致。
+    """
+    gemm_on = bool(getattr(args, "gemm", False))
+    out = []
+    for f in canonical_rtl():
+        base = os.path.basename(f)
+        if base == "gemm_accel.sv" and not gemm_on:
+            continue          # GEMM_EN 关 -> 该模块不会被例化, 不进网表
+        out.append(f)
+    return out + ["fpga/top_a100t.sv", "fpga/mmio_subsys.sv", "fpga/daVinciPro.xdc"]
+
+
 def declared_modules(rel: str) -> list[str]:
     try:
         return MODULE_RE.findall(read_text(abspath(rel)))
@@ -433,20 +454,30 @@ def check_bitstream_freshness() -> list[dict]:
     # 【镜像用内容哈希判据, 不用 mtime】—— 重建一份"逐字节相同"的镜像会让 mtime
     # 变新, 用 mtime 就会误报 stale。synth 每次构建会记下当时用的镜像哈希,
     # 哈希没变就说明 bitstream 里的程序镜像仍然对得上。
+    #
+    # 【RTL 要按"那次综合实际用的输入清单"判, 不能按 canonical_rtl() 全清单】
+    # 有些模块被宏门控 (例如 gemm_accel.sv 由 GEMM_EN 控制, 两个构建都不定义它),
+    # 它们根本不在 bitstream 里 —— 拿它们的 mtime 去判 stale 会**误报**。
+    # synth 会把当时用的输入清单记进 synth-cache.json, 这里优先采用。
     newer = []
-    inputs = canonical_rtl() + [
-        "fpga/top_a100t.sv", "fpga/mmio_subsys.sv", "fpga/daVinciPro.xdc",
-    ]
+    try:
+        sc = json.loads(read_text(os.path.join(CACHE_DIR, "synth-cache.json")))
+    except Exception:
+        sc = {}
+    rec = sc.get("image_hash", {}).get(prog) or {}
+    recorded_inputs = rec.get("inputs")
+    if recorded_inputs:
+        inputs = list(recorded_inputs)
+    else:
+        # 旧版本构建没记录 -> 退回全清单 (偏保守, 可能误报但不会漏报)
+        inputs = canonical_rtl() + [
+            "fpga/top_a100t.sv", "fpga/mmio_subsys.sv", "fpga/daVinciPro.xdc",
+        ]
     for f in inputs:
         fp = abspath(f)
         if os.path.exists(fp) and os.path.getmtime(fp) > bit_t:
             newer.append(f)
 
-    try:
-        sc = json.loads(read_text(os.path.join(CACHE_DIR, "synth-cache.json")))
-        rec = sc.get("image_hash", {}).get(prog)
-    except Exception:
-        rec = None
     for label, rel in (("imem", imem_img), ("dmem", dmem_img)):
         if not rel or not os.path.exists(abspath(rel)):
             continue
@@ -1418,7 +1449,11 @@ def cmd_synth(args) -> int:
         except Exception:
             sc = {}
         sc.setdefault("image_hash", {})[prog] = {
-            "imem": sha256_file(imem), "dmem": sha256_file(dmem)
+            "imem": sha256_file(imem), "dmem": sha256_file(dmem),
+            # 记下**这次综合实际用的输入清单**。check 判"bitstream 是否过期"时
+            # 用它而不是 canonical_rtl() 全清单 —— 否则被宏门控、根本没进 bitstream
+            # 的模块会**误报** stale。
+            "inputs": synth_inputs_for(args),
         }
         os.makedirs(CACHE_DIR, exist_ok=True)
         with open(sstate, "w", encoding="utf-8") as f:
