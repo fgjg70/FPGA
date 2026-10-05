@@ -574,7 +574,32 @@ score_result = 0x9E49D60C
 2. `write_hw_ila_data` 目标 CSV 已存在时**必须加 `-force`**（否则 `Labtoolstcl 44-54`）。
 3. 读回用 `python tools\fpga_workflow.py hw --iterations 1200 --tag <标签> --record`。
 
-### P5 · Cache / AI 加速单元（工作量大，未开始）
+### 上板闭环 —— ⚠ **板子当前未连接（2026-10-05 22:13 起）**
+
+**最后一次成功上板：2026-10-05 17:49**（`results/ila_done.csv` 时间戳），
+结果 PASS：`ila_ctrl=0x42`、CRC 判定=1、tick=508,155,404、10.16 s。
+那次验证的 bitstream 与当时的 RTL 一致。
+
+**2026-10-05 22:13 起 JTAG 检测不到器件**：
+```
+ERROR: [Labtools 27-2269] No devices detected on target
+       localhost:3121/xilinx_tcf/Digilent/210512180081
+```
+
+> ⚠️ **陷阱**：`python tools\fpga_workflow.py hw` 在板子掉线时**不报错** ——
+> 它只是重新解析 `results/ila_done.csv` 这个**上次抓的**文件，于是照样打印
+> "上板验证 PASS"。**必须同时看 CSV 的时间戳**，否则会把陈旧结果当成新验证
+> （本轮差点被它骗过去：先看到 `=> 上板验证 PASS`，再看时间戳才发现是 4.5 小时前的）。
+> 采集脚本 `ila_cap_done.bat` 本身会正确报错；需要加时间戳判断的是 `hw` 子命令。
+
+**恢复步骤**（用户操作）：重新插好 USB/JTAG 线 -> `cmd /c fpga\jtag_probe.bat`
+确认能识别器件 -> 再跑 `cmd /c fpga\ila_cap_done.bat`。
+
+**注意**：17:49 之后 RTL 有改动（新增 GEMM 加速单元与其诊断寄存器），
+所以**当前 bitstream 已过期**（`check` 会报出来）。板子恢复后应重新
+`build_ila.bat` + 抓取，才能声称"最新代码已上板"。
+
+### P5 · Cache / AI 加速单元（进行中）
 
 ### P6 · 迁移紫光同创 PDS（需用户先装 PDS）
 
