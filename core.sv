@@ -96,6 +96,15 @@ module core
   logic        md_busy, is_muldiv;
   logic        ex_taken;
 
+  // ---- Zicsr / 陷阱 (M-mode) ----
+  logic [31:0] csr_rdata, csr_wdata, csr_src;
+  logic        csr_we, is_csr;
+  logic        exc_req, irq_take, trap_req, trap_enter, trap_redir, any_redir;
+  logic [4:0]  trap_cause, irq_cause;
+  logic [3:0]  exc_cause;
+  logic [31:0] trap_vector, mret_pc;
+  logic        irq_pending, mret_taken, is_mret;
+
   // EX/MEM
   ctrl_s       ex_mem_ctrl;
   logic [31:0] ex_mem_alu_out, ex_mem_store_data, ex_mem_pc_plus4;
@@ -147,7 +156,7 @@ module core
     .rdata (imem_rdata)
   );
 
-  assign if_id_flush = redirect;
+  assign if_id_flush = any_redir;
 
   // ==========================================================================
   // 分支预测 (IF 预测 / EX 校验)
@@ -229,7 +238,9 @@ module core
   id_ex_reg u_id_ex (
     .clk         (clk),
     .rst         (rst),
-    .flush       (redirect),
+    // 陷阱也必须冲掉 ID/EX —— 否则触发指令会继续走到 MEM/WB 产生副作用,
+    // 陷阱就不再是"精确"的了 (见本文件顶部陷阱注释)。
+    .flush       (any_redir),
     .stall       (pipe_stall),
     .bubble      (id_ex_bubble),
     .ctrl_in     (id_ctrl),
@@ -305,8 +316,12 @@ module core
     .busy   (md_busy)
   );
 
-  // 写回结果: M 指令取 muldiv, 其余取 ALU
-  assign ex_result = is_muldiv ? md_result : ex_alu_out;
+  // 写回结果: M 指令取 muldiv, CSR 指令取读到的旧值, 其余取 ALU。
+  // WB_CSR 走写回 mux 的 default 分支 (mem_wb_alu_out), 而 EX/MEM 存的就是
+  // ex_result —— 所以只要在这里加一路, CSR 读值就自然到了 WB 段。
+  assign ex_result = is_muldiv ? md_result
+                   : is_csr    ? csr_rdata
+                   :             ex_alu_out;
 
   branch_unit #(.XLEN(XLEN)) u_branch (
     .rs1         (ex_rs1),        // 分支用前递后的寄存器值
@@ -348,8 +363,74 @@ module core
   // 预测正确时绝不能冲刷, 否则两条正确路径被白白丢掉, 预测收益归零。
   assign redirect_raw = !pred_ok;
 
-  assign pc_src    = redirect || pred_taken;
-  assign pc_target = redirect ? actual_target : pred_target;
+  // ==========================================================================
+  // Zicsr 与陷阱 (M-mode) —— 赛题高阶任务"完整异常/中断"
+  // --------------------------------------------------------------------------
+  // 陷阱在 EX 段、指令 *提交之前* 裁决, 与分支预测错误共用同一套冲刷机制。
+  // 这样陷阱是精确的: 触发指令被冲成气泡 -> 不写寄存器、不写存储器, 而它之前
+  // 的指令全部已经提交。mepc 记 trap_pc 本身(不 +4), 因为被抢占的指令必须
+  // 重新执行 —— 异常时它是触发指令, 中断时它是本来要执行的下一条。
+  // ==========================================================================
+  csr_file u_csr (
+    .clk         (clk),
+    .rst         (rst),
+    .raddr       (id_ex_ctrl.csr_addr),
+    .rdata       (csr_rdata),
+    .we          (csr_we),
+    .waddr       (id_ex_ctrl.csr_addr),
+    .wdata       (csr_wdata),
+    .trap_req    (trap_req),
+    .trap_cause  (trap_cause),
+    .trap_pc     (id_ex_pc),
+    .trap_tval   (32'd0),
+    .trap_enter  (trap_enter),
+    .trap_vector (trap_vector),
+    .mret_req    (is_mret && !pipe_stall),
+    .mret_taken  (mret_taken),
+    .mret_pc     (mret_pc),
+    .irq_timer   (1'b0),        // P2 待接: mmio_subsys 实现 mtimecmp 后接过来
+    .irq_ext     (1'b0),
+    .irq_pending (irq_pending),
+    .irq_cause   (irq_cause)
+  );
+
+  // ---- EX 段 CSR 读改写 ----
+  assign is_csr    = (id_ex_ctrl.sys_op == SYS_CSR);
+  assign csr_src   = id_ex_ctrl.csr_src_imm ? {27'b0, id_ex_ctrl.csr_uimm} : ex_rs1;
+  assign csr_wdata = (id_ex_ctrl.csr_cmd == 2'b01) ? csr_src
+                   : (id_ex_ctrl.csr_cmd == 2'b10) ? (csr_rdata |  csr_src)
+                   :                                (csr_rdata & ~csr_src);
+  // 规范: CSRRS/CSRRC 且源为 0 时不写 —— 读只读寄存器不得触发异常。
+  // exc_req 也参与否决: 陷阱与 CSR 写不能同拍 (异常指令本身就不该有副作用)。
+  assign csr_we    = is_csr && !pipe_stall && !exc_req &&
+                     (id_ex_ctrl.csr_cmd == 2'b01 || csr_src != 32'd0);
+
+  // ---- 陷阱判定 (EX 段, 指令提交前) ----
+  // 优先于分支重定向: 异常/中断一旦成立, 这条指令不能提交, 分支结果也不再重要。
+  assign is_mret  = (id_ex_ctrl.sys_op == SYS_MRET);
+  assign exc_req  = !pipe_stall && (id_ex_ctrl.illegal ||
+                                    id_ex_ctrl.sys_op == SYS_ECALL ||
+                                    id_ex_ctrl.sys_op == SYS_EBREAK);
+  assign exc_cause = id_ex_ctrl.illegal            ? CAUSE_ILLEGAL
+                   : id_ex_ctrl.sys_op == SYS_ECALL ? CAUSE_ECALL_M
+                   :                                  CAUSE_BREAKPOINT;
+  // 中断优先级低于异常 (规范要求), 且不在 MRET 那一拍取中断。
+  assign irq_take  = irq_pending && !pipe_stall && !exc_req && !is_mret;
+  assign trap_req  = exc_req || irq_take;
+  assign trap_cause = exc_req ? {1'b0, exc_cause} : irq_cause;
+  // 访存地址错异常 (CAUSE_LOAD/STORE_MISALIGN) 本核按"支持非对齐访存"处理,
+  // 故不产生 —— tb_core 的 basic.hex 专门测了非对齐访存, 必须继续通过。
+
+  // ---- 重定向: 分支预测错误 与 陷阱 共用 ----
+  assign trap_redir = trap_enter || mret_taken;
+  assign any_redir  = redirect || trap_redir;
+
+  assign pc_src    = any_redir || pred_taken;
+  // 目标优先级: 陷阱入口 > MRET 返回 > 预测错误纠正 > 预测目标
+  assign pc_target = trap_enter ? trap_vector
+                   : mret_taken ? mret_pc
+                   : redirect   ? actual_target
+                   :              pred_target;
 
   // ==========================================================================
   // 冒险单元
@@ -505,21 +586,30 @@ module core
   assign dbg_mem_addr  = dmem_addr;
   assign dbg_mem_wdata = dmem_wdata;
 
-  // 非法指令粘滞标志。
-  // redirect=1 的这一拍, ID 段里装的是分支/跳转的 *错误路径* 后继指令, 它马上
-  // 就会被冲掉; 若它恰好译码非法, 标志会被误置 1, 而 tb_core 把该标志当硬失败
-  // -> 假失败。因此必须用 !redirect 排除。
-  // 反方向不会漏报: 一条真正执行的非法指令要进 ID/EX 就必须 !pipe_stall, 那种
-  // 情况下 redirect 只可能由别的指令(更老的)产生。
+  // 非法指令粘滞标志 (调试用: 表示"发生了一次**没被处理**的非法指令")。
+  // 两个必须排除的情况, 都会造成假失败:
+  //   1) redirect=1 的这一拍, ID 段里装的是分支/跳转的 *错误路径* 后继指令, 它马上
+  //      就会被冲掉; 若它恰好译码非法, 标志会被误置 1。
+  //   2) trap_enter=1 的这一拍, 非法指令正在被陷阱机制**正常接管** —— 它不再是
+  //      "错误", 而是 trap.S 专门要测的行为。此时若仍置位, tb_core 会立刻 $fatal,
+  //      测试程序根本没机会跑它的 handler。
+  // 【必须用 id_ex_ctrl.illegal (EX 段), 不能用 id_ctrl.illegal (ID 段)】
+  //   陷阱是在 EX 段裁决的, trap_enter 由 id_ex_ctrl.illegal 驱动。ID 段的 illegal
+  //   比它早整整一拍 —— 用 ID 段会在"非法指令还在 ID、trap 尚未触发"那一拍就置位,
+  //   与 trap_enter 对不上, 于是假失败依旧发生 (实测: cyc50 id_illegal=1 而
+  //   exc_req=0; cyc51 才 ex_illegal=1/trap_enter=1)。
+  // 反方向不会漏报: 真正无法处理的非法指令 (trap 未接线) 不会进 trap_enter, 标志照常置位。
   always_ff @(posedge clk or posedge rst) begin
-    if (rst)                                               dbg_illegal <= 1'b0;
-    else if (id_ctrl.illegal && !pipe_stall && !redirect)  dbg_illegal <= 1'b1;
+    if (rst)                                                               dbg_illegal <= 1'b0;
+    else if (id_ex_ctrl.illegal && !pipe_stall && !redirect && !trap_enter) dbg_illegal <= 1'b1;
   end
 
-  // 跳转目标必须 4 字节对齐 (未来 trap 单元接管时删除此断言)
+  // 跳转目标必须 4 字节对齐。陷阱接管后这条断言覆盖 redirect 与 trap_redir 两条路径:
+  // trap_vector 在 csr_file 里已按 {mtvec[31:2],2'b00} 对齐, mepc 写入时同样对齐,
+  // 所以两者本来就恒定对齐 —— 保留断言等于免费多一道保险。
   `ifndef SYNTHESIS
   always_ff @(posedge clk) begin
-    if (!rst && redirect && (pc_target[1:0] != 2'b00)) begin
+    if (!rst && any_redir && (pc_target[1:0] != 2'b00)) begin
       $error("instruction address misaligned: target=%h", pc_target);
     end
   end

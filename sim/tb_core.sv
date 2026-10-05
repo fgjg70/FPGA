@@ -67,6 +67,55 @@ module tb_core;
   // tohost 观察 (直接看 DMEM 内的字; 程序不做其它解释)
   wire [31:0] tohost_word = u_dut.u_dmem.mem[TOHOST_WORD_IDX];
 
+  // ==========================================================================
+  // 陷阱诊断探针 (加 +illegal_trace 才启用, 平时零开销)
+  // --------------------------------------------------------------------------
+  // 为什么需要它: dbg_illegal 是**粘滞**标志 (只置位不清零), 所以它一旦置位就无法
+  // 从值本身判断"是哪一拍、哪条指令"触发的。之前只靠 PC/instr 猜, 猜错过两次
+  // (报 0x8000005c, 又报 0x80000058, 真正的非法指令在 0x80000054)。
+  // 这里直接打印锁存那一拍的完整状态, 一次看清。
+  // ==========================================================================
+  `ifndef SYNTHESIS
+  // 逐拍 pre-edge 轨迹: 在 negedge 采样, 避开 tb 的 always_ff, 这样即使 $fatal
+  // 终止仿真, 最后几拍的状态也已经打印出来了。
+  always @(negedge clk) begin
+    if (!rst && $test$plusargs("illegal_trace") && cycles >= 40) begin
+      $display("[pre] cyc=%0d if_pc=0x%08x if_instr=0x%08x | ex_pc=0x%08x ex_illegal=%b",
+               cycles, u_dut.if_pc, u_dut.if_instr, u_dut.id_ex_pc, u_dut.id_ex_ctrl.illegal);
+      $display("      id_illegal=%b exc_req=%b trap_req=%b trap_enter=%b trap_redir=%b irq_take=%b irq_pend=%b",
+               u_dut.id_ctrl.illegal, u_dut.exc_req, u_dut.trap_req, u_dut.trap_enter,
+               u_dut.trap_redir, u_dut.irq_take, u_dut.irq_pending);
+      $display("      pipe_stall=%b redirect=%b redirect_raw=%b actual_taken=%b pred_ok=%b ex_taken=%b pc_src=%b",
+               u_dut.pipe_stall, u_dut.redirect, u_dut.redirect_raw, u_dut.actual_taken,
+               u_dut.pred_ok, u_dut.ex_taken, u_dut.pc_src);
+      $display("      dmem_we=%b mem_read=%b mem_write=%b reg_write=%b pc_sel=%0d dbg_illegal=%b",
+               u_dut.dmem_we, u_dut.id_ex_ctrl.mem_read, u_dut.id_ex_ctrl.mem_write,
+               u_dut.id_ex_ctrl.reg_write, u_dut.id_ex_ctrl.pc_sel, dbg_illegal);
+    end
+  end
+  `endif
+
+  `ifndef SYNTHESIS
+  initial begin
+    bit trace_on;
+    trace_on = $test$plusargs("illegal_trace");
+    if (trace_on) begin
+      $display("[trace] cycle | if_pc      if_instr    (ID) | ex_pc      | ill stll bubl trap_enter redirect exc_req");
+      forever begin
+        @(posedge clk);
+        if (!rst) begin
+          $display("[trace] %5d | 0x%08x 0x%08x | 0x%08x |  %b   %b    %b      %b        %b      %b",
+                   cycles,
+                   u_dut.if_pc, u_dut.if_instr,
+                   u_dut.id_ex_pc,
+                   u_dut.id_ctrl.illegal, u_dut.pipe_stall, u_dut.id_ex_bubble,
+                   u_dut.trap_enter, u_dut.redirect, u_dut.exc_req);
+        end
+      end
+    end
+  end
+  `endif
+
   initial begin
     begin
       string dump_file;
@@ -95,8 +144,11 @@ module tb_core;
 
       if (dbg_illegal) begin
         finished = 1'b1;
-        $display("[tb_core] FAIL: 遇到非法指令 (PC=0x%08x instr=0x%08x)",
-                 dbg_pc, dbg_instr);
+        // 必须用 dbg_id_pc 而不是 dbg_pc: dbg_illegal 是在 ID 段锁存的, 而 dbg_pc
+        // 是 IF 段"正在取"的地址, 比那条非法指令早 2 条 (8 字节)。用 dbg_pc 会把
+        // 诊断指向无关的地方 (实测: 报了 PC=0x8000005c, 真正的非法指令在 0x80000054)。
+        $display("[tb_core] FAIL: 遇到非法指令 (id_pc=0x%08x instr=0x%08x)",
+                 dbg_id_pc, dbg_instr);
         $fatal(1);
       end
 

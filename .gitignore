@@ -19,6 +19,17 @@ sim/prog/*.lst
 # ---- 本机便携工具链 (只属于这台机器, 不入库) ----
 tools/riscv-tools/
 
+# ---- 工作流工具的增量回归缓存 (由 tools/fpga_workflow.py 生成) ----
+# 内容指纹 + ModelSim work 库 + 每个测试的完整日志, 全部可完全再生
+.fpga-cache/
+
+# ---- DSH 技能发现根 (本机配置, 不入库) ----
+# DSH 的技能目录按"最近的含 .git 的祖先"定位, 即 <projectRoot>/.dsh/skills。
+# 本仓库的 projectRoot = D:\USER\Desktop\FPGA\FPGA, 但技能源文件在 skills/ 下,
+# 不在任何被扫描的根里 -> 靠 .dsh/skills/ 里的 junction 把它们暴露出去。
+# junction 是本机路径, 别人的机器上要重建 (见 tools/README.md "技能注册")。
+.dsh/
+
 # ---- 软件构建产物: 由 tools/build_sw.py 生成, 可完全再生 ----
 sim/prog/*.elf
 sim/prog/*.map

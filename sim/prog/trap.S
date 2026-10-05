@@ -15,8 +15,13 @@
 
     .text
     # -------- 安装陷阱处理程序 --------
-    li   t0, handler
-    csrw mtvec, t0
+    # 【必须用一个 handler 不会破坏的寄存器, 所以用 s1 而不是 t0】
+    # handler 自己要用 t0 (csrr t0, mcause / mepc), 它一执行就把 t0 覆盖成 mcause。
+    # 之后主程序那句 `csrw mtvec, s1` 若写成 t0, 就会把 mtvec 写坏 —— 实测写进去
+    # 的值正好等于 mcause (11), 下一次陷阱直接跳到 0x00000000 跑飞。
+    # 这个 bug 在"陷阱没接线"时永远不会暴露 (ecall 根本没陷入), P1 接线一完成才现形。
+    li   s1, handler
+    csrw mtvec, s1
     li   s2, 0                  # 陷阱计数
     li   s3, 0                  # 陷阱内自检失败标记
 
@@ -42,9 +47,9 @@
     bne  s3, zero, fail4
 
     # -------- 5/6. 读回 CSR, 确认写进去了 --------
-    csrw mtvec, t0              # t0 仍是 handler 地址
+    csrw mtvec, s1              # s1 仍是 handler 地址 (t0 会被 handler 破坏)
     csrr t1, mtvec
-    bne  t1, t0, fail5
+    bne  t1, s1, fail5
 
     csrsi mstatus, 8            # MIE = 1
     csrr t1, mstatus

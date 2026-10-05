@@ -12,9 +12,17 @@
 ## 0. 一句话现状
 
 **RV32IM 五级流水线 CPU 已在真实板卡上跑通 CoreMark v1.0（1200 次迭代 / 10.16 秒 / CRC 逐位正确），
-三项评分指标齐全；赛题的基础任务全部完成。异常/中断已完成大半但 core 接线未做。**
+三项评分指标齐全；赛题的基础任务全部完成。异常/中断（P1）已于本轮接入 core 并通过全部回归。**
 
 仓库：`D:\USER\Desktop\FPGA\FPGA`（git，工作区干净，HEAD = `9083059`）
+
+**上手第一件事（不要跳过，2 秒）**：
+```bat
+cmd /c tools\doctor.bat                          REM 环境自检 + R1 漂移检测
+python tools\fpga_workflow.py verify             REM 增量回归, 期望 7 PASS
+```
+工具集说明见 `tools/README.md`；本轮的教训已补进 `skills/fpga-riscv-a100t/PITFALLS.md`
+（新增 R4/R5 与"一·五 逐拍诊断"一节）。
 
 ---
 
@@ -35,25 +43,43 @@
 → **本仓库全部完成** ✅
 
 **高阶任务（加分）**：2 路组相联 I/D Cache + 总线突发 / 动态分支预测(BTB) + 完整异常中断 / AI 加速单元
-→ BTB 已完成 ✅；异常中断 **大半完成，差 core 接线** ⬜；Cache 与 AI 未做 ⬜
+→ BTB ✅；**完整异常/中断 ✅（本轮 P1 完成，7/7 回归通过）**；Cache 与 AI 未做 ⬜
 
 **其他评分维度**：代码规范 ✅ / 分析报告（含 ILA 波形）素材已备 ✅ / 应用场景与 AI 模型未做 ⬜
+
+### 还剩什么（按赛题加分价值排序）
+
+| 项 | 价值 | 难度 |
+|---|---|---|
+| **fmax 还债 78.4→61.4** | 三项指标之一，**当前是最大失分点** | 中（根因已定位）|
+| mtimecmp 定时器中断（P2）| 补齐"完整中断"的最后一块（现只有异常 + 已就绪的中断通路）| 低 |
+| Cache（2 路组相联 + 突发）| 高阶任务，BRAM 已就位是前置条件 | 高 |
+| AI 加速单元 + 应用场景 | 高阶任务与独立评分维度 | 高 |
+| 迁移紫光同创 PDS | 赛题平台要求（但 CPU 核零厂商原语，已具可移植性）| 中（等装 PDS）|
 
 ---
 
 ## 2. 当前实测成果
 
+> ⚠️ **先看这条**：下面「硬件闭环」一节是**上一版 bitstream（P1 之前）**的实测结果，
+> 板卡上当时跑的是它。本轮重建的评分版 **已含 P1 异常/中断，但尚未上板验证**（见 P4）。
+> 另外历史行的 `LUT 2481 / fmax 74.6` 用当前代码复现不出来，原因见第 6 节 P1 的说明。
+
 ### 三项评分指标
 
-| 指标 | 基线 | **当前** | 变化 |
+| 指标 | 基线 | **最新可复现实测** | 变化 |
 |---|---|---|---|
-| **CoreMark/MHz** | 0.8263 | **2.3615（硬件实测）** | **+186%** |
-| **最高时钟频率** | 78.4 MHz | **74.6 MHz** | −4.8% |
-| **CoreMark/LUTs** | 2.361e-4 | **9.518e-4** | **+303%** |
+| **CoreMark/MHz** | 0.8263 | **2.3614**（仿真，硬件吻合 0.02%）| **+186%** |
+| **最高时钟频率** | 78.4 MHz | **61.4 MHz**（`synth` 实测 WNS 3.710ns）| −21.7% |
+| **CoreMark/LUTs** | 2.361e-4 | **6.019e-4** | **+154.9%** |
 
-资源：LUT 2481 / FF 1059 / BRAM 4 / DSP 8（评分版，不含 ILA）
+资源：**LUT 3923 / FF 1333 / BRAM 4 / DSP 8**（评分版，含 P1，不含 ILA）
+绝对吞吐 = CoreMark/MHz × fmax = **145.0**（基线 64.8，+123.8%）
 
-### 硬件闭环（真实板卡，非仿真）
+> 这三行由 `python tools\fpga_workflow.py report` 从 `results/coremark.csv` 重算得出，
+> 是**当前唯一可复现**的数字。旧记录（LUT 2481 / fmax 74.6）见下方历史表与第 6 节的说明。
+
+### 硬件闭环（真实板卡，非仿真）—— **P1 之前的版本**
 
 ```
 ila_ctrl     = 0x42  ->  done=1  pass=1  fail=0  illegal=0
@@ -64,6 +90,7 @@ score_result = 0x9E49D60C
 ```
 
 CoreMark/MHz 硬件 2.3615 vs 仿真 2.3611，吻合到 0.02%。
+**含 P1 的新评分版待复跑，预期 tick 不变（trap 逻辑不在热路径上）。**
 
 ### 逐轮指标历史（`results/coremark.csv`，含被否决的配置）
 
@@ -74,8 +101,12 @@ CoreMark/MHz 硬件 2.3615 vs 仿真 2.3611，吻合到 0.02%。
 | rv32im-v1 | 414,062 | 2.4151 | 4532 | 64.7 | **rejected** |
 | m-ext-v2 | 423,486 | 2.3614 | 4551 | 74.6 | keep |
 | branch-pred-v2-ras | 419,180 | 2.3856 | 4809 | 71.2 | **rejected** |
-| bram-v1 | 423,486 | 2.3614 | **2481** | 63.9 | keep |
-| HARDWARE-VERIFIED | 508,155,404 | **2.3615** | 2481 | 74.6 | **实测** |
+| bram-v1 | 423,486 | 2.3614 | 2481 ⚠️ | 63.9 | keep |
+| HARDWARE-VERIFIED | 508,155,404 | **2.3615** | 2481 ⚠️ | 74.6 | 上板实测（P1 前）|
+| p0-score-cm_hw | 423,486 | 2.3614 | 3679 | 64.0 | keep（P0 重建）|
+| **p1-trap-wired** | 423,486 | **2.3614** | **3923** | **61.4** | **keep（当前）** |
+
+⚠️ = 该 LUT 值用当前代码复现不出来，详见第 6 节 P1 小节末尾的说明。
 
 ---
 
@@ -157,8 +188,12 @@ D:\USER\Desktop\FPGA\FPGA\
 │     tb_units.sv (194 项单元检查)  tb_core.sv  tb_soc.sv  tb_sw.sv
 │     prog/  basic.S  mmio.S  m_ext.S  trap.S (+ 生成的 .hex)
 ├── tools/         asm.py  build_sw.py  elf2hex.py  run_coremark.py
+│     fpga_workflow.py  ★统一入口: doctor/check/verify/report (见 tools/README.md)
+│     doctor.bat        零摩擦包装 (纯 ASCII, 一条命令跑完自检+漂移检测)
 ├── results/       每轮优化的设计与实测数据 (见第 10 节)
-└── skills/fpga-riscv-a100t/  SKILL.md + PITFALLS.md
+└── skills/
+      fpga-riscv-a100t/  SKILL.md + PITFALLS.md   (环境事实 + 错误台账)
+      fpga-workflow/     SKILL.md                (改→验→量→记 的标准动作)
 ```
 
 ### 内存布局（改动过，注意）
@@ -240,26 +275,42 @@ tb_sw     hello.hex / cm_rv32im.hex (CoreMark)
 
 ## 6. 待办（按优先级，含具体怎么做）
 
-### P0 · 重建评分版 bitstream ⚠️ 最容易误判的一项
+### P0 · ~~重建评分版 bitstream~~ ✅ 已完成（本轮）
 
-**`fpga/cpu_a100t.bit` 是旧的** —— 它在 `tohost` 上移（0x90001000→0x90002000）和 MMIO 新增
-**之前**构建的。现在板子上跑的是**带 ILA 的调试镜像**，不是评分版。
+原来 `fpga/cpu_a100t.bit` 是旧的（`tohost` 上移与 MMIO 新增之前构建），且
+`build.tcl` **只定义了 `IMEM_INIT_FILE`** —— 本核是哈佛结构，缺少
+`DMEM_INIT_FILE` 会让 `.data/.rodata` 全是 0，跑不了真正的程序。
 
-```bat
-cmd /c D:\USER\Desktop\FPGA\FPGA\fpga\build.bat
+**已修**：`build.tcl` 现在同时定义两个镜像，并把程序镜像**参数化**：
+
+```tcl
+set PROG basic        # 工具会临时改写这一行, 跑完自动还原
+set imem "$root/sim/prog/$PROG.hex"
+set dmem "$root/sim/prog/$PROG.dmem.hex"
+# 两个镜像都存在才继续; 缺 dmem 直接报错退出, 不静默继续
 ```
 
-注意 `build.tcl` 目前只定义了 `IMEM_INIT_FILE=basic.hex`。**若要让评分版直接跑 CoreMark，
-必须同时定义 `DMEM_INIT_FILE`**（本核是哈佛结构，`.data/.rodata` 靠 dmem 自己的镜像装入）。
-路径**一定要带引号**，否则宏展开成裸路径会在 `/` 上报 syntax error。
+一键重建评分版（跑分程序）并同时得到四项指标：
 
-### P1 · 异常/中断的 core 接线（赛题高阶任务，最接近完成）
+```bat
+python tools\fpga_workflow.py synth --prog cm_hw --tag <标签> --record
+```
 
-**已完成的部件**：
+`synthesize` 会自己加**全局构建锁**（Vivado 必须串行，两个实例重叠会谎报
+`pkgIndex.tcl` 缺失）、按内容哈希缓存、并把 `timing.rpt`/`util.rpt` **归档**
+（它们每次构建都被覆盖，不留档就无法复核历史数字）。
+
+**待用户操作**：上板复验（`fpga\ila_cap_done.bat`），预期 `score_result` bit31=1、
+tick ≈ 508,232,400。注意 `results/coremark.csv` 里 `bram-v1`/`HARDWARE-VERIFIED`
+两行的 LUT=2481 用当前代码复现不出来，详见下方"P1 已完成"小节的说明。
+
+### P1 · ~~异常/中断的 core 接线~~ ✅ 已完成（见下方"P1 已完成"小节）
+
+**P1 之前已完成的部件**（接线时原样沿用，未改逻辑）：
 - `csr_file.sv` —— mstatus/mie/mtvec/mscratch/mepc/mcause/mtval/mip + 进陷阱/MRET 状态机
 - `control_unit.sv` —— SYSTEM（ECALL/EBREAK/MRET/Zicsr）+ FENCE 译码，**tb_units 12 项新检查已通过**
 - `tools/asm.py` —— CSR 指令 + 助记名表（编码已逐条手工验算）
-- `sim/prog/trap.S` —— 6 组异常自校验程序（已能汇编）
+- `sim/prog/trap.S` —— 6 组异常自校验程序
 
 **缺的就是 `core.sv` 里的接线。设计已经想清楚，照下面写即可：**
 
@@ -318,6 +369,42 @@ id_ex_reg 的 .flush 也改成 any_redir;    // 原来只写 redirect
 **改完必须**：`tb_units` / `tb_core(basic,m_ext)` / `tb_soc` / `tb_sw(hello,coremark)` 全过，
 并把 `sim/prog/trap.S` 加进 tb_sw 测试列表跑通。
 
+#### ✅ P1 已完成（本轮）—— 以上就是最终落地的接线
+
+**回归 7 PASS**（`tb_units` / `tb_core_basic` / `tb_core_trap` / `tb_core_m_ext` /
+`tb_soc` / `tb_sw_hello` / `tb_sw_coremark`）。`csr_file.sv` 已进三处 RTL 清单与
+`CORE_SV_ORDER`，`KNOWN_UNWIRED` 白名单已清空（`check` 不再报未接线）。
+
+**过程中修掉的三个真 bug（都在 PITFALLS 里立了条）：**
+
+| # | 症状 | 真因 |
+|---|---|---|
+| R5 | `tb_core` 在 555ns 就 `$fatal`，测试程序没机会跑 handler | `dbg_illegal` 在 **ID 段**锁存，而陷阱在 **EX 段**裁决，早整一拍 → 改用 `id_ex_ctrl.illegal` |
+| R4 | 第二次陷阱跳到 `0x00000000`（实际是 `mtvec` 被写成 `11`） | `trap.S` 用 `t0` 存 handler 地址，而 handler 也用 `t0` → 已改用 `s1` |
+| — | `tb_core` 报的非法指令地址差 8 字节 | 诊断用了 `dbg_pc`（IF 段）而非 `dbg_id_pc`（与 `dbg_instr` 同级）——SKILL 6.10 早写过，这次真踩了 |
+
+**测量到的代价（`results/coremark.csv` 的 `p1-trap-wired` 行）：**
+
+| 指标 | P1 前 | P1 后 | 变化 |
+|---|---|---|---|
+| CoreMark/MHz | 2.3614 | 2.3614 | 0（诚实：trap 逻辑不在热路径上）|
+| LUT | 3679 | **3923** | +6.6% |
+| FF | 1146 | **1333** | +16.3% |
+| fmax | 64.0 | **61.4** | **−4.1%** |
+| CoreMark/LUTs | 6.418e-4 | 6.019e-4 | −6.2% |
+| 绝对吞吐 | 151.1 | 145.0 | −4.0% |
+
+**结论**：用 +6.6% LUT、−4.1% fmax 换来了赛题高阶任务「完整异常中断」——
+**值得**，因为它从"未完成"变成"完成"。fmax 的 −4.1% 大概率是
+`pc_target` 从 2 路 mux 变 4 路 mux（陷阱向量 / MRET / 重定向 / 预测目标）加在
+**关键路径末端**上，属于 P3 要还的同一类债，可与 P3 一起修。
+
+> ⚠️ 另外记一笔：`results/coremark.csv` 里 `bram-v1` 与 `HARDWARE-VERIFIED` 两行的
+> LUT=2481 **用当前代码与构型复现不出来**。现在这条 `synth` 命令实测稳定给出
+> LUT 3679（P1 前）/ 3923（P1 后），且 BRAM 推断正常
+> （`LUT as Distributed RAM = 83`、`Block RAM Tile = 4`，与 bram-v1 的意图一致）。
+> 推测 2481 来自更早的 RTL 修订。**后续以 `synth` 的实测值为准**，历史行仅供趋势参考。
+
 ### P2 · mtimecmp 定时器中断
 
 `rv32_pkg.sv` 里地址常量已加（`MMIO_MTIMECMP_LO/HI`、`MMIO_MTIME_LO/HI`）。
@@ -365,6 +452,41 @@ cmd /c D:\USER\Desktop\FPGA\FPGA\fpga\ila_cap_mark.bat   REM 抓流水线波形
 
 ## 7. 命令配方
 
+### 【先跑这个】统一工作流入口
+
+`skills/fpga-riscv-a100t/PITFALLS.md` 记了 40+ 个坑，最高频的是 **R1「改了 A 忘了同步 B」——
+全部静默失败**。这套工具把那条纪律从"靠人记"变成"机器每次都查"：
+
+```bat
+rem 收尾必跑: 环境自检 + R1 漂移检测 (约 2 秒)
+cmd /c tools\doctor.bat
+
+rem 回归: ModelSim 增量 (未受影响的测试直接跳过)
+python tools\fpga_workflow.py verify
+
+rem 指标: 三项指标 + 绝对吞吐 (从 results/coremark.csv 重算)
+python tools\fpga_workflow.py report
+```
+
+`verify` 的判定依据是 testbench 打印的 **`RESULT : PASS`**，不是 `vsim` 退出码
+（ModelSim 用 `quit -f` 退出时无论成败都返回 0）。当前基线：
+**7 PASS**，全量约 23 秒，未受影响时 2.8 秒。
+
+`check` 查六件事：三处 RTL 清单是否同步 / 有无未登记或未接线的模块 /
+软件源是否比 `.hex` 镜像新 / **bitstream 是否比 RTL 与镜像新** /
+tohost 地址与注释是否一致 / `.bat`·`.tcl` 是否纯 ASCII。
+**新增 `.sv` 必须登记进 `tools/fpga_workflow.py` 的 `CORE_SV_ORDER`**
+（`rv32_pkg.sv` 必须排第一 —— 其余模块 `import` 它，顺序是语义不是格式）。
+
+### 改一处 RTL → 四项指标全出（测量半环）
+
+```bat
+python tools\fpga_workflow.py synth --prog cm_hw --tag <标签> --record
+```
+
+自动串行化（全局构建锁）、内容哈希缓存、报告归档，一次给出
+CoreMark/MHz + fmax + CoreMark/LUTs + 绝对吞吐 并追加进 `results/coremark.csv`。
+
 ### 软件构建
 
 ```bash
@@ -403,9 +525,12 @@ cmd /c fpga\build_ila.bat    REM 带 ILA 调试版 (工程模式, 慢; 产物在
 
 ### 最高频 · 改了 A 忘了同步 B（已踩 5+ 次，全部静默失败）
 
+> **现在这条已经机器化了** —— 改完直接跑 `cmd /c tools\doctor.bat`，
+> 下面这张表里的第 1、2、3 行都会被自动查出来。
+
 | 改了什么 | 必须同步 |
 |---|---|
-| 新增 RTL 文件 | `fpga/build.tcl`、`fpga/build_ila.tcl`、`tools/run_coremark.py`、以及所有 vlog 列表 |
+| 新增 RTL 文件 | `fpga/build.tcl`、`fpga/build_ila.tcl`、`tools/run_coremark.py`、以及所有 vlog 列表、**`tools/fpga_workflow.py` 的 `CORE_SV_ORDER`** |
 | 改软件源码 | 重建 `.hex`，**并重新综合 bitstream**（imem/dmem 是综合时 `$readmemh` 进去的）|
 | 改 `link.ld` 地址 | portme.c / crt0.S / core_portme.c / top_a100t.sv / 三个 tb 的 TOHOST_ADDR / **`sim/prog/*.S` 里硬编码的地址** |
 | 改 `.S` | 重新用 asm.py 汇编（tb 用的是 .hex，不是 .S）|
@@ -472,10 +597,13 @@ cmd /c fpga\build_ila.bat    REM 带 ILA 调试版 (工程模式, 慢; 产物在
 
 ## 11. 需要用户确认/操作的事
 
-1. **板卡当前跑的是带 ILA 的调试镜像**，要上板复现请先重建评分版（P0）
+1. **上板复跑含 P1 的评分版** —— `fpga/cpu_a100t.bit` 已重建（含异常/中断，P0+P1），
+   但**尚未上板验证**。命令见 P4 节；预期 `score_result` bit31=1、tick ≈ 508,232,400。
 2. **串口不可用** —— 若需要（如现场演示），得装 FTDI 的 VCP 驱动
 3. **紫光同创 PDS 尚未安装** —— 迁移工作要等装好
 4. 仓库 `fpga/` 目录里有较多 Vivado 日志与备份文件（已被 gitignore），可清理
+5. **本轮改动尚未提交 git**（`core.sv` / `build.tcl` / `tb_core.sv` / `trap.S` /
+   `PITFALLS.md` / `HANDOFF.md` / `results/coremark.csv` + 新增的 `tools/`、`skills/fpga-workflow/`）
 
 ---
 
@@ -484,15 +612,19 @@ cmd /c fpga\build_ila.bat    REM 带 ILA 调试版 (工程模式, 慢; 产物在
 ```
 1. 读 skills/fpga-riscv-a100t/PITFALLS.md   (10 分钟, 能省你几小时)
 2. 读 skills/fpga-riscv-a100t/SKILL.md      (环境与命令配方)
-3. 跑一次完整回归确认现状                  (见第 7 节)
-4. 做 P0 (重建评分版 bitstream)             (10 分钟)
-5. 做 P1 (异常/中断 core 接线)              (设计已给出, 约 1 轮)
-6. 做 P2 (mtimecmp 定时器中断)
-7. 做 P3 (fmax 还债)
+3. 读 tools/README.md                       (统一工作流: doctor/check/verify/synth/report)
+4. 跑 cmd /c tools\doctor.bat               (环境自检 + 漂移检测, 2 秒)
+5. 跑 python tools\fpga_workflow.py verify  (确认基线 7 PASS)
+6. 做 P4 (上板复跑含 P1 的评分版)            (你操作, 见第 6 节)
+7. 做 P3 (fmax 还债, 从 61.4 往 74+ 挣回来)   (收益最大, 工具已就绪)
+8. 做 P2 (mtimecmp 定时器中断)
 ```
 
-**当前三项指标已是可参赛水平（基础任务全完成）。P1/P2 是赛题高阶任务的加分项，
-P3 是把唯一退步的指标补回来。**
+> ✅ P0（重建评分版）与 P1（异常/中断接线）**已于上一轮完成**，不要再做一遍。
+> P1 的"完成"判定已经落定：`tb_core_trap` 为 PASS、`check` 不再报未接线模块。
+
+**当前三项指标已是可参赛水平（基础任务 + BTB + 完整异常中断全完成）。
+P3 是把唯一大幅退步的指标（fmax 78.4→61.4）补回来，P2 是再补一个高阶任务。**
 
 ---
 
@@ -507,5 +639,11 @@ P3 是把唯一退步的指标补回来。**
 | 5-6 | 上板读回基础设施（MMIO + ILA）| — |
 | 7-9 | 差距分析、CSR/异常基础、汇编器扩展 | tb_units 通过 |
 | 10 | **上板 CoreMark 实测通过** | 10.16s，CRC 判定=1 |
+| 11 | 工具化: `check`/`verify`/`synth`/`report` + 技能注册 | 回归 6 PASS + 1 XFAIL → 见下 |
+| 11 | **P0** 评分版重建（补 `DMEM_INIT_FILE` + 参数化 `PROG`）| LUT 3679 / fmax 64.0 |
+| 11 | **P1** 异常/中断接入 core（Zicsr + 陷阱 + MRET）| **7 PASS**；LUT 3923 / fmax 61.4 |
+
+`PITFALLS` 本轮新增：R4（handler 破坏自己要用的寄存器）、R5（调试标志与事件不同流水级）、
+一·五（逐拍诊断: 粘滞标志 + `$fatal` 会让"猜"变成唯一手段）。
 
 git 提交：`e49f801`（原始）→ `97be06f` → `2ca639c` → `9083059`（HEAD）

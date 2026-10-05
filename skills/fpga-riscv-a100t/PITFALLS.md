@@ -30,10 +30,61 @@
 `0xFFFFFFEC / 3` 我写成 1431655762, 实际是 **1431655758**。
 **修法: 期望值先独立验算一遍** (换成好算的数, 比如除以 16)。
 
+### R4. 陷阱处理程序破坏了它自己要用的寄存器 ✅踩过 1 次 (P1 接线后才暴露)
+`sim/prog/trap.S` 用 `t0` 存 handler 地址, 而 handler 自己也用 `t0`
+(`csrr t0, mcause` / `csrr t0, mepc`) —— 一进陷阱 `t0` 就被覆盖成 `mcause`。
+于是主程序后面那句 `csrw mtvec, t0` 把 **mtvec 写成了 11**, 下一次陷阱直接跳到
+`0x00000000` 跑飞。
+
+**这个 bug 在"陷阱没接线"时永远不会暴露**: ecall 根本没陷入, handler 从没执行过,
+`t0` 一直是好的。P1 接线一完成才现形 —— 与 SKILL 9.3 的 JAL 前递是同一类:
+**"今天触发不了"的代码, 加新特性后会变成真 bug。**
+
+**修法**: handler 与"安装陷阱的代码"**不要共用寄存器**。trap.S 现在用 `s1` 存
+handler 地址 (handler 只碰 `t0/s0/s2/s3/t1`)。
+**识别信号**: 第二次陷阱跳到 `0x00000000` 或某个小整数, 而首次陷阱正常。
+
+### R5. 调试标志与它要监视的事件不在同一级流水 ✅踩过 1 次
+`dbg_illegal` 曾在 **ID 段**锁存 (`id_ctrl.illegal`), 但陷阱是 **EX 段**裁决的
+(`trap_enter` 由 `id_ex_ctrl.illegal` 驱动)。ID 段比 EX 段早整一拍 ->
+标志在"非法指令还在 ID、trap 尚未触发"那一拍就置位, 与 `trap_enter` 对不上,
+`tb_core` 立刻 `$fatal`, 测试程序根本没机会跑 handler。
+**修法**: 判据必须与事件同级 —— 用 `id_ex_ctrl.illegal`。
+**诊断方法**: 在 `negedge clk` 上逐拍打印 (见下条)。
+
+---
+
+## 一·五、逐拍诊断: 粘滞标志 + $fatal 会让"猜"变成唯一手段 (P1 血的教训)
+
+调 `tb_core_trap` 时连猜错两次 (先报 `PC=0x8000005c`, 又报 `0x80000058`, 真正的非法
+指令在 `0x80000054`)。根因是**证据不够**:
+
+1. `dbg_illegal` 是**粘滞**标志 (只置位不清零), 值本身不含"哪一拍、哪条指令"的信息;
+2. `tb_core` 一看到它就 `$fatal`, **仿真当场终止** —— 事后拿不到任何上下文。
+
+**解法 (已固化在 `tb_core.sv`, 加 `+illegal_trace` 启用)**:
+
+```systemverilog
+// 在 NEGEDGE 采样: 此刻组合逻辑已稳定, 而 tb 的 always_ff 还没在下一个
+// posedge 置位并 $fatal —— 所以即使 $fatal 立刻终止仿真, 证据也已经打印出来。
+always @(negedge clk) begin
+  if (!rst && $test$plusargs("illegal_trace") && cycles >= 40) begin
+    $display("[pre] cyc=%0d if_pc=0x%08x if_instr=0x%08x | ex_pc=0x%08x ex_illegal=%b",
+             cycles, u_dut.if_pc, u_dut.if_instr, u_dut.id_ex_pc, u_dut.id_ex_ctrl.illegal);
+    // 把 id_/ex_ 两级、pipe_stall、trap_enter、redirect、pc_src 一起打出来
+  end
+end
+```
+
+**两条通用经验**:
+- **`posedge` 上采样只能看到"上一拍"的状态** (NBA 还没更新), 追时序问题时优先用 `negedge`;
+- 逐拍打印时**必须同时打印 ID 段和 EX 段**, 并标注哪个信号属于哪一级 ——
+  这次就是把 `if_pc`/`id_ctrl.illegal` (ID 段) 和 `ex_illegal`/`trap_enter` (EX 段)
+  混在一起读, 才误判成"陷阱没触发"。
+
 ---
 
 ## 二、SystemVerilog / Verilog 语法
-
 | 症状 | 原因 | 修法 |
 |---|---|---|
 | `vlog-13069 unexpected '['` | **不能对括号表达式位选**: `(a>>b)[31:0]` 非法 | 先赋中间 wire 再切片 |
