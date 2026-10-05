@@ -330,12 +330,26 @@ module core
     .taken       (ex_taken)
   );
 
-  // 跳转目标: JALR 清最低位 (规范要求), 其余直接取 ALU 的原始加法器输出。
-  // 用 ex_sum 而不是 ex_alu_out: BR/JAL/JALR 的 alu_op 恒为 ALU_ADD, 两者数值
-  // 相同, 但 ex_sum 少走一级操作码 mux, 而这条正是 pc 关键路径。
+  // ---- 跳转/分支目标: 独立加法器 (P3 fmax 还债) ----
+  //
+  // 【为什么不让跳转目标穿 ALU】原写法取 alu 的 ex_sum, 虽然已绕过 ALU 的
+  // 结果 mux, 但**操作数 mux 仍在路径上**: ex_a 是 3:1 (PC/ZERO/rs1)、
+  // ex_b 是 2:1 (imm/rs2)。而 BR/JAL/JALR 的 alu_op 恒为 ADD, 操作数是确定的:
+  //   BR/JAL -> pc + imm      JALR -> rs1 + imm
+  // 所以这里给它们一条**只有 1 级 mux** 的专用加法器, 把 ALU 那两级操作数 mux
+  // 整个移出关键路径。
+  //
+  // 关键路径实测 (P1 后): u_dmem/mem_reg_3/CLKBWRCLK -> u_pc/pc_reg[2]/D
+  //   16.125ns (logic 5.268 = 32.7%, route 10.857 = 67.3%), 19 级
+  // 布线占 2/3 -> 少一级逻辑往往同时减少扇出与布线长度, 收益可能超过逻辑本身。
+  // 代价: 一个 32 位加法器 (约 32 LUT, 相对 3923 是 ~0.8%), 无任何周期代价。
+  wire [31:0] ex_ctrl_operand_a = id_ex_ctrl.pc_sel == PC_JR ? ex_rs1 : id_ex_pc;
+  wire [31:0] ex_ctrl_sum       = ex_ctrl_operand_a + id_ex_imm;
+
+  // 跳转目标: JALR 清最低位 (规范要求), 其余直接取专用加法器输出。
   assign ex_pc_target = (id_ex_ctrl.pc_sel == PC_JR)
-                        ? {ex_sum[31:1], 1'b0}
-                        : ex_sum;
+                        ? {ex_ctrl_sum[31:1], 1'b0}
+                        : ex_ctrl_sum;
 
   // ---- 控制流真实结果 ----
   assign actual_taken = ((id_ex_ctrl.pc_sel == PC_BR) && ex_taken) ||

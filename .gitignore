@@ -23,6 +23,9 @@ tools/riscv-tools/
 # 内容指纹 + ModelSim work 库 + 每个测试的完整日志, 全部可完全再生
 .fpga-cache/
 
+# ---- 剖析结果 (由 fpga_workflow.py profile 生成, 可完全再生) ----
+results/profile.json
+
 # ---- DSH 技能发现根 (本机配置, 不入库) ----
 # DSH 的技能目录按"最近的含 .git 的祖先"定位, 即 <projectRoot>/.dsh/skills。
 # 本仓库的 projectRoot = D:\USER\Desktop\FPGA\FPGA, 但技能源文件在 skills/ 下,

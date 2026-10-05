@@ -891,9 +891,11 @@ def _tail_interesting(out: str) -> str:
     keep = []
     for ln in out.splitlines():
         if re.search(r"PASS|FAIL|ERROR|Error|Total ticks|Iterations|CRC|crc|"
-                     r"ALL TESTS|illegal|Mismatch|expected|timeout|TIMEOUT", ln):
+                     r"ALL TESTS|illegal|Mismatch|expected|timeout|TIMEOUT|"
+                     r"cycles|fetch|retire|redirects|stalls|load-use|split-mem|"
+                     r"muldiv|ctrl-flow|mispredict|cond branch|JAL|JALR|CPI|profile", ln):
             keep.append(ln)
-    return "\n".join(keep[-40:]) if keep else "\n".join(out.splitlines()[-15:])
+    return "\n".join(keep[-70:]) if keep else "\n".join(out.splitlines()[-20:])
 
 
 # ==========================================================================
@@ -1268,6 +1270,271 @@ def cmd_synth(args) -> int:
 
 
 # ==========================================================================
+# metrics: 四项指标 + keep/reject 判定 (把赛题纪律编码进来)
+# ==========================================================================
+def read_csv_rows() -> list[dict]:
+    path = abspath("results/coremark.csv")
+    lines = [l for l in read_text(path).splitlines() if l and not l.startswith("#")]
+    hdr = [h.strip() for h in lines[0].split(",")]
+    rows = []
+    for l in lines[1:]:
+        parts = [p.strip() for p in re.findall(r'[^,"]+|"[^"]*"', l)]
+        d = dict(zip(hdr, parts))
+        d["_raw"] = l
+        rows.append(d)
+    return rows
+
+
+def _f(row: dict, key: str):
+    try:
+        return float(str(row.get(key, "")).strip('"'))
+    except ValueError:
+        return None
+
+
+def metric_set(row: dict) -> dict:
+    """由一行 CSV 推出四项指标 (派生量现算, 避免依赖是否记录过)。"""
+    cm = _f(row, "coremark_per_mhz")
+    lut = _f(row, "lut")
+    fmax = _f(row, "fmax_mhz")
+    return {
+        "coremark_per_mhz": cm,
+        "fmax_mhz": fmax,
+        "coremark_per_lut": (cm / lut) if (cm and lut) else None,
+        "absolute": (cm * fmax) if (cm and fmax) else None,
+    }
+
+
+def find_row(tag: str) -> dict | None:
+    for r in read_csv_rows():
+        if r.get("tag") == tag:
+            return r
+    return None
+
+
+def fmt_metric(k: str, v) -> str:
+    if v is None:
+        return "n/a"
+    if k == "fmax_mhz":
+        return f"{v:.1f} MHz"
+    if k == "coremark_per_lut":
+        return f"{v:.3e}"
+    if k == "absolute":
+        return f"{v:.1f}"
+    return f"{v:.4f}"
+
+
+def verdict(now: dict, prev: dict) -> tuple[str, list[str]]:
+    """赢 2 输 1 才留 —— 阈值按 HANDOFF-WORKFLOW.md 第 3.1 节。
+
+    0.5% 不是随手写的: 仿真噪声 + 工具重排会带来约 1% 抖动, 低于它不该算赢。
+    绝对吞吐单独看: 它是"每秒跑多少次迭代", 是三项指标互相矛盾时的最终裁判。
+    """
+    notes, win, lose = [], 0, 0
+    for k in ("coremark_per_mhz", "fmax_mhz", "coremark_per_lut"):
+        a, b = prev.get(k), now.get(k)
+        if not a or not b:
+            continue
+        if b > a * 1.005:
+            win += 1
+            notes.append(f"  WIN  {k:18s} {fmt_metric(k, a)} -> {fmt_metric(k, b)}  (+{100*(b-a)/a:.1f}%)")
+        elif b < a * 0.995:
+            lose += 1
+            notes.append(f"  LOSE {k:18s} {fmt_metric(k, a)} -> {fmt_metric(k, b)}  ({100*(b-a)/a:+.1f}%)")
+        else:
+            notes.append(f"  ---- {k:18s} {fmt_metric(k, a)} -> {fmt_metric(k, b)}  (~持平)")
+    if win > lose:
+        v = "KEEP"
+    elif lose > win:
+        v = "REJECT"
+    else:
+        v = "TIE(看赛题取向)"
+    a, b = prev.get("absolute"), now.get("absolute")
+    if a and b:
+        notes.append(f"  ABS  {'absolute':18s} {fmt_metric('absolute', a)} -> "
+                     f"{fmt_metric('absolute', b)}  ({100*(b-a)/a:+.1f}%)")
+        if b < a * 0.98:
+            notes.append("  [WARN] 绝对吞吐下降 >2% —— 即使赢两项也要慎重")
+    return v, notes
+
+
+def cmd_metrics(args) -> int:
+    rows = read_csv_rows()
+    # 当前值: 优先命令行直传, 否则取最近一次综合的归档报告
+    res = parse_reports()
+    if args.ticks:
+        it = args.iters or 1
+        res["cm_mhz"] = it * 1e6 / args.ticks
+    else:
+        res = compute_metrics(res)
+    now = {
+        "coremark_per_mhz": res.get("cm_mhz"),
+        "fmax_mhz": res.get("fmax"),
+        "coremark_per_lut": res.get("cm_lut"),
+        "absolute": res.get("throughput"),
+    }
+    print("=" * 74)
+    print("  当前四项指标")
+    print("=" * 74)
+    for k, v in now.items():
+        print(f"    {k:20s} {fmt_metric(k, v)}")
+    if not any(now.values()):
+        print("\n  [warn] 四项全空 —— 先跑一次 synth, 或用 --ticks 指定 ticks")
+        return 1
+
+    if not args.vs:
+        print("\n  (加 --vs <tag> 可与历史某行对比并给出 keep/reject 判定)")
+        return 0
+
+    prev_row = find_row(args.vs)
+    if not prev_row:
+        tags = [r.get("tag") for r in rows][-8:]
+        print(f"\n  [FAIL] coremark.csv 里没有 tag = {args.vs}")
+        print(f"         最近的 tag: {', '.join(str(t) for t in tags)}")
+        return 1
+
+    prev = metric_set(prev_row)
+    print(f"\n  对比基线: {args.vs}  ({prev_row.get('date','')})")
+    print("  " + "-" * 70)
+    v, notes = verdict(now, prev)
+    for n in notes:
+        print(n)
+    print("  " + "-" * 70)
+    print(f"  判定: {v}")
+    print("=" * 74)
+    print("\n  纪律提醒 (HANDOFF-WORKFLOW.md §1.2):")
+    print("    · 一次只改一处, 否则归因不了")
+    print("    · 结果与上次完全一致 -> 先怀疑镜像没重建, 别当成'改动无效'")
+    print("    · 被否决的方案要记 rejected + 原因, 否则下一轮会重复试")
+    return 0
+
+
+# ==========================================================================
+# profile: 剖析停顿构成 (优化前先测量)
+# ==========================================================================
+def parse_profile(out: str) -> dict:
+    """从 tb_sw 的 profile 段落抽结构化数据。
+
+    【分母要用 tb 的 cycles, 不能用 CoreMark 的 Total ticks】
+    两者不同: CoreMark 的 ticks 只统计它自己的计时区间, 而 tb 的 cycles 从复位
+    开始算, 多出启动/收尾的几万拍。算"某项占多少周期"必须用 tb cycles, 否则
+    占比会被系统性低估。
+
+    【ModelSim 会给每行加 "# " 前缀】所以先把行首的 '# ' 去掉再匹配 ——
+    否则所有 ^ 锚定的正则都匹配不上 (踩过: 只有不带 ^ 的 mispredict/cond 匹配到了)。
+    """
+    # 去掉 ModelSim 的行首 "# " 注释前缀
+    out = re.sub(r"^#\s?", "", out, flags=re.M)
+    p: dict = {}
+
+    def num(pat, key, grp=1):
+        m = re.search(pat, out, re.M)
+        if m:
+            try:
+                p[key] = int(m.group(grp))
+            except ValueError:
+                pass
+
+    # 注意: 第一个 "cycles = N" 出现在 tb 启动日志里 ([tb_sw] reset released 之后
+    # 也有一行), 所以用带标题的 "--- profile ---" 之后那一段更稳。
+    seg = out.split("--- profile ---")[-1] if "--- profile ---" in out else out
+    num(r"^\s*cycles\s*=\s*(\d+)", "ticks")
+    num(r"^\s*fetch\s*=\s*(\d+)", "fetch")
+    num(r"^\s*retire\(wb\)\s*=\s*(\d+)", "retire")
+    num(r"^\s*redirects\s*=\s*(\d+)", "redirect_total")
+    num(r"^\s*stalls\s*=\s*(\d+)", "stall_total")
+    num(r"^\s*load-use\s*=\s*(\d+)", "stall_load_use")
+    num(r"^\s*split-mem\s*=\s*(\d+)", "stall_split_mem")
+    num(r"muldiv busy=\s*(\d+)", "stall_muldiv")
+    num(r"ctrl-flow\s*=\s*(\d+)", "ctrl_flow")
+    num(r"mispredict\s*=\s*(\d+)", "mispredict")
+    num(r"cond branch total\s*=\s*(\d+)", "cond_total")
+    num(r"^\s*JAL\s*=\s*(\d+)", "jal")
+    num(r"^\s*JALR\s*=\s*(\d+)", "jalr")
+    num(r"^\s*Total ticks\s*:\s*(\d+)", "cm_ticks")
+    num(r"^\s*Iterations\s*:\s*(\d+)", "iterations")
+
+    # tb 的 cycles 必须从 profile 段取 (CoreMark 的 Total ticks 只覆盖它自己的
+    # 计时区间, 少了启动/收尾的几万拍, 当分母会低估占比)
+    m = re.search(r"cycles\s*=\s*(\d+)", seg)
+    if m:
+        p["ticks"] = int(m.group(1))
+
+    if p.get("retire"):
+        p["cpi"] = round(p["ticks"] / p["retire"], 3)
+    if p.get("ctrl_flow"):
+        p["predict_accuracy"] = round(1 - p["mispredict"] / p["ctrl_flow"], 4)
+    cyc = p.get("ticks") or 0
+    if cyc:
+        # 每项占周期总数的百分比 —— "取占比最大的那一项"是选靶子的规则。
+        # redirect 每次损失 2 拍, 所以乘 2。
+        p["share_pct"] = {
+            "load_use":  round(100 * p.get("stall_load_use", 0) / cyc, 1),
+            "muldiv":    round(100 * p.get("stall_muldiv", 0) / cyc, 1),
+            "split_mem": round(100 * p.get("stall_split_mem", 0) / cyc, 1),
+            "redirect":  round(100 * p.get("redirect_total", 0) * 2 / cyc, 1),
+        }
+        # ---- 把 load-use 停顿从 1 拍加到 2 拍的**时间代价** ----
+        # 停顿次数不变, 每次多 1 拍 -> 周期数从 cyc 变成 cyc + lu。
+        # 时间涨幅 = (cyc + lu)/cyc - 1 = lu/cyc ... 但这里报的是
+        # lu/(cyc+lu), 即"新总时间里有百分之多少是新加的" —— 与 share_pct
+        # 同一口径 (占**新**总数的比例), 便于和 fmax 涨幅直接对比:
+        #   需要 fmax 涨幅 > 这个数, 这笔交易才不亏。
+        lu = p.get("stall_load_use", 0)
+        if lu:
+            p["cost_if_load_use_2cyc_pct"] = round(100 * lu / (cyc + lu), 2)
+    return p
+
+
+def cmd_profile(args) -> int:
+    prog = args.prog
+    print("=" * 74)
+    print("  剖析: 周期花在哪 (优化前先测量, 不要猜)")
+    print("=" * 74)
+    imem = abspath(f"sim/prog/{prog}.hex")
+    dmem = abspath(f"sim/prog/{prog}.dmem.hex")
+    for label, p in (("imem", imem), ("dmem", dmem)):
+        if not os.path.exists(p):
+            print(f"  [BLOCK] 缺 {label} 镜像 {p}")
+            return 1
+
+    files = canonical_rtl()
+    rc, out, workdir = compile_sim(files, "sim/tb_sw.sv")
+    if rc != 0:
+        print("  [FAIL] 编译失败")
+        print(_indent(_vlog_errors(out)))
+        return 1
+
+    cmd = [os.path.join(MSIM, "vsim.exe"), "-c", "-do", "run -all; quit -f", "work.tb_sw",
+           "+imem=" + imem, "+dmem=" + dmem, f"+max_cycles={args.max_cycles}"]
+    rc, out, _ = run(cmd, cwd=workdir, timeout=args.timeout)
+    if "RESULT : PASS" not in out:
+        print("  [FAIL] 仿真未通过 (没有 RESULT : PASS), 剖析数据不可信")
+        print(_indent(_tail_interesting(out)))
+        return 1
+
+    p = parse_profile(out)
+    print("\n  周期构成 (占比最大的就是下一轮的靶子):")
+    print("  " + "-" * 62)
+    for k, v in sorted(p.get("share_pct", {}).items(), key=lambda kv: -kv[1]):
+        bar = "#" * int(round(v))
+        print(f"    {k:12s} {v:5.1f}%  {bar}")
+    print("  " + "-" * 62)
+    for k in ("ticks", "retire", "cpi", "predict_accuracy", "mispredict",
+              "stall_load_use", "stall_muldiv", "stall_split_mem",
+              "redirect_total", "cond_total", "jal", "jalr"):
+        if k in p:
+            print(f"    {k:18s} {p[k]}")
+    if args.json:
+        os.makedirs(os.path.dirname(abspath(args.json)), exist_ok=True)
+        with open(abspath(args.json), "w", encoding="utf-8") as f:
+            json.dump(p, f, indent=1, ensure_ascii=False)
+        print(f"\n  -> {args.json}")
+    print("=" * 74)
+    return 0
+
+
+# ==========================================================================
 # doctor
 # ==========================================================================
 def cmd_doctor(args) -> int:
@@ -1322,6 +1589,19 @@ def main() -> int:
 
     p = sub.add_parser("report", help="三项指标 + 绝对吞吐")
     p.set_defaults(func=cmd_report)
+
+    p = sub.add_parser("metrics", help="四项指标 + keep/reject 判定 (含绝对吞吐裁判)")
+    p.add_argument("--vs", metavar="TAG", help="与 coremark.csv 里某个 tag 对比")
+    p.add_argument("--ticks", type=int, help="直接给 ticks (否则用最近归档报告 + CSV)")
+    p.add_argument("--iters", type=int, default=1, help="配合 --ticks 的迭代次数")
+    p.set_defaults(func=cmd_metrics)
+
+    p = sub.add_parser("profile", help="剖析停顿构成 (优化前先测量)")
+    p.add_argument("--prog", default="cm_rv32im", help="程序基名 (默认 cm_rv32im)")
+    p.add_argument("--json", help="结果写到这个 JSON 路径")
+    p.add_argument("--max-cycles", type=int, default=5000000)
+    p.add_argument("--timeout", type=int, default=1200)
+    p.set_defaults(func=cmd_profile)
 
     p = sub.add_parser("synth", help="Vivado 综合 -> 四项指标 (自动串行化 + 缓存)")
     p.add_argument("--prog", default="cm_hw",
