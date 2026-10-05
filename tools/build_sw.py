@@ -104,8 +104,39 @@ def main():
                 parts = line.split()
                 if len(parts) >= 2:
                     print('    %-14s %6s' % (parts[0], parts[1]))
+
+    record_sw_hash()
     print('[OK] %s' % args.output)
     return 0
+
+
+def record_sw_hash(group=None):
+    """把当前 sw/ 源码的内容哈希记进 .fpga-cache/sw-build.json。
+
+    为什么需要: tools/fpga_workflow.py check 用**内容哈希**判断
+    "镜像是否需要重建"(不用 mtime)。构建成功后记录一次, 下次 check 才能对上。
+    不记录的话 check 会退化成弱判据 (只喊"无基线可比")。
+    """
+    try:
+        sys.path.insert(0, HERE)
+        import fpga_workflow as fw
+        import json, os as _os
+        h = fw._sw_source_hash()
+        p = _os.path.join(fw.CACHE_DIR, 'sw-build.json')
+        _os.makedirs(fw.CACHE_DIR, exist_ok=True)
+        try:
+            cur = json.loads(open(p, encoding='utf-8').read())
+        except Exception:
+            cur = {}
+        # 没指定 group 就把已知的两组都刷新 (都是同一份 sw/ 源码)
+        for g in (([group] if group else ['hello', 'coremark'])):
+            cur[g] = h
+        with open(p, 'w', encoding='utf-8') as f:
+            json.dump(cur, f, indent=1)
+    except Exception as e:
+        # 记录失败不该让构建失败 —— 它只影响 check 的判据强度
+        print('[warn] 未能记录 sw 源码哈希 (%s); check 会退化为弱判据' % e,
+              file=sys.stderr)
 
 
 if __name__ == '__main__':

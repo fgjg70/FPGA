@@ -148,6 +148,35 @@ overwrite existing file`。**坑在于抓取本身是成功的** (PROGRAMMED/ARM
 [REGISTER.IDCODE] property`。**修法**: 用 `get_property IDCODE $dev`
 (实测回二进制串 `00010011011000110001000010010011` = **0x13631093**, 与器件手册一致)。
 
+### R14. `ITERATIONS` 只影响 **dmem 镜像**, imem 逐字节相同 —— 别把它当"没生效" ✅查过 1 次
+用不同 `-D ITERATIONS=1` 与 `-D ITERATIONS=1200` 构建 CoreMark, 两个 **`.hex`(imem)
+逐字节相同**, 只有 **`.dmem.hex` 不同**。
+
+一度以为是"宏没生效"这个经典静默失败, 实测是**正常的**: CoreMark 把迭代数放在
+**可写数据变量**里 (不在指令流里), 所以改迭代数**只改数据段**。
+
+**但这条引出一个真风险 —— 与 R1 同源**:
+本核是哈佛结构, imem 与 dmem 是**两个独立镜像**(`IMEM_INIT_FILE` / `DMEM_INIT_FILE`)。
+改了 `ITERATIONS` 却只重建/只同步了一个镜像, 就会得到
+**"新程序 + 旧迭代数"** 的组合, 而且**不报任何错** —— 表现是上板跑分时长莫名其妙。
+**所以换迭代数时两个宏都必须重新生成 hex 并重新综合。**
+
+判据: 想确认镜像对不对, **比对 `.dmem.hex`**, 不要只比 `.hex`。
+
+### R15. PowerShell 会吃掉 `-D 'X="a b c"'` 里的内层引号 ✅踩过 1 次
+在 PowerShell 里敲:
+```
+python tools/build_sw.py ... -D 'FLAGS_STR="-Os -march=rv32im -mabi=ilp32"'
+```
+PowerShell 剥掉单引号后, gcc 收到的是 `FLAGS_STR=-Os -march=rv32im -mabi=ilp32`
+被当成**多个参数**, 于是报一堆
+`error: 'Os' undeclared` / `'march' undeclared` / `'ilp32' undeclared`,
+看起来像源码问题, 其实是**引号在 shell 层就丢了**。
+
+**修法**: 别在 shell 里拼这种带内层引号的参数 —— **用 Python 侧 `subprocess` 传 argv
+列表**(`tools/run_coremark.py` 就是这么做的, 一直是对的)。
+本项目"构建一律走 .bat / Python 脚本"的约定, 一半原因就是这个。
+
 ---
 
 ## 二、SystemVerilog / Verilog 语法

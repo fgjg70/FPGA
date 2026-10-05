@@ -429,19 +429,34 @@ def check_bitstream_freshness() -> list[dict]:
                    f"这个 bitstream 上板跑不出 CoreMark 分数 (P0)",
         })
 
-    # 比 bit 新的输入文件
+    # 比 bit 新的输入文件。
+    # 【镜像用内容哈希判据, 不用 mtime】—— 重建一份"逐字节相同"的镜像会让 mtime
+    # 变新, 用 mtime 就会误报 stale。synth 每次构建会记下当时用的镜像哈希,
+    # 哈希没变就说明 bitstream 里的程序镜像仍然对得上。
     newer = []
     inputs = canonical_rtl() + [
         "fpga/top_a100t.sv", "fpga/mmio_subsys.sv", "fpga/daVinciPro.xdc",
     ]
-    if imem_img:
-        inputs.append(imem_img)
-    if dmem_img:
-        inputs.append(dmem_img)
     for f in inputs:
         fp = abspath(f)
         if os.path.exists(fp) and os.path.getmtime(fp) > bit_t:
             newer.append(f)
+
+    try:
+        sc = json.loads(read_text(os.path.join(CACHE_DIR, "synth-cache.json")))
+        rec = sc.get("image_hash", {}).get(prog)
+    except Exception:
+        rec = None
+    for label, rel in (("imem", imem_img), ("dmem", dmem_img)):
+        if not rel or not os.path.exists(abspath(rel)):
+            continue
+        cur = sha256_file(abspath(rel))
+        if rec and rec.get(label) == cur:
+            # 内容与上次综合时一致 -> 即使 mtime 更新也不算 stale
+            continue
+        if os.path.getmtime(abspath(rel)) > bit_t:
+            newer.append(f"{rel}  (内容已变)")
+
     if newer:
         shown = ", ".join(newer[:6]) + (" ..." if len(newer) > 6 else "")
         out.append({
@@ -1327,6 +1342,25 @@ def cmd_synth(args) -> int:
     if not res.get("lut"):
         print("  [warn] util.rpt 里没解析到 LUT, 资源数字可能不准")
     print_metrics(compute_metrics(res))
+
+    # 记录本次构建所用的镜像内容哈希。
+    # 为什么: check 的 bitstream 新鲜度原来只能比 mtime —— 而"重建了逐字节相同的
+    # 镜像"会让 mtime 变新从而误报 stale。有了哈希就能区分
+    # "镜像真的变了" 与 "文件被重写但内容一样"。
+    try:
+        sstate = os.path.join(CACHE_DIR, "synth-cache.json")
+        try:
+            sc = json.loads(read_text(sstate))
+        except Exception:
+            sc = {}
+        sc.setdefault("image_hash", {})[prog] = {
+            "imem": sha256_file(imem), "dmem": sha256_file(dmem)
+        }
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        with open(sstate, "w", encoding="utf-8") as f:
+            json.dump(sc, f, indent=1, ensure_ascii=False)
+    except OSError as e:
+        print(f"  [warn] 记录镜像哈希失败: {e}")
 
     # 归档本次报告: timing.rpt/util.rpt 每次构建都被覆盖, 不留档就没法回查
     # (本项目就出现过"旧报告被覆盖后无法复核历史数字"的情况)
