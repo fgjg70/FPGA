@@ -25,3 +25,4 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-05,HW-P2P3-verified,1200,508155404,2.3615,2526,1377,8,8,70.9,keep,"HW-verified: ILA over JTAG, CRC verdict=1, 10.16s"
 2026-10-05,p2p3-final-rebuild,1,423527,2.3611,2526,1377,8,8,70.9,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-05,p4-honest-baseline,1,423527,2.3611,4019,1387,4,8,61.6,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-05,p4-final-default,1,423527,2.3611,4015,1381,4,8,61.3,keep,fpga_workflow.py synth (PROG=cm_hw)
