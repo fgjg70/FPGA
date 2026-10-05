@@ -82,6 +82,10 @@
 | IP 生成器 `::ipgen_iptclns` 初始化失败, 谎报 `pkgIndex.tcl` 缺失 | **两个 Vivado 实例重叠** | 构建串行化 + 设 `XILINX_VIVADO` |
 | `Synth 8-2715 syntax error near /`, 行号指向 `$readmemh` 那行 | **`set_property verilog_define` 里路径没加引号** —— 宏展开成裸路径, 报错点落在路径的 `/` 上, 行号极具误导性 | 值写成 `\"path\"`; 非工程模式用 `-verilog_define {X="path"}` |
 | 找不到 bitstream / runs 目录 | `create_project ... <dir>/<name>` 会把最后一段当**工程名**, 文件落在**父目录** | 按 `<dir>/<name>.xpr` 和 `<dir>/<name>.runs/` 去找 |
+| Vivado Tcl 报 `invalid command name "W??"` | **.tcl 用 7 位掩码编码写会毁掉中文注释** —— 非 ASCII 字节被掩码成控制字符, 其中一些正好是 `0x0A`, 把注释行劈成代码行 | **Vivado 的 .tcl 一律纯 ASCII** (与 .bat 同规则, 成因不同: 这是编码掩码, 那是代码页) |
+| `get_hw_probes probe2` 返回空 | **ILA 探针名是连接的网络名**, 不是 probe0/probe1/... | 先 `get_hw_probes -of_objects $ila` 列出实际名字 |
+| `Designutils 20-610 Invalid logic operator '8'` / `20-614 No apostrophe specified` | `TRIGGER_COMPARE_VALUE` 需要**比较前缀**且位宽匹配 | 用 `eq8'h40`; 默认值 `eq8'hXX` 就是格式提示 |
+| 触发值看起来对但 ILA 永不触发 | **精确匹配太脆弱**: `eq8'h40` 要求其余 7 位全 0, 而程序结束时 pass 位也是 1 (ila_ctrl=0x42) | 清空触发值用默认 `eq8'hXX` (无条件), 等状态稳定后 arm 直接抓 |
 | 临时目录跑到工作区 (`undefined\temp`) | `os.tmpdir()` 在空 env 下返回相对路径 | 用绝对临时路径 |
 | 找不到 `powershell` | 会话 PATH 被剥离 | 补 `C:\Windows\System32\WindowsPowerShell\v1.0` |
 

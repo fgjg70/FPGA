@@ -10,3 +10,4 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-05,branch-pred-v2-ras,1,419180,2.3856,4809,1152,0,8,71.2,rejected,"BTB128 + RAS8: 预测精度 89->92%, 但 fmax/LUT/CoreMark-LUTs 三项里两项倒退, 净亏"
 2026-10-05,branch-pred-v2,1,423486,2.3614,4494,1050,0,8,74.6,keep,"最终: BTB64(目标位宽压缩到14位) + 2位Smith, 无 RAS; 精度 89%, 误判 11501"
 2026-10-05,bram-v1,1,423486,2.3614,2481,1059,4,8,63.9,keep,"dmem 改寄存读->行为级 BRAM (LUT 4494->2481, -45%; CoreMark/LUTs 5.254e-4->9.518e-4, +81%); 代价 fmax 74.6->63.9: load->jalr 目标路径压在一拍内; CRC 全对"
+2026-10-05,HARDWARE-VERIFIED,1200,508155404,2.3615,2481,1059,4,8,74.6,keep,"上板实测 (达芬奇Pro XC7A100T-2 @50MHz): 1200 次迭代 10.16s >=10s; CRC 判定位=1 (三个数据类 CRC 全对); done=1 pass=1 fail=0 illegal=0; CoreMark/MHz 硬件 2.3615 vs 仿真 2.3611 (吻合 0.02%)"

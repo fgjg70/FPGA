@@ -38,6 +38,14 @@ ABI = {
     't3': 28, 't4': 29, 't5': 30, 't6': 31,
 }
 
+# ---- Zicsr: CSR 名字 -> 地址 (只列本核实现的) ----
+CSR_NAME = {
+    'mstatus': 0x300, 'misa': 0x301, 'mie': 0x304, 'mtvec': 0x305,
+    'mscratch': 0x340, 'mepc': 0x341, 'mcause': 0x342, 'mtval': 0x343,
+    'mip': 0x344,
+    'mvendorid': 0xF11, 'marchid': 0xF12, 'mimpid': 0xF13, 'mhartid': 0xF14,
+}
+
 R_OPS = {
     'add': (0x00, 0), 'sub': (0x20, 0), 'sll': (0x00, 1), 'slt': (0x00, 2),
     'sltu': (0x00, 3), 'xor': (0x00, 4), 'srl': (0x00, 5), 'sra': (0x20, 5),
@@ -74,6 +82,14 @@ def value(tok, labels, pc=0, relative=False):
         return v
     v = int(t, 0)
     return v
+
+
+def csr(tok, labels):
+    """CSR 操作数: 支持助记名 (mstatus/mtvec/...) 也支持数字"""
+    t = tok.strip()
+    if t in CSR_NAME:
+        return CSR_NAME[t]
+    return value(t, labels) & 0xFFF
 
 
 def r_type(f7, rs2, rs1, f3, rd):
@@ -122,7 +138,14 @@ def li_split(v):
 def instruction_size(mn, ops, labels):
     """该行占用的字节数 (li 可能展开为两条)"""
     if mn == 'li':
-        v = value(ops[1], labels)
+        t = ops[1].strip()
+        try:
+            v = int(t, 0)
+        except ValueError:
+            # 符号操作数 (如 li t0, handler): 第一遍标签还没算出来。
+            # **两遍都必须给同一个答案**, 否则地址布局会错位 —— 所以一律按
+            # 8 字节预留。imem 地址 0x8000_xxxx 的 li 本来就是 8 字节, 不浪费。
+            return 8
         hi, lo = li_split(v)
         return 8 if (lo != 0 or hi == 0) else 4
     return 4
@@ -190,6 +213,35 @@ def encode(mn, ops, pc, labels):
             rd, rs1 = reg(ops[0]), reg(ops[1])
             off = value(ops[2], labels)
         return [i_type(off & 0xFFF, rs1, 0, rd, 0b1100111)]
+    # ---- Zicsr (opcode 1110011 = SYSTEM) ----
+    if mn in ('csrrw', 'csrrs', 'csrrc'):
+        f3 = {'csrrw': 1, 'csrrs': 2, 'csrrc': 3}[mn]
+        return [i_type(csr(ops[1], labels), reg(ops[2]), f3, reg(ops[0]), 0b1110011)]
+    if mn in ('csrrwi', 'csrrsi', 'csrrci'):
+        f3 = {'csrrwi': 5, 'csrrsi': 6, 'csrrci': 7}[mn]
+        return [i_type(csr(ops[1], labels), value(ops[2], labels) & 0x1F, f3, reg(ops[0]), 0b1110011)]
+    # 伪指令
+    if mn == 'csrr':
+        return [i_type(csr(ops[1], labels), 0, 2, reg(ops[0]), 0b1110011)]
+    if mn == 'csrw':
+        return [i_type(csr(ops[0], labels), reg(ops[1]), 1, 0, 0b1110011)]
+    if mn == 'csrs':
+        return [i_type(csr(ops[0], labels), reg(ops[1]), 2, 0, 0b1110011)]
+    if mn == 'csrc':
+        return [i_type(csr(ops[0], labels), reg(ops[1]), 3, 0, 0b1110011)]
+    if mn == 'csrsi':
+        return [i_type(csr(ops[0], labels), value(ops[1], labels) & 0x1F, 6, 0, 0b1110011)]
+    if mn == 'csrci':
+        return [i_type(csr(ops[0], labels), value(ops[1], labels) & 0x1F, 7, 0, 0b1110011)]
+    # ---- 陷阱指令 (SYSTEM 的固定编码) ----
+    if mn == 'ecall':
+        return [0x00000073]
+    if mn == 'ebreak':
+        return [0x00100073]
+    if mn == 'mret':
+        return [0x30200073]
+    if mn == 'fence':
+        return [0x0FF0000F]          # 本核顺序执行, FENCE 可退化为 NOP
     raise ValueError('unknown mnemonic: %s' % mn)
 
 

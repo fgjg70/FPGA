@@ -349,12 +349,43 @@ module tb_units;
     chk({31'd0, cu_ctrl.illegal}, 32'd1, "JALR f3=001 illegal");
     chk({31'd0, cu_ctrl.reg_write}, 32'd0, "illegal jalr 不写寄存器");
     chk(cu_ctrl.pc_sel, PC_NEXT, "illegal jalr 不跳转");
-    // 未实现/未知 opcode 一律 illegal
-    cu_instr = {25'd0, 7'b1110011}; #1;                            // SYSTEM (未实现)
-    chk({31'd0, cu_ctrl.illegal}, 32'd1, "SYSTEM illegal");
-    chk({31'd0, cu_ctrl.reg_write}, 32'd0, "SYSTEM NOP 安全");
-    cu_instr = {25'd0, 7'b0001111}; #1;                            // FENCE (未实现)
-    chk({31'd0, cu_ctrl.illegal}, 32'd1, "FENCE illegal");
+    // ---- SYSTEM / Zicsr (已实现: 不再一律 illegal) ----
+    cu_instr = {25'd0, 7'b1110011}; #1;                            // ECALL (f3=000, imm=0)
+    chk({31'd0, cu_ctrl.illegal}, 32'd0, "ECALL 合法");
+    chk(cu_ctrl.sys_op, SYS_ECALL, "ECALL sys_op");
+    chk({31'd0, cu_ctrl.reg_write}, 32'd0, "ECALL 不写寄存器");
+    cu_instr = {12'h001, 5'd0, 3'b000, 5'd0, 7'b1110011}; #1;      // EBREAK
+    chk({31'd0, cu_ctrl.illegal}, 32'd0, "EBREAK 合法");
+    chk(cu_ctrl.sys_op, SYS_EBREAK, "EBREAK sys_op");
+    cu_instr = {12'h302, 5'd0, 3'b000, 5'd0, 7'b1110011}; #1;      // MRET
+    chk({31'd0, cu_ctrl.illegal}, 32'd0, "MRET 合法");
+    chk(cu_ctrl.sys_op, SYS_MRET, "MRET sys_op");
+    cu_instr = {12'h123, 5'd0, 3'b000, 5'd0, 7'b1110011}; #1;      // f3=000 但 imm 非特权编码
+    chk({31'd0, cu_ctrl.illegal}, 32'd1, "SYSTEM f3=000 未知 imm illegal");
+    cu_instr = {12'h300, 5'd0, 3'b100, 5'd0, 7'b1110011}; #1;      // f3=100 规范保留
+    chk({31'd0, cu_ctrl.illegal}, 32'd1, "SYSTEM f3=100 illegal");
+    // CSRRW rd, mstatus, rs1
+    cu_instr = enc_i(12'h300, 5'd2, 3'b001, 5'd5, 7'b1110011); #1;
+    chk({31'd0, cu_ctrl.illegal}, 32'd0, "CSRRW 合法");
+    chk(cu_ctrl.sys_op, SYS_CSR, "CSRRW sys_op");
+    chk({20'd0, cu_ctrl.csr_addr}, 32'h300, "CSRRW csr_addr");
+    chk({30'd0, cu_ctrl.csr_cmd}, 32'd1, "CSRRW csr_cmd = W");
+    chk({31'd0, cu_ctrl.csr_src_imm}, 32'd0, "CSRRW 源取 rs1");
+    chk({31'd0, cu_ctrl.reg_write}, 32'd1, "CSRRW 写回旧值");
+    chk(cu_ctrl.wb_src, WB_CSR, "CSRRW wb_src = WB_CSR");
+    // CSRRS rd, mtvec, rs1
+    cu_instr = enc_i(12'h305, 5'd2, 3'b010, 5'd5, 7'b1110011); #1;
+    chk(cu_ctrl.sys_op, SYS_CSR, "CSRRS sys_op");
+    chk({30'd0, cu_ctrl.csr_cmd}, 32'd2, "CSRRS csr_cmd = S");
+    // CSRRWI rd, mscratch, uimm (f3=101 -> 源取 5 位 uimm)
+    cu_instr = {12'h340, 5'd17, 3'b101, 5'd6, 7'b1110011}; #1;
+    chk({31'd0, cu_ctrl.csr_src_imm}, 32'd1, "CSRRWI 源取 uimm");
+    chk({27'd0, cu_ctrl.csr_uimm}, 32'd17, "CSRRWI csr_uimm");
+    // FENCE: 合法 NOP —— 编译器/运行库会插, 误判为非法会让正常程序一上来就掉陷阱
+    cu_instr = {25'd0, 7'b0001111}; #1;
+    chk({31'd0, cu_ctrl.illegal}, 32'd0, "FENCE 合法 (NOP)");
+    chk({31'd0, cu_ctrl.reg_write}, 32'd0, "FENCE 不写寄存器");
+    chk(cu_ctrl.pc_sel, PC_NEXT, "FENCE 不跳转");
 
     // ------------------------------------------------------------------
     $display("[5/6] regfile ...");

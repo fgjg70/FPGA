@@ -57,7 +57,9 @@ package rv32_pkg;
     OPC_LOAD   = 7'b0000011,
     OPC_STORE  = 7'b0100011,
     OPC_OPIMM  = 7'b0010011,
-    OPC_OP     = 7'b0110011
+    OPC_OP     = 7'b0110011,
+    OPC_FENCE  = 7'b0001111,   // FENCE / FENCE.I: 本核顺序执行无 cache, 退化为 NOP
+    OPC_SYSTEM = 7'b1110011    // ECALL / EBREAK / MRET / Zicsr
   } opcode_e;
 
   // --------------------------------------------------------------------------
@@ -151,9 +153,20 @@ package rv32_pkg;
   typedef enum logic [1:0] {
     WB_ALU = 2'd0,
     WB_MEM = 2'd1,   // load 数据 (经 load 扩展单元)
-    WB_PC4 = 2'd2    // JAL/JALR 链接值
-    // 2'd3 保留 (如需立即数直通写回)
+    WB_PC4 = 2'd2,   // JAL/JALR 链接值
+    WB_CSR = 2'd3    // CSR 旧值 (CSRRW/S/C 写回 rd 的是 *读到的旧值*)
   } wb_src_e;
+
+  // --------------------------------------------------------------------------
+  // SYSTEM 指令子类型 (opcode = 1110011)
+  // --------------------------------------------------------------------------
+  typedef enum logic [2:0] {
+    SYS_NONE   = 3'd0,   // 非 SYSTEM 指令
+    SYS_CSR    = 3'd1,   // Zicsr: CSRRW/S/C + 立即数形式
+    SYS_ECALL  = 3'd2,   // 环境调用 -> 异常 11
+    SYS_EBREAK = 3'd3,   // 断点    -> 异常 3
+    SYS_MRET   = 3'd4    // 从 M 模式陷阱返回
+  } sys_op_e;
 
   // --------------------------------------------------------------------------
   // 下一 PC 来源 —— 取代旧设计中 branch/jump/jalr 三个独立位,
@@ -190,7 +203,13 @@ package rv32_pkg;
     // ---- ID 段消费 ----
     imm_fmt_e   imm_fmt;         // 立即数格式 (imm_gen 用)
     // ---- 状态/异常 ----
-    logic       illegal;         // 非法指令标志 (当前按 NOP 处理, 预留 trap)
+    logic       illegal;         // 非法指令标志 (core 据此发起异常 2)
+    // ---- SYSTEM / Zicsr (EX 段消费) ----
+    sys_op_e    sys_op;          // SYSTEM 子类型
+    logic [11:0] csr_addr;       // CSR 地址 (instr[31:20])
+    logic [1:0]  csr_cmd;        // 01=W (直接写) 10=S (置位) 11=C (清位)
+    logic        csr_src_imm;    // 1 = 源操作数取 5 位零扩展的 uimm, 0 = 取 rs1
+    logic [4:0]  csr_uimm;       // 立即数形式的源 (instr[19:15])
   } ctrl_s;
 
   // --------------------------------------------------------------------------
@@ -225,6 +244,23 @@ package rv32_pkg;
   // 上板跑分观测用 (软件 -> 硬件单向报告, 供顶层 LED 与 ILA 抓取)
   localparam logic [31:0] MMIO_MARK        = 32'hA000_0020;  // W: 写任意值 -> 单拍 mark 脉冲 (ILA 触发点)
   localparam logic [31:0] MMIO_RESULT      = 32'hA000_0024;  // W/R: 写锁存结果并置 done; 读回该值
+  // 机器定时器 (对应 RISC-V 的 mtime/mtimecmp, 产生 MTIP 中断)
+  localparam logic [31:0] MMIO_MTIMECMP_LO = 32'hA000_0028;  // W/R: mtimecmp[31:0]
+  localparam logic [31:0] MMIO_MTIMECMP_HI = 32'hA000_002C;  // W/R: mtimecmp[63:32]
+  localparam logic [31:0] MMIO_MTIME_LO    = 32'hA000_0030;  // R:   mtime[31:0]  (= 周期计数器)
+  localparam logic [31:0] MMIO_MTIME_HI    = 32'hA000_0034;  // R:   mtime[63:32]
+
+  // --------------------------------------------------------------------------
+  // 陷阱原因码 (mcause 的低 4 位; 最高位由 csr_file 补 = 是否中断)
+  // --------------------------------------------------------------------------
+  localparam logic [3:0] CAUSE_INSN_MISALIGN  = 4'd0;
+  localparam logic [3:0] CAUSE_ILLEGAL        = 4'd2;
+  localparam logic [3:0] CAUSE_BREAKPOINT     = 4'd3;
+  localparam logic [3:0] CAUSE_LOAD_MISALIGN  = 4'd4;
+  localparam logic [3:0] CAUSE_STORE_MISALIGN = 4'd6;
+  localparam logic [3:0] CAUSE_ECALL_M        = 4'd11;
+  localparam logic [3:0] CAUSE_IRQ_TIMER      = 4'd7;    // 机器定时器中断
+  localparam logic [3:0] CAUSE_IRQ_EXT        = 4'd11;   // 机器外部中断
 
   // --------------------------------------------------------------------------
   // EX 段操作数前递来源

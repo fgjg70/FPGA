@@ -240,6 +240,43 @@ module control_unit
         end
       end
 
+      // ----------------------------------------------------------------
+      // FENCE / FENCE.I: 本核顺序执行且无 cache, 架构上无副作用 -> 合法 NOP。
+      // **不能译成 illegal**: 编译器/运行库会在切换栈、初始化之后插 fence,
+      // 误判为非法会让正常程序一上来就掉进陷阱。
+      // ----------------------------------------------------------------
+      OPC_FENCE: begin
+        // 有意留空: 安全默认就是 NOP
+      end
+
+      // ----------------------------------------------------------------
+      // SYSTEM: ECALL / EBREAK / MRET / Zicsr
+      // ----------------------------------------------------------------
+      OPC_SYSTEM: begin
+        case (funct3)
+          3'b000: begin
+            // 特权指令靠 instr[31:20] 区分 (规范里这三个编码固定)
+            case (instr[31:20])
+              12'h000: ctrl.sys_op = SYS_ECALL;    // -> 异常 11 (M 模式环境调用)
+              12'h001: ctrl.sys_op = SYS_EBREAK;   // -> 异常 3  (断点)
+              12'h302: ctrl.sys_op = SYS_MRET;     // -> PC <- mepc 并恢复 MIE
+              default: illegal = 1'b1;
+            endcase
+          end
+          3'b100: illegal = 1'b1;                  // 规范保留, 非法
+          default: begin
+            // CSRRW/S/C 与立即数形式 (funct3 = 001/010/011/101/110/111)
+            ctrl.sys_op      = SYS_CSR;
+            ctrl.csr_addr    = instr[31:20];
+            ctrl.csr_cmd     = funct3[1:0];        // 01=W 10=S 11=C
+            ctrl.csr_src_imm = funct3[2];
+            ctrl.csr_uimm    = instr[19:15];
+            ctrl.reg_write   = 1'b1;               // 写回的是 *读到的旧值*
+            ctrl.wb_src      = WB_CSR;
+          end
+        endcase
+      end
+
       default: begin
         illegal = 1'b1;   // 未知 opcode: 其余信号保持 NOP 安全默认
       end
