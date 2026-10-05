@@ -35,6 +35,21 @@ run_hw_ila $ila
 puts "ARMED"
 wait_on_hw_ila -timeout 60 $ila
 upload_hw_ila_data $ila
-# -force: results/ila_done.csv 已存在时必须显式覆盖 (否则 Labtoolstcl 44-54 报错)
-write_hw_ila_data -force -csv_file {D:/USER/Desktop/FPGA/FPGA/results/ila_done.csv} hw_ila_data_1
+# -force: results/ila_done.csv must be explicitly overwritten when it exists,
+# otherwise Labtoolstcl 44-54 errors out.
+set csv {D:/USER/Desktop/FPGA/FPGA/results/ila_done.csv}
+write_hw_ila_data -force -csv_file $csv hw_ila_data_1
+
+# Self-check: confirm the file was really refreshed by THIS capture.
+# Printing CAPTURE_OK alone is not enough -- if the write silently failed the script
+# can still look successful, and the downstream `hw` subcommand would then parse an
+# OLD file and report the PREVIOUS run's result (measured: after the board dropped
+# off, it still printed "hardware verify PASS"). Checking mtime makes
+# "did the file actually refresh" a hard criterion.
+# Keep this file PURE ASCII (Vivado Tcl requirement).
+if {![file exists $csv]} { error "CAPTURE_NO_FILE: $csv not found" }
+set mt  [file mtime $csv]
+set age [expr {[clock seconds] - $mt}]
+puts "CSV_MTIME=[clock format $mt -format {%Y-%m-%d %H:%M:%S}] AGE_SEC=$age"
+if {$age > 120} { error "CAPTURE_STALE: csv is $age s old -> this capture did not land" }
 puts "CAPTURE_OK"

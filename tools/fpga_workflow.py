@@ -1698,6 +1698,33 @@ def cmd_hw(args) -> int:
         print(f"  [BLOCK] 找不到 {args.csv}")
         print("          先跑: cmd /c fpga\\ila_cap_done.bat")
         return 1
+
+    # ---- 【必须校验数据新鲜度】--------------------------------------------
+    # 本子命令只解析 results/ila_done.csv, 那是某一次抓取的**快照**。
+    # 板子掉线/没重新抓取时这个文件不会更新, 于是它会**照样打印
+    # "上板验证 PASS"** —— 把几小时前的陈旧结果当成新验证。
+    # 这是"工具制造虚假证据", 比功能 bug 更危险, 因为它静默。
+    # 实测踩过: 板子 22:13 已掉线, 这里仍在报 PASS (数据是 17:49 的)。
+    # 所以超过 max_age 分钟就**拒绝给结论**, 只作历史参考。
+    age_s   = time.time() - os.path.getmtime(path)
+    age_min = age_s / 60.0
+    stamp   = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(os.path.getmtime(path)))
+    fresh   = age_min <= args.max_age_min
+
+    print("=" * 74)
+    print("  上板读回结果 (ILA over JTAG)")
+    print("=" * 74)
+    print(f"  数据文件 : {args.csv}")
+    print(f"  抓取时间 : {stamp}   ({age_min:.1f} 分钟前)")
+    if not fresh:
+        print()
+        print(f"  [STALE] 这份数据已超过 {args.max_age_min} 分钟 —— **不作为本次验证结论**。")
+        print("          大概率是板子没连上 / 没有重新抓取。请先:")
+        print("            cmd /c fpga\\jtag_probe.bat     (确认能识别器件)")
+        print("            cmd /c fpga\\ila_cap_done.bat   (重新抓取)")
+        print("          以下内容仅作**历史参考**。")
+        print("-" * 74)
+
     lines = [l for l in read_text(path).splitlines() if l.strip()]
     hdr = [h.strip().strip('"') for h in lines[0].split(",")]
 
@@ -1739,9 +1766,7 @@ def cmd_hw(args) -> int:
     cmmhz = iters * 1e6 / tick if tick else 0
     secs = tick / args.clk_hz
 
-    print("=" * 74)
-    print("  上板读回结果 (ILA over JTAG)")
-    print("=" * 74)
+    # 头部与新鲜度已经在函数开头打印过, 这里不再重复
     print(f"  ila_ctrl     = 0x{ctrl:02X}  -> done={done} pass={p} fail={f} illegal={illegal}")
     print(f"  score_result = 0x{res:08X}")
     print(f"    bit31 = {crc}  -> CRC 判定 {'全部匹配官方参考值' if crc else '不匹配 !!'}")
@@ -1754,6 +1779,12 @@ def cmd_hw(args) -> int:
         print(f"    对照预期 {args.expect_tick:,}: 偏差 "
               f"{abs(tick-args.expect_tick)/args.expect_tick*100:.3f}%")
     ok = done and p and not f and not illegal and crc
+    if not fresh:
+        # 陈旧数据绝不允许给出 PASS 结论 —— 否则板子掉线也会"验证通过"
+        print(f"\n  => 结果本身: {'PASS' if ok else 'FAIL'}"
+              f"  (但数据已 {age_min:.0f} 分钟未更新, **不作为验证结论**)")
+        print(f"  => 本次验证: 未完成 (需要重新抓取)")
+        return 1
     print(f"\n  => 上板验证 {'PASS' if ok else 'FAIL'}")
 
     if args.record:
@@ -1854,6 +1885,10 @@ def main() -> int:
     p.add_argument("--expect-tick", type=int, help="预期 tick, 用于算偏差")
     p.add_argument("--tag", help="记录进 coremark.csv 的标签")
     p.add_argument("--record", action="store_true", help="追加一行到 results/coremark.csv")
+    # 数据新鲜度门限: 超过就拒绝给结论 (板子掉线时 CSV 不会更新, 否则会
+    # 把几小时前的旧结果当成新验证 —— 实测踩过)
+    p.add_argument("--max-age-min", type=float, default=20.0,
+                   help="CSV 超过这个分钟数就判为陈旧, 不给验证结论 (默认 20)")
     p.set_defaults(func=cmd_hw)
 
     p = sub.add_parser("synth", help="Vivado 综合 -> 四项指标 (自动串行化 + 缓存)")

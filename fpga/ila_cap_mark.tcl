@@ -28,6 +28,7 @@ run_hw_ila $ila
 puts "ARMED"
 wait_on_hw_ila -timeout 60 $ila
 upload_hw_ila_data $ila
-# -force: results/ila_pipeline.csv 已存在时必须显式覆盖 (否则 Labtoolstcl 44-54 报错)
+# -force: results/ila_pipeline.csv must be explicitly overwritten when it exists,
+# otherwise Labtoolstcl 44-54 errors out.
 write_hw_ila_data -force -csv_file {D:/USER/Desktop/FPGA/FPGA/results/ila_pipeline.csv} hw_ila_data_1
 puts "CAPTURE_OK"
