@@ -768,7 +768,14 @@ def compile_sim(rtl_files: list[str], tb: str, defines: tuple[str, ...] = ()) ->
     rc, out, _ = run([vlib, "work"], cwd=workdir)
     if rc != 0:
         return rc, out, workdir
-    flags = ["+" + d if not d.startswith("+") else d for d in defines]
+    # 【必须写成 +define+NAME, 不能写 +NAME】
+    # 实测: `vlog -sv +FOO ...` 里 `+FOO` 会被当成未知选项 —— 宏**根本不会被定义**,
+    # 而编译还"成功"(只报个错然后继续), 于是仿真跑的是**没开宏的版本**。
+    # 这个坑静默了很久: IMEM_REG_READ / LOAD_RESULT_REG / BTB_GSHARE 三个宏
+    # 在 ModelSim 侧**从来没生效过** —— 综合(Tcl 的 -verilog_define)开了, 仿真没开,
+    # 两边跑的不是同一份设计。见 PITFALLS R17。
+    # 自证手段: 每个宏生效时该模块会 $display 一行 (如 "[btb] GSHARE ... ACTIVE")。
+    flags = [(d if d.startswith("+define+") else "+define+" + d.lstrip("+")) for d in defines]
     rc, out2, _ = run([vlog, "-sv"] + flags + ["-work", "work"] + srcs, cwd=workdir)
     if rc == 0:
         SIM_CACHE[key] = "ok"
@@ -815,13 +822,18 @@ def cmd_verify(args) -> int:
 
         print(f"\n--- {name}: {t['desc']}")
         t0 = time.time()
+        # 【默认三个宏全关】= 上板验证过的配置 (ILA 版 bitstream)。
+        # 三个宏都曾默认为开, 但那是基于无效实验 —— ModelSim 侧宏传递写错
+        # (见 PITFALLS R17), 宏从未在仿真生效, 所以零代价是假的。
+        # 修好后实测: IMEM_REG_READ / LOAD_RESULT_REG 单独开会 timeout;
+        # BTB_GSHARE 能跑但慢 6%。要用请显式加 --gshare / --reg-read / --load-reg。
         defs = []
-        if not args.imem_comb_read:
+        if args.imem_reg_read:
             defs.append("IMEM_REG_READ")
-        if not args.load_comb:
-            # 默认由 MEM/WB 寄存器给出 load 结果。实测零代价 (ticks 与 load-use
-            # 停顿完全不变), 却把 fmax 从 65.3 抬到 75.0 —— 见 results/p3-load-result.md
+        if args.load_reg:
             defs.append("LOAD_RESULT_REG")
+        if args.gshare:
+            defs.append("BTB_GSHARE")
         defines = tuple(defs)
         rc, out, workdir = compile_sim(files, t["tb"], defines)
         if rc != 0:
@@ -1284,6 +1296,7 @@ def cmd_synth(args) -> int:
     h.update(prog.encode())
     h.update(b"combread" if args.imem_comb_read else b"regread")
     h.update(b"loadcomb" if args.load_comb else b"loadreg")
+    h.update(b"smith" if args.smith else b"gshare")
     fp = h.hexdigest()[:32]
 
     cache = os.path.join(CACHE_DIR, "synth-cache.json")
@@ -1320,6 +1333,8 @@ def cmd_synth(args) -> int:
                 benv["IMEM_COMB_READ"] = "1"
             if args.load_comb:
                 benv["LOAD_COMB"] = "1"
+            if args.smith:
+                benv["BTB_SMITH"] = "1"
             rc, out, dt = run(["cmd", "/c", abspath("fpga/build.bat")],
                               cwd=abspath("fpga"), timeout=args.timeout, env=benv)
             with open(log, "w", encoding="utf-8") as f:
@@ -1787,10 +1802,12 @@ def main() -> int:
     p = sub.add_parser("verify", help="ModelSim 增量回归")
     p.add_argument("--only", nargs="*", help="只跑指定测试名")
     p.add_argument("--force", action="store_true", help="忽略缓存全量重跑")
-    p.add_argument("--imem-comb-read", action="store_true",
-                   help="仿真时按组合读编译 (对应 IMEM_COMB_READ); 默认寄存读")
-    p.add_argument("--load-comb", action="store_true",
-                   help="仿真时回退 load 组合路径 (LOAD_COMB); 默认由 MEM/WB 寄存器给出")
+    p.add_argument("--imem_reg_read", action="store_true",
+                   help="取指存储器用寄存读 (IMEM_REG_READ); 默认组合读")
+    p.add_argument("--load_reg", action="store_true",
+                   help="load 结果由 MEM/WB 寄存器给出 (LOAD_RESULT_REG); 默认组合")
+    p.add_argument("--gshare", action="store_true",
+                   help="方向预测器用 gshare (BTB_GSHARE); 默认纯局部 Smith")
     p.add_argument("-v", "--verbose", action="store_true", help="通过时也打印摘要")
     p.set_defaults(func=cmd_verify)
 
@@ -1829,6 +1846,8 @@ def main() -> int:
                    help="取指存储器回退组合读 (IMEM_COMB_READ); 默认是寄存读/BRAM")
     p.add_argument("--load-comb", action="store_true",
                    help="load 结果回退组合路径 (LOAD_COMB); 默认由 MEM/WB 寄存器给出")
+    p.add_argument("--smith", action="store_true",
+                   help="方向预测器回退纯 Smith; 默认 gshare")
     p.add_argument("--timeout", type=int, default=3600, help="Vivado 超时秒数")
     p.add_argument("--lock-timeout", type=int, default=1800, help="等待构建锁的秒数")
     p.set_defaults(func=cmd_synth)

@@ -158,6 +158,29 @@ module tb_sw;
   // 预测器精度
   int unsigned n_ctrl = 0;       // 控制流指令数 (每条做一次预测)
   int unsigned n_mis  = 0;       // 预测错误数
+  // 【按类型分】决定下一步该优化哪一类预测器:
+  //   条件分支错多 -> 方向预测器 (2 位 Smith / 更深的表)
+  //   JALR(返回) 错多 -> 需要 RAS (返回地址栈)
+  int unsigned n_mis_br = 0, n_mis_jal = 0, n_mis_jalr = 0;
+  // 【条件分支误判再细分】决定该修 BTB 组织还是方向预测器:
+  //   BTB 没命中      -> 预测"不跳", 若实际 taken 则误判 => 该扩表 / 改组织
+  //   BTB 命中但方向错 -> 表命中了, 2 位计数器的方向判断错了 => 该改方向预测器
+  int unsigned n_mis_br_nohit = 0, n_mis_br_dir = 0;
+  int unsigned n_br_hit = 0, n_br_nohit = 0;      // 条件分支的 BTB 命中情况
+
+  // 复现 btb.sv 的"有没有表项"判据 (纯观测用)。
+  // btb 实例化参数: IDX_BITS=6, PC_TOP=14 -> 6 位索引 + 6 位 tag。
+  // btb.sv 原文: pidx = pc[IDX_BITS+1:2], ptag = pc[PC_TOP-1:IDX_BITS+2]
+  //              pred_hit = vld[pidx] && (tag[pidx] == ptag)
+  function automatic logic btb_has_entry(input logic [31:0] pc);
+    logic [5:0] idx;
+    logic [5:0] tg;
+    begin
+      idx = pc[7:2];
+      tg  = pc[13:8];
+      btb_has_entry = u_dut.u_btb.vld[idx] && (u_dut.u_btb.tag[idx] == tg);
+    end
+  endfunction
 
   always @(posedge clk) begin
     if (!rst) begin
@@ -176,6 +199,27 @@ module tb_sw;
       if (u_dut.id_ex_ctrl.pc_sel != 2'd0) begin
         if (!u_dut.pipe_stall) n_ctrl++;
         if (u_dut.redirect_raw) n_mis++;
+      end
+      // 按类型统计预测错误 (pc_sel: 1=BR 2=J 3=JR)
+      if (u_dut.redirect_raw && !u_dut.pipe_stall) begin
+        if      (u_dut.id_ex_ctrl.pc_sel == 2'd1) n_mis_br++;
+        else if (u_dut.id_ex_ctrl.pc_sel == 2'd2) n_mis_jal++;
+        else if (u_dut.id_ex_ctrl.pc_sel == 2'd3) n_mis_jalr++;
+      end
+      // 【条件分支误判再细分】纯观测 (层次化读 BTB 阵列, 不改 RTL)。
+      // 目的: 分清两种完全不同的病因 ——
+      //   (a) BTB 没表项 -> 只能预测"不跳"; 若实际 taken 就是"容量/冲突"问题
+      //   (b) BTB 有表项但方向计数器判反 -> 是"方向预测器"问题
+      // 修法完全不同, 必须先分清。
+      // 做法: 用与 btb.sv 完全相同的 index/tag 切片, 在 EX 段 PC 上复现它的
+      // 组合读公式 (btb.sv: pidx=pc[IDX+1:2], ptag=pc[PC_TOP-1:IDX+2])。
+      if (u_dut.id_ex_ctrl.pc_sel == 2'd1) begin
+        if (btb_has_entry(u_dut.id_ex_pc)) n_br_hit++;
+        else                         n_br_nohit++;
+        if (u_dut.redirect_raw && !u_dut.pipe_stall) begin
+          if (btb_has_entry(u_dut.id_ex_pc)) n_mis_br_dir++;
+          else                         n_mis_br_nohit++;
+        end
       end
 
       // pc_sel_e: PC_NEXT=0 PC_BR=1 PC_J=2 PC_JR=3
@@ -244,6 +288,23 @@ module tb_sw;
     $display("  --- predictor accuracy ---");
     $display("  ctrl-flow  = %0d   mispredict = %0d   accuracy = %0d%%",
              n_ctrl, n_mis, n_ctrl == 0 ? 0 : 100 - (n_mis * 100) / n_ctrl);
+    $display("  --- mispredict by type (决定下一个优化方向) ---");
+    $display("  cond branch = %0d  (%0d%% of mispredicts)", n_mis_br,
+             n_mis == 0 ? 0 : (n_mis_br * 100) / n_mis);
+    $display("  JAL         = %0d  (%0d%%)", n_mis_jal,
+             n_mis == 0 ? 0 : (n_mis_jal * 100) / n_mis);
+    $display("  JALR        = %0d  (%0d%%)  <- 若这项大, RAS 才有价值", n_mis_jalr,
+             n_mis == 0 ? 0 : (n_mis_jalr * 100) / n_mis);
+    $display("  --- 条件分支: BTB 冲突 vs 方向预测 (决定改表组织还是改方向预测器) ---");
+    $display("  条件分支总数 = %0d   BTB 有表项 = %0d (%0d%%)   无表项 = %0d (%0d%%)",
+             n_br_hit + n_br_nohit, n_br_hit,
+             (n_br_hit + n_br_nohit) == 0 ? 0 : (n_br_hit * 100) / (n_br_hit + n_br_nohit),
+             n_br_nohit,
+             (n_br_hit + n_br_nohit) == 0 ? 0 : (n_br_nohit * 100) / (n_br_hit + n_br_nohit));
+    $display("  误判细分: 无表项(容量/冲突) = %0d   有表项但方向错 = %0d",
+             n_mis_br_nohit, n_mis_br_dir);
+    $display("           无表项占条件分支误判 %0d%% (这项大 => 该扩容/改组织)",
+             n_mis_br == 0 ? 0 : (n_mis_br_nohit * 100) / n_mis_br);
     $display("  --- redirect breakdown ---");
     $display("  cond branch total = %0d  (taken %0d = %0d%%)",
              n_bcond, n_br_taken, n_bcond == 0 ? 0 : (n_br_taken * 100) / n_bcond);
