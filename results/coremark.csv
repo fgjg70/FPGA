@@ -1,16 +1,15 @@
-# CoreMark 指标历史 — 每行一次测量
-# coremark_per_mhz = iterations * 1e6 / ticks   (主频自动约掉)
-# fmax_mhz = 1000 / (20 - wns_ns), 由 Vivado 时序报告推算
-# 状态: keep = 当前保留的配置; rejected = 试过但因综合指标净亏而回退
+﻿# CoreMark 鎸囨爣鍘嗗彶 鈥?姣忚涓€娆℃祴閲?# coremark_per_mhz = iterations * 1e6 / ticks   (涓婚鑷姩绾︽帀)
+# fmax_mhz = 1000 / (20 - wns_ns), 鐢?Vivado 鏃跺簭鎶ュ憡鎺ㄧ畻
+# 鐘舵€? keep = 褰撳墠淇濈暀鐨勯厤缃? rejected = 璇曡繃浣嗗洜缁煎悎鎸囨爣鍑€浜忚€屽洖閫€
 date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
-2026-10-05,baseline-v1,1,1210148,0.8263,3499,732,0,0,78.4,keep,"RV32I 5-stage, 分支在 EX 判定(2拍), 无预测"
-2026-10-05,branch-pred-v1,1,973352,1.0274,3877,862,0,0,70.1,keep,"BTB64 + 2位Smith; redirect 184890->59466"
-2026-10-05,rv32im-v1,1,414062,2.4151,4532,1032,0,8,64.7,rejected,"RV32M 组合乘法: CoreMark/MHz 高但 fmax 被 DSP 路径拖到 64.7"
-2026-10-05,m-ext-v2,1,423486,2.3614,4551,1084,0,8,74.6,keep,"RV32M + 乘积寄存进 DSP(MREG/PREG): 换回 fmax 74.6, 只让 2.2% CoreMark"
-2026-10-05,branch-pred-v2-ras,1,419180,2.3856,4809,1152,0,8,71.2,rejected,"BTB128 + RAS8: 预测精度 89->92%, 但 fmax/LUT/CoreMark-LUTs 三项里两项倒退, 净亏"
-2026-10-05,branch-pred-v2,1,423486,2.3614,4494,1050,0,8,74.6,keep,"最终: BTB64(目标位宽压缩到14位) + 2位Smith, 无 RAS; 精度 89%, 误判 11501"
-2026-10-05,bram-v1,1,423486,2.3614,2481,1059,4,8,63.9,keep,"dmem 改寄存读->行为级 BRAM (LUT 4494->2481, -45%; CoreMark/LUTs 5.254e-4->9.518e-4, +81%); 代价 fmax 74.6->63.9: load->jalr 目标路径压在一拍内; CRC 全对"
-2026-10-05,HARDWARE-VERIFIED,1200,508155404,2.3615,2481,1059,4,8,74.6,keep,"上板实测 (达芬奇Pro XC7A100T-2 @50MHz): 1200 次迭代 10.16s >=10s; CRC 判定位=1 (三个数据类 CRC 全对); done=1 pass=1 fail=0 illegal=0; CoreMark/MHz 硬件 2.3615 vs 仿真 2.3611 (吻合 0.02%)"
+2026-10-05,baseline-v1,1,1210148,0.8263,3499,732,0,0,78.4,keep,"RV32I 5-stage, 鍒嗘敮鍦?EX 鍒ゅ畾(2鎷?, 鏃犻娴?
+2026-10-05,branch-pred-v1,1,973352,1.0274,3877,862,0,0,70.1,keep,"BTB64 + 2浣峉mith; redirect 184890->59466"
+2026-10-05,rv32im-v1,1,414062,2.4151,4532,1032,0,8,64.7,rejected,"RV32M 缁勫悎涔樻硶: CoreMark/MHz 楂樹絾 fmax 琚?DSP 璺緞鎷栧埌 64.7"
+2026-10-05,m-ext-v2,1,423486,2.3614,4551,1084,0,8,74.6,keep,"RV32M + 涔樼Н瀵勫瓨杩?DSP(MREG/PREG): 鎹㈠洖 fmax 74.6, 鍙 2.2% CoreMark"
+2026-10-05,branch-pred-v2-ras,1,419180,2.3856,4809,1152,0,8,71.2,rejected,"BTB128 + RAS8: 棰勬祴绮惧害 89->92%, 浣?fmax/LUT/CoreMark-LUTs 涓夐」閲屼袱椤瑰€掗€€, 鍑€浜?
+2026-10-05,branch-pred-v2,1,423486,2.3614,4494,1050,0,8,74.6,keep,"鏈€缁? BTB64(鐩爣浣嶅鍘嬬缉鍒?4浣? + 2浣峉mith, 鏃?RAS; 绮惧害 89%, 璇垽 11501"
+2026-10-05,bram-v1,1,423486,2.3614,2481,1059,4,8,63.9,keep,"dmem 鏀瑰瘎瀛樿->琛屼负绾?BRAM (LUT 4494->2481, -45%; CoreMark/LUTs 5.254e-4->9.518e-4, +81%); 浠ｄ环 fmax 74.6->63.9: load->jalr 鐩爣璺緞鍘嬪湪涓€鎷嶅唴; CRC 鍏ㄥ"
+2026-10-05,HARDWARE-VERIFIED,1200,508155404,2.3615,2481,1059,4,8,74.6,keep,"涓婃澘瀹炴祴 (杈捐姮濂嘝ro XC7A100T-2 @50MHz): 1200 娆¤凯浠?10.16s >=10s; CRC 鍒ゅ畾浣?1 (涓変釜鏁版嵁绫?CRC 鍏ㄥ); done=1 pass=1 fail=0 illegal=0; CoreMark/MHz 纭欢 2.3615 vs 浠跨湡 2.3611 (鍚诲悎 0.02%)"
 2026-10-05,p0-score-cm_hw,1,423486,2.3614,3679,1146,4,8,64.0,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-05,p1-trap-wired,1,423486,2.3614,3923,1333,4,8,61.4,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-05,p3a-jalr-addder,1,423486,2.3614,3945,1333,4,8,64.4,keep,fpga_workflow.py synth (PROG=cm_hw)
@@ -22,4 +21,4 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-05,p3f-load-result-reg,1,423486,2.3614,2444,1313,8,8,75.0,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-05,p3g-default-final,1,423486,2.3614,2444,1313,8,8,75.0,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-05,p2-timer-irq,1,423527,2.3611,2526,1377,8,8,70.9,keep,fpga_workflow.py synth (PROG=cm_hw)
-2026-10-05,HW-P2P3-verified,1200,508155404,2.3615,2526,1377,8,8,70.9,keep,fpga_workflow.py synth (PROG=?)
+2026-10-05,HW-P2P3-verified,1200,508155404,2.3615,2526,1377,8,8,70.9,keep,HW-verified: ILA over JTAG, CRC verdict=1, 10.16s

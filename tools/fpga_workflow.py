@@ -1228,7 +1228,9 @@ def append_csv(tag: str, m: dict) -> None:
         "lut": m.get("lut") or "", "ff": m.get("ff") or "",
         "bram": m.get("bram") or "", "dsp": m.get("dsp") or "",
         "fmax_mhz": f"{m['fmax']:.1f}" if m.get("fmax") else "",
-        "status": "keep", "notes": f"fpga_workflow.py synth (PROG={m.get('prog','?')})",
+        "status": "keep",
+        # 调用方可以给更准确的 notes (例如 hw 是"上板实测"); 没给才用 synth 默认文案
+        "notes": m.get("note") or f"fpga_workflow.py synth (PROG={m.get('prog','?')})",
     }
     cells = []
     for k in hdr:
@@ -1693,7 +1695,9 @@ def cmd_hw(args) -> int:
              "ff": res_m.get("ff"), "bram": res_m.get("bram"), "dsp": res_m.get("dsp"),
              "cm_lut": (cmmhz / res_m["lut"]) if res_m.get("lut") else None,
              "throughput": (cmmhz * res_m["fmax"]) if res_m.get("fmax") else None,
-             "iters": iters, "ticks": tick}
+             "iters": iters, "ticks": tick,
+             "note": ("上板实测 (ILA over JTAG): %d 迭代, %.2fs, CRC 判定=%d; "
+                      "资源取自最近一次 synth 归档" % (iters, secs, crc))}
         append_csv(args.tag or "HARDWARE-RERUN", m)
     print("=" * 74)
     return 0 if ok else 1
