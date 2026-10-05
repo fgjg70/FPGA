@@ -243,24 +243,47 @@ int main(void) {
      *       虽然两者应当相同 —— 用独立参考更硬)。
      * ====================================================================*/
     u64 h0, h1, h2;
-    /* 【先证明加速单元真的在】写一个已知值到 A 窗口再读回。
-     * 放在启动**之前**: 读 STATUS 会清 done 标志, 放在后面会把完成标志吃掉。 */
+    /* 【自证加速单元在总线上】写已知值到 A 窗口再读回。放在启动**之前**:
+     * 读 STATUS 会清 done 标志, 放后面会把完成标志吃掉。 */
     G_A_W(0) = 0xDEADBEEFu;
     u32 rb = G_A_W(0);
-    puts_("  --- accelerator ---\n");
-    /* 自证加速单元确实在总线上: 写已知值再读回。这条必须留着 —— 少了它,
-     * "读回一堆不对的数"就分不清是"加速单元算错"还是"根本没接上"。 */
-    puts_("  probe alive="); putu(rb == 0xDEADBEEFu ? 1u : 0u); puts_("\n");
+
+    /* 【先把软件结果留下来再跑硬件】踩过的坑: gemm_hw_unpack() 会把 C 覆盖成
+     * 硬件结果, 而 count_mismatch()/逐行直方图是拿 C 与"独立参考"比的 ——
+     * 于是它们实际在**用硬件结果和硬件结果比**, 恒等于自己跟自己比,
+     * 什么也证明不了。所以必须在 C 被覆盖前把软件基准存下来。 */
+    static s32 C_sw[N][N];
+    for (int i = 0; i < N; i++)
+        for (int j = 0; j < N; j++) C_sw[i][j] = C[i][j];
+    u32 cs_sw = checksum();
 
     h0 = read_cycles();
     gemm_hw_pack();
     u32 accel_cycles = gemm_hw_run();
-    gemm_hw_unpack();
+    gemm_hw_unpack();                 /* 此后 C = 硬件结果 */
     h2 = read_cycles();
 
-    u32 cs_hw  = checksum();
-    u32 bad_hw = count_mismatch();
+    /* 硬件结果 vs 独立参考实现 (不经过 C_sw, 直接重算) */
+    u32 bad_hw = 0;
+    for (int i = 0; i < N; i++)
+        for (int j = 0; j < N; j++) {
+            long long acc = 0;
+            for (int k = 0; k < N; k++) acc += (long long)A[i][k] * (long long)B[k][j];
+            if ((long long)C[i][j] != acc) bad_hw++;
+        }
+    /* 硬件结果 vs 软件结果 (两条独立实现互证) */
+    u32 diff_sw = 0;
+    for (int i = 0; i < N; i++)
+        for (int j = 0; j < N; j++) if (C[i][j] != C_sw[i][j]) diff_sw++;
 
+    u32 cs_hw = checksum();
+
+    puts_("  --- accelerator ---\n");
+    puts_("  probe alive="); putu(rb == 0xDEADBEEFu ? 1u : 0u); puts_("\n");
+    /* 读回规模寄存器: 若 M/K/N 与写入不符, 说明寄存器通路有问题,
+     * 后面的"结果不对"就只是它的下游现象。 */
+    puts_("  regs M/K/N="); putu(G_M); puts_("/"); putu(G_K);
+    puts_("/"); putu(G_N); puts_("\n");
     puts_("  accel_cycles=");  putu(accel_cycles);        puts_("\n");
     puts_("  ramp_cycles=");   putu((u32)(h2 - h0));     puts_("\n");
     /* 逐点看前几个元素: 排错时"哪里开始不对"比"有多少不对"有用得多 */
@@ -280,6 +303,35 @@ int main(void) {
     puts_("\n");
     puts_("  checksum_hw=");   puthex(cs_hw);            puts_("\n");
     puts_("  mismatch_hw=");   putu(bad_hw);             puts_("\n");
+    puts_("  diff_vs_sw=");    putu(diff_sw);            puts_("\n");
+    /* 每行错几个 —— "错在哪里"比"错多少"有用得多:
+     * 集中在某几行 -> 行索引推进有问题; 每行都错同样的列 -> 列索引/B 缓冲有问题。 */
+    puts_("  hw_bad_per_row:");
+    for (int i = 0; i < N; i++) {
+        u32 bad = 0;
+        for (int j = 0; j < N; j++) {
+            long long acc = 0;
+            for (int k = 0; k < N; k++) acc += (long long)A[i][k] * (long long)B[k][j];
+            if ((long long)C[i][j] != acc) bad++;
+        }
+        puts_(" "); putu(bad);
+    }
+    puts_("\n");
+    /* 逐点看第 0 行与第 8 行 (硬件在 8 行之后开始错) —— 直接看数值 */
+    puts_("  row0 ref/hw:");
+    for (int j = 0; j < 6; j++) {
+        long long acc = 0;
+        for (int k = 0; k < N; k++) acc += (long long)A[0][k] * (long long)B[k][j];
+        puts_(" "); putu((u32)acc); puts_("/"); putu((u32)C[0][j]);
+    }
+    puts_("\n");
+    puts_("  row8 ref/hw:");
+    for (int j = 0; j < 6; j++) {
+        long long acc = 0;
+        for (int k = 0; k < N; k++) acc += (long long)A[8][k] * (long long)B[k][j];
+        puts_(" "); putu((u32)acc); puts_("/"); putu((u32)C[8][j]);
+    }
+    puts_("\n");
     puts_("  hw_match=");      putu(bad_hw == 0u ? 1u : 0u); puts_("\n");
 
     /* 加速比: 软件 GEMM 周期 / 加速单元自报周期 (定点两位) */

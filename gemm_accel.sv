@@ -76,6 +76,7 @@ module gemm_accel
   state_e st;
   logic [31:0] i_idx, j_idx, k_idx;
   logic signed [31:0] acc;
+  logic        first_k;      // 当前输出元素的第一个积 (赋值而非累加)
 
   assign busy = (st != S_IDLE);
 
@@ -130,6 +131,7 @@ module gemm_accel
       j_idx    <= '0;
       k_idx    <= '0;
       acc      <= '0;
+      first_k  <= 1'b0;
     end
     else begin
       if (sel && we) begin
@@ -146,6 +148,7 @@ module gemm_accel
             j_idx    <= '0;
             k_idx    <= '0;
             acc      <= '0;
+            first_k  <= 1'b0;
             done_r   <= 1'b0;
             cycles_r <= '0;
           end
@@ -172,13 +175,27 @@ module gemm_accel
       case (st)
         S_IDLE: ;
         S_CLEAR: begin
-          acc   <= '0;
-          k_idx <= '0;
-          st    <= S_MAC;
+          // 【为什么要有 first_k 这个标志】
+          // 不能只在 S_CLEAR 里 `acc <= 0` 就完事: S_MAC 写的是
+          // `acc <= acc + 积` —— 这是**非阻塞赋值, 右值读的是旧的 acc**,
+          // 于是刚清零的值在同一拍就被"旧值 + 积"覆盖掉了。
+          // 后果是**每个输出元素的累加器从上一个元素接着算**, 从不归零,
+          // 直到 32 位溢出。实测症状极有欺骗性: 前 128 个元素正好对
+          // (累加器从复位值 0 开始, 还没溢出), 之后整片全错:
+          //   hw_bad_per_row: 0 0 0 0 0 0 0 0 14 16 16 16 15 16 16 16
+          // 正确做法: 第一个积**直接赋值**(不累加), 后续才累加。
+          k_idx   <= '0;
+          first_k <= 1'b1;
+          st      <= S_MAC;
         end
         S_MAC: begin
-          // acc 在 S_CLEAR 已清零, 所以这里可以无条件累加
-          acc <= acc + ($signed(a_val) * $signed(b_val));
+          if (first_k) begin
+            acc     <= $signed(a_val) * $signed(b_val);   // 首项: 赋值, 不是累加
+            first_k <= 1'b0;
+          end
+          else begin
+            acc <= acc + ($signed(a_val) * $signed(b_val));
+          end
           if (k_idx + 1 < r_k) k_idx <= k_idx + 1;
           else                 st    <= S_STORE;
         end
