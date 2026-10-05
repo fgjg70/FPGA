@@ -152,6 +152,7 @@ module core
   );
 
   imem #(.BASE(IMEM_BASE), .BYTES(IMEM_BYTES)) u_imem (
+    .clk   (clk),
     .addr  (pc),
     .rdata (imem_rdata)
   );

@@ -38,7 +38,22 @@ read_xdc "D:/USER/Desktop/FPGA/FPGA/fpga/daVinciPro.xdc"
 # 路径一定要带引号, 否则宏展开成裸路径会在 '/' 上报 syntax error (Synth 8-2715),
 # 而且报错行号会落在 $readmemh 那一行, 极具误导性。
 # DMEM_INIT_FILE 必须给: 只给 IMEM 的话 .data/.rodata 全是 0。
-synth_design -top top_a100t -part $part -verilog_define "IMEM_INIT_FILE=\"$imem\" DMEM_INIT_FILE=\"$dmem\""
+# IMEM_REG_READ: 取指存储器"寄存读(进 BRAM)"还是"组合读(LUT ROM)"。
+# 【默认寄存读】实测 (见 results/p3-imem.md):
+#   寄存读: LUT 2656, u_imem 仅 36 LUT, BRAM 8, fmax 65.3, ticks 423527 (不变)
+#   组合读: LUT 3945, u_imem 1228 LUT, BRAM 4, fmax 64.4, ticks 423527
+#   -> 寄存读四项指标全面不劣: CoreMark/LUTs +48.5%, CoreMark/MHz 完全不变。
+#      整个前端只是相位平移 (if_pc 与 if_instr 由同一个寄存器锁存, 始终配对),
+#      **不加流水级、不加气泡** —— 所以它是无脑更优。
+# 回退: set IMEM_COMB_READ=1
+set IMEM_DEFS "IMEM_REG_READ=1"
+if {[info exists ::env(IMEM_COMB_READ)] && $::env(IMEM_COMB_READ) ne ""} {
+  set IMEM_DEFS ""
+  puts "BUILD_IMEM_COMB_READ=1"
+} else {
+  puts "BUILD_IMEM_REG_READ=1"
+}
+synth_design -top top_a100t -part $part -verilog_define "IMEM_INIT_FILE=\"$imem\" DMEM_INIT_FILE=\"$dmem\" $IMEM_DEFS"
 puts "BUILD_PROG=$PROG"
 opt_design
 place_design -directive ExtraTimingOpt

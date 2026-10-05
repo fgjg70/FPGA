@@ -342,6 +342,37 @@ def check_memory_layout() -> list[dict]:
     return findings
 
 
+def _sw_source_files() -> list[str]:
+    """sw/ 下参与镜像构建的源文件 (C / S / 链接脚本)。"""
+    out = []
+    for d in ("sw", "sw/coremark"):
+        dd = abspath(d)
+        if os.path.isdir(dd):
+            for n in sorted(os.listdir(dd)):
+                if n.endswith((".c", ".h", ".S", ".ld")):
+                    out.append(f"{d}/{n}")
+    return out
+
+
+def _sw_source_hash() -> str:
+    """sw/ 源码的内容哈希 -> 用于判断镜像是否需要重建。"""
+    h = hashlib.sha256()
+    for rel in _sw_source_files():
+        p = abspath(rel)
+        h.update(rel.encode())
+        h.update(sha256_file(p).encode() if os.path.exists(p) else b"MISSING")
+    return h.hexdigest()[:32]
+
+
+def _newest_sw_mtime() -> float:
+    newest = 0.0
+    for rel in _sw_source_files():
+        p = abspath(rel)
+        if os.path.exists(p):
+            newest = max(newest, os.path.getmtime(p))
+    return newest
+
+
 def check_bitstream_freshness() -> list[dict]:
     """bitstream 新鲜度: 评分版 .bit 是否比 RTL / 程序镜像旧。
 
@@ -518,31 +549,42 @@ def cmd_check(args) -> int:
         print("  OK   所有 RTL 模块都被例化")
 
     # ---- 3. 软件 -> 镜像 新鲜度 ----
-    print("\n[3] 软件源 -> .hex 镜像 新鲜度")
+    # 【判据用内容哈希, 不用 mtime】(HANDOFF-WORKFLOW.md §5)
+    # 踩过: 把 link.ld 改回原样(mtime 变了、内容没变) 就误报"镜像过期"。
+    # mtime 会被 checkout/复制/改回原样打乱, 只有内容才算数。
+    print("\n[3] 软件源 -> .hex 镜像 新鲜度 (内容哈希判据)")
+    sw_hash = _sw_source_hash()
+    hcache_path = os.path.join(CACHE_DIR, "sw-build.json")
+    try:
+        hcache = json.loads(read_text(hcache_path))
+    except Exception:
+        hcache = {}
     pairs = [
-        ("sw/hello.c", "sim/prog/hello.hex"),
-        ("sw/coremark/core_main.c", "sim/prog/cm_rv32im.hex"),
-        ("sw/coremark/core_main.c", "sim/prog/cm_hw.hex"),
+        ("sim/prog/hello.hex", "hello"),
+        ("sim/prog/cm_rv32im.hex", "coremark"),
+        ("sim/prog/cm_hw.hex", "coremark"),
     ]
-    for src, img in pairs:
-        sp, ip = abspath(src), abspath(img)
+    for img, group in pairs:
+        ip = abspath(img)
         if not os.path.exists(ip):
             print(f"  [warn] {img} 不存在")
             warnings.append(f"{img} 不存在")
             continue
-        newest_src = 0.0
-        for d in ("sw", "sw/coremark"):
-            dd = abspath(d)
-            if os.path.isdir(dd):
-                for n in os.listdir(dd):
-                    p = os.path.join(dd, n)
-                    if os.path.isfile(p):
-                        newest_src = max(newest_src, os.path.getmtime(p))
-        if newest_src > os.path.getmtime(ip):
-            print(f"  [FAIL] {img} 比 sw/ 下的源文件旧 -> 需要重建镜像")
+        built = hcache.get(group)
+        if built is None:
+            # 没有记录: 退回 mtime 比较, 但明确说明这是弱判据
+            if os.path.getmtime(ip) < _newest_sw_mtime():
+                print(f"  [warn] {img}: 无内容基线可比, 且比 sw/ 源文件旧 (建议重建)")
+                warnings.append(f"{img} 可能过期 (无基线)")
+            else:
+                print(f"  OK    {img} (无内容基线, mtime 更新)")
+            continue
+        if built != sw_hash:
+            print(f"  [FAIL] {img}: sw/ 源码内容已变 -> 需要重建镜像 "
+                  f"(重跑 tools/build_sw.py 或 tools/asm.py)")
             problems.append(f"{img} 过期")
         else:
-            print(f"  OK    {img} 比 sw/ 源文件新")
+            print(f"  OK    {img} 与当前 sw/ 源码内容一致")
 
     # ---- 4. bitstream 新鲜度 ----
     print("\n[4] bitstream 新鲜度  (imem/dmem 是综合时装进去的, 改软件必须重新综合)")
@@ -688,10 +730,10 @@ def save_state(state: dict) -> None:
 SIM_CACHE: dict[str, str] = {}
 
 
-def compile_sim(rtl_files: list[str], tb: str) -> tuple[int, str, str]:
-    """vlib + vlog, 结果按 (文件集, 内容) 缓存到各测试自己的 work 目录。"""
+def compile_sim(rtl_files: list[str], tb: str, defines: tuple[str, ...] = ()) -> tuple[int, str, str]:
+    """vlib + vlog, 结果按 (文件集, 内容, defines) 缓存到各测试自己的 work 目录。"""
     key = hashlib.sha256(
-        ("".join(rtl_files) + tb + "".join(
+        ("".join(rtl_files) + tb + "|".join(defines) + "".join(
             sha256_file(abspath(f)) for f in rtl_files + [tb] if os.path.exists(abspath(f)))
          ).encode()
     ).hexdigest()[:16]
@@ -705,7 +747,8 @@ def compile_sim(rtl_files: list[str], tb: str) -> tuple[int, str, str]:
     rc, out, _ = run([vlib, "work"], cwd=workdir)
     if rc != 0:
         return rc, out, workdir
-    rc, out2, _ = run([vlog, "-sv", "-work", "work"] + srcs, cwd=workdir)
+    flags = ["+" + d if not d.startswith("+") else d for d in defines]
+    rc, out2, _ = run([vlog, "-sv"] + flags + ["-work", "work"] + srcs, cwd=workdir)
     if rc == 0:
         SIM_CACHE[key] = "ok"
     return rc, out + out2, workdir
@@ -751,7 +794,8 @@ def cmd_verify(args) -> int:
 
         print(f"\n--- {name}: {t['desc']}")
         t0 = time.time()
-        rc, out, workdir = compile_sim(files, t["tb"])
+        defines = () if args.imem_comb_read else ("IMEM_REG_READ",)
+        rc, out, workdir = compile_sim(files, t["tb"], defines)
         if rc != 0:
             print(f"    [FAIL] 编译失败 (vlog)")
             print(_indent(_vlog_errors(out)))
@@ -764,6 +808,9 @@ def cmd_verify(args) -> int:
         vsim = os.path.join(MSIM, "vsim.exe")
         top = t.get("top", t["tb"].split("/")[-1][:-3])
         cmd = [vsim, "-c", "-do", "run -all; quit -f", "work." + top]
+        # -sv_seed / defines 对 vsim 也要给, 否则 $test$plusargs 之外的宏不一致
+        for d in defines:
+            cmd.insert(1, "+define+" + d)
 
         blocked = None
         for key, plus in (("imem", "+imem="), ("dmem", "+dmem=")):
@@ -1192,6 +1239,7 @@ def cmd_synth(args) -> int:
     for p in (imem, dmem):
         h.update(sha256_file(p).encode())
     h.update(prog.encode())
+    h.update(b"combread" if args.imem_comb_read else b"regread")
     fp = h.hexdigest()[:32]
 
     cache = os.path.join(CACHE_DIR, "synth-cache.json")
@@ -1221,9 +1269,13 @@ def cmd_synth(args) -> int:
             log = os.path.join(CACHE_DIR, "synth.log")
             os.makedirs(CACHE_DIR, exist_ok=True)
             t0 = time.time()
-            # 走 .bat: 它负责 call settings64.bat (Vivado 未加入 PATH)
+            # 走 .bat: 它负责 call settings64.bat (Vivado 未加入 PATH)。
+            # --imem-reg-read 通过环境变量传给 build.tcl (Tcl 读 $::env)。
+            benv = clean_env()
+            if args.imem_comb_read:
+                benv["IMEM_COMB_READ"] = "1"
             rc, out, dt = run(["cmd", "/c", abspath("fpga/build.bat")],
-                              cwd=abspath("fpga"), timeout=args.timeout)
+                              cwd=abspath("fpga"), timeout=args.timeout, env=benv)
             with open(log, "w", encoding="utf-8") as f:
                 f.write(out)
             ok = "BUILD_OK" in out
@@ -1584,6 +1636,8 @@ def main() -> int:
     p = sub.add_parser("verify", help="ModelSim 增量回归")
     p.add_argument("--only", nargs="*", help="只跑指定测试名")
     p.add_argument("--force", action="store_true", help="忽略缓存全量重跑")
+    p.add_argument("--imem-comb-read", action="store_true",
+                   help="仿真时按组合读编译 (对应 IMEM_COMB_READ); 默认寄存读")
     p.add_argument("-v", "--verbose", action="store_true", help="通过时也打印摘要")
     p.set_defaults(func=cmd_verify)
 
@@ -1609,6 +1663,8 @@ def main() -> int:
     p.add_argument("--tag", help="记录进 results/coremark.csv 用的标签")
     p.add_argument("--record", action="store_true", help="追加一行到 results/coremark.csv")
     p.add_argument("--force", action="store_true", help="忽略缓存强制重建")
+    p.add_argument("--imem-comb-read", action="store_true",
+                   help="取指存储器回退组合读 (IMEM_COMB_READ); 默认是寄存读/BRAM")
     p.add_argument("--timeout", type=int, default=3600, help="Vivado 超时秒数")
     p.add_argument("--lock-timeout", type=int, default=1800, help="等待构建锁的秒数")
     p.set_defaults(func=cmd_synth)

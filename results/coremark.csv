@@ -14,3 +14,8 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-05,p0-score-cm_hw,1,423486,2.3614,3679,1146,4,8,64.0,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-05,p1-trap-wired,1,423486,2.3614,3923,1333,4,8,61.4,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-05,p3a-jalr-addder,1,423486,2.3614,3945,1333,4,8,64.4,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-05,p3b-imem16k-base,1,423486,2.3614,3945,1333,4,8,64.4,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-05,p3b-imem12k,1,423486,2.3614,4058,1331,4,8,65.2,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-05,p3c-comb-base,1,423486,2.3614,3945,1333,4,8,64.4,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-05,p3d-imem-bram,1,423486,2.3614,2656,1281,8,8,65.3,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-05,p3e-imem-bram-default,1,423486,2.3614,2656,1281,8,8,65.3,keep,fpga_workflow.py synth (PROG=cm_hw)
