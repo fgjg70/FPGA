@@ -118,6 +118,36 @@ end
 **MMIO 读回 0、中断永远不来**, 而 RTL 完全没问题。
 **修法**: 涉及 MMIO/定时器/UART 的测试用 `tb_soc` 或 `tb_sw`; `tb_core` 只跑纯 CPU 程序。
 
+### R10. PowerShell `Set-Content -Encoding UTF8` 会**写入 BOM**, 破坏 CSV/源码 ✅踩过 1 次
+想改 `results/coremark.csv` 里一行 notes, 用了
+`Set-Content -Path x.csv -Value $lines -Encoding UTF8` —— **PowerShell 5.x 的 `-Encoding UTF8`
+会写入 BOM**(`EF BB BF`)。BOM 一进文件头, 首列列名就变成 `\ufeffdate`,
+所有按列名索引的解析全部失配 —— 表现是 `report` 里所有数字变成 `-`, 而文件**看起来正常**。
+
+**修法**: 不要用 PowerShell 读写工程里的文本/CSV 文件。用 Python:
+```python
+io.open(p, "w", encoding="utf-8", newline="")   # 无 BOM
+```
+或用 git 恢复 (`git checkout -- <file>`) 再重做改动。
+**通用教训**: 涉及编码的改动, 改完**必须用消费方(解析器)验一遍**, 不能只看文件"能打开"。
+
+### R11. 用 `split("\n")` 切 CRLF 文件会把首行和次行粘在一起 ✅踩过 1 次
+同上那次: 文件是 CRLF, 我用 `text.split("\n")` 拆行再拼回, 每行尾部残留的 `\r`
+让处理错位, 且重写后首个注释行与下一行**合并成一行**。
+**修法**: 先 `text.replace("\r\n", "\n")` 归一化; 或者干脆用 `csv` 模块读写 CSV
+(它会正确处理引号与换行, 自己拼逗号很容易把 `"a, b"` 这类带逗号的字段弄坏)。
+
+### R12. `write_hw_ila_data` 覆盖已存在的 CSV 必须加 `-force` ✅踩过 1 次
+不带 `-force` 时报 `ERROR: [Labtoolstcl 44-54] You must use the -force option to
+overwrite existing file`。**坑在于抓取本身是成功的** (PROGRAMMED/ARMED/CAPTURE 都过了),
+只有最后一步落盘失败 —— 症状是"全流程 OK 却没有结果文件", 很容易误判成抓取失败。
+**修法**: `write_hw_ila_data -force -csv_file <path> hw_ila_data_1`。
+
+### R13. `get_property REGISTER.IDCODE` 不是合法属性 ✅踩过 1 次
+报 `ERROR: [Labtoolstcl 44-56] hw_device [xc7a100t_0] does not have a
+[REGISTER.IDCODE] property`。**修法**: 用 `get_property IDCODE $dev`
+(实测回二进制串 `00010011011000110001000010010011` = **0x13631093**, 与器件手册一致)。
+
 ---
 
 ## 二、SystemVerilog / Verilog 语法
