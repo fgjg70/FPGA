@@ -43,7 +43,7 @@ python tools\fpga_workflow.py verify             REM 增量回归, 期望 7 PASS
 → **本仓库全部完成** ✅
 
 **高阶任务（加分）**：2 路组相联 I/D Cache + 总线突发 / 动态分支预测(BTB) + 完整异常中断 / AI 加速单元
-→ BTB ✅；**完整异常/中断 ✅（本轮 P1 完成，7/7 回归通过）**；Cache 与 AI 未做 ⬜
+→ BTB ✅；**完整异常/中断 ✅（P1 异常 + P2 定时器中断，回归 8 PASS）**；Cache 与 AI 未做 ⬜
 
 **其他评分维度**：代码规范 ✅ / 分析报告（含 ILA 波形）素材已备 ✅ / 应用场景与 AI 模型未做 ⬜
 
@@ -69,16 +69,18 @@ python tools\fpga_workflow.py verify             REM 增量回归, 期望 7 PASS
 
 | 指标 | 基线 | **最新可复现实测** | 变化 |
 |---|---|---|---|
-| **CoreMark/MHz** | 0.8263 | **2.3614**（仿真，硬件吻合 0.02%）| **+185.8%** |
-| **最高时钟频率** | 78.4 MHz | **75.0 MHz**（`synth` 实测 WNS 6.664ns）| −4.3% |
-| **CoreMark/LUTs** | 2.361e-4 | **9.662e-4** | **+309.2%** |
+| **CoreMark/MHz** | 0.8263 | **2.3611**（仿真，硬件吻合 0.02%）| **+185.8%** |
+| **最高时钟频率** | 78.4 MHz | **70.9 MHz**（`synth` 实测 WNS 5.902ns）| −9.6% |
+| **CoreMark/LUTs** | 2.361e-4 | **9.347e-4** | **+295.9%** |
 
-资源：**LUT 2444 / FF 1313 / BRAM 8 / DSP 8**（评分版，含 P1 + P3，不含 ILA）
-绝对吞吐 = CoreMark/MHz × fmax = **177.1**（基线 64.8，+173.3%）
+资源：**LUT 2526 / FF 1377 / BRAM 8 / DSP 8**（评分版，含 P1+P2+P3，不含 ILA）
+绝对吞吐 = CoreMark/MHz × fmax = **167.5**（基线 64.8，+158.5%）
 
-> **两项已创历史最好**：CoreMark/LUTs 9.662e-4 > 旧最好 9.518e-4；
-> 绝对吞吐 177.1 > 旧最好 176.2。fmax 距 78.4 只差 4.3%，且旧的 78.4
-> 来自"分布式 RAM 版"旧架构，严格说不同构型、可比性有限。
+> CoreMark/LUTs 与绝对吞吐都**接近但略低于 P3 完成时的历史最好**
+> （9.662e-4 / 177.1）—— 差额是 P2 定时器中断的代价（−5.5% fmax），
+> 那是**用频率换"完整中断"这个赛题加分项**，详见 `results/p2-timer-irq.md`。
+> 若要纯性能最优，可用 `--load-comb`/`--imem-comb-read` 之外的方式关掉中断——
+> 但赛题要求完整中断，**不建议**。
 
 > 这三行由 `python tools\fpga_workflow.py report` 从 `results/coremark.csv` 重算得出，
 > 是**当前唯一可复现**的数字。旧记录（LUT 2481 / fmax 74.6）见下方历史表与第 6 节的说明。
@@ -111,7 +113,8 @@ CoreMark/MHz 硬件 2.3615 vs 仿真 2.3611，吻合到 0.02%。
 | p1-trap-wired | 423,486 | 2.3614 | 3923 | 61.4 | keep（P1 异常/中断）|
 | p3a-jalr-addder | 423,486 | 2.3614 | 3945 | 64.4 | keep（跳转目标专用加法器）|
 | p3e-imem-bram-default | 423,486 | 2.3614 | 2656 | 65.3 | keep（取指寄存读/BRAM）|
-| **p3g-default-final** | 423,486 | **2.3614** | **2444** | **75.0** | **keep（当前·load 结果寄存）**|
+| p3g-default-final | 423,486 | 2.3614 | 2444 | 75.0 | keep（load 结果寄存·**P3 最好**）|
+| **p2-timer-irq** | 423,527 | **2.3611** | **2526** | **70.9** | **keep（当前·含完整中断）**|
 
 ⚠️ = 该 LUT 值用当前代码复现不出来，详见第 6 节 P1 小节末尾的说明。
 
@@ -428,52 +431,57 @@ id_ex_reg 的 .flush 也改成 any_redir;    // 原来只写 redirect
 > （`LUT as Distributed RAM = 83`、`Block RAM Tile = 4`，与 bram-v1 的意图一致）。
 > 推测 2481 来自更早的 RTL 修订。**后续以 `synth` 的实测值为准**，历史行仅供趋势参考。
 
-### P2 · mtimecmp 定时器中断
+### P2 · ~~mtimecmp 定时器中断~~ ✅ 已完成（本轮）
 
-`rv32_pkg.sv` 里地址常量已加（`MMIO_MTIMECMP_LO/HI`、`MMIO_MTIME_LO/HI`）。
-在 `mmio_subsys.sv` 里实现：mtimecmp 寄存器 + `irq_timer = (mtime >= mtimecmp)` 电平输出，
-接到 `csr_file` 的 `irq_timer`（→ mip.MTIP）。
-**注意**：中断是电平触发，`mret` 后若 mtimecmp 没被清会无限重入 —— 这是**规范的正常行为**，
-由中断处理程序负责写 mtimecmp 清除。
+`rv32_pkg.sv` 里的地址常量（`MMIO_MTIMECMP_LO/HI`、`MMIO_MTIME_LO/HI`）已落地：
 
-### P3 · fmax 还债（三项指标里唯一大幅退步的）⏸ 进行中：实验 A 已挣回 +4.9%
+- `fpga/mmio_subsys.sv`：64 位 `mtimecmp` 寄存器（复位值全 1 → 上电不会立刻中断），
+  `mtime` **复用**已有周期计数器（保证 MMIO_MTIME_* 与 MMIO_CYCLE_* 读数必然一致），
+  `irq_timer = (mtime >= mtimecmp)` 电平输出
+- `core.sv`：新增 `irq_timer` 端口 → `csr_file.irq_timer`（→ `mip.MTIP`），不再硬接 1'b0
+- `top_a100t.sv` / `tb_soc.sv` / `tb_sw.sv` 已接线（`tb_core` 保持恒 0，它不接外设）
+- 新测试 `sim/prog/timer_irq.S` + `tb_soc_timer_irq`：验证中断触发、`mcause` 判定、
+  handler 推进 mtimecmp 清电平、`mret` 返回、**handler 用 mscratch 保存/恢复现场**、
+  以及中断之后 UART/GPIO 仍正常。**全套回归 8 PASS。**
 
-**当前状态：61.4 → 64.4 MHz（+4.9%），绝对吞吐 145.0 → 152.1。**
-实验 A = 跳转目标专用加法器，零周期代价，详见 `results/p3-fmax.md`。
-**本轮到此暂停**，剩余方案与盈亏平衡账见下。
+> ⚠️ **中断是电平触发**：`mret` 后若 handler 没推进 `mtimecmp`，条件依然成立 → 立刻重入
+> → 死循环。这是**规范的正常行为**，由中断处理程序负责写 `mtimecmp`。
 
-**根因已定位**（`results/bram-v1.md`）：
+**本轮修掉的两个真 bug（都只在测中断时才暴露）：**
+
+| # | 症状 | 真因 |
+|---|---|---|
+| R6 | 中断进了但 handler 走错分支；`mcause` 读回 `0x17` 而非 `0x80000007` | `mcause <= {27'b0, trap_cause}` 把**中断位放到了 bit4**，规范要求 bit31。**同步异常下 bit31 本来就是 0，所以此前一直没暴露** |
+| R7 | 定时器测试自旋等待、中断永不使能 | `csrsi mie, 0x80` 的立即数**只有 5 位**（规范），`0x80 & 0x1F = 0` → 静默变成 `csrsi mie, 0`。MTIE 是 bit7，**必须用寄存器形式** `li t0,0x80` + `csrw mie,t0` |
+
+### P3 · fmax 还债 ✅ 已完成（61.4 → 75.0 MHz，+22.2%）
+
+三个实验，全部已落地为**默认配置**，详见 `results/p3-fmax.md` / `p3-imem.md` / `p3-load-result.md`：
+
+| 实验 | 改动 | fmax | LUT | 绝对吞吐 |
+|---|---|---|---|---|
+| （起点，P1 之后） | — | 61.4 | 3923 | 145.0 |
+| A | 跳转目标专用加法器（绕开 ALU 操作数 mux）| 64.4 | 3945 | 152.1 |
+| B | 取指存储器改寄存读 → 进 BRAM | 65.3 | 2656 | 154.2 |
+| **C** | **load 结果改由 MEM/WB 寄存器给出** | **75.0** | **2444** | **177.1** |
+
+**全部零周期代价**（CoreMark ticks 逐位不变 423,527）；CoreMark/LUTs 与绝对吞吐
+两项均已**超过历史最好**。距 78.4 仅差 4.3%。
+
+> ⚠️ **一条重要教训**：`HANDOFF.md` 原先把实验 C 标注为"代价：load-use 停顿 1→2 拍，
+> 约 +7% 周期"而长期搁置。**实测那个代价根本不存在** —— `dmem` 的寄存读已经提供了
+> 那一拍，`MEM/WB` 只是把同一个值再接一次。**文档里的"预期代价"必须重新实测再据此决策。**
+>
+> 两个可回退开关：`--load-comb`（实验 C）与 `--imem-comb-read`（实验 B）。
+
+**当前关键路径**（已不是 load 路径）：
 ```
-Source:      u_dmem/mem_reg_3/CLKBWRCLK   (BRAM 输出寄存器)
-Destination: u_pc/pc_reg[2]/D
-15.245ns, 18 levels
+Source:      u_id_ex/rs2_addr_reg[4]/C
+Destination: u_id_ex/rs1_data_reg[28]/D
+13.236ns (logic 28.5% | route 71.5%), slack 6.664ns
 ```
-即**「load 出来的值直接当 jalr 目标」**（从栈恢复 ra 后返回，极常见）：
-`BRAM → 字节提取 → 写回 mux → 前递 mux → ALU → 目标 mux → PC` 全压在一拍。
-旧版提取逻辑在 MEM/WB 寄存器**之前**，前递路径从寄存器出发；新版挪到了寄存器**之后**。
 
-**修法（按代价排序，均已用 `profile` 算出盈亏平衡）**：
-
-> 当前 fmax **64.4 MHz**（实验 A 之后）。`profile` 给出 load-use 停顿的时间代价
-> 为 **6.14%**，即**方案 1 需要 fmax 涨过 68.4 MHz 才不亏**。
-
-1. **load 结果寄存器 + 专用前递通道** —— 提取结果在 WB 拍末打进 `load_result`，前递从它取，
-   切断 `BRAM → 前递/PC` 直连。代价：**load-use 停顿 1→2 拍 = +6.14% 周期**。
-   若 fmax 到 74.6 净赚 +9.7%，到 78.4 净赚 +15.6%。**先确认能否保住 1 拍停顿**——
-   若能（例如把字节提取挤进 MEM 拍、让前递从寄存器出发），就是纯赚。
-2. **缩短 PC 目标选择链** —— 已由实验 A 部分完成（跳转目标专用加法器，+4.9%）。
-3. **dmem 保持组合读但缩容** —— 需要先把 log 缓冲从 0x90003000 挪低。
-
-**当前关键路径（实验 A 之后，位置已变）**：
-```
-Source:      u_dmem/mem_reg_1/CLKBWRCLK
-Destination: u_id_ex/rs1_data_reg[29]/D
-15.427ns  (logic 34.8% | route 65.2%),  19 级
-```
-即 **load 结果 → 写回 mux → 前递 mux → ID/EX 的 rs1**，与方案 1 要解决的
-是同一个根因（load 结果落进前递路径），只是终点从 PC 变成了 ID/EX 输入寄存器。
-
-### P4 · 上板复跑（P3 定稿后一次做）⏳ 待用户操作
+### P4 · 上板复跑（P2/P3 定稿后一次做）⏳ 待用户操作
 
 `fpga/cpu_a100t.bit` 当前是**含 P1 + P3 实验 A 的全新构建**（LUT 3945 / fmax 64.4），
 **尚未上板验证**。建议**等 RTL 改到满意再烧一次**，避免为中间版本反复烧板。

@@ -82,6 +82,42 @@ end
   这次就是把 `if_pc`/`id_ctrl.illegal` (ID 段) 和 `ex_illegal`/`trap_enter` (EX 段)
   混在一起读, 才误判成"陷阱没触发"。
 
+### R6. `mcause` 的位布局被写错 —— 只在"读 mcause[31] 判中断"时才暴露 ✅踩过 1 次
+`csr_file.sv` 原来写的是 `mcause <= {27'b0, trap_cause};`, 而 `trap_cause` 是紧凑的
+5 位 `{is_interrupt, code[3:0]}` —— 于是**中断位被放到了 bit4**, 而规范要求它在 **bit31**。
+
+实测症状: 中断确实进了 (mstatus.MIE 被清、handler 也跑了), 但 `mcause` 读回
+`0x00000017` 而不是 `0x80000007`, 于是 handler 里"检查 mcause[31] 判断是中断"的
+分支全部走错, 中断处理程序认为收到的是异常。
+
+**为什么一直没暴露**: 之前只测同步异常, 而异常的 bit31 本来就是 0,
+`{27'b0, cause}` 与正确布局**恰好一致**。只有中断才有 bit31=1。
+
+**修法**: 显式重排 `mcause <= {trap_cause[4], 27'b0, trap_cause[3:0]};`
+**通用教训**: 两个"看起来都是原因码"的表示之间**必须查规范确认位布局**,
+不要凭"字段名一样"就直连。紧凑编码 (5 位) 与寄存器布局 (32 位) 是两回事。
+
+### R7. Zicsr 立即数形式只有 5 位, 高位掩码是**静默**的 ✅踩过 1 次
+`csrsi mie, 0x80` 想置 MTIE (mie 的 bit7 = 0x80), 但规范规定 CSRRSI/CSRRCI 的
+立即数取自 `instr[19:15]`, **只有 5 位, 上限 31**。`0x80 & 0x1F = 0`,
+所以这条指令实际等价于 `csrsi mie, 0` —— **中断永远使能不上, 且不报任何错**。
+
+症状: 定时器测试一直自旋等中断, 最后靠打印 `ie_mtie` 才定位。
+**修法**: 任何 bit ≥ 5 的 CSR 位都用寄存器形式: `li t0, 0x80` + `csrw mie, t0`。
+(对照: `csrsi mstatus, 8` 没问题, 因为 MIE 是 bit3 < 32 —— 所以这个坑很容易漏。)
+
+### R8. 具名端口连接里的未声明信号会被**隐式声明**成 net ✅踩过 1 次
+`.irq_timer (irq_timer)` 若 `irq_timer` 尚未声明, 仿真器会在此处隐式声明一条 net;
+之后那句 `logic irq_timer;` 就变成重复声明 -> `vlog-2388 already declared in this scope`。
+**修法**: **声明一律写在例化之前**。报错行号指向的是显式声明那行, 不是隐式声明处,
+所以看上去像"我只声明了一次却报重复"。
+
+### R9. 用错测试平台: `tb_core` 不接外设 ✅踩过 1 次
+`tb_core.sv` 里 `ext_rdata` 恒 0、`irq_timer` 恒 0 (它只测 CPU 核, 这是**正确的**设计)。
+把需要外设的程序 (碰 MMIO / 等定时器中断) 挂到 `tb_core` 上, 症状是
+**MMIO 读回 0、中断永远不来**, 而 RTL 完全没问题。
+**修法**: 涉及 MMIO/定时器/UART 的测试用 `tb_soc` 或 `tb_sw`; `tb_core` 只跑纯 CPU 程序。
+
 ---
 
 ## 二、SystemVerilog / Verilog 语法

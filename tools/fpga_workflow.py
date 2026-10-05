@@ -670,6 +670,12 @@ def test_matrix() -> list[dict]:
          # 出问题时需要逐拍证据 (完整输出在 .fpga-cache/logs/tb_core_trap.log)。
          "plus": ["+illegal_trace"], "max_cycles": 200000, "timeout": 600,
          "desc": "异常/中断自校验 (Zicsr + 陷阱 + MRET)"},
+        # 【必须用 tb_soc / tb_sw】tb_core 不接外设 (ext_rdata 恒 0、irq_timer 恒 0),
+        # 定时器测试需要 mmio_subsys 真的在位, 否则 MMIO 读回 0、中断永远不来。
+        {"name": "tb_soc_timer_irq", "top": "tb_soc", "rtl": "rtl", "tb": "sim/tb_soc.sv",
+         "imem": "sim/prog/timer_irq.hex",
+         "plus": [], "max_cycles": 200000, "timeout": 600,
+         "desc": "P2 定时器中断 (mtime/mtimecmp -> mip.MTIP)"},
         {"name": "tb_core_m_ext", "top": "tb_core", "rtl": "rtl", "tb": "sim/tb_core.sv",
          "imem": "sim/prog/m_ext.hex", "plus": [], "max_cycles": 200000, "timeout": 600,
          "desc": "RV32M 边界"},

@@ -48,7 +48,7 @@ module csr_file
   // 【优先级由 core 裁决】只有 core 知道流水线状态 (是否停顿、EX 里是不是气泡),
   // 所以 core 把"异常"和"已使能的中断"合成一个 trap_req 送进来, 本模块只管状态转移。
   input  logic        trap_req,      // 本拍确实要陷入 (已含优先级裁决)
-  input  logic [4:0]  trap_cause,    // {is_interrupt, code[3:0]}
+  input  logic [4:0]  trap_cause,    // {is_interrupt, code[3:0]} —— 这不是 mcause 的位布局
   input  logic [31:0] trap_pc,       // 要记录的 PC (异常=触发指令本身; 中断=被抢占的指令)
   input  logic [31:0] trap_tval,
   output logic        trap_enter,    // = trap_req, 供 core 拿来重定向 PC
@@ -166,7 +166,13 @@ module csr_file
       // ---- 进入陷阱: 优先级最高, 覆盖同拍的 CSR 写入 ----
       if (trap_req) begin
         mepc        <= trap_pc;
-        mcause      <= {27'b0, trap_cause};
+        // 【mcause 的位布局是规范定死的】bit31 = 是否中断, bit[30:0] = 原因码。
+        // 而 trap_cause 是紧凑的 {is_interrupt, code[3:0]} (5 位), 两者布局不同,
+        // **必须显式重排**, 不能直接 {27'b0, trap_cause} —— 那样会把中断位放到
+        // bit4 ! 实测后果: mcause 读回 0x00000017 而不是 0x80000007, 于是
+        // "检查 mcause[31] 判断是中断" 的中断处理程序全部走错分支。
+        // (之前只测同步异常所以没暴露: 异常的 bit31 本来就是 0。)
+        mcause      <= {trap_cause[4], 27'b0, trap_cause[3:0]};
         mtval       <= trap_tval;
         st_mpie     <= st_mie;
         st_mie      <= 1'b0;

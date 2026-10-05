@@ -47,6 +47,9 @@ module top_a100t
   logic        ext_we, ext_re;
   logic [31:0] ext_addr, ext_wdata, ext_rdata;
   logic [3:0]  ext_wstrb;
+  // 定时器中断: mmio_subsys 产出 -> core 的 csr_file (mip.MTIP)。
+  // 声明必须在两个例化之前, 否则具名端口连接会把它隐式声明成 net (vlog-2388)。
+  logic        irq_timer;
 
   core u_core (
     .clk            (sys_clk),
@@ -67,10 +70,11 @@ module top_a100t
     .ext_addr       (ext_addr),
     .ext_wdata      (ext_wdata),
     .ext_wstrb      (ext_wstrb),
-    .ext_rdata      (ext_rdata)
+    .ext_rdata      (ext_rdata),
+    .irq_timer      (irq_timer)
   );
 
-  // ---- 外设: GPIO / 周期计数器 / UART ----
+  // ---- 外设: GPIO / 周期计数器 / UART / 定时器 ----
   logic [31:0] gpio_out, tx_bytes, rx_bytes, score_result;
   logic        score_mark, score_done;
 
@@ -94,7 +98,8 @@ module top_a100t
     .rx_byte_count (rx_bytes),
     .mark          (score_mark),
     .done          (score_done),
-    .result        (score_result)
+    .result        (score_result),
+    .irq_timer     (irq_timer)
   );
 
   // ---- 结果观测: 监视程序对 tohost 的写入 ----

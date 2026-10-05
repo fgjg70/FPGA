@@ -52,7 +52,10 @@ module core
   output logic [31:0] ext_addr,
   output logic [31:0] ext_wdata,
   output logic [3:0]  ext_wstrb,
-  input  logic [31:0] ext_rdata
+  input  logic [31:0] ext_rdata,
+
+  // 定时器中断请求 (电平, 来自 mmio_subsys 的 mtime>=mtimecmp; -> mip.MTIP)
+  input  logic        irq_timer
 );
 
   // ==========================================================================
@@ -403,8 +406,9 @@ module core
     .mret_req    (is_mret && !pipe_stall),
     .mret_taken  (mret_taken),
     .mret_pc     (mret_pc),
-    .irq_timer   (1'b0),        // P2 待接: mmio_subsys 实现 mtimecmp 后接过来
-    .irq_ext     (1'b0),
+    // P2 已接通: mtimecmp 定时器中断 (mmio_subsys 产生, 电平)
+    .irq_timer   (irq_timer),
+    .irq_ext     (1'b0),        // 外部中断: 暂无外设, 预留
     .irq_pending (irq_pending),
     .irq_cause   (irq_cause)
   );

@@ -50,7 +50,10 @@ module mmio_subsys
   // ILA over JTAG 把结果读回来。
   output logic        mark,
   output logic        done,
-  output logic [31:0] result
+  output logic [31:0] result,
+
+  // 定时器中断 (电平, -> core.irq_timer -> csr_file -> mip.MTIP)
+  output logic        irq_timer
 );
 
   localparam int unsigned BAUD_DIV = CLK_HZ / BAUD_HZ;   // 50MHz/115200 = 434
@@ -61,7 +64,8 @@ module mmio_subsys
   logic sel_gpio_out, sel_gpio_in, sel_cyc_lo, sel_cyc_hi;
   logic sel_uart_tx, sel_uart_stat, sel_uart_rx, sel_uart_rstat;
   logic sel_mark, sel_result;
-  logic wr_gpio_out, wr_uart_tx;
+  logic sel_mtimecmp_lo, sel_mtimecmp_hi, sel_mtime_lo, sel_mtime_hi;
+  logic wr_gpio_out, wr_uart_tx, wr_mtimecmp_lo, wr_mtimecmp_hi;
 
   assign sel_gpio_out   = (addr == MMIO_GPIO_OUT);
   assign sel_gpio_in    = (addr == MMIO_GPIO_IN);
@@ -73,9 +77,15 @@ module mmio_subsys
   assign sel_uart_rstat = (addr == MMIO_UART_RSTAT);
   assign sel_mark       = (addr == MMIO_MARK);
   assign sel_result     = (addr == MMIO_RESULT);
+  assign sel_mtimecmp_lo= (addr == MMIO_MTIMECMP_LO);
+  assign sel_mtimecmp_hi= (addr == MMIO_MTIMECMP_HI);
+  assign sel_mtime_lo   = (addr == MMIO_MTIME_LO);
+  assign sel_mtime_hi   = (addr == MMIO_MTIME_HI);
 
-  assign wr_gpio_out = we && sel_gpio_out;
-  assign wr_uart_tx  = we && sel_uart_tx;
+  assign wr_gpio_out    = we && sel_gpio_out;
+  assign wr_uart_tx     = we && sel_uart_tx;
+  assign wr_mtimecmp_lo = we && sel_mtimecmp_lo;
+  assign wr_mtimecmp_hi = we && sel_mtimecmp_hi;
 
   // ------------------------------------------------------------------------
   // 跑分观测寄存器 (software -> hardware)
@@ -115,6 +125,36 @@ module mmio_subsys
     if (rst) cycle_cnt <= 64'd0;
     else     cycle_cnt <= cycle_cnt + 64'd1;
   end
+
+  // ------------------------------------------------------------------------
+  // 定时器: mtime / mtimecmp -> irq_timer (P2, 对应 mip.MTIP)
+  // ----------------------------------------------------------------------------
+  // mtime 就是上面那个自由运行计数器 (规范里 mtime 是持续递增的, 不复位到 0
+  // 之外没有别的语义), 复用它可以省一个 64 位计数器, 也让 MMIO_MTIME_*
+  // 与 MMIO_CYCLE_* 读出来必然一致 —— 软件不必关心有两个时间源。
+  //
+  // 【电平触发, 不清就重入 —— 这是规范的正常行为】
+  //   irq_timer = (mtime >= mtimecmp) 是**电平**。mret 之后若 mtimecmp 没被改写,
+  //   条件依然成立 -> 立刻再次进入陷阱 -> 死循环。
+  //   **这不是 bug**: 规范要求中断处理程序负责推进 mtimecmp。
+  //   仿真里一旦看到"中断反复进入", 先查 handler 有没有写 MTIMECMP。
+  //
+  // 【为什么要寄存器读 (寄存器打了拍)】
+  //   MMIO 读路径要在 core 里寄存一拍才能与 dmem 的寄存读对齐 (见 core.sv),
+  //   所以这里照直给组合值即可 —— 对齐由 core 侧统一完成。
+  // ------------------------------------------------------------------------
+  logic [63:0] mtimecmp;
+
+  always @(posedge clk) begin
+    if (rst) mtimecmp <= 64'hFFFF_FFFF_FFFF_FFFF;   // 复位后极大值 -> 不会立刻中断
+    else begin
+      if (wr_mtimecmp_lo) mtimecmp[31:0]  <= wdata;
+      if (wr_mtimecmp_hi) mtimecmp[63:32] <= wdata;
+    end
+  end
+
+  // 电平: 到点就拉高, 直到软件写新的 mtimecmp
+  assign irq_timer = (cycle_cnt >= mtimecmp);
 
   // ------------------------------------------------------------------------
   // UART 发送: 10 位帧 (start + 8 数据 + stop), LSB 先发
@@ -254,6 +294,11 @@ module mmio_subsys
     else if (sel_uart_rx)   rdata = {24'b0, rx_byte};
     else if (sel_uart_rstat)rdata = {31'b0, rx_rdy};
     else if (sel_result)    rdata = result;
+    else if (sel_mtimecmp_lo) rdata = mtimecmp[31:0];
+    else if (sel_mtimecmp_hi) rdata = mtimecmp[63:32];
+    // mtime 与 CYCLE_* 同源: 都读 cycle_cnt, 保证软件看到的时间只有一个
+    else if (sel_mtime_lo)  rdata = cycle_cnt[31:0];
+    else if (sel_mtime_hi)  rdata = cycle_cnt[63:32];
     else                    rdata = 32'h0;    // 未映射地址读 0
   end
 

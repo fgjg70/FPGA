@@ -43,6 +43,11 @@ module tb_sw;
   logic [31:0] ext_addr, ext_wdata, ext_rdata;
   logic [3:0]  ext_wstrb;
   logic [31:0] gpio_out, tx_bytes, rx_bytes;
+  // 【声明必须在例化之前】具名端口连接 `.irq_timer (irq_timer)` 里若 irq_timer
+  // 尚未声明, 仿真器会在此处**隐式声明**一条 net; 之后那句 `logic irq_timer;`
+  // 就变成重复声明 -> vlog-2388 'already declared in this scope'。
+  // (实测踩过: 把声明写在例化后面, tb_sw/tb_soc 全部编译失败)
+  logic        irq_timer;
 
   core u_dut (
     .clk (clk), .rst (rst),
@@ -51,7 +56,8 @@ module tb_sw;
     .dbg_raddr (5'd0), .dbg_rdata (dbg_rdata),
     .dbg_mem_we (dbg_mem_we), .dbg_mem_addr (dbg_mem_addr), .dbg_mem_wdata (dbg_mem_wdata),
     .ext_we (ext_we), .ext_re (ext_re), .ext_addr (ext_addr), .ext_wdata (ext_wdata),
-    .ext_wstrb (ext_wstrb), .ext_rdata (ext_rdata)
+    .ext_wstrb (ext_wstrb), .ext_rdata (ext_rdata),
+    .irq_timer (irq_timer)
   );
 
   mmio_subsys #(.CLK_HZ(50_000_000), .BAUD_HZ(115_200)) u_mmio (
@@ -60,7 +66,8 @@ module tb_sw;
     .rdata (ext_rdata),
     .gpio_out (gpio_out), .gpio_in (32'h0),
     .uart_txd (uart_txd), .uart_rxd (uart_rxd),
-    .tx_byte_count (tx_bytes), .rx_byte_count (rx_bytes)
+    .tx_byte_count (tx_bytes), .rx_byte_count (rx_bytes),
+    .irq_timer (irq_timer)
   );
 
   wire [31:0] tohost_word = u_dut.u_dmem.mem[TOHOST_IDX];

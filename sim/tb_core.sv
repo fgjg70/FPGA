@@ -59,7 +59,9 @@ module tb_core;
     .ext_addr       (ext_addr),
     .ext_wdata      (ext_wdata),
     .ext_wstrb      (ext_wstrb),
-    .ext_rdata      (ext_rdata)
+    .ext_rdata      (ext_rdata),
+    // 本平台不接外设: 定时器中断恒低 (P2 的定时器测试在 tb_soc/tb_sw 里做)
+    .irq_timer      (1'b0)
   );
 
   assign ext_rdata = 32'h0;

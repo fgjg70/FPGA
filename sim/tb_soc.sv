@@ -40,6 +40,9 @@ module tb_soc;
   logic [31:0] ext_addr, ext_wdata, ext_rdata;
   logic [3:0]  ext_wstrb;
   logic [31:0] gpio_out, tx_bytes, rx_bytes;
+  // 声明必须在例化之前: 具名端口连接里的未声明标识符会被隐式声明成 net,
+  // 之后显式声明就成了重复声明 (vlog-2388)。
+  logic        irq_timer;
 
   core u_dut (
     .clk (clk), .rst (rst),
@@ -47,7 +50,8 @@ module tb_soc;
     .dbg_raddr (5'd0), .dbg_rdata (dbg_rdata),
     .dbg_mem_we (dbg_mem_we), .dbg_mem_addr (dbg_mem_addr), .dbg_mem_wdata (dbg_mem_wdata),
     .ext_we (ext_we), .ext_re (ext_re), .ext_addr (ext_addr), .ext_wdata (ext_wdata),
-    .ext_wstrb (ext_wstrb), .ext_rdata (ext_rdata)
+    .ext_wstrb (ext_wstrb), .ext_rdata (ext_rdata),
+    .irq_timer (irq_timer)
   );
 
   mmio_subsys #(.CLK_HZ(50_000_000), .BAUD_HZ(115_200)) u_mmio (
@@ -56,10 +60,89 @@ module tb_soc;
     .rdata (ext_rdata),
     .gpio_out (gpio_out), .gpio_in (32'hDEADBEEF),
     .uart_txd (uart_txd), .uart_rxd (uart_rxd),
-    .tx_byte_count (tx_bytes), .rx_byte_count (rx_bytes)
+    .tx_byte_count (tx_bytes), .rx_byte_count (rx_bytes),
+    .irq_timer (irq_timer)
   );
 
   assign uart_rxd = uart_txd;      // 环回: 发送直接进接收
+
+  // ==========================================================================
+  // 定时器中断诊断探针 (加 +irq_trace 启用, 平时零开销)
+  // --------------------------------------------------------------------------
+  // 排查"中断永远不来"这类问题, 光看信号不够 —— 必须能分辨是
+  //   (a) mtime 没走到 mtimecmp, 还是
+  //   (b) mstatus.MIE / mie.MTIE 没使能, 还是
+  //   (c) 使能了但 irq_pending 没抬起来
+  // 所以一次性把 (mtime, mtimecmp, MTIE, MIE, irq_timer, irq_pending) 打出来。
+  // ==========================================================================
+  // ==========================================================================
+  // 诊断探针 (都用 plusarg 门控, 平时零开销、不影响任何测试结果)
+  //   +irq_trace       定时器/中断状态 (mtime, mtimecmp, MTIE, MIE, irq_pending)
+  //   +trap_csr_trace  陷阱 CSR 状态 (mcause/mepc/mtvec/mstatus + trap_req/cause)
+  //   +pc_trace        每拍 PC/指令 + s3/s4 寄存器值
+  // 教训: 排查"中断不来"这类问题, 光看一个信号不够 —— 必须能分清
+  //   (a) mtime 没走到 mtimecmp  (b) MIE/MTIE 没使能  (c) 请求抬起了但没被接受
+  //   (d) 接受了但 mcause 读回来不对
+  // 本轮就是靠这一组探针定位到 R6 (mcause 位布局) 与 R7 (csrsi 5 位立即数)。
+  // ==========================================================================
+  `ifndef SYNTHESIS
+  initial begin
+    if ($test$plusargs("pc_trace")) begin
+      $display("[pctrace] cycle -> dbg_id_pc / instr  (只在值变化时打印)");
+      forever begin
+        @(negedge clk);
+        if (!rst) begin
+          $display("[pctrace] %6d 0x%08x 0x%08x  s3=%0d s4=%0d",
+                   cycles, dbg_id_pc, dbg_instr,
+                   u_dut.u_regfile.mem[18], u_dut.u_regfile.mem[19]);
+        end
+      end
+    end
+  end
+  `endif
+
+  `ifndef SYNTHESIS
+  initial begin
+    if ($test$plusargs("trap_csr_trace")) begin
+      $display("[csrtrace] cycle | mcause      mepc        mtvec       mstatus | trap_req trap_cause irq_cause");
+      forever begin
+        @(negedge clk);
+        if (!rst) begin
+          $display("[csrtrace] %6d | 0x%08x 0x%08x 0x%08x 0x%08x |    %b     0x%02x     0x%02x",
+                   cycles, u_dut.u_csr.mcause, u_dut.u_csr.mepc, u_dut.u_csr.mtvec,
+                   {19'b0, u_dut.u_csr.st_mpp, 3'b0, u_dut.u_csr.st_mpie, 3'b0,
+                    u_dut.u_csr.st_mie, 3'b0},
+                   u_dut.trap_req, u_dut.trap_cause, u_dut.irq_cause);
+        end
+      end
+    end
+  end
+  `endif
+
+  `ifndef SYNTHESIS
+  initial begin
+    if ($test$plusargs("irq_trace")) begin
+      $display("[irqtrace]  cycle |     mtime      mtimecmp | MTIE MIE gt | irq_timer irq_pending");
+      forever begin
+        @(negedge clk);
+        if (!rst) begin
+          $display("[irqtrace] %6d | %10d %12d |  %b   %b   %b |     %b          %b",
+                   cycles,
+                   u_mmio.cycle_cnt[31:0], u_mmio.mtimecmp[31:0],
+                   u_dut.u_csr.ie_mtie, u_dut.u_csr.st_mie,
+                   (u_mmio.cycle_cnt >= u_mmio.mtimecmp),
+                   irq_timer, u_dut.irq_pending);
+          // 陷阱/中断裁决级观测: 分清"请求没到"与"到了没被接受"
+          if (u_dut.irq_pending || u_dut.trap_enter || u_dut.irq_take)
+            $display("           >> irq_take=%b trap_req=%b trap_enter=%b exc_req=%b stall=%b mret=%b | s2(x18)=%0d s3(x19)=%0d",
+                     u_dut.irq_take, u_dut.trap_req, u_dut.trap_enter, u_dut.exc_req,
+                     u_dut.pipe_stall, u_dut.mret_taken,
+                     u_dut.u_regfile.mem[18], u_dut.u_regfile.mem[19]);
+        end
+      end
+    end
+  end
+  `endif
 
   wire [31:0] tohost_word = u_dut.u_dmem.mem[TOHOST_WORD_IDX];
 
