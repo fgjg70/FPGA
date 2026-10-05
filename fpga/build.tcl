@@ -92,6 +92,17 @@ if {[info exists ::env(RAS_EN)] && $::env(RAS_EN) ne ""} {
 } else {
   puts "BUILD_RAS_OFF=1"
 }
+# A_EN: RV32A 原子指令译码。【默认关闭】实测它是**纯代价**:
+#   fmax 61.7 -> 58.8 MHz (-4.7%), LUT +26, 绝对吞吐 145.6 -> 138.9 (-4.6%);
+#   而 CoreMark 不含原子指令 -> 收益为零。且多周期读写还没实现, 所以
+#   即使打开也**执行不了** A 指令 (会按普通 load/store 走, 静默出错)。
+#   要启用必须先完成多周期控制 (results/p6-a-extension.md 第 5 节)。
+if {[info exists ::env(A_EN)] && $::env(A_EN) ne ""} {
+  append IMEM_DEFS " A_EN=1"
+  puts "BUILD_A_EN=1"
+} else {
+  puts "BUILD_A_OFF=1"
+}
 
 synth_design -top top_a100t -part $part -verilog_define "IMEM_INIT_FILE=\"$imem\" DMEM_INIT_FILE=\"$dmem\" $IMEM_DEFS"
 puts "BUILD_PROG=$PROG"

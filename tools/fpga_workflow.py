@@ -906,6 +906,10 @@ def cmd_verify(args) -> int:
             # GEMM 加速单元。默认关闭 —— 实测打开会让 FF +916%、CoreMark/LUTs -60%,
             # 且功能还没做对 (见 results/p5-ai-accelerator.md)
             defs.append("GEMM_EN")
+        if args.a_ext:
+            # RV32A 原子指令译码。默认关闭 —— 实测纯代价 (fmax -4.7%/吞吐 -4.6%),
+            # 且多周期读写未实现, 打开也执行不了原子指令
+            defs.append("A_EN")
         defines = tuple(defs)
         rc, out, workdir = compile_sim(files, t["tb"], defines)
         if rc != 0:
@@ -1927,6 +1931,8 @@ def main() -> int:
                    help="启用返回地址栈 (RAS_EN); 默认关闭 (实测综合指标净亏)")
     p.add_argument("--gemm", action="store_true",
                    help="启用 GEMM 加速单元 (GEMM_EN); 默认关闭 (实测面积翻倍且功能未完成)")
+    p.add_argument("--a-ext", action="store_true",
+                   help="启用 RV32A 原子指令译码 (A_EN); 默认关闭 (实测纯代价, 且多周期未实现)")
     p.add_argument("-v", "--verbose", action="store_true", help="通过时也打印摘要")
     p.set_defaults(func=cmd_verify)
 
@@ -1977,6 +1983,8 @@ def main() -> int:
                    help="启用返回地址栈 (RAS_EN); 默认关闭 (实测综合指标净亏)")
     p.add_argument("--gemm", action="store_true",
                    help="启用 GEMM 加速单元 (GEMM_EN); 默认关闭 (实测面积翻倍且功能未完成)")
+    p.add_argument("--a-ext", action="store_true",
+                   help="启用 RV32A 原子指令译码 (A_EN); 默认关闭 (实测纯代价, 且多周期未实现)")
     p.add_argument("--timeout", type=int, default=3600, help="Vivado 超时秒数")
     p.add_argument("--lock-timeout", type=int, default=1800, help="等待构建锁的秒数")
     p.set_defaults(func=cmd_synth)

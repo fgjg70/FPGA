@@ -2,6 +2,9 @@
 // tb_units.sv — 6 个 RTL 模块的单元回归测试 (自校验)
 // ----------------------------------------------------------------------------
 // 覆盖: alu / imm_gen / branch_unit / control_unit / regfile / pc
+// 其中 RV32A 部分 (Round 13/15 新增):
+//   alu            — 9 个 AMO 算符的"待写回值"计算, 含 min/max 的有符号/无符号边界
+//   control_unit   — OPC_AMO 译码: amo_en/amo_op/alu_op 映射/aq/rl/非法组合
 // 重点回归 (对应 control_unit.sv 头部注释列出的修复项):
 //   - LOAD 后译码 STORE, wb_src/mem_unsigned 必须回到默认 (锁存器检查)
 //   - JAL 的 pc_sel 必须是 PC_J 而不是 PC_JR
@@ -414,6 +417,72 @@ module tb_units;
     chk({31'd0, cu_ctrl.illegal}, 32'd0, "FENCE 合法 (NOP)");
     chk({31'd0, cu_ctrl.reg_write}, 32'd0, "FENCE 不写寄存器");
     chk(cu_ctrl.pc_sel, PC_NEXT, "FENCE 不跳转");
+
+    // ------------------------------------------------------------------
+    // RV32A: OPC_AMO (7'b0101111)。字段: [31:27]funct5 [26]aq [25]rl
+    //                                   [24:20]rs2 [19:15]rs1 [11:7]rd
+    // 【门控】译码本身由 A_EN 宏控制 (默认关 —— 实测它给评分三项带来纯代价:
+    //   fmax -4.7%、绝对吞吐 -4.6%, 而 CoreMark 不含原子指令所以收益为零)。
+    //   所以这里也必须跟着门控, 否则 A_EN 关时会误报一堆 "AMOADD 合法" 失败。
+    // 【关键检查】amo_en 必须置位 —— 它是告诉流水线"本条要走多周期
+    // 原子序列"的唯一信号; 漏了它 AMO 会按普通 load/store 走, 静默出错。
+    // ------------------------------------------------------------------
+`ifdef A_EN
+    // amoadd.w x1, x2, (x3): 实测编码 0x0021A0AF 的字段组合
+    cu_instr = {AMO_ADD, 2'b00, 5'd2, 5'd3, 3'b010, 5'd1, OPC_AMO}; #1;
+    chk({31'd0, cu_ctrl.illegal},   32'd0,             "AMOADD 合法");
+    chk({31'd0, cu_ctrl.amo_en},    32'd1,             "AMOADD amo_en=1");
+    chk({27'd0, cu_ctrl.amo_op},    {27'd0, AMO_ADD},  "AMOADD amo_op");
+    chk(cu_ctrl.alu_op,             ALU_AMO_ADD,       "AMOADD alu_op");
+    chk(cu_ctrl.wb_src,             WB_MEM,            "AMOADD rd<-旧值(WB_MEM)");
+    chk({31'd0, cu_ctrl.reg_write}, 32'd1,             "AMOADD 写回使能");
+
+    // 逐条覆盖 9 个 AMO 算符的 alu_op 映射 (写错一条就是静默错语义)
+    cu_instr = {AMO_SWAP, 2'b00, 5'd2, 5'd3, 3'b010, 5'd1, OPC_AMO}; #1;
+    chk(cu_ctrl.alu_op, ALU_AMO_SWAP, "AMOSWAP alu_op");
+    cu_instr = {AMO_XOR,  2'b00, 5'd2, 5'd3, 3'b010, 5'd1, OPC_AMO}; #1;
+    chk(cu_ctrl.alu_op, ALU_AMO_XOR,  "AMOXOR alu_op");
+    cu_instr = {AMO_AND,  2'b00, 5'd2, 5'd3, 3'b010, 5'd1, OPC_AMO}; #1;
+    chk(cu_ctrl.alu_op, ALU_AMO_AND,  "AMOAND alu_op");
+    cu_instr = {AMO_OR,   2'b00, 5'd2, 5'd3, 3'b010, 5'd1, OPC_AMO}; #1;
+    chk(cu_ctrl.alu_op, ALU_AMO_OR,   "AMOOR alu_op");
+    cu_instr = {AMO_MIN,  2'b00, 5'd2, 5'd3, 3'b010, 5'd1, OPC_AMO}; #1;
+    chk(cu_ctrl.alu_op, ALU_AMO_MIN,  "AMOMIN  alu_op (有符号)");
+    cu_instr = {AMO_MAX,  2'b00, 5'd2, 5'd3, 3'b010, 5'd1, OPC_AMO}; #1;
+    chk(cu_ctrl.alu_op, ALU_AMO_MAX,  "AMOMAX  alu_op (有符号)");
+    cu_instr = {AMO_MINU, 2'b00, 5'd2, 5'd3, 3'b010, 5'd1, OPC_AMO}; #1;
+    chk(cu_ctrl.alu_op, ALU_AMO_MINU, "AMOMINU alu_op (无符号)");
+    cu_instr = {AMO_MAXU, 2'b00, 5'd2, 5'd3, 3'b010, 5'd1, OPC_AMO}; #1;
+    chk(cu_ctrl.alu_op, ALU_AMO_MAXU, "AMOMAXU alu_op (无符号)");
+
+    // LR / SC: amo_en=1 但**不给 AMO 的 ALU 算符** (不走"新值"路径)
+    cu_instr = {AMO_LR, 2'b00, 5'd0, 5'd3, 3'b010, 5'd1, OPC_AMO}; #1;
+    chk({31'd0, cu_ctrl.illegal}, 32'd0,          "LR.W 合法");
+    chk({31'd0, cu_ctrl.amo_en},  32'd1,          "LR.W amo_en=1");
+    chk({27'd0, cu_ctrl.amo_op},  {27'd0, AMO_LR}, "LR.W amo_op");
+    chk(cu_ctrl.wb_src,           WB_MEM,         "LR.W rd<-读到的值");
+    cu_instr = {AMO_SC, 2'b00, 5'd2, 5'd3, 3'b010, 5'd1, OPC_AMO}; #1;
+    chk({31'd0, cu_ctrl.illegal}, 32'd0,          "SC.W 合法");
+    chk({31'd0, cu_ctrl.amo_en},  32'd1,          "SC.W amo_en=1");
+    chk(cu_ctrl.wb_src,           WB_MEM,         "SC.W rd<-成功标志");
+
+    // aq/rl 位: 单核无 cache, 架构上无副作用, 但必须**被译码**(不是非法)
+    cu_instr = {AMO_ADD, 2'b11, 5'd2, 5'd3, 3'b010, 5'd1, OPC_AMO}; #1;
+    chk({31'd0, cu_ctrl.amo_aq}, 32'd1, "AMO aq 位译码");
+    chk({31'd0, cu_ctrl.amo_rl}, 32'd1, "AMO rl 位译码");
+    chk({31'd0, cu_ctrl.illegal}, 32'd0, "AMO aq=rl=1 仍合法");
+
+    // 非法组合: funct3 非 010 (本核只实现 .W 变体)
+    cu_instr = {AMO_ADD, 2'b00, 5'd2, 5'd3, 3'b011, 5'd1, OPC_AMO}; #1;
+    chk({31'd0, cu_ctrl.illegal}, 32'd1, "AMO funct3=011 非法 (只实现 .W)");
+    // 非法组合: 未实现的 funct5
+    cu_instr = {5'b11111, 2'b00, 5'd2, 5'd3, 3'b010, 5'd1, OPC_AMO}; #1;
+    chk({31'd0, cu_ctrl.illegal}, 32'd1, "AMO funct5=11111 非法");
+`else
+    // A_EN 关: 0x2F 必须仍判非法 (与加 A 扩展之前的行为一致)
+    cu_instr = {25'd0, OPC_AMO}; #1;
+    chk({31'd0, cu_ctrl.illegal}, 32'd1, "A_EN 关: OPC_AMO 非法");
+`endif
 
     // ------------------------------------------------------------------
     $display("[5/6] regfile ...");
