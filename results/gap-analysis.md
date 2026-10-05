@@ -26,37 +26,42 @@
 | 要求 | 状态 | 差距 |
 |---|---|---|
 | **动态分支预测 (BTB)** | ✅ | 已完成, 是 CoreMark/MHz +24% 的主因 |
-| **完整异常 / 中断** | ✅ **已完成** | `csr_file.sv` 已接入 `core.sv`: Zicsr 读改写 + ECALL/EBREAK/非法指令异常 + MRET + mstatus 语义; `tb_core_trap` 由 XFAIL 转为 PASS, 全套回归 7 PASS |
-| 2 路组相联 I/D Cache + 总线突发 | ❌ 未做 | BRAM 前置条件已满足 ✅（行为级推断, 4×RAMB36）; 缺突发总线协议 |
-| AI 加速单元 | ❌ 未做 | — |
+| **完整异常 / 中断** | ✅ **已完成** | Zicsr 读改写 + ECALL/EBREAK/非法指令异常 + **mtimecmp 定时器中断** + MRET + mstatus 语义; handler 用 mscratch 保存/恢复现场; 回归 **8 PASS**（`tb_core_trap` + `tb_soc_timer_irq`）|
+| 2 路组相联 I/D Cache + 总线突发 | ❌ 未做 | BRAM 前置条件已满足 ✅（行为级推断, 8×RAMB36）; 缺突发总线协议 |
+| AI 加速单元 | ❌ 未做 | 需要先定义应用场景与模型接口 |
 
-> 异常/中断**只差定时器中断**（P2）：`irq_timer` 目前硬接 `1'b0`，
-> 需在 `mmio_subsys.sv` 实现 mtimecmp 后接过来（`csr_file` 那一侧已就绪）。
+> 「完整异常/中断」**已无缺口**：P1 做同步异常，P2 补定时器中断
+> （`irq_timer` 原为硬接 `1'b0` 的死线，现已接到 `csr_file` → `mip.MTIP`）。
+> 过程中修掉一个 RISC-V 合规性 bug（`mcause` 中断位错放在 bit4 而非 bit31），
+> 详见 `results/p2-timer-irq.md`。
 
 ## 评分三项（当前实测）
 
 | 指标 | 基线 | 当前 | 变化 |
 |---|---|---|---|
-| CoreMark/MHz | 0.8263 | **2.3614** | +185.8% |
-| 最高时钟频率 | 78.4 MHz | **75.0 MHz** | −4.3% |
-| CoreMark/LUTs | 2.361e-4 | **9.662e-4** | +309.2% |
+| CoreMark/MHz | 0.8263 | **2.3611** | +185.8% |
+| 最高时钟频率 | 78.4 MHz | **70.9 MHz** | −9.6% |
+| CoreMark/LUTs | 2.361e-4 | **9.347e-4** | +295.9% |
 
-资源：LUT 2444 / FF 1313 / BRAM 8 / DSP 8（评分版，含 P1 + P3，不含 ILA）
-绝对吞吐 = CoreMark/MHz × fmax = **177.1**（基线 64.8，+173.3%）
+资源：LUT 2526 / FF 1377 / BRAM 8 / DSP 8（评分版，含 P1+P2+P3，不含 ILA）
+绝对吞吐 = CoreMark/MHz × fmax = **167.5**（基线 64.8，+158.5%）
 
-> **两项已创历史最好**：CoreMark/LUTs **9.662e-4** > 旧最好 9.518e-4；
-> 绝对吞吐 **177.1** > 旧最好 176.2。
+> CoreMark/MHz 相对基线 **+185.8%**，是本核最强的一项。
+> fmax 从 P1 后的 61.4 挣到 **75.0**（P3 三项实验，+22.2%），
+> P2 补中断后又回落 5.5% 到 **70.9** —— 那是**用频率换功能完成度**，已留痕。
 
-**fmax 的还债进展**（原为最大失分点，61.4 → 75.0，**+22.2%**，距 78.4 仅差 4.3%）：
+**fmax 还债全程**（曾是最大失分点）：
 
 | 阶段 | fmax | LUT | 绝对吞吐 |
 |---|---|---|---|
 | P1 之后 | 61.4 | 3923 | 145.0 |
 | 实验 A：跳转目标专用加法器 | 64.4 | 3945 | 152.1 |
 | 实验 B：imem 改寄存读进 BRAM | 65.3 | 2656 | 154.2 |
-| **实验 C：load 结果走 MEM/WB 寄存器** | **75.0** | **2444** | **177.1** |
+| **实验 C：load 结果走 MEM/WB 寄存器** | **75.0** | **2444** | **177.1（历史最好）** |
+| P2：定时器中断 | 70.9 | 2526 | 167.5（换功能）|
 
-详见 `results/p3-fmax.md` / `results/p3-imem.md` / `results/p3-load-result.md`。
+详见 `results/p3-fmax.md` / `p3-imem.md` / `p3-load-result.md` / `p2-timer-irq.md`。
+**当前关键路径 route 已占 73%** → 设计进入布线受限区间，后续提 fmax 需物理手段。
 
 ## 其他评分维度
 
@@ -72,22 +77,28 @@
 
 ## 优先级建议（更新）
 
-1. ~~异常 / 中断~~ ✅ **已完成**（原为"高阶任务里最接近完成的一项")
-2. ~~收尾上板闭环~~ ✅ 已上板实测 10.16 s（P0/P1 的新 bitstream 待复跑）
-3. **fmax 还债** —— 三项指标里唯一大幅退步的; 实验 A 已挣回 +4.9%,
-   下一步的盈亏平衡账已算清（见 `results/p3-fmax.md`）
-4. **P2 定时器中断** —— 低难度, 补齐"完整中断"的最后一块
-5. **分析报告** —— 数据齐全, 补 ILA 波形即可成文
-6. Cache / AI 加速 —— 工作量大, 视剩余时间决定
+1. ~~收尾上板闭环~~ ✅ 已上板实测 10.16 s —— **但 P0/P1/P2/P3 之后的新 bitstream 待复跑**
+2. ~~异常 / 中断~~ ✅ **已完成**（P1 异常 + P2 定时器中断）
+3. ~~fmax 还债~~ ✅ **已完成**（61.4 → 75.0，+22.2%）
+4. **上板复跑**（P4）—— 当前 bitstream 未验证, 是唯一的阻塞项
+5. **ILA 波形 + 分析报告** —— 数据齐全（`results/*.md` + `ila_pipeline.csv` 2048 拍），
+   补波形即可成文；这是"其他评分维度"里唯一还缺的
+6. Cache / AI 加速 —— 工作量大；AI 需要先定义应用场景与模型接口
 
-## 工程纪律（本轮新增）
+## 工程纪律（已固化）
 
-判据与工具已固化, 不再靠人盯:
+判据与工具不再靠人盯:
 
 ```bat
 cmd /c tools\doctor.bat                          REM 环境自检 + R1 漂移检测
-python tools\fpga_workflow.py verify             REM 增量回归, 期望 7 PASS
+python tools\fpga_workflow.py verify             REM 增量回归, 期望 8 PASS
 python tools\fpga_workflow.py profile            REM 优化前先测量停顿构成
 python tools\fpga_workflow.py synth --tag X --record   REM 综合 -> 四项指标
 python tools\fpga_workflow.py metrics --vs <tag> REM keep/reject 判定
+```
+
+按层次查资源（定位"某模块被实现成了什么"，普通 report_utilization 看不出来）:
+
+```bat
+vivado -mode batch -nojournal -log hier_util.log -source tools/hier_util.tcl
 ```
