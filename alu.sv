@@ -47,6 +47,33 @@ module alu
   assign slt     = $signed(a) < $signed(b);
   assign sltu    = a < b;
 
+  // ---------------------------------------------------------------------------
+  // RV32A 原子指令的"待写回值"计算
+  // ---------------------------------------------------------------------------
+  // 【算子约定】b = rs2 (软件给的操作数), a = **从内存读回的旧值**。
+  // 于是 alu_out 就是"应该写回内存的新值", 同时旧值 (a) 原样送给 rd。
+  // 这样 AMO 的"读-改-写"里只有"改"这一步落在 ALU 上, 其余复用现有 LSU/写回。
+  //
+  // 【最容易写错的一处】min/max 有**两套符号语义**, 必须分开实现:
+  //   amomin.w  / amomax.w    有符号比较
+  //   amominu.w / amomaxu.w   无符号比较
+  // 混用会在负数用例上静默出错 (本项目 PITFALLS 里同类教训已多次出现,
+  // 所以 amo 测试程序特意用负数和 0x8000_0000 这类边界值覆盖)。
+  logic [XLEN-1:0] amo_swap, amo_add, amo_xor, amo_and, amo_or;
+  logic [XLEN-1:0] amo_min, amo_max, amo_minu, amo_maxu;
+  assign amo_swap = b;
+  assign amo_add  = a + b;
+  assign amo_xor  = a ^ b;
+  assign amo_and  = a & b;
+  assign amo_or   = a | b;
+  // 【核心 0.1】别把 min/max 的三元表达式方向写反 —— 我自己第一版就写错了:
+  //   amo_max 曾写成 (slt) ? a : b, 即 a<b 时取 a —— 取成了最小值。
+  //   正确: min = a<b ? a : b;  max = a<b ? b : a。
+  assign amo_min  = (slt)  ? a : b;        // 有符号: 复用上面的 slt
+  assign amo_max  = (slt)  ? b : a;
+  assign amo_minu = (sltu) ? a : b;        // 无符号: 复用 sltu
+  assign amo_maxu = (sltu) ? b : a;
+
   always_comb begin
     case (op)
       ALU_ADD:  out = sum;
@@ -64,6 +91,16 @@ module alu
       // 污染前递与调试观测。真正非法的编码由 control_unit 拦截。
       ALU_MUL, ALU_MULH, ALU_MULHSU, ALU_MULHU,
       ALU_DIV, ALU_DIVU, ALU_REM,   ALU_REMU: out = '0;
+      // ---- RV32A 原子指令: 给出"应写回内存的新值" ----
+      ALU_AMO_SWAP: out = amo_swap;
+      ALU_AMO_ADD:  out = amo_add;
+      ALU_AMO_XOR:  out = amo_xor;
+      ALU_AMO_AND:  out = amo_and;
+      ALU_AMO_OR:   out = amo_or;
+      ALU_AMO_MIN:  out = amo_min;
+      ALU_AMO_MAX:  out = amo_max;
+      ALU_AMO_MINU: out = amo_minu;
+      ALU_AMO_MAXU: out = amo_maxu;
       default:  out = 'x;
     endcase
   end

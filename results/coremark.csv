@@ -32,3 +32,4 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-05,p5-gemm-integrated,1,423527,2.3611,9984,14097,4,20,53.6,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-05,p5-gemm-gated-off,1,423527,2.3611,4019,1387,4,8,61.6,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-05,p5-freshness-fix,1,423527,2.3611,4019,1387,4,8,61.6,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-05,p6-a-ext-datapath,1,423527,2.3611,4078,1377,4,8,61.7,keep,fpga_workflow.py synth (PROG=cm_hw)

@@ -59,7 +59,8 @@ package rv32_pkg;
     OPC_OPIMM  = 7'b0010011,
     OPC_OP     = 7'b0110011,
     OPC_FENCE  = 7'b0001111,   // FENCE / FENCE.I: 本核顺序执行无 cache, 退化为 NOP
-    OPC_SYSTEM = 7'b1110011    // ECALL / EBREAK / MRET / Zicsr
+    OPC_SYSTEM = 7'b1110011,   // ECALL / EBREAK / MRET / Zicsr
+    OPC_AMO    = 7'b0101111    // RV32A: LR.W / SC.W / AMO*.W
   } opcode_e;
 
   // --------------------------------------------------------------------------
@@ -91,9 +92,41 @@ package rv32_pkg;
     ALU_DIV    = 5'd14,
     ALU_DIVU   = 5'd15,
     ALU_REM    = 5'd16,
-    ALU_REMU   = 5'd17
-    // 5'd18..5'd31 保留
+    ALU_REMU   = 5'd17,
+    // ---- RV32A 原子指令的"新值"计算 (5'd18..25) ----
+    // 语义: alu_out = rs2 与"从内存读回的旧值"按 amo 类型运算后的**待写回值**。
+    // 有符号/无符号的 min/max 必须分开 (这是 A 扩展最易写错的地方):
+    //   amomin.w / amomax.w    用**有符号**比较
+    //   amominu.w / amomaxu.w  用**无符号**比较
+    ALU_AMO_SWAP  = 5'd18,   // 新值 = rs2
+    ALU_AMO_ADD   = 5'd19,   // 新值 = 旧值 + rs2
+    ALU_AMO_XOR   = 5'd20,
+    ALU_AMO_AND   = 5'd21,
+    ALU_AMO_OR    = 5'd22,
+    ALU_AMO_MIN   = 5'd23,   // 有符号
+    ALU_AMO_MAX   = 5'd24,   // 有符号
+    ALU_AMO_MINU  = 5'd25,   // 无符号
+    ALU_AMO_MAXU  = 5'd26    // 无符号
+    // 5'd27..5'd31 保留
   } alu_op_e;
+
+  // --------------------------------------------------------------------------
+  // 原子操作码 (AMO) —— instr[31:27], 即 funct5。仅在 opcode = OPC_AMO 时有效。
+  // 编码已用 riscv-none-elf-gcc -march=rv32ia 实测确认 (见 results/p6-a-extension.md):
+  //   amoadd.w 0x0062a3af(funct5=00000)  lr.w 0x1002ae2f(00010)  sc.w 0x1862aeaf(00011)
+  //   amoswap.w 0x0862af2f(00001)        amoor.w 0x4062afaf(01000)
+  // --------------------------------------------------------------------------
+  localparam logic [4:0] AMO_LR      = 5'b00010;
+  localparam logic [4:0] AMO_SC      = 5'b00011;
+  localparam logic [4:0] AMO_SWAP    = 5'b00001;
+  localparam logic [4:0] AMO_ADD     = 5'b00000;
+  localparam logic [4:0] AMO_XOR     = 5'b00100;
+  localparam logic [4:0] AMO_AND     = 5'b01100;
+  localparam logic [4:0] AMO_OR      = 5'b01000;
+  localparam logic [4:0] AMO_MIN     = 5'b10000;
+  localparam logic [4:0] AMO_MAX     = 5'b10100;
+  localparam logic [4:0] AMO_MINU    = 5'b11000;
+  localparam logic [4:0] AMO_MAXU    = 5'b11100;
 
   // --------------------------------------------------------------------------
   // ALU 操作数来源 —— 取代旧设计中的 alu_src / alu_src_pc 两个不对称信号,
@@ -210,6 +243,14 @@ package rv32_pkg;
     logic [1:0]  csr_cmd;        // 01=W (直接写) 10=S (置位) 11=C (清位)
     logic        csr_src_imm;    // 1 = 源操作数取 5 位零扩展的 uimm, 0 = 取 rs1
     logic [4:0]  csr_uimm;       // 立即数形式的源 (instr[19:15])
+    // ---- RV32A 原子指令 (EX/MEM 段消费) ----
+    // 【为什么需要 amo_en 而不是复用 mem_read/mem_write】
+    // AMO 是"读-改-写"三合一: 单拍只读或只写的 LSU 做不了, 必须让 MEM 段
+    // 进入多周期序列。amo_en 就是告诉流水线控制"这条指令要走原子序列"。
+    logic        amo_en;         // 1 = 本条是 LR/SC/AMO (opcode=0x2F)
+    logic [4:0]  amo_op;         // funct5 (见 AMO_* 常量)
+    logic        amo_aq;         // acquire 语义位 (单核无 cache, 译码后无副作用)
+    logic        amo_rl;         // release 语义位 (同上)
   } ctrl_s;
 
   // --------------------------------------------------------------------------

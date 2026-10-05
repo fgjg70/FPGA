@@ -185,6 +185,34 @@ module tb_units;
     alu_op = ALU_DIV;                                                 #1; chk(alu_out, 32'd0,          "DIV -> ALU 输出 0 (实算在 muldiv)");
 
     // ------------------------------------------------------------------
+    // RV32A 原子指令的"待写回值"计算
+    //   约定: a = 从内存读回的**旧值**, b = rs2。alu_out = 应写回内存的**新值**。
+    //   【为什么必须测负数与 0x8000_0000】min/max 有两套符号语义
+    //   (amomin/max 有符号, amominu/maxu 无符号), 混用只在边界值上暴露。
+    //   本人写第一版时就把 amo_max 的三元表达式方向写反了, 正是这类 bug。
+    // ------------------------------------------------------------------
+    alu_op = ALU_AMO_SWAP; alu_a = 32'hDEADBEEF; alu_b = 32'h12345678; #1; chk(alu_out, 32'h12345678, "AMO_SWAP 新值=rs2");
+    alu_op = ALU_AMO_ADD;  alu_a = 32'd100;      alu_b = 32'd23;       #1; chk(alu_out, 32'd123,      "AMO_ADD 100+23");
+    alu_op = ALU_AMO_XOR;  alu_a = 32'hAAAA5555; alu_b = 32'hAAAA55AA; #1; chk(alu_out, 32'h000000FF, "AMO_XOR");
+    alu_op = ALU_AMO_AND;  alu_a = 32'hF0F0F0F0; alu_b = 32'h0FF00FF0; #1; chk(alu_out, 32'h00F000F0, "AMO_AND");
+    alu_op = ALU_AMO_OR;   alu_a = 32'hF0F0F0F0; alu_b = 32'h0F0F0F0F; #1; chk(alu_out, 32'hFFFFFFFF, "AMO_OR");
+    // ---- min/max: 有符号 vs 无符号必须分开 ----
+    // 旧值 = -1 (0xFFFFFFFF), rs2 = 1
+    //   有符号: -1 < 1  -> min = -1,          max = 1
+    //   无符号: 0xFFFFFFFF > 1 -> minu = 1,   maxu = 0xFFFFFFFF
+    alu_op = ALU_AMO_MIN;  alu_a = 32'hFFFFFFFF; alu_b = 32'd1;        #1; chk(alu_out, 32'hFFFFFFFF, "AMO_MIN  -1<1  -> -1");
+    alu_op = ALU_AMO_MAX;  alu_a = 32'hFFFFFFFF; alu_b = 32'd1;        #1; chk(alu_out, 32'd1,        "AMO_MAX  -1<1  -> 1");
+    alu_op = ALU_AMO_MINU; alu_a = 32'hFFFFFFFF; alu_b = 32'd1;        #1; chk(alu_out, 32'd1,        "AMO_MINU max>1 -> 1");
+    alu_op = ALU_AMO_MAXU; alu_a = 32'hFFFFFFFF; alu_b = 32'd1;        #1; chk(alu_out, 32'hFFFFFFFF, "AMO_MAXU max>1 -> max");
+    // 有符号边界: 旧值 = 0x80000000 (最小负数), rs2 = 0x7FFFFFFF (最大正数)
+    //   有符号: min = 0x80000000, max = 0x7FFFFFFF
+    //   无符号: 0x80000000 > 0x7FFFFFFF -> minu = 0x7FFFFFFF, maxu = 0x80000000
+    alu_op = ALU_AMO_MIN;  alu_a = 32'h80000000; alu_b = 32'h7FFFFFFF; #1; chk(alu_out, 32'h80000000, "AMO_MIN  min<max -> min");
+    alu_op = ALU_AMO_MAX;  alu_a = 32'h80000000; alu_b = 32'h7FFFFFFF; #1; chk(alu_out, 32'h7FFFFFFF, "AMO_MAX  min<max -> max");
+    alu_op = ALU_AMO_MINU; alu_a = 32'h80000000; alu_b = 32'h7FFFFFFF; #1; chk(alu_out, 32'h7FFFFFFF, "AMO_MINU 0x8..>u0x7.. -> 0x7..");
+    alu_op = ALU_AMO_MAXU; alu_a = 32'h80000000; alu_b = 32'h7FFFFFFF; #1; chk(alu_out, 32'h80000000, "AMO_MAXU -> 0x8..");
+
+    // ------------------------------------------------------------------
     $display("[2/6] imm_gen ...");
     // 黄金向量 (独立手推, 不经过 enc_* 函数)
     ig_instr = 32'h00000013; ig_fmt = IMM_I; #1; chk(ig_imm, 32'h00000000,   "golden NOP imm");
