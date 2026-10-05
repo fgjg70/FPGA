@@ -191,13 +191,37 @@ module core
   assign is_ctrl_flow = (id_ex_ctrl.pc_sel != PC_NEXT);
   assign btb_upd_en   = is_ctrl_flow && !pipe_stall && !rst;
 
+  // --------------------------------------------------------------------------
+  // 【取指相位对齐 —— 寄存读取指存储器的必要配套】
+  // imem 若用寄存读 (IMEM_REG_READ), rdata 比 pc 晚一拍出:
+  //     cycle N   : addr = pc_N,  rdata = instr(pc_{N-1})
+  // 而 if_id_reg 原来把 `pc` 和 `imem_rdata` 在同拍锁存 -> **PC 与指令错位一拍**,
+  // BTB 预测也跟着配错 (预测是对 pc_N 做的, 却贴到了 instr(pc_{N-1}) 上),
+  // 于是仿真直接跑挂。原先以为"两者由同一个寄存器锁存所以始终配对"是**错的**:
+  // 配对的前提是它们本来就是同一条指令的 PC 与指令字, 寄存读破坏了这个前提。
+  //
+  // 修法: 给 PC 也加一级寄存器, 让进 if_id 的 pc 与 imem_rdata 同源同拍。
+  //   组合读模式下 pc_d1 恒等于 pc (见下), 因此这条路径**零代价、行为不变**。
+  // 复位时就清成 PC_RESET, 避免第一拍配到一个未定义 PC。
+  // --------------------------------------------------------------------------
+`ifdef IMEM_REG_READ
+  logic [31:0] pc_if;
+  always @(posedge clk) begin
+    if (rst) pc_if <= PC_RESET;
+    else     pc_if <= pc;      // pc 本身在 stall 时保持, 这里自然跟随
+  end
+`else
+  wire [31:0] pc_if = pc;
+`endif
+  wire [31:0] pc_if_plus4 = pc_if + 32'd4;
+
   if_id_reg #(.RESET_PC(PC_RESET)) u_if_id (
     .clk         (clk),
     .rst         (rst),
     .flush       (if_id_flush),
     .stall       (pipe_stall),
-    .pc_in       (pc),
-    .pc_plus4_in (pc_plus4),
+    .pc_in       (pc_if),
+    .pc_plus4_in (pc_if_plus4),
     .instr_in    (imem_rdata),
     .pred_taken_in  (pred_taken),
     .pred_target_in (pred_target),
