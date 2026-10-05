@@ -19,3 +19,5 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-05,p3c-comb-base,1,423486,2.3614,3945,1333,4,8,64.4,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-05,p3d-imem-bram,1,423486,2.3614,2656,1281,8,8,65.3,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-05,p3e-imem-bram-default,1,423486,2.3614,2656,1281,8,8,65.3,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-05,p3f-load-result-reg,1,423486,2.3614,2444,1313,8,8,75.0,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-05,p3g-default-final,1,423486,2.3614,2444,1313,8,8,75.0,keep,fpga_workflow.py synth (PROG=cm_hw)

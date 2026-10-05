@@ -53,6 +53,21 @@ if {[info exists ::env(IMEM_COMB_READ)] && $::env(IMEM_COMB_READ) ne ""} {
 } else {
   puts "BUILD_IMEM_REG_READ=1"
 }
+# LOAD_RESULT_REG: load 结果改由 MEM/WB 寄存器给出, 砍掉
+#   dmem 输出 -> LSU 提取 -> wb_data mux -> 前递 mux -> ID/EX 这段长走线。
+# 【默认开启】实测 (results/p3-load-result.md):
+#   开启: fmax 75.0, LUT 2444, 绝对吞吐 177.1, ticks 423527
+#   关闭: fmax 65.3, LUT 2656, 绝对吞吐 154.2, ticks 423527
+#   -> fmax +14.8%、CoreMark/LUTs +8.7%, 而 CoreMark/MHz 逐位不变。
+# **零代价**: load-use 停顿 30645 与 ticks 完全不变 —— dmem 的寄存读已经提供
+# 了那一拍, MEM/WB 只是把同一个值再接一次。原先以为要付"停顿 1->2 拍"是错的。
+# 回退: set LOAD_COMB=1
+if {[info exists ::env(LOAD_COMB)] && $::env(LOAD_COMB) ne ""} {
+  puts "BUILD_LOAD_COMB=1"
+} else {
+  append IMEM_DEFS " LOAD_RESULT_REG=1"
+  puts "BUILD_LOAD_RESULT_REG=1"
+}
 synth_design -top top_a100t -part $part -verilog_define "IMEM_INIT_FILE=\"$imem\" DMEM_INIT_FILE=\"$dmem\" $IMEM_DEFS"
 puts "BUILD_PROG=$PROG"
 opt_design

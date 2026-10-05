@@ -794,7 +794,14 @@ def cmd_verify(args) -> int:
 
         print(f"\n--- {name}: {t['desc']}")
         t0 = time.time()
-        defines = () if args.imem_comb_read else ("IMEM_REG_READ",)
+        defs = []
+        if not args.imem_comb_read:
+            defs.append("IMEM_REG_READ")
+        if not args.load_comb:
+            # 默认由 MEM/WB 寄存器给出 load 结果。实测零代价 (ticks 与 load-use
+            # 停顿完全不变), 却把 fmax 从 65.3 抬到 75.0 —— 见 results/p3-load-result.md
+            defs.append("LOAD_RESULT_REG")
+        defines = tuple(defs)
         rc, out, workdir = compile_sim(files, t["tb"], defines)
         if rc != 0:
             print(f"    [FAIL] 编译失败 (vlog)")
@@ -1240,6 +1247,7 @@ def cmd_synth(args) -> int:
         h.update(sha256_file(p).encode())
     h.update(prog.encode())
     h.update(b"combread" if args.imem_comb_read else b"regread")
+    h.update(b"loadcomb" if args.load_comb else b"loadreg")
     fp = h.hexdigest()[:32]
 
     cache = os.path.join(CACHE_DIR, "synth-cache.json")
@@ -1274,6 +1282,8 @@ def cmd_synth(args) -> int:
             benv = clean_env()
             if args.imem_comb_read:
                 benv["IMEM_COMB_READ"] = "1"
+            if args.load_comb:
+                benv["LOAD_COMB"] = "1"
             rc, out, dt = run(["cmd", "/c", abspath("fpga/build.bat")],
                               cwd=abspath("fpga"), timeout=args.timeout, env=benv)
             with open(log, "w", encoding="utf-8") as f:
@@ -1638,6 +1648,8 @@ def main() -> int:
     p.add_argument("--force", action="store_true", help="忽略缓存全量重跑")
     p.add_argument("--imem-comb-read", action="store_true",
                    help="仿真时按组合读编译 (对应 IMEM_COMB_READ); 默认寄存读")
+    p.add_argument("--load-comb", action="store_true",
+                   help="仿真时回退 load 组合路径 (LOAD_COMB); 默认由 MEM/WB 寄存器给出")
     p.add_argument("-v", "--verbose", action="store_true", help="通过时也打印摘要")
     p.set_defaults(func=cmd_verify)
 
@@ -1665,6 +1677,8 @@ def main() -> int:
     p.add_argument("--force", action="store_true", help="忽略缓存强制重建")
     p.add_argument("--imem-comb-read", action="store_true",
                    help="取指存储器回退组合读 (IMEM_COMB_READ); 默认是寄存读/BRAM")
+    p.add_argument("--load-comb", action="store_true",
+                   help="load 结果回退组合路径 (LOAD_COMB); 默认由 MEM/WB 寄存器给出")
     p.add_argument("--timeout", type=int, default=3600, help="Vivado 超时秒数")
     p.add_argument("--lock-timeout", type=int, default=1800, help="等待构建锁的秒数")
     p.set_defaults(func=cmd_synth)

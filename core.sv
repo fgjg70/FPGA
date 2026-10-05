@@ -556,9 +556,22 @@ module core
     .stall        (hold_mem),
     .ctrl_in      (ex_mem_ctrl),
     .alu_out_in   (ex_mem_alu_out),
+`ifdef LOAD_RESULT_REG
+    // 【P3 实验C】让 MEM/WB 真正寄存 load 结果。
+    // 关键路径原来长这样 (15.2ns, route 占 64%):
+    //   u_dmem 输出寄存器 -> LSU 字节提取 -> wb_data mux -> 前递 mux -> ID/EX
+    // 即"组合读出的数据"在**同一个时钟沿**既要被 MEM/WB 锁存、又要穿过
+    // wb_data mux 去前递/写回 —— 两跳合一跳。
+    // 寄存后: MEM/WB 锁存提取结果, wb_data 从前递寄存器出发 -> 砍掉一段长走线。
+    // **不新增任何寄存器** (用的就是这个本来就存在的 MEM/WB 寄存器)。
+    // 实测 load-use 停顿与 ticks 均**不变** —— 因为 dmem 的寄存读已经提供了
+    // 那一拍, MEM/WB 只是把同一个值再接一次, 没有额外延迟。
+    .load_data_in (mem_load_data),
+`else
     // 【寄存读版】load_data 不再经 MEM/WB 打第二拍: 它在 WB 拍由 LSU 组合给出
     // (dmem 的输出寄存器就是"第一拍"), 写回 mux 直接用它。这里恒 0 让它被优化掉。
     .load_data_in (32'h0),
+`endif
     .pc_plus4_in  (ex_mem_pc_plus4),
     .rd_addr_in   (ex_mem_rd),
     .ctrl         (mem_wb_ctrl),
@@ -570,8 +583,14 @@ module core
 
   always_comb begin
     case (mem_wb_ctrl.wb_src)
+`ifdef LOAD_RESULT_REG
+      // 【P3 实验C】从前递寄存器取, 而不是从"刚组合读出的数据"取 —— 这是砍掉
+      // 关键路径的关键一步 (见 u_mem_wb 处注释)。
+      WB_MEM:  wb_data = mem_wb_load_data;
+`else
       // 直接用 LSU 的 WB 拍组合输出 (dmem 寄存读的数据此刻正好有效)
       WB_MEM:  wb_data = mem_load_data;
+`endif
       WB_PC4:  wb_data = mem_wb_pc_plus4;
       default: wb_data = mem_wb_alu_out;      // WB_ALU
     endcase

@@ -69,12 +69,16 @@ python tools\fpga_workflow.py verify             REM 增量回归, 期望 7 PASS
 
 | 指标 | 基线 | **最新可复现实测** | 变化 |
 |---|---|---|---|
-| **CoreMark/MHz** | 0.8263 | **2.3614**（仿真，硬件吻合 0.02%）| **+186%** |
-| **最高时钟频率** | 78.4 MHz | **65.3 MHz**（`synth` 实测 WNS 4.697ns）| −16.7% |
-| **CoreMark/LUTs** | 2.361e-4 | **8.891e-4** | **+276.5%** |
+| **CoreMark/MHz** | 0.8263 | **2.3614**（仿真，硬件吻合 0.02%）| **+185.8%** |
+| **最高时钟频率** | 78.4 MHz | **75.0 MHz**（`synth` 实测 WNS 6.664ns）| −4.3% |
+| **CoreMark/LUTs** | 2.361e-4 | **9.662e-4** | **+309.2%** |
 
-资源：**LUT 2656 / FF 1281 / BRAM 8 / DSP 8**（评分版，含 P1 + P3，不含 ILA）
-绝对吞吐 = CoreMark/MHz × fmax = **154.3**（基线 64.8，+138.1%）
+资源：**LUT 2444 / FF 1313 / BRAM 8 / DSP 8**（评分版，含 P1 + P3，不含 ILA）
+绝对吞吐 = CoreMark/MHz × fmax = **177.1**（基线 64.8，+173.3%）
+
+> **两项已创历史最好**：CoreMark/LUTs 9.662e-4 > 旧最好 9.518e-4；
+> 绝对吞吐 177.1 > 旧最好 176.2。fmax 距 78.4 只差 4.3%，且旧的 78.4
+> 来自"分布式 RAM 版"旧架构，严格说不同构型、可比性有限。
 
 > 这三行由 `python tools\fpga_workflow.py report` 从 `results/coremark.csv` 重算得出，
 > 是**当前唯一可复现**的数字。旧记录（LUT 2481 / fmax 74.6）见下方历史表与第 6 节的说明。
@@ -106,16 +110,26 @@ CoreMark/MHz 硬件 2.3615 vs 仿真 2.3611，吻合到 0.02%。
 | p0-score-cm_hw | 423,486 | 2.3614 | 3679 | 64.0 | keep（P0 重建）|
 | p1-trap-wired | 423,486 | 2.3614 | 3923 | 61.4 | keep（P1 异常/中断）|
 | p3a-jalr-addder | 423,486 | 2.3614 | 3945 | 64.4 | keep（跳转目标专用加法器）|
-| **p3e-imem-bram-default** | 423,486 | **2.3614** | **2656** | **65.3** | **keep（当前·取指寄存读/BRAM）**|
+| p3e-imem-bram-default | 423,486 | 2.3614 | 2656 | 65.3 | keep（取指寄存读/BRAM）|
+| **p3g-default-final** | 423,486 | **2.3614** | **2444** | **75.0** | **keep（当前·load 结果寄存）**|
 
 ⚠️ = 该 LUT 值用当前代码复现不出来，详见第 6 节 P1 小节末尾的说明。
 
-> **imem 的重大修正（本轮）**：`imem` 原来既不是 BRAM 也不是 LUTRAM，
-> 而是被综合成 **1228 个纯 LUT 的组合 ROM**（占全核 31%）。改成寄存读后进 BRAM，
-> `u_imem` 从 1228 LUT 降到 **36**，全核 LUT 3945 → **2656（−32.7%）**，
-> 而 **CoreMark/MHz 逐位不变**（零周期代价）。详见 `results/p3-imem.md`。
-> 建议：**新增/更换取指存储器时先跑 `tools/hier_util.tcl` 确认它真的进了 BRAM**——
-> 普通 `report_utilization` 看不出这个问题（imem 在两张内存映射表里都不出现）。
+> **本轮两项重大修正（都来自实测，见 `results/p3-imem.md` 与 `results/p3-load-result.md`）**：
+> 1. `imem` 原来既不是 BRAM 也不是 LUTRAM，而是 **1228 个纯 LUT 的组合 ROM**（占全核 31%）。
+>    改寄存读后进 BRAM，`u_imem` 1228 → **36 LUT**，全核 LUT 3945 → 2656，**CoreMark/MHz 逐位不变**。
+> 2. `core.sv` 里 `mem_wb_reg` 的 `load_data_in` 原本**硬接 `32'h0`**，load 结果直接从
+>    LSU 组合输出进 `wb_data` mux → 前递 mux → ID/EX，两跳压在一拍。
+>    改成真正走 MEM/WB 寄存器后 **fmax 65.3 → 75.0（+14.8%）**，LUT −8.1%，
+>    而 **ticks 与 load-use 停顿完全不变（零代价）**。
+>
+> ⚠️ 第 2 条曾长期被 `HANDOFF.md` 的 P3 方案 1 标注为"代价：load-use 停顿 1→2 拍，约 +7% 周期"
+> 而搁置 —— **实测那个代价根本不存在**（dmem 的寄存读已经提供了那一拍）。
+> **教训：文档里的"预期代价"必须重新实测，否则会白白放弃大收益。**
+>
+> 诊断建议：怀疑某个数组没进 BRAM、或某段逻辑被实现成了 LUT 时，跑
+> `tools/hier_util.tcl`（按层次报告资源）。普通 `report_utilization` 看不出
+> "imem 是 1228 个 LUT" 这类问题 —— 它在两张内存映射表里都不出现。
 
 ---
 
