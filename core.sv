@@ -73,6 +73,7 @@ module core
   logic [31:0] pred_target, actual_target;
   logic        pred_is_ret;          // 预测命中的 PC 是"函数返回" (RAS 用)
   logic        ex_is_call, ex_is_ret;// EX 解析出的 call / return (RAS 控制)
+  logic        ex_is_cond;           // EX 段该指令是条件分支 (gshare 历史用)
   logic        actual_taken, pred_ok;
   wire  [31:0] btb_pred_target;
 
@@ -186,8 +187,12 @@ module core
     .upd_taken   (actual_taken),
     .upd_target  (ex_pc_target),
     .upd_is_ret  (ex_is_ret),
+    .upd_is_cond (ex_is_cond),
     .pred_is_ret (pred_is_ret)
   );
+
+  // 条件分支 (pc_sel==PC_BR) —— gshare 的全局历史只记这类, 不记 JAL/JALR
+  assign ex_is_cond = (id_ex_ctrl.pc_sel == PC_BR);
 
   // ==========================================================================
   // 返回地址栈 (RAS) —— 由 RAS_EN 宏控制, **默认关闭**

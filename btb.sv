@@ -59,6 +59,7 @@ module btb
   input  logic        upd_taken,
   input  logic [31:0] upd_target,
   input  logic        upd_is_ret,     // 这条控制流是"函数返回" (JALR rd=x0, rs1=x1/x5)
+  input  logic        upd_is_cond,    // 【只给 gshare 用】这条是**条件分支**
   output logic        pred_is_ret     // 预测命中的这条 PC 是不是返回 (给 RAS 用)
 );
 
@@ -135,10 +136,16 @@ module btb
       else
         dctr[u_dir_idx] <= upd_taken ? dctr[u_dir_idx] + 2'b01
                                      : dctr[u_dir_idx] - 2'b01;
+      // 【历史记什么? 两个变体都实测过, 结论: 记全部控制流更好】
+      //   A) 记全部控制流 (当前):           ticks 449317, 精度 89%
+      //   B) 只记条件分支 (JAL/JALR 不记):  ticks 451265, 精度 **74%** (更差!)
+      // B 更差的真因是 **冷却效应**: 6 位历史做 XOR 索引, 同一个分支在不同历史下
+      // 会落到 2^6=64 个不同计数器上, 每个都要重新学 -> 表被摊薄, 精度崩掉。
+      // A 虽然给索引注入了常量噪声, 但"噪声"同时也起到了分散冲突的作用。
+      // 保留 A。见 results/p4-gshare.md。
       ghr <= {ghr[GH_BITS-2:0], upd_taken};
     end
   end
-
 `else
   // ========================================================================
   // 纯局部 2 位 Smith: 方向计数器索引 == 表项索引
