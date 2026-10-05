@@ -166,6 +166,8 @@ module tb_sw;
   //   BTB 没命中      -> 预测"不跳", 若实际 taken 则误判 => 该扩表 / 改组织
   //   BTB 命中但方向错 -> 表命中了, 2 位计数器的方向判断错了 => 该改方向预测器
   int unsigned n_align_err = 0;    // 取指对齐自检失败次数 (必须为 0)
+  int unsigned n_ras_push = 0, n_ras_pop = 0, n_ras_nonempty = 0;  // RAS 自证
+  int unsigned n_pred_is_ret = 0, n_ras_diff = 0;   // 预测被判为返回的次数 / 与 BTB 目标不同的次数
   int unsigned n_mis_br_nohit = 0, n_mis_br_dir = 0;
   int unsigned n_br_hit = 0, n_br_nohit = 0;      // 条件分支的 BTB 命中情况
 
@@ -224,6 +226,21 @@ module tb_sw;
       if (u_dut.u_hazard.load_use) n_stall_lu++;   // load_use 在 hazard_unit 内部
       if (u_dut.lsu_stall) n_stall_ls++;
       if (u_dut.md_busy)   n_stall_ex++;
+
+      // RAS 自证 (仅在 RAS_EN 打开时存在)
+`ifdef RAS_EN
+      if (u_dut.ex_is_call)      n_ras_push++;
+      if (u_dut.ex_is_ret)       n_ras_pop++;
+      if (!u_dut.u_ras.empty)    n_ras_nonempty++;
+      // 预测时"这条 PC 被识别为返回"以及"RAS 目标与 BTB 目标不同"的次数。
+      // 若 pred_is_ret 一直是 0, 说明 is_ret 标记没起作用 (而非 RAS 无用) ——
+      // 这个区分非常关键: 实测就先踩过"只把 is_ret 写进 gshare 分支、
+      // 默认的 Smith 分支没写", 导致 RAS 压栈弹栈都正常却完全不改变预测。
+      if (u_dut.pred_is_ret) begin
+        n_pred_is_ret++;
+        if (u_dut.ras_top !== u_dut.btb_pred_target) n_ras_diff++;
+      end
+`endif
 
       // 预测器精度: 每条控制流指令做一次预测 (停顿期间不重复计)
       if (u_dut.id_ex_ctrl.pc_sel != 2'd0) begin
@@ -320,6 +337,23 @@ module tb_sw;
       $display("  *** 失败 %0d 次: if_pc 与 if_instr 不同源 (取指错位!) ***", n_align_err);
     else
       $display("  OK (0 次错位)");
+`ifdef RAS_EN
+    // RAS 自证: 必须能区分"RAS 没用"和"RAS 没生效"。
+    // 实测踩过: is_ret 只写进了 gshare 分支, 默认的 Smith 分支没写 ->
+    // 压栈/弹栈计数都正常, 但 pred_is_ret 恒为 0, 对误判毫无影响。
+    $display("  --- RAS (返回地址栈) ---");
+    $display("  push(call) = %0d   pop(ret) = %0d   栈顶非空拍数 = %0d",
+             n_ras_push, n_ras_pop, n_ras_nonempty);
+    $display("  预测判为返回 = %0d   其中 RAS 目标 != BTB 目标 = %0d",
+             n_pred_is_ret, n_ras_diff);
+    begin : btb_ret_count
+      int unsigned n_ret_entries;
+      n_ret_entries = 0;
+      for (int bi = 0; bi < 64; bi++)
+        if (u_dut.u_btb.vld[bi] && u_dut.u_btb.is_ret[bi]) n_ret_entries++;
+      $display("  BTB 中 is_ret=1 的表项 = %0d (为 0 则标记没写进表)", n_ret_entries);
+    end
+`endif
     $display("  --- predictor accuracy ---");
     $display("  ctrl-flow  = %0d   mispredict = %0d   accuracy = %0d%%",
              n_ctrl, n_mis, n_ctrl == 0 ? 0 : 100 - (n_mis * 100) / n_ctrl);

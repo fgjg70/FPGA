@@ -57,7 +57,9 @@ module btb
   input  logic        upd_en,
   input  logic [31:0] upd_pc,
   input  logic        upd_taken,
-  input  logic [31:0] upd_target
+  input  logic [31:0] upd_target,
+  input  logic        upd_is_ret,     // 这条控制流是"函数返回" (JALR rd=x0, rs1=x1/x5)
+  output logic        pred_is_ret     // 预测命中的这条 PC 是不是返回 (给 RAS 用)
 );
 
   localparam int unsigned N        = 1 << IDX_BITS;
@@ -68,6 +70,11 @@ module btb
   logic                vld [N];
   logic [TAG_BITS-1:0] tag [N];
   logic [TGT_BITS-1:0] tgt [N];
+  // 【返回标记】这条 PC 上的控制流是"函数返回"(JALR rd=x0, rs1=x1/x5)。
+  // 前端在 IF 段无法识别返回指令(要译码才知道), 所以必须在 EX 解析后把这个
+  // 标记**学着记进表里**, 下次取到这条 PC 就能直接问 RAS 要目标。
+  // 这是 RAS 能与 BTB 配合工作的前提 (P4 优化, 实测 JALR 误判占全部误判 37%)。
+  logic                is_ret [N];
 
   // ---- 索引/标签 (声明必须在使用之前) ----
   wire [IDX_BITS-1:0] pidx = pred_pc[IDX_BITS+1:2];
@@ -78,6 +85,7 @@ module btb
   // 表项命中: 始终用纯 pidx (理由见文件头)
   assign pred_hit    = vld[pidx] && (tag[pidx] == ptag);
   assign pred_target = {PC_BASE[31:PC_TOP], tgt[pidx]};
+  assign pred_is_ret = pred_hit && is_ret[pidx];
 
   integer i;
 
@@ -99,6 +107,7 @@ module btb
     for (i = 0; i < N; i++) begin
       vld[i]  = 1'b0;
       tag[i]  = '0;
+      is_ret[i] = 1'b0;
       tgt[i]  = '0;
       dctr[i] = 2'b01;                            // 弱不跳
     end
@@ -117,6 +126,7 @@ module btb
       vld[uidx] <= 1'b1;
       tag[uidx] <= utag;
       tgt[uidx] <= upd_target[PC_TOP-1:0];
+      is_ret[uidx] <= upd_is_ret;
       // 饱和计数器: 到边界就保持, 不环绕
       if (dctr[u_dir_idx] == 2'b11 && upd_taken)
         dctr[u_dir_idx] <= 2'b11;
@@ -141,6 +151,7 @@ module btb
     for (i = 0; i < N; i++) begin
       vld[i] = 1'b0;
       tag[i] = '0;
+      is_ret[i] = 1'b0;
       tgt[i] = '0;
       ctr[i] = 2'b01;                            // 弱不跳
     end
@@ -154,6 +165,10 @@ module btb
       vld[uidx] <= 1'b1;
       tag[uidx] <= utag;
       tgt[uidx] <= upd_target[PC_TOP-1:0];
+      // 返回标记必须**两种模式都写**。曾经只写进了 gshare 分支, 而默认走的是
+      // 本分支 -> is_ret 恒为 0, RAS 永远不被选中, 表现为"RAS 明明在压栈弹栈,
+      // 却对误判毫无影响"。tb_sw 里那条"BTB 中 is_ret=1 的表项数"就是为它加的。
+      is_ret[uidx] <= upd_is_ret;
       if (vld[uidx] && (tag[uidx] == utag)) begin
         if (upd_taken) ctr[uidx] <= (ctr[uidx] == 2'b11) ? 2'b11 : ctr[uidx] + 2'b01;
         else           ctr[uidx] <= (ctr[uidx] == 2'b00) ? 2'b00 : ctr[uidx] - 2'b01;

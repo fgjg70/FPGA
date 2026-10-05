@@ -120,7 +120,7 @@ CORE_SV_ORDER = [
     "alu.sv", "branch_unit.sv", "control_unit.sv", "imm_gen.sv", "pc.sv", "regfile.sv",
     "if_id_reg.sv", "id_ex_reg.sv", "ex_mem_reg.sv", "mem_wb_reg.sv",
     "hazard_unit.sv", "load_store_unit.sv",
-    "imem.sv", "dmem.sv", "btb.sv", "muldiv.sv", "csr_file.sv",
+    "imem.sv", "dmem.sv", "btb.sv", "ras.sv", "muldiv.sv", "csr_file.sv",
     "core.sv",
 ]
 
@@ -834,6 +834,10 @@ def cmd_verify(args) -> int:
             defs.append("LOAD_RESULT_REG")
         if args.gshare:
             defs.append("BTB_GSHARE")
+        if args.ras:
+            # 返回地址栈。实测有效但不划算 (CoreMark/MHz +0.38% 换 fmax -2.8%),
+            # 故默认关闭 —— 见 results/p4-ras.md
+            defs.append("RAS_EN")
         defines = tuple(defs)
         rc, out, workdir = compile_sim(files, t["tb"], defines)
         if rc != 0:
@@ -1294,9 +1298,12 @@ def cmd_synth(args) -> int:
     for p in (imem, dmem):
         h.update(sha256_file(p).encode())
     h.update(prog.encode())
-    h.update(b"combread" if args.imem_comb_read else b"regread")
-    h.update(b"loadcomb" if args.load_comb else b"loadreg")
-    h.update(b"smith" if args.smith else b"gshare")
+    # 指纹必须覆盖**所有影响网表的开关**, 否则改开关会命中旧缓存、拿到旧数字。
+    # 注意与 build.tcl 里的默认保持一致 (默认三宏全关 + RAS 关)。
+    h.update(b"regread" if args.imem_reg_read else b"combread")
+    h.update(b"loadreg" if args.load_reg else b"loadcomb")
+    h.update(b"gshare" if args.gshare else b"smith")
+    h.update(b"ras" if args.ras else b"noras")
     fp = h.hexdigest()[:32]
 
     cache = os.path.join(CACHE_DIR, "synth-cache.json")
@@ -1327,14 +1334,19 @@ def cmd_synth(args) -> int:
             os.makedirs(CACHE_DIR, exist_ok=True)
             t0 = time.time()
             # 走 .bat: 它负责 call settings64.bat (Vivado 未加入 PATH)。
-            # --imem-reg-read 通过环境变量传给 build.tcl (Tcl 读 $::env)。
+            # 架构宏通过环境变量传给 build.tcl (Tcl 读 $::env)。
+            # 默认**一个都不设** = 三宏全关 = 上板验证过的配置。
             benv = clean_env()
-            if args.imem_comb_read:
-                benv["IMEM_COMB_READ"] = "1"
-            if args.load_comb:
-                benv["LOAD_COMB"] = "1"
-            if args.smith:
-                benv["BTB_SMITH"] = "1"
+            if args.imem_reg_read:
+                # build.tcl 检测到它时**直接报错退出** —— 该配置需重排取指流水,
+                # 当前会让 pc_plus4/跳转目标整体偏移。见 results/p4-macro-failure.md
+                benv["IMEM_REG_READ"] = "1"
+            if args.load_reg:
+                benv["LOAD_REG"] = "1"
+            if args.gshare:
+                benv["BTB_GSHARE"] = "1"
+            if args.ras:
+                benv["RAS_EN"] = "1"
             rc, out, dt = run(["cmd", "/c", abspath("fpga/build.bat")],
                               cwd=abspath("fpga"), timeout=args.timeout, env=benv)
             with open(log, "w", encoding="utf-8") as f:
@@ -1808,6 +1820,8 @@ def main() -> int:
                    help="load 结果由 MEM/WB 寄存器给出 (LOAD_RESULT_REG); 默认组合")
     p.add_argument("--gshare", action="store_true",
                    help="方向预测器用 gshare (BTB_GSHARE); 默认纯局部 Smith")
+    p.add_argument("--ras", action="store_true",
+                   help="启用返回地址栈 (RAS_EN); 默认关闭 (实测综合指标净亏)")
     p.add_argument("-v", "--verbose", action="store_true", help="通过时也打印摘要")
     p.set_defaults(func=cmd_verify)
 
@@ -1842,12 +1856,16 @@ def main() -> int:
     p.add_argument("--tag", help="记录进 results/coremark.csv 用的标签")
     p.add_argument("--record", action="store_true", help="追加一行到 results/coremark.csv")
     p.add_argument("--force", action="store_true", help="忽略缓存强制重建")
-    p.add_argument("--imem-comb-read", action="store_true",
-                   help="取指存储器回退组合读 (IMEM_COMB_READ); 默认是寄存读/BRAM")
-    p.add_argument("--load-comb", action="store_true",
-                   help="load 结果回退组合路径 (LOAD_COMB); 默认由 MEM/WB 寄存器给出")
-    p.add_argument("--smith", action="store_true",
-                   help="方向预测器回退纯 Smith; 默认 gshare")
+    # 【注意默认值】三个架构宏默认**全关** —— 与上板验证过的配置一致。
+    # IMEM_REG_READ 目前不可用 (需重排取指流水, build.tcl 会直接拦住)。
+    p.add_argument("--imem-reg-read", action="store_true",
+                   help="取指存储器用寄存读 (IMEM_REG_READ); 当前不可用, 见 p4-macro-failure.md")
+    p.add_argument("--load-reg", action="store_true",
+                   help="load 结果由 MEM/WB 寄存器给出 (LOAD_RESULT_REG); 默认组合")
+    p.add_argument("--gshare", action="store_true",
+                   help="方向预测器用 gshare (BTB_GSHARE); 默认纯 Smith")
+    p.add_argument("--ras", action="store_true",
+                   help="启用返回地址栈 (RAS_EN); 默认关闭 (实测综合指标净亏)")
     p.add_argument("--timeout", type=int, default=3600, help="Vivado 超时秒数")
     p.add_argument("--lock-timeout", type=int, default=1800, help="等待构建锁的秒数")
     p.set_defaults(func=cmd_synth)

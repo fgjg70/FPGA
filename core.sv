@@ -71,6 +71,8 @@ module core
   // 分支预测
   logic        pred_hit, pred_taken, btb_upd_en, is_ctrl_flow;
   logic [31:0] pred_target, actual_target;
+  logic        pred_is_ret;          // 预测命中的 PC 是"函数返回" (RAS 用)
+  logic        ex_is_call, ex_is_ret;// EX 解析出的 call / return (RAS 控制)
   logic        actual_taken, pred_ok;
   wire  [31:0] btb_pred_target;
 
@@ -182,10 +184,60 @@ module core
     .upd_en      (btb_upd_en),
     .upd_pc      (id_ex_pc),
     .upd_taken   (actual_taken),
-    .upd_target  (ex_pc_target)
+    .upd_target  (ex_pc_target),
+    .upd_is_ret  (ex_is_ret),
+    .pred_is_ret (pred_is_ret)
   );
 
+  // ==========================================================================
+  // 返回地址栈 (RAS) —— 由 RAS_EN 宏控制, **默认关闭**
+  // --------------------------------------------------------------------------
+  // 【为什么加】把预测错误按类型拆开后实测: JALR 占全部误判的 **37%** (4378 次),
+  // 且其中绝大多数是函数返回 —— BTB 只记得住"上一次"的返回地址。
+  //
+  // 【实测结果: 有效, 但综合指标净亏 —— 故默认关闭】
+  //   CoreMark/MHz  2.3611 -> 2.3701  (+0.38%)   JALR 误判 4378 -> 3558
+  //   fmax          61.3   -> 59.6    (-2.8%)
+  //   LUT           4015   -> 4142
+  //   绝对吞吐       144.7  -> 141.4   (-2.3%)   <-- 输
+  // 原因: 栈顶是 `stk[sp-1]` 的 8:1 mux, 而它落在**已经最紧的 pc_target 路径**上
+  // (预测目标 -> 下一拍 PC)。为 0.38% 的周期收益换 2.8% 的 fmax 不划算。
+  // 要救它得让栈顶**提前一拍**准备好 (寄存 RAS top, 但那样返回目标就晚一拍),
+  // 或与取指流水一起重排 —— 都是结构性改动, 收益太小。
+  // 完整数据见 results/p4-ras.md。
+  // ==========================================================================
+`ifdef RAS_EN
+  logic [31:0] ras_top;
+  logic        ras_empty;
+  // call = 带链接的跳转 (JAL/JALR 且 rd 是链接寄存器 x1/x5)
+  wire ex_is_call_w = btb_upd_en
+                 && ((id_ex_ctrl.pc_sel == PC_J) || (id_ex_ctrl.pc_sel == PC_JR))
+                 && (id_ex_rd == 5'd1 || id_ex_rd == 5'd5);
+  // return = JALR 且 rs1 是链接寄存器 且 rd=x0 (标准 ret 不长新链接)
+  wire ex_is_ret_w  = btb_upd_en
+                 && (id_ex_ctrl.pc_sel == PC_JR)
+                 && (id_ex_rs1 == 5'd1 || id_ex_rs1 == 5'd5)
+                 && (id_ex_rd == 5'd0);
+  assign ex_is_call = ex_is_call_w;
+  assign ex_is_ret  = ex_is_ret_w;
+
+  ras #(.DEPTH(8)) u_ras (
+    .clk     (clk),
+    .rst     (rst),
+    .push_en (ex_is_call),
+    .push_pc (id_ex_pc_plus4),   // 返回地址 = 链接值 (JAL/JALR 写的就是 pc+4)
+    .pop_en  (ex_is_ret),
+    .top     (ras_top),
+    .empty   (ras_empty)
+  );
+
+  // 预测目标: 若这条 PC 是"返回"(BTB 记着 is_ret) 且栈非空, 用 RAS 栈顶
+  assign pred_target = (pred_is_ret && !ras_empty) ? ras_top : btb_pred_target;
+`else
+  assign ex_is_call  = 1'b0;      // 关掉时给恒 0, 让综合把 RAS 相关逻辑全裁掉
+  assign ex_is_ret   = 1'b0;
   assign pred_target = btb_pred_target;
+`endif
 
   // 控制流指令解析完成且结果有效时才更新 (停顿期间操作数可能未就绪)
   assign is_ctrl_flow = (id_ex_ctrl.pc_sel != PC_NEXT);
