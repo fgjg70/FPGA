@@ -28,6 +28,19 @@ typedef unsigned long long u64;
 #define MMIO_CYCLE_LO  (*(volatile u32 *)0xA0000008u)
 #define MMIO_CYCLE_HI  (*(volatile u32 *)0xA000000Cu)
 
+/* ---- GEMM 加速单元 MMIO (见 rv32_pkg.sv 的 MMIO_GEMM_*) ---- */
+#define G_CTRL    (*(volatile u32 *)0xA0000040u)
+#define G_STATUS  (*(volatile u32 *)0xA0000044u)
+#define G_M       (*(volatile u32 *)0xA0000048u)
+#define G_K       (*(volatile u32 *)0xA000004Cu)
+#define G_N       (*(volatile u32 *)0xA0000050u)
+#define G_CYCLES  (*(volatile u32 *)0xA0000054u)
+#define G_ARENA   ((volatile u32 *)0xA0000400u)
+/* 缓冲窗口内的字偏移: A=0..63, B=64..127, C=128..383 */
+#define G_A_W(w)  G_ARENA[(w)]
+#define G_B_W(w)  G_ARENA[64u + (w)]
+#define G_C_W(w)  G_ARENA[128u + (w)]
+
 extern void uart_send_char(char c);
 extern void report_done(void);
 
@@ -124,6 +137,40 @@ static u32 count_mismatch(void) {
     return bad;
 }
 
+/* ---- 加速路径 -------------------------------------------------------------
+ * 把 A/B 打包成 int8 推进加速单元的本地缓冲, 启动, 轮询完成, 把 C 读回来。
+ *
+ * 【为什么软件要自己打包】加速单元的缓冲按 int8 存放 (每字 4 个), 所以软件
+ * 要把 s32 截成 8 位再拼字。这也正是"本核 dmem 单读口"带来的代价 ——
+ * 数据搬运必须由 CPU 做, 而且这部分开销要如实算进加速比 (下面分开统计)。
+ * --------------------------------------------------------------------------*/
+static void gemm_hw_pack(void) {
+    for (int w = 0; w < 64; w++) {
+        u32 pa = 0, pb = 0;
+        for (int b = 0; b < 4; b++) {
+            int idx = w * 4 + b;          /* A/B 都是 16x16 行主序 -> 线性下标 */
+            pa |= ((u32)(A[idx / N][idx % N] & 0xFF)) << (8 * b);
+            pb |= ((u32)(B[idx / N][idx % N] & 0xFF)) << (8 * b);
+        }
+        G_A_W(w) = pa;
+        G_B_W(w) = pb;
+    }
+}
+
+static u32 gemm_hw_run(void) {
+    G_M = N; G_K = N; G_N = N;
+    G_CTRL = 1;                            /* bit0 = start */
+    /* 轮询完成。加速单元 busy 期间 CPU 只读状态寄存器, 不碰 dmem —— 这正是
+     * "本地缓冲"方案的用意: 零访存冲突。 */
+    while ((G_STATUS & 2u) == 0u) { }
+    return G_CYCLES;
+}
+
+static void gemm_hw_unpack(void) {
+    for (int w = 0; w < (N * N); w++)
+        C[w / N][w % N] = (s32)G_C_W(w);
+}
+
 int main(void) {
     u64 t0, t1;
 
@@ -188,7 +235,70 @@ int main(void) {
     puts_("  checksum=");     puthex(cs);  puts_("\n");
     puts_("  checksum_ref="); puthex(ref); puts_("\n");
     puts_("  mismatch=");     putu(bad);   puts_("\n");
-    puts_("  match=");        putu((cs == ref && bad == 0u) ? 1u : 0u); puts_("\n");
+    puts_("  sw_match=");     putu((cs == ref && bad == 0u) ? 1u : 0u); puts_("\n");
+
+    /* ======================================================================
+     * 加速路径: 同一个问题, 走 GEMM 加速单元
+     * 判据: 读回的 C 必须与**独立参考实现**逐元素一致 (不是与软件结果比,
+     *       虽然两者应当相同 —— 用独立参考更硬)。
+     * ====================================================================*/
+    u64 h0, h1, h2;
+    /* 【先证明加速单元真的在】写一个已知值到 A 窗口再读回。
+     * 放在启动**之前**: 读 STATUS 会清 done 标志, 放在后面会把完成标志吃掉。 */
+    G_A_W(0) = 0xDEADBEEFu;
+    u32 rb = G_A_W(0);
+    puts_("  --- accelerator ---\n");
+    /* 自证加速单元确实在总线上: 写已知值再读回。这条必须留着 —— 少了它,
+     * "读回一堆不对的数"就分不清是"加速单元算错"还是"根本没接上"。 */
+    puts_("  probe alive="); putu(rb == 0xDEADBEEFu ? 1u : 0u); puts_("\n");
+
+    h0 = read_cycles();
+    gemm_hw_pack();
+    u32 accel_cycles = gemm_hw_run();
+    gemm_hw_unpack();
+    h2 = read_cycles();
+
+    u32 cs_hw  = checksum();
+    u32 bad_hw = count_mismatch();
+
+    puts_("  accel_cycles=");  putu(accel_cycles);        puts_("\n");
+    puts_("  ramp_cycles=");   putu((u32)(h2 - h0));     puts_("\n");
+    /* 逐点看前几个元素: 排错时"哪里开始不对"比"有多少不对"有用得多 */
+    puts_("  dump C[0][0..5] sw/hw:");
+    for (int j = 0; j < 6; j++) {
+        long long acc = 0;
+        for (int k = 0; k < N; k++) acc += (long long)A[0][k] * (long long)B[k][j];
+        puts_(" "); putu((u32)acc); puts_("/"); putu((u32)C[0][j]);
+    }
+    puts_("\n");
+    puts_("  dump C[1][0..3] sw/hw:");
+    for (int j = 0; j < 4; j++) {
+        long long acc = 0;
+        for (int k = 0; k < N; k++) acc += (long long)A[1][k] * (long long)B[k][j];
+        puts_(" "); putu((u32)acc); puts_("/"); putu((u32)C[1][j]);
+    }
+    puts_("\n");
+    puts_("  checksum_hw=");   puthex(cs_hw);            puts_("\n");
+    puts_("  mismatch_hw=");   putu(bad_hw);             puts_("\n");
+    puts_("  hw_match=");      putu(bad_hw == 0u ? 1u : 0u); puts_("\n");
+
+    /* 加速比: 软件 GEMM 周期 / 加速单元自报周期 (定点两位) */
+    {
+        u32 sw = (u32)(t1 - t0);
+        puts_("  speedup_x100=");
+        if (accel_cycles == 0u) { puts_("inf\n"); }
+        else {
+            putu(sw / accel_cycles); puts_(".");
+            putu(((sw * 100u) / accel_cycles) % 100u); puts_("\n");
+        }
+        /* 含搬运在内的端到端对比 (更诚实的口径) */
+        puts_("  e2e_speedup_x100=");
+        if ((u32)(h2 - h0) == 0u) { puts_("inf\n"); }
+        else {
+            putu(sw / (u32)(h2 - h0)); puts_(".");
+            putu(((sw * 100u) / (u32)(h2 - h0)) % 100u); puts_("\n");
+        }
+    }
 
     report_done();
     return 0;

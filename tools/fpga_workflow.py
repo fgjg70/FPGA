@@ -120,7 +120,7 @@ CORE_SV_ORDER = [
     "alu.sv", "branch_unit.sv", "control_unit.sv", "imm_gen.sv", "pc.sv", "regfile.sv",
     "if_id_reg.sv", "id_ex_reg.sv", "ex_mem_reg.sv", "mem_wb_reg.sv",
     "hazard_unit.sv", "load_store_unit.sv",
-    "imem.sv", "dmem.sv", "btb.sv", "ras.sv", "muldiv.sv", "csr_file.sv",
+    "imem.sv", "dmem.sv", "btb.sv", "ras.sv", "gemm_accel.sv", "muldiv.sv", "csr_file.sv",
     "core.sv",
 ]
 

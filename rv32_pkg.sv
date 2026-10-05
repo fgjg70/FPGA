@@ -251,6 +251,26 @@ package rv32_pkg;
   localparam logic [31:0] MMIO_MTIME_HI    = 32'hA000_0034;  // R:   mtime[63:32]
 
   // --------------------------------------------------------------------------
+  // GEMM 加速单元 (AI 应用场景) —— 见 gemm_accel.sv 与 results/p5-ai-accelerator.md
+  // --------------------------------------------------------------------------
+  // 设计要点: 本核 dmem 是**单读口且被 LSU 独占**, 加速单元若直接访存就会争用,
+  // 而且单口限制使每拍只能取一个操作数、并行度上不去。所以采用"**本地缓冲**"
+  // 方案: 加速单元自带片上缓冲, CPU 用 MMIO 把数据推入、算完再读出来。
+  // 零访存冲突, 且不动已经上板验证过的 CPU/存储子系统。
+  //
+  // 缓冲布局 (一个 1KB 的 arena, 按字编址):
+  //   +0x000 .. +0x0FF  A[256]  int8   (16x16, 行主序)  —— 64 个字
+  //   +0x100 .. +0x1FF  B[256]  int8                    —— 64 个字
+  //   +0x200 .. +0x5FF  C[256]  int32                   —— 256 个字
+  localparam logic [31:0] MMIO_GEMM_CTRL   = 32'hA000_0040;  // W: bit0=start(自清) bit1=irq_en
+  localparam logic [31:0] MMIO_GEMM_STATUS = 32'hA000_0044;  // R: bit0=busy bit1=done(读清)
+  localparam logic [31:0] MMIO_GEMM_M      = 32'hA000_0048;  // W/R: A 的行数
+  localparam logic [31:0] MMIO_GEMM_K      = 32'hA000_004C;  // W/R: A 的列数 = B 的行数
+  localparam logic [31:0] MMIO_GEMM_N      = 32'hA000_0050;  // W/R: B 的列数
+  localparam logic [31:0] MMIO_GEMM_CYCLES = 32'hA000_0054;  // R:  本次运算周期数 (软件算加速比)
+  localparam logic [31:0] MMIO_GEMM_ARENA  = 32'hA000_0400;  // W/R: 缓冲窗口基址 (1KB, 按字访问)
+
+  // --------------------------------------------------------------------------
   // 陷阱原因码 (mcause 的低 4 位; 最高位由 csr_file 补 = 是否中断)
   // --------------------------------------------------------------------------
   localparam logic [3:0] CAUSE_INSN_MISALIGN  = 4'd0;

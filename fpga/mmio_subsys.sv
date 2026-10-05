@@ -66,6 +66,9 @@ module mmio_subsys
   logic sel_mark, sel_result;
   logic sel_mtimecmp_lo, sel_mtimecmp_hi, sel_mtime_lo, sel_mtime_hi;
   logic wr_gpio_out, wr_uart_tx, wr_mtimecmp_lo, wr_mtimecmp_hi;
+  // GEMM 加速单元
+  logic        gemm_sel, gemm_busy, gemm_irq;
+  logic [31:0] gemm_rdata;
 
   assign sel_gpio_out   = (addr == MMIO_GPIO_OUT);
   assign sel_gpio_in    = (addr == MMIO_GPIO_IN);
@@ -299,7 +302,32 @@ module mmio_subsys
     // mtime 与 CYCLE_* 同源: 都读 cycle_cnt, 保证软件看到的时间只有一个
     else if (sel_mtime_lo)  rdata = cycle_cnt[31:0];
     else if (sel_mtime_hi)  rdata = cycle_cnt[63:32];
+    // GEMM 加速单元: 命中它的寄存器或缓冲窗口时由它给读数据
+    else if (gemm_sel)      rdata = gemm_rdata;
     else                    rdata = 32'h0;    // 未映射地址读 0
   end
+
+  // ------------------------------------------------------------------------
+  // GEMM 加速单元 (AI 应用场景)
+  //   缓冲窗口用高 21 位比较译码 (2KB 对齐), 范围覆盖 arena 起连续 2KB
+  // ------------------------------------------------------------------------
+  assign gemm_sel = (addr == MMIO_GEMM_CTRL)   || (addr == MMIO_GEMM_STATUS) ||
+                    (addr == MMIO_GEMM_M)      || (addr == MMIO_GEMM_K)      ||
+                    (addr == MMIO_GEMM_N)      || (addr == MMIO_GEMM_CYCLES) ||
+                    (addr[31:11] == MMIO_GEMM_ARENA[31:11]);
+
+  gemm_accel u_gemm (
+    .clk    (clk),
+    .rst    (rst),
+    .sel    (gemm_sel),
+    .we     (we),
+    .re     (re),
+    .addr   (addr),
+    .wstrb  (wstrb),
+    .wdata  (wdata),
+    .rdata  (gemm_rdata),
+    .busy   (gemm_busy),
+    .irq    (gemm_irq)
+  );
 
 endmodule
