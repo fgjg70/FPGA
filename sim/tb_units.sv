@@ -179,8 +179,10 @@ module tb_units;
                        alu_a = 32'd0;         alu_b = 32'hFFFFFFFF;  #1; chk(alu_out, 32'd1,          "SLTU 0<u max");
                        alu_a = 32'h80000000;  alu_b = 32'h7FFFFFFF;   #1; chk(alu_out, 32'd0,          "SLTU 0x8.. <u 0x7..");
     // M 预留编码必须输出 x (仿真中暴露误用)
-    alu_op = ALU_MUL;  alu_a = 32'd7;         alu_b = 32'd6;          #1; chk(alu_out, 32'bx,          "MUL reserved -> x");
-    alu_op = ALU_DIV;                                                 #1; chk(alu_out, 32'bx,          "DIV reserved -> x");
+    // RV32M 已启用: M 算符由 core 里的 muldiv 负责。ALU 对它们输出 0 而不是 'x ——
+    // 这些编码现在是 *合法输入*, 输出 'x 会沿 ex_mem_alu_out 污染前递与调试观测。
+    alu_op = ALU_MUL;  alu_a = 32'd7;         alu_b = 32'd6;          #1; chk(alu_out, 32'd0,          "MUL -> ALU 输出 0 (实算在 muldiv)");
+    alu_op = ALU_DIV;                                                 #1; chk(alu_out, 32'd0,          "DIV -> ALU 输出 0 (实算在 muldiv)");
 
     // ------------------------------------------------------------------
     $display("[2/6] imm_gen ...");
@@ -238,9 +240,32 @@ module tb_units;
     cu_instr = enc_r(7'b0000010, 5'd3, 5'd2, 3'b000, 5'd1); #1; // 非法 funct7
     chk({31'd0, cu_ctrl.illegal}, 32'd1, "R bad funct7 illegal");
     chk({31'd0, cu_ctrl.reg_write}, 32'd0, "illegal R 不写寄存器");
-    cu_instr = enc_r(F7_MULDIV, 5'd3, 5'd2, 3'b000, 5'd1); #1; // mul (M 预留)
-    chk({31'd0, cu_ctrl.illegal}, 32'd1, "MUL reserved illegal");
-    chk({31'd0, cu_ctrl.reg_write}, 32'd0, "MUL 预留不写寄存器");
+    // ---- RV32M 已启用: 8 条指令必须全部译码合法, 且给出正确的 alu_op ----
+    cu_instr = enc_r(F7_MULDIV, 5'd3, 5'd2, 3'b000, 5'd1); #1;
+    chk({31'd0, cu_ctrl.illegal}, 32'd0, "MUL 合法");
+    chk({31'd0, cu_ctrl.reg_write}, 32'd1, "MUL 写寄存器");
+    chk(cu_ctrl.alu_op, ALU_MUL, "MUL -> ALU_MUL");
+    cu_instr = enc_r(F7_MULDIV, 5'd3, 5'd2, 3'b001, 5'd1); #1;
+    chk({31'd0, cu_ctrl.illegal}, 32'd0, "MULH 合法");
+    chk(cu_ctrl.alu_op, ALU_MULH, "MULH -> ALU_MULH");
+    cu_instr = enc_r(F7_MULDIV, 5'd3, 5'd2, 3'b010, 5'd1); #1;
+    chk({31'd0, cu_ctrl.illegal}, 32'd0, "MULHSU 合法");
+    chk(cu_ctrl.alu_op, ALU_MULHSU, "MULHSU -> ALU_MULHSU");
+    cu_instr = enc_r(F7_MULDIV, 5'd3, 5'd2, 3'b011, 5'd1); #1;
+    chk({31'd0, cu_ctrl.illegal}, 32'd0, "MULHU 合法");
+    chk(cu_ctrl.alu_op, ALU_MULHU, "MULHU -> ALU_MULHU");
+    cu_instr = enc_r(F7_MULDIV, 5'd3, 5'd2, 3'b100, 5'd1); #1;
+    chk({31'd0, cu_ctrl.illegal}, 32'd0, "DIV 合法");
+    chk(cu_ctrl.alu_op, ALU_DIV, "DIV -> ALU_DIV");
+    cu_instr = enc_r(F7_MULDIV, 5'd3, 5'd2, 3'b101, 5'd1); #1;
+    chk({31'd0, cu_ctrl.illegal}, 32'd0, "DIVU 合法");
+    chk(cu_ctrl.alu_op, ALU_DIVU, "DIVU -> ALU_DIVU");
+    cu_instr = enc_r(F7_MULDIV, 5'd3, 5'd2, 3'b110, 5'd1); #1;
+    chk({31'd0, cu_ctrl.illegal}, 32'd0, "REM 合法");
+    chk(cu_ctrl.alu_op, ALU_REM, "REM -> ALU_REM");
+    cu_instr = enc_r(F7_MULDIV, 5'd3, 5'd2, 3'b111, 5'd1); #1;
+    chk({31'd0, cu_ctrl.illegal}, 32'd0, "REMU 合法");
+    chk(cu_ctrl.alu_op, ALU_REMU, "REMU -> ALU_REMU");
     // I 型
     cu_instr = enc_i(12'hFF4, 5'd2, 3'b000, 5'd1, OPC_OPIMM); #1;  // addi -12
     chk(cu_ctrl.alu_op, ALU_ADD, "ADDI alu_op");

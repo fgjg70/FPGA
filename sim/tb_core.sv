@@ -21,7 +21,8 @@ module tb_core;
   localparam time TCLK_HALF  = 5ns;      // 100 MHz 等效
   localparam int  MAX_CYCLES = 20000;
 
-  localparam logic [31:0] TOHOST_ADDR     = DMEM_BASE + 32'h1000;
+  // tohost 约定地址 = DMEM_BASE + 0x2000 (见 sw/link.ld)
+  localparam logic [31:0] TOHOST_ADDR     = DMEM_BASE + 32'h2000;
   localparam int unsigned TOHOST_WORD_IDX = (TOHOST_ADDR - DMEM_BASE) / 4;
 
   logic clk = 1'b0;
@@ -34,15 +35,34 @@ module tb_core;
   logic [31:0] dbg_pc, dbg_instr, dbg_rdata;
   logic        dbg_illegal;
 
+  logic [31:0] dbg_id_pc;
+  logic [31:0] dbg_mem_addr, dbg_mem_wdata, ext_rdata;
+  logic        dbg_mem_we, ext_we, ext_re;
+  logic [31:0] ext_addr, ext_wdata;
+  logic [3:0]  ext_wstrb;
+
   core u_dut (
-    .clk         (clk),
-    .rst         (rst),
-    .dbg_pc      (dbg_pc),
-    .dbg_instr   (dbg_instr),
-    .dbg_illegal (dbg_illegal),
-    .dbg_raddr   (5'd0),
-    .dbg_rdata   (dbg_rdata)
+    .clk            (clk),
+    .rst            (rst),
+    .dbg_pc         (dbg_pc),
+    .dbg_id_pc      (dbg_id_pc),
+    .dbg_instr      (dbg_instr),
+    .dbg_illegal    (dbg_illegal),
+    .dbg_raddr      (5'd0),
+    .dbg_rdata      (dbg_rdata),
+    .dbg_mem_we     (dbg_mem_we),
+    .dbg_mem_addr   (dbg_mem_addr),
+    .dbg_mem_wdata  (dbg_mem_wdata),
+    // 本测试平台不接外设: MMIO 读恒 0 (程序也不访问 MMIO 区)
+    .ext_we         (ext_we),
+    .ext_re         (ext_re),
+    .ext_addr       (ext_addr),
+    .ext_wdata      (ext_wdata),
+    .ext_wstrb      (ext_wstrb),
+    .ext_rdata      (ext_rdata)
   );
+
+  assign ext_rdata = 32'h0;
 
   // tohost 观察 (直接看 DMEM 内的字; 程序不做其它解释)
   wire [31:0] tohost_word = u_dut.u_dmem.mem[TOHOST_WORD_IDX];

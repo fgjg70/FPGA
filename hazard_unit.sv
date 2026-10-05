@@ -12,6 +12,11 @@
 //      结果落入 MEM/WB 的那一拍拿到正确操作数 (组合前递每拍重估, 冻结
 //      期间的计算结果不会被锁存). 此时 ID/EX 保持, 不能注气泡.
 //
+// 注意: pipe_stall 与 id_ex_bubble 并不互斥 —— load_use=1 且 lsu_stall=0 时
+// 两者同时为 1。id_ex_bubble 里的 !lsu_stall 限定是必需的: EX/MEM 冻结期间
+// 注气泡会把 load 丢掉; 保持才是安全的, 因为 load_use 由冻结的 ID/EX +
+// IF/ID 重新算出, 气泡只是被推迟、不会丢失。
+//
 // 重定向 (分支/JAL/JALR 在 EX 判定) 会被停顿门控抑制: 冻结期间 EX 中的
 // 指令可能因操作数未就绪而算出错误的判定, 下一拍重算后再生效; 重定向
 // 只冲刷两条年轻指令 (IF/ID、ID/EX).
@@ -39,8 +44,9 @@ module hazard_unit
   input  logic [4:0] if_id_rs1,
   input  logic [4:0] if_id_rs2,
 
-  // 拆分访存与重定向请求
+  // 拆分访存 / 多周期执行单元忙 / 重定向请求
   input  logic       lsu_stall,
+  input  logic       ex_busy,        // RV32M 除法器 busy: 冻结流水线直到出结果
   input  logic       redirect_raw,
 
   // 前递选择与流水线控制
@@ -59,9 +65,11 @@ module hazard_unit
                ((id_ex_rd == if_id_rs1) || (id_ex_rd == if_id_rs2));
   end
 
-  assign pipe_stall   = load_use || lsu_stall;
-  assign id_ex_bubble = load_use && !lsu_stall;
-  assign hold_mem     = lsu_stall;
+  // ex_busy (多周期除法) 与 lsu_stall 同类: 冻结 ID/EX 与 EX/MEM/MEM/WB,
+  // *不能* 注气泡 (EX 里的指令还没算完, 注气泡会把它丢掉)。
+  assign pipe_stall   = load_use || lsu_stall || ex_busy;
+  assign id_ex_bubble = load_use && !(lsu_stall || ex_busy);
+  assign hold_mem     = lsu_stall || ex_busy;
   assign redirect     = redirect_raw && !pipe_stall;
 
   // 前递: EX/MEM 优先于 MEM/WB; load 在 EX/MEM 段只有地址没有数据,
@@ -75,6 +83,16 @@ module hazard_unit
   // 显式写法行为确定, 且综合结果相同。
   logic hit_ex_mem_a, hit_ex_mem_b, hit_mem_wb_a, hit_mem_wb_b;
 
+  // EX/MEM 段只排除 load: 此刻 alu_out 只是地址, 数据还没回来
+  // (依赖它的指令由 load-use 停顿保证等到 MEM/WB 才取数)。
+  //
+  // 【千万不要在这里排除 JAL/JALR】—— 曾经这么干过, 是个真 bug。
+  //   JAL/JALR 在 EX/MEM 时 alu_out 是 *跳转目标*, 但它的链接值 (PC+4) 同样
+  //   就在 EX/MEM 寄存器里 (ex_mem_pc_plus4)。正确做法是在 core.sv 里按
+  //   wb_src 选择前递源 (WB_PC4 -> ex_mem_pc_plus4), 而不是把整条前递路径砍掉。
+  //   砍掉的后果: 紧跟在 jal ra, f 之后的 mv t0, ra 这种 *距离 1* 消费者会读到
+  //   陈旧的 ra。加分支预测之前它被 2 拍冲刷掩盖着, 预测生效后立刻暴露 ——
+  //   实测把 libgcc 的 __umodsi3 打成了死循环。
   assign hit_ex_mem_a = ex_mem_reg_write && !ex_mem_mem_read &&
                         (ex_mem_rd != 5'd0) && (ex_mem_rd == id_ex_rs1);
   assign hit_ex_mem_b = ex_mem_reg_write && !ex_mem_mem_read &&

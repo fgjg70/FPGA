@@ -208,6 +208,25 @@ package rv32_pkg;
   parameter logic [31:0] INSTR_NOP  = 32'h0000_0013;  // addi x0,x0,0: 流水线气泡
 
   // --------------------------------------------------------------------------
+  // MMIO 映射 —— 落在 DMEM 窗口之外的访问由 core 的 ext_* 总线送出, 由顶层外设响应。
+  // 地址译码在 core 内完成: DMEM 窗口 -> 内部 dmem; 其它 -> ext_* 总线。
+  // 外设一律 32 位对齐访问; 本核 LSU 是组合读, 要求外设同拍组合给出读数据。
+  // --------------------------------------------------------------------------
+  parameter logic [31:0] MMIO_BASE = 32'hA000_0000;
+
+  localparam logic [31:0] MMIO_GPIO_OUT   = 32'hA000_0000;  // W: GPIO/LED 输出
+  localparam logic [31:0] MMIO_GPIO_IN    = 32'hA000_0004;  // R: 按键/拨码输入
+  localparam logic [31:0] MMIO_CYCLE_LO   = 32'hA000_0008;  // R: 自由运行周期计数器 [31:0]
+  localparam logic [31:0] MMIO_CYCLE_HI   = 32'hA000_000C;  // R: 周期计数器 [63:32]
+  localparam logic [31:0] MMIO_UART_TX    = 32'hA000_0010;  // W: 发送一个字节 (bit[7:0])
+  localparam logic [31:0] MMIO_UART_STAT  = 32'hA000_0014;  // R: bit0 = TX 忙
+  localparam logic [31:0] MMIO_UART_RX    = 32'hA000_0018;  // R: 收到的字节
+  localparam logic [31:0] MMIO_UART_RSTAT = 32'hA000_001C;  // R: bit0 = RX 有数据
+  // 上板跑分观测用 (软件 -> 硬件单向报告, 供顶层 LED 与 ILA 抓取)
+  localparam logic [31:0] MMIO_MARK        = 32'hA000_0020;  // W: 写任意值 -> 单拍 mark 脉冲 (ILA 触发点)
+  localparam logic [31:0] MMIO_RESULT      = 32'hA000_0024;  // W/R: 写锁存结果并置 done; 读回该值
+
+  // --------------------------------------------------------------------------
   // EX 段操作数前递来源
   // --------------------------------------------------------------------------
   typedef enum logic [1:0] {

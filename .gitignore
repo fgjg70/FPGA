@@ -19,6 +19,21 @@ sim/prog/*.lst
 # ---- 本机便携工具链 (只属于这台机器, 不入库) ----
 tools/riscv-tools/
 
+# ---- 软件构建产物: 由 tools/build_sw.py 生成, 可完全再生 ----
+sim/prog/*.elf
+sim/prog/*.map
+sim/prog/*.dmem.hex
+tools/__pycache__/
+sw/**/*.o
+
+# ---- 上板构建产物: 由 fpga/build.bat 生成, 可完全再生 ----
+fpga/*.bit
+fpga/*.rpt
+fpga/*.log
+fpga/*.jou
+fpga/.Xil/
+fpga/xsim.dir/
+
 # ---- 编辑器与操作系统产生的杂物 ----
 .vscode/
 *.swp
@@ -30,3 +45,16 @@ Desktop.ini
 *.log
 *.xdbg
 
+
+# ---- Vivado 工程模式产物 (带 ILA 的调试构建) ----
+# 体积很大 (ILA 的 IP 源就有 20MB+) 且完全可由 build_ila.tcl 再生, 不入库
+fpga/ila_proj.*
+fpga/ila_proj/
+fpga/*.xpr
+fpga/*.cache/
+fpga/*.hw/
+fpga/*.ip_user_files/
+fpga/*.srcs/
+fpga/*.runs/
+fpga/*.html
+fpga/*_webtalk.*

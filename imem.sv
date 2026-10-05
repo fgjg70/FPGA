@@ -35,6 +35,23 @@ module imem
     for (int i = 0; i < WORDS; i++) begin
       mem[i] = INSTR_NOP;
     end
+
+`ifdef SYNTHESIS
+    // ---- 综合路径 ----
+    // 综合工具不支持 string 变量与 $value$plusargs (Vivado 报 Synth 8-27),
+    // 因此综合分支里不含这两者。需要把程序固化进 ROM 时, 由构建脚本额外
+    // 定义 IMEM_INIT_FILE 宏指向 hex 文件。实测可用的写法:
+    //   Vivado: synth_design -verilog_define {IMEM_INIT_FILE="prog/basic.hex"}
+    //           (Vivado 综合会自动预定义 SYNTHESIS, 不必手动加;
+    //            而 read_verilog -define 在非 compile-unit 模式下会被拒绝)
+    //   PDS   : 在综合选项里加同名宏
+    // 未定义该宏时指令存储器保持上面的 NOP 初值 —— 这是安全默认值, 正好
+    // 配合"上电后由 UART 在线下载程序"的用法。
+`ifdef IMEM_INIT_FILE
+    $readmemh(`IMEM_INIT_FILE, mem);
+`endif
+`else
+    // ---- 仿真路径: +imem=<file> 运行时覆盖, 换程序不必重编译 ----
     begin
       string init_file;
       if ($value$plusargs("imem=%s", init_file)) begin
@@ -45,6 +62,7 @@ module imem
         $display("[imem] no +imem=<file> given, instruction memory stays all-NOP");
       end
     end
+`endif
   end
 
   assign rdata = mem[addr[AW+1:2]];

@@ -21,27 +21,37 @@ module if_id_reg
   input  logic [31:0] pc_in,
   input  logic [31:0] pc_plus4_in,
   input  logic [31:0] instr_in,
+  input  logic        pred_taken_in,     // IF 段对该指令做出的预测
+  input  logic [31:0] pred_target_in,
 
   output logic [31:0] pc,
   output logic [31:0] pc_plus4,
-  output logic [31:0] instr
+  output logic [31:0] instr,
+  output logic        pred_taken,
+  output logic [31:0] pred_target
 );
 
   always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
-      pc       <= RESET_PC;
-      pc_plus4 <= RESET_PC;
-      instr    <= INSTR_NOP;
+      pc          <= RESET_PC;
+      pc_plus4    <= RESET_PC;
+      instr       <= INSTR_NOP;
+      pred_taken  <= 1'b0;
+      pred_target <= '0;
     end
     else if (flush) begin
-      pc       <= '0;
-      pc_plus4 <= '0;
-      instr    <= INSTR_NOP;
+      pc          <= '0;
+      pc_plus4    <= '0;
+      instr       <= INSTR_NOP;
+      pred_taken  <= 1'b0;      // 气泡必须预测"不跳", 否则会产生假预测错误
+      pred_target <= '0;
     end
     else if (!stall) begin
-      pc       <= pc_in;
-      pc_plus4 <= pc_plus4_in;
-      instr    <= instr_in;
+      pc          <= pc_in;
+      pc_plus4    <= pc_plus4_in;
+      instr       <= instr_in;
+      pred_taken  <= pred_taken_in;
+      pred_target <= pred_target_in;
     end
   end
 

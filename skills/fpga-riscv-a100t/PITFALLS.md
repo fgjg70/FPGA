@@ -1,0 +1,133 @@
+# 错误台账 — 症状优先速查
+
+> 用途: 长任务里防止重复踩坑。**先查症状, 再看原因和修法。**
+> 每条都是本工程真实踩过的, 不是臆测。
+
+---
+
+## ⚠️ 一、反复犯过的 (最高优先级)
+
+### R1. 改了 A, 忘了同步 B —— 用旧产物静默跑 ✅踩过 5+ 次
+这是本工程最高频的错误, 且**全部是静默失败** (不报错, 结果不对或不变)。
+
+| 改了什么 | 必须同步 |
+|---|---|
+| 新增 RTL 文件 | `fpga/build.tcl` 的 read_verilog 列表、`tools/run_coremark.py` 的 RTL 列表、ModelSim 的 vlog 列表 |
+| 改软件源码 | **重新构建 .hex**, 再**重新综合** bitstream (imem/dmem 是综合时 $readmemh 进去的) |
+| 改 link.ld 地址 | portme.c / crt0.S / core_portme.c / top_a100t.sv / 三个 tb 的 TOHOST_ADDR / **sim/prog/*.S 里硬编码的地址** |
+| 改 .S 文件 | **重新用 asm.py 汇编** (tb 用的是 .hex 不是 .S) |
+| 改 RTL | 重新 vlog + vsim; 上板还要重新综合 |
+| 改 tb 里的预期值 | 想清楚"预期"本身对不对 (见 R3) |
+
+**识别信号**: 结果与上次"完全一致" (ticks 一模一样、镜像逐字节相同)、或程序跑到 `j .` 自旋。
+
+### R2. .bat 里写中文 → 每行首字符被吃掉 ✅踩过 2 次
+`cmd` 用 OEM 代码页解析 .bat, 中文会让整行错位:
+`'et' 不是内部或外部命令`、`'cho' 不是内部或外部命令`。
+**修法: .bat 一律纯 ASCII** (echo 的说明文字也用英文)。
+
+### R3. 测试期望值自己算错 ✅踩过 1 次
+`0xFFFFFFEC / 3` 我写成 1431655762, 实际是 **1431655758**。
+**修法: 期望值先独立验算一遍** (换成好算的数, 比如除以 16)。
+
+---
+
+## 二、SystemVerilog / Verilog 语法
+
+| 症状 | 原因 | 修法 |
+|---|---|---|
+| `vlog-13069 unexpected '['` | **不能对括号表达式位选**: `(a>>b)[31:0]` 非法 | 先赋中间 wire 再切片 |
+| `vlog-2730 Undefined variable` | `assign` 写在了信号声明**之前** | 观测类 assign 放 `endmodule` 前 |
+| `Synth 8-27 string type not supported` | `string` 不可综合 | ``ifdef SYNTHESIS` 包住仿真专用代码 |
+| `vopt-7061` | `initial` 与 `always_ff` 同驱动一个变量 (LRM 违规) | 改用 `always` |
+| `always_ff` 里不能有 `wait`/`#delay` | — | 拆到独立 `initial` |
+| 信号恒为 X | `logic x = expr;` 是**声明式初始化**, 只在 0 时刻求值一次 | 用 `assign` 或 `always_comb` |
+
+---
+
+## 三、RTL 逻辑 (都真跑挂过)
+
+1. **跳转重定向目标取错**: 条件分支 *不 taken* 时 `ex_pc_target` 是分支目标而非后继。
+   正确: `actual_target = actual_taken ? ex_pc_target : id_ex_pc_plus4`。
+2. **JAL 链接值前递**: jal 在 EX/MEM 时 `alu_out` 是跳转目标, 链接值在 `ex_mem_pc_plus4`。
+   **按 `wb_src` 选前递源**, 绝不要把 WB_PC4 整条前递路径排除 —— 那会让消费者读到陈旧 ra
+   (被 2 拍冲刷掩盖, 加分支预测后立刻暴露)。
+3. **除法器余数必须 33 位**: 32 位时若除数 > 2^31, 左移丢位。
+4. **除法器 `busy` 必须覆盖启动那一拍**: 否则 DIV 在结果出来前离开 EX。
+5. **单周期的除零/溢出同样要占一拍**: 否则 EX/MEM 捕获到上一次的 `div_result`。
+   统一判据: `busy = 迭代中 || (是除法 && 结果尚未寄存)`。
+6. **store 的移位量用当前请求的 `off`**, 不是 WB 影子寄存器的 `off_wb`。
+   症状: tohost 变成 0x40000。
+7. **MMIO 需要读选通 (`ext_re`)**: 只靠 `we` 的话外设的粘滞就绪标志永远清不掉。
+8. **UART RX 起始位下降沿判据是 `rxd_sync[2:1] == 2'b10`**, 不是 `2'b01`
+   (1->0 的样点序列是 111->110->100->000)。
+9. **计数要用单拍脉冲, 不能用粘滞标志** (如 `rx_rdy`) —— 会变成每拍 +1。
+10. **哈佛结构: load 到不了 imem 空间**。所以 `.rodata` 不能留 IMEM; `.data` 也不能靠
+    crt0 从 IMEM 搬运。两者都靠 dmem 自己的初始化镜像装入。
+11. **组合读无法推断 BRAM**。要 BRAM 必须寄存读, 并把字节提取挪到 WB 拍吸收延迟。
+
+---
+
+## 四、构建/工具链
+
+| 症状 | 原因 | 修法 |
+|---|---|---|
+| Vivado `32-bit platform is not supported` | 会话 env 被剥离, 缺 `PROCESSOR_ARCHITECTURE` | .bat 里 `set PROCESSOR_ARCHITECTURE=AMD64` |
+| ModelSim `Unable to checkout a license` | 会话缺 `LM_LICENSE_FILE` | .bat 里显式 set |
+| 综合出 25 个 LUT | 没装程序, 全被常量折叠 | 必须 `-verilog_define IMEM_INIT_FILE=...` |
+| `Too many positional options` | `-retiming on` 放在了 `-verilog_define {...}` 之后 | 选项顺序要对 |
+| `open_hw_manager` 无效 | Vivado 2018.3 用 `open_hw` | 换命令 |
+| `read_verilog -define` 不生效 | 需要 compile-unit 模式 | 用 `synth_design -verilog_define` |
+| Tcl `invalid command name "xxx.sv"` | **`[...]` 内换行是命令分隔符, 不是列表分隔符** | 文件列表**写在一行** |
+| IP 生成器 `::ipgen_iptclns` 初始化失败, 谎报 `pkgIndex.tcl` 缺失 | **两个 Vivado 实例重叠** | 构建串行化 + 设 `XILINX_VIVADO` |
+| `Synth 8-2715 syntax error near /`, 行号指向 `$readmemh` 那行 | **`set_property verilog_define` 里路径没加引号** —— 宏展开成裸路径, 报错点落在路径的 `/` 上, 行号极具误导性 | 值写成 `\"path\"`; 非工程模式用 `-verilog_define {X="path"}` |
+| 找不到 bitstream / runs 目录 | `create_project ... <dir>/<name>` 会把最后一段当**工程名**, 文件落在**父目录** | 按 `<dir>/<name>.xpr` 和 `<dir>/<name>.runs/` 去找 |
+| 临时目录跑到工作区 (`undefined\temp`) | `os.tmpdir()` 在空 env 下返回相对路径 | 用绝对临时路径 |
+| 找不到 `powershell` | 会话 PATH 被剥离 | 补 `C:\Windows\System32\WindowsPowerShell\v1.0` |
+
+---
+
+## 五、软件 / 链接
+
+1. **漏 `crt0.S` + `--gc-sections` 会静默产生 0 字节镜像**。
+2. **CoreMark 的 `exit()` 根本没被调用** —— 程序靠 crt0 在 main 返回后写 tohost 结束。
+   放 exit() 里的代码是死代码 (反汇编可验证)。
+3. **`results[]`/`total_time` 是 main() 的局部变量**, 跨文件拿不到 → 加 extern 全局。
+4. **`.data+.bss` 边界要留余量**: CoreMark 正好用满 4KB, 加 12 字节就溢出。
+5. **build_sw.py 已自动包含 `crt0.S` 和 `libc_min.c`**, 不要再手动传 (multiple definition)。
+   但 `hello.c` 需要手动带 `sw/portme.c`。
+6. **`build_sw.py` 的 `--march` 才是真生效的**; `-D FLAGS_STR` 只改 CoreMark 打印的字符串。
+
+---
+
+## 六、优化决策纪律
+
+1. **赛题记三项指标, 改一项必须同时量三项** + 绝对吞吐 (CoreMark/MHz × fmax)。
+   反例: RAS+BTB128 让 CoreMark/MHz +1.0%, 但 fmax −4.6%、CoreMark/LUTs −4.4% → 净亏, 回退。
+2. **优化前先测量**。本工程靠剖析发现"分支惩罚 29%", 才决定先做预测而不是 M 扩展。
+3. **改动后重新量, 不凭感觉**。`phys_opt_design` 单用无效, 要配
+   `place_design -directive ExtraTimingOpt` + `route_design -directive AggressiveExplore`。
+4. **计数器/标签会过时**。`redirect` 语义从"分支 taken"改成"预测错误"后,
+   原先叫 `n_br_taken` 的计数器实际统计的是"被误判的条件分支"。
+5. **层次化引用路径要核对**: `load_use` 在 `u_hazard` 内部, 不是 core 顶层信号。
+
+---
+
+## 七、编辑操作
+
+1. **替换注释块时把代码一起包进 old/new string** —— 曾因只换注释而误删两行 `assign`.
+2. **编辑失败要看清是真失败还是 no-op** (`old_string and new_string must differ`)。
+3. **删端口行后会留下悬空逗号** → 语法错误, 要一并处理。
+
+---
+
+## 八、改动后的自检清单 (每次收尾必跑)
+
+- [ ] 所有 RTL 文件都在 build.tcl / run_coremark.py / vlog 列表里?
+- [ ] 软件改了 → 重新构建 .hex **并重新综合 bitstream**?
+- [ ] .S 改了 → 重新汇编 .hex?
+- [ ] 地址/布局改了 → 所有引用点都同步了 (含 tb 和 .S)?
+- [ ] 全套仿真回归跑过 (units / basic / m_ext / soc / hello / coremark)?
+- [ ] CoreMark 三个数据类 CRC (0xe714 / 0x1fd7 / 0x8e3a) 仍匹配?
+- [ ] 三项指标 + 绝对吞吐 都重新量并记进 results/coremark.csv?
+- [ ] .bat 是纯 ASCII?

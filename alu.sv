@@ -21,7 +21,13 @@ module alu
   input  logic [XLEN-1:0] b,
   input  alu_op_e         op,
 
-  output logic [XLEN-1:0] out
+  output logic [XLEN-1:0] out,
+
+  // 原始加法器输出 (未经操作码 mux)。
+  // 【为什么单独引出】BR/JAL/JALR 的 alu_op 恒为 ALU_ADD, 跳转目标就等于 sum;
+  // 直接从加法器出口取, 可以少走 ALU 的结果 mux (约 2 级 LUT) —— 那几级正好
+  // 在 pc 的关键路径上 (实测逻辑 3.7ns / 布线 11ns)。零面积代价。
+  output logic [XLEN-1:0] sum_out
 );
 
   localparam int unsigned SHAMT_W = $clog2(XLEN);
@@ -30,6 +36,7 @@ module alu
   logic            slt, sltu;
 
   assign sum     = a + b;
+  assign sum_out = sum;
   assign diff    = a - b;
   assign and_out = a & b;
   assign or_out  = a | b;
@@ -52,7 +59,11 @@ module alu
       ALU_SRA:  out = sra_out;
       ALU_SLT:  out = {{(XLEN-1){1'b0}}, slt};
       ALU_SLTU: out = {{(XLEN-1){1'b0}}, sltu};
-      // ALU_MUL..ALU_REMU (RV32M 预留) 与其它未用编码落到这里
+      // RV32M 的算符由 core 里的 muldiv 单元负责, 本模块对它们输出 0 而不是 'x:
+      // 这些编码现在是 *合法输入*, 若输出 'x 会沿 ex_mem_alu_out 传播,
+      // 污染前递与调试观测。真正非法的编码由 control_unit 拦截。
+      ALU_MUL, ALU_MULH, ALU_MULHSU, ALU_MULHU,
+      ALU_DIV, ALU_DIVU, ALU_REM,   ALU_REMU: out = '0;
       default:  out = 'x;
     endcase
   end

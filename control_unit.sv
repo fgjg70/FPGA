@@ -57,43 +57,45 @@ module control_unit
         ctrl.alu_b_src = ALU_B_RS2;
         ctrl.wb_src    = WB_ALU;
         case (funct3)
-          3'b000: begin  // ADD / SUB
+          3'b000: begin  // ADD / SUB / MUL
             case (funct7)
-              F7_ZERO: ctrl.alu_op = ALU_ADD;
-              F7_ALT:  ctrl.alu_op = ALU_SUB;
-              default: illegal = 1'b1;  // 含 F7_MULDIV -> MUL (RV32M 预留)
+              F7_ZERO:   ctrl.alu_op = ALU_ADD;
+              F7_ALT:    ctrl.alu_op = ALU_SUB;
+              F7_MULDIV: ctrl.alu_op = ALU_MUL;     // RV32M
+              default:   illegal = 1'b1;
             endcase
           end
-          3'b001: begin  // SLL
-            ctrl.alu_op   = ALU_SLL;
-            illegal  = (funct7 != F7_ZERO);
+          3'b001: begin  // SLL / MULH
+            if (funct7 == F7_MULDIV) ctrl.alu_op = ALU_MULH;      // RV32M
+            else begin ctrl.alu_op = ALU_SLL; illegal = (funct7 != F7_ZERO); end
           end
-          3'b010: begin  // SLT
-            ctrl.alu_op   = ALU_SLT;
-            illegal  = (funct7 != F7_ZERO);
+          3'b010: begin  // SLT / MULHSU
+            if (funct7 == F7_MULDIV) ctrl.alu_op = ALU_MULHSU;    // RV32M
+            else begin ctrl.alu_op = ALU_SLT; illegal = (funct7 != F7_ZERO); end
           end
-          3'b011: begin  // SLTU
-            ctrl.alu_op   = ALU_SLTU;
-            illegal  = (funct7 != F7_ZERO);
+          3'b011: begin  // SLTU / MULHU
+            if (funct7 == F7_MULDIV) ctrl.alu_op = ALU_MULHU;     // RV32M
+            else begin ctrl.alu_op = ALU_SLTU; illegal = (funct7 != F7_ZERO); end
           end
-          3'b100: begin  // XOR
-            ctrl.alu_op   = ALU_XOR;
-            illegal  = (funct7 != F7_ZERO);
+          3'b100: begin  // XOR / DIV
+            if (funct7 == F7_MULDIV) ctrl.alu_op = ALU_DIV;       // RV32M
+            else begin ctrl.alu_op = ALU_XOR; illegal = (funct7 != F7_ZERO); end
           end
-          3'b101: begin  // SRL / SRA
+          3'b101: begin  // SRL / SRA / DIVU
             case (funct7)
-              F7_ZERO: ctrl.alu_op = ALU_SRL;
-              F7_ALT:  ctrl.alu_op = ALU_SRA;
-              default: illegal = 1'b1;  // 含 F7_MULDIV -> DIVU (RV32M 预留)
+              F7_ZERO:   ctrl.alu_op = ALU_SRL;
+              F7_ALT:    ctrl.alu_op = ALU_SRA;
+              F7_MULDIV: ctrl.alu_op = ALU_DIVU;    // RV32M
+              default:   illegal = 1'b1;
             endcase
           end
-          3'b110: begin  // OR
-            ctrl.alu_op   = ALU_OR;
-            illegal  = (funct7 != F7_ZERO);
+          3'b110: begin  // OR / REM
+            if (funct7 == F7_MULDIV) ctrl.alu_op = ALU_REM;       // RV32M
+            else begin ctrl.alu_op = ALU_OR; illegal = (funct7 != F7_ZERO); end
           end
-          3'b111: begin  // AND
-            ctrl.alu_op   = ALU_AND;
-            illegal  = (funct7 != F7_ZERO);
+          3'b111: begin  // AND / REMU
+            if (funct7 == F7_MULDIV) ctrl.alu_op = ALU_REMU;      // RV32M
+            else begin ctrl.alu_op = ALU_AND; illegal = (funct7 != F7_ZERO); end
           end
         endcase
       end

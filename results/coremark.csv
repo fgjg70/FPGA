@@ -1,0 +1,12 @@
+# CoreMark 指标历史 — 每行一次测量
+# coremark_per_mhz = iterations * 1e6 / ticks   (主频自动约掉)
+# fmax_mhz = 1000 / (20 - wns_ns), 由 Vivado 时序报告推算
+# 状态: keep = 当前保留的配置; rejected = 试过但因综合指标净亏而回退
+date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
+2026-10-05,baseline-v1,1,1210148,0.8263,3499,732,0,0,78.4,keep,"RV32I 5-stage, 分支在 EX 判定(2拍), 无预测"
+2026-10-05,branch-pred-v1,1,973352,1.0274,3877,862,0,0,70.1,keep,"BTB64 + 2位Smith; redirect 184890->59466"
+2026-10-05,rv32im-v1,1,414062,2.4151,4532,1032,0,8,64.7,rejected,"RV32M 组合乘法: CoreMark/MHz 高但 fmax 被 DSP 路径拖到 64.7"
+2026-10-05,m-ext-v2,1,423486,2.3614,4551,1084,0,8,74.6,keep,"RV32M + 乘积寄存进 DSP(MREG/PREG): 换回 fmax 74.6, 只让 2.2% CoreMark"
+2026-10-05,branch-pred-v2-ras,1,419180,2.3856,4809,1152,0,8,71.2,rejected,"BTB128 + RAS8: 预测精度 89->92%, 但 fmax/LUT/CoreMark-LUTs 三项里两项倒退, 净亏"
+2026-10-05,branch-pred-v2,1,423486,2.3614,4494,1050,0,8,74.6,keep,"最终: BTB64(目标位宽压缩到14位) + 2位Smith, 无 RAS; 精度 89%, 误判 11501"
+2026-10-05,bram-v1,1,423486,2.3614,2481,1059,4,8,63.9,keep,"dmem 改寄存读->行为级 BRAM (LUT 4494->2481, -45%; CoreMark/LUTs 5.254e-4->9.518e-4, +81%); 代价 fmax 74.6->63.9: load->jalr 目标路径压在一拍内; CRC 全对"

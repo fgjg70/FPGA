@@ -43,7 +43,11 @@ module regfile
     end
   end
 
-  always_ff @(posedge clk) begin
+  // 这里用 always 而不是 always_ff: mem 同时被上面的 initial 块初始化, 而
+  // SystemVerilog LRM 禁止 always_ff 驱动的变量再被其它进程驱动 —— ModelSim
+  // 会直接报 vopt-7061 并拒绝优化 (iverilog 不报, 所以这个坑只有换工具才暴露)。
+  // always 没有该限制, 综合结果与 always_ff 完全相同。
+  always @(posedge clk) begin
     if (we && (waddr != '0)) begin
       mem[waddr] <= wdata;
     end

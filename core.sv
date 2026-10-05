@@ -27,11 +27,32 @@ module core
   input  logic        rst,
 
   // 调试接口 (仿真 / ILA; 可悬空)
-  output logic [31:0] dbg_pc,
+  output logic [31:0] dbg_pc,      // IF 段正在取的地址 ("现在跑到哪了")
+  output logic [31:0] dbg_id_pc,   // IF/ID 中那条指令的地址 (与 dbg_instr 配对)
   output logic [31:0] dbg_instr,
   output logic        dbg_illegal,
   input  logic [4:0]  dbg_raddr,
-  output logic [31:0] dbg_rdata
+  output logic [31:0] dbg_rdata,
+
+  // 存储器写观测口 (上板闭环 / ILA 用; 可悬空)
+  // 直接旁路自 dmem 端口, 让顶层能在真实硬件上判定自校验程序的 PASS/FAIL,
+  // 而不必深入 core 内部做跨模块引用 (那样会妨碍综合优化)。
+  output logic        dbg_mem_we,
+  output logic [31:0] dbg_mem_addr,
+  output logic [31:0] dbg_mem_wdata,
+
+  // 流水线效率观测 (分析报告里的 ILA 波形用; 可悬空)
+  output logic        dbg_stall,     // 流水线停顿 (load-use / 拆分访存 / 多周期乘除)
+  output logic        dbg_redirect,  // 分支预测错误引发的冲刷
+
+  // 外部 MMIO 总线 (DMEM 窗口之外的访问; 接 GPIO/UART/定时器等外设)
+  // 组合读: 外设必须在同拍给出 ext_rdata, 与本核组合读的 LSU 匹配。
+  output logic        ext_we,
+  output logic        ext_re,      // 读选通 (1 拍脉冲) —— 外设靠它清"数据就绪"标志
+  output logic [31:0] ext_addr,
+  output logic [31:0] ext_wdata,
+  output logic [3:0]  ext_wstrb,
+  input  logic [31:0] ext_rdata
 );
 
   // ==========================================================================
@@ -44,8 +65,16 @@ module core
   logic        lsu_stall;
   logic        id_ex_bubble;
 
+  // 分支预测
+  logic        pred_hit, pred_taken, btb_upd_en, is_ctrl_flow;
+  logic [31:0] pred_target, actual_target;
+  logic        actual_taken, pred_ok;
+  wire  [31:0] btb_pred_target;
+
   // IF/ID
   logic [31:0] if_pc, if_pc_plus4, if_instr;
+  logic        if_pred_taken;
+  logic [31:0] if_pred_target;
 
   // ID
   ctrl_s       id_ctrl;
@@ -56,10 +85,15 @@ module core
   ctrl_s       id_ex_ctrl;
   logic [31:0] id_ex_pc, id_ex_pc_plus4, id_ex_rs1_data, id_ex_rs2_data, id_ex_imm;
   logic [4:0]  id_ex_rs1, id_ex_rs2, id_ex_rd;
+  logic        id_ex_pred_taken;
+  logic [31:0] id_ex_pred_target;
 
   // EX
   fwd_sel_e    fwd_a, fwd_b;
-  logic [31:0] ex_rs1, ex_rs2, ex_a, ex_b, ex_alu_out, ex_pc_target;
+  logic [31:0] ex_rs1, ex_rs2, ex_a, ex_b, ex_alu_out, ex_pc_target, ex_sum;
+  // RV32M
+  logic [31:0] ex_result, md_result;
+  logic        md_busy, is_muldiv;
   logic        ex_taken;
 
   // EX/MEM
@@ -71,6 +105,14 @@ module core
   logic [31:0] dmem_addr, dmem_wdata, dmem_rdata, mem_load_data;
   logic [3:0]  dmem_wstrb;
   logic        dmem_we;
+  // 地址译码: 内部 dmem vs 外部 MMIO
+  logic        sel_dmem;
+  logic        dmem_we_g;
+  logic [31:0] dmem_rdata_g;
+  // dmem 改成寄存读之后, MMIO 读数据也必须寄存一拍, 否则两条路径差一拍、
+  // 写回 mux 会取到错的数据。
+  logic        sel_dmem_r;
+  logic [31:0] ext_rdata_r;
 
   // MEM/WB
   ctrl_s       mem_wb_ctrl;
@@ -107,6 +149,35 @@ module core
 
   assign if_id_flush = redirect;
 
+  // ==========================================================================
+  // 分支预测 (IF 预测 / EX 校验)
+  // --------------------------------------------------------------------------
+  // 每周期用 pc 组合查 BTB: 命中且方向计数器说 taken -> 直接用表里的目标取指,
+  // 分支惩罚归零。预测结果随 IF/ID -> ID/EX 传下去, EX 段再和真实结果比对,
+  // 只有不一致时才冲刷 (redirect_raw = 预测错误)。
+  // ==========================================================================
+  // IDX_BITS=6 -> 64 项。曾试 128 项: 条件分支误判只从 6041 降到 5694 (省 347 次),
+  // 但 LUT +258、pc 路径多一级 LUTRAM 输出 mux 使 fmax 掉 4.6%, 净亏。
+  // 配合目标位宽压缩(14 位), 64 项每项只有 24 位, 比原来未压缩的 41 位还小。
+  btb #(.IDX_BITS(6), .PC_TOP(14), .PC_BASE(IMEM_BASE)) u_btb (
+    .clk         (clk),
+    .rst         (rst),
+    .pred_pc     (pc),
+    .pred_hit    (pred_hit),
+    .pred_taken  (pred_taken),
+    .pred_target (btb_pred_target),
+    .upd_en      (btb_upd_en),
+    .upd_pc      (id_ex_pc),
+    .upd_taken   (actual_taken),
+    .upd_target  (ex_pc_target)
+  );
+
+  assign pred_target = btb_pred_target;
+
+  // 控制流指令解析完成且结果有效时才更新 (停顿期间操作数可能未就绪)
+  assign is_ctrl_flow = (id_ex_ctrl.pc_sel != PC_NEXT);
+  assign btb_upd_en   = is_ctrl_flow && !pipe_stall && !rst;
+
   if_id_reg #(.RESET_PC(PC_RESET)) u_if_id (
     .clk         (clk),
     .rst         (rst),
@@ -115,9 +186,13 @@ module core
     .pc_in       (pc),
     .pc_plus4_in (pc_plus4),
     .instr_in    (imem_rdata),
+    .pred_taken_in  (pred_taken),
+    .pred_target_in (pred_target),
     .pc          (if_pc),
     .pc_plus4    (if_pc_plus4),
-    .instr       (if_instr)
+    .instr       (if_instr),
+    .pred_taken  (if_pred_taken),
+    .pred_target (if_pred_target)
   );
 
   // ==========================================================================
@@ -166,6 +241,8 @@ module core
     .rs1_addr_in (id_rs1),
     .rs2_addr_in (id_rs2),
     .rd_addr_in  (id_rd),
+    .pred_taken_in  (if_pred_taken),
+    .pred_target_in (if_pred_target),
     .ctrl        (id_ex_ctrl),
     .pc          (id_ex_pc),
     .pc_plus4    (id_ex_pc_plus4),
@@ -174,17 +251,26 @@ module core
     .imm         (id_ex_imm),
     .rs1_addr    (id_ex_rs1),
     .rs2_addr    (id_ex_rs2),
-    .rd_addr     (id_ex_rd)
+    .rd_addr     (id_ex_rd),
+    .pred_taken  (id_ex_pred_taken),
+    .pred_target (id_ex_pred_target)
   );
 
   // ==========================================================================
   // EX 段
   // ==========================================================================
+  // EX/MEM 段的前递数据必须按写回来源选:
+  //   WB_PC4 (JAL/JALR 的链接值) -> ex_mem_pc_plus4
+  //   其余                       -> ex_mem_alu_out
+  // 少了这一层选择, 紧跟 jal 的消费者会从"跳转目标"里取链接值 (真踩过)。
+  wire [31:0] ex_mem_fwd_data = (ex_mem_ctrl.wb_src == WB_PC4) ? ex_mem_pc_plus4
+                                                               : ex_mem_alu_out;
+
   always_comb begin
     // 前递 mux
-    ex_rs1 = (fwd_a == FWD_EX_MEM) ? ex_mem_alu_out :
+    ex_rs1 = (fwd_a == FWD_EX_MEM) ? ex_mem_fwd_data :
              (fwd_a == FWD_MEM_WB) ? wb_data : id_ex_rs1_data;
-    ex_rs2 = (fwd_b == FWD_EX_MEM) ? ex_mem_alu_out :
+    ex_rs2 = (fwd_b == FWD_EX_MEM) ? ex_mem_fwd_data :
              (fwd_b == FWD_MEM_WB) ? wb_data : id_ex_rs2_data;
     // ALU 操作数 mux (契约见 rv32_pkg 顶部)
     ex_a = (id_ex_ctrl.alu_a_src == ALU_A_PC)   ? id_ex_pc :
@@ -193,11 +279,34 @@ module core
   end
 
   alu #(.XLEN(XLEN)) u_alu (
-    .a   (ex_a),
-    .b   (ex_b),
-    .op  (id_ex_ctrl.alu_op),
-    .out (ex_alu_out)
+    .a       (ex_a),
+    .b       (ex_b),
+    .op      (id_ex_ctrl.alu_op),
+    .out     (ex_alu_out),
+    .sum_out (ex_sum)
   );
+
+  // ---- RV32M 乘除法单元 ----
+  always_comb begin
+    case (id_ex_ctrl.alu_op)
+      ALU_MUL, ALU_MULH, ALU_MULHSU, ALU_MULHU,
+      ALU_DIV, ALU_DIVU, ALU_REM,   ALU_REMU: is_muldiv = 1'b1;
+      default:                                 is_muldiv = 1'b0;
+    endcase
+  end
+
+  muldiv #(.XLEN(XLEN)) u_muldiv (
+    .clk    (clk),
+    .rst    (rst),
+    .op     (id_ex_ctrl.alu_op),
+    .a      (ex_a),
+    .b      (ex_b),
+    .result (md_result),
+    .busy   (md_busy)
+  );
+
+  // 写回结果: M 指令取 muldiv, 其余取 ALU
+  assign ex_result = is_muldiv ? md_result : ex_alu_out;
 
   branch_unit #(.XLEN(XLEN)) u_branch (
     .rs1         (ex_rs1),        // 分支用前递后的寄存器值
@@ -206,17 +315,41 @@ module core
     .taken       (ex_taken)
   );
 
-  // 跳转目标: JALR 清最低位 (规范要求), 其余取 ALU 结果
+  // 跳转目标: JALR 清最低位 (规范要求), 其余直接取 ALU 的原始加法器输出。
+  // 用 ex_sum 而不是 ex_alu_out: BR/JAL/JALR 的 alu_op 恒为 ALU_ADD, 两者数值
+  // 相同, 但 ex_sum 少走一级操作码 mux, 而这条正是 pc 关键路径。
   assign ex_pc_target = (id_ex_ctrl.pc_sel == PC_JR)
-                        ? {ex_alu_out[31:1], 1'b0}
-                        : ex_alu_out;
+                        ? {ex_sum[31:1], 1'b0}
+                        : ex_sum;
 
-  assign redirect_raw = ((id_ex_ctrl.pc_sel == PC_BR) && ex_taken) ||
+  // ---- 控制流真实结果 ----
+  assign actual_taken = ((id_ex_ctrl.pc_sel == PC_BR) && ex_taken) ||
                         (id_ex_ctrl.pc_sel == PC_J) ||
                         (id_ex_ctrl.pc_sel == PC_JR);
 
-  assign pc_src    = redirect;        // 由 hazard_unit 门控后的重定向
-  assign pc_target = ex_pc_target;
+  // 【重定向目标必须是"正确的后继 PC"】
+  //   实际 taken   -> 控制流目标 ex_pc_target
+  //   实际不 taken -> pc+4
+  // 不能在"非 PC_NEXT"时一律用 ex_pc_target —— 条件分支 *不 taken* 时
+  // ex_pc_target 是分支目标而不是后继, 用它会把 PC 送进错误路径。
+  // (第一版就是这么写错的: 一旦 BTB 预测 taken 而分支实际不跳, 就会跳到
+  //  分支目标, 程序直接跑飞。tb_core 与 CoreMark 同时失败暴露了它。)
+  // 直接用流水寄存器里现成的 pc+4, *不要* 在这里再算一次 id_ex_pc + 4 ——
+  // 那会在关键路径 (rs1/rs2 -> 前递 -> ALU -> 目标选择 -> pc) 上串进一个
+  // 额外的 32 位加法器。实测它让 WNS 从 +7.25ns 掉到 +4.64ns (fmax 78->65MHz)。
+  assign actual_target = actual_taken ? ex_pc_target : id_ex_pc_plus4;
+
+  // ---- 预测正确性判定 ----
+  // 方向一致; 若实际 taken, 目标也必须一致。
+  assign pred_ok = (actual_taken == id_ex_pred_taken) &&
+                   (!actual_taken || (actual_target == id_ex_pred_target));
+
+  // 【关键】redirect 不再是"分支 taken", 而是"预测错误"。
+  // 预测正确时绝不能冲刷, 否则两条正确路径被白白丢掉, 预测收益归零。
+  assign redirect_raw = !pred_ok;
+
+  assign pc_src    = redirect || pred_taken;
+  assign pc_target = redirect ? actual_target : pred_target;
 
   // ==========================================================================
   // 冒险单元
@@ -234,6 +367,7 @@ module core
     .if_id_rs1        (id_rs1),
     .if_id_rs2        (id_rs2),
     .lsu_stall        (lsu_stall),
+    .ex_busy          (md_busy),
     .redirect_raw     (redirect_raw),
     .fwd_a            (fwd_a),
     .fwd_b            (fwd_b),
@@ -251,7 +385,7 @@ module core
     .rst           (rst),
     .stall         (hold_mem),
     .ctrl_in       (id_ex_ctrl),
-    .alu_out_in    (ex_alu_out),
+    .alu_out_in    (ex_result),
     .store_data_in (ex_rs2),         // store 数据 (前递后)
     .pc_plus4_in   (id_ex_pc_plus4),
     .rd_addr_in    (id_ex_rd),
@@ -278,17 +412,42 @@ module core
     .dmem_wdata   (dmem_wdata),
     .dmem_wstrb   (dmem_wstrb),
     .dmem_we      (dmem_we),
-    .dmem_rdata   (dmem_rdata),
+    .dmem_rdata   (dmem_rdata_g),   // 译码后: 窗口内取 dmem, 窗口外取 ext_rdata
     .load_data    (mem_load_data),
     .lsu_stall    (lsu_stall)
   );
+
+  // ------------------------------------------------------------------------
+  // 地址译码: DMEM 窗口内 -> 内部 dmem; 窗口外 -> 外部 MMIO 总线
+  // 原设计里 imem/dmem 的 BASE 参数声明了却从不使用, 任何地址都会别名进
+  // 16KB 窗口 —— 那样既无法加 MMIO, 也无法产生访问错误异常。这里让 BASE
+  // 真正参与译码。
+  // ------------------------------------------------------------------------
+  assign sel_dmem     = (dmem_addr >= DMEM_BASE) && (dmem_addr < (DMEM_BASE + DMEM_BYTES));
+  assign dmem_we_g    = dmem_we && sel_dmem;                                  // 窗口外不写内部 RAM
+  // 读数据回选: 内部 dmem 与外部 MMIO 都已寄存一拍, 用寄存后的选择信号对齐
+  always @(posedge clk) begin
+    ext_rdata_r <= ext_rdata;
+    sel_dmem_r  <= sel_dmem;
+  end
+  assign dmem_rdata_g = sel_dmem_r ? dmem_rdata : ext_rdata_r;
+
+  // 读选通同样必须送出: 外设的"数据就绪"标志需要软件读一次来清除, 若只给写
+  // 选通, 粘滞标志永远清不掉 —— 表现为"第一次轮询正常, 之后每次都立即通过并
+  // 读到上一次的数据"(UART RX 实测踩过)。mem_read 只在 load 的 MEM 段有效,
+  // 所以它天然是每访问一拍的脉冲, 不像地址会在总线上多停几拍。
+  assign ext_we    = dmem_we && !sel_dmem && (dmem_wstrb != 4'b0000);
+  assign ext_re    = ex_mem_ctrl.mem_read && !sel_dmem;
+  assign ext_addr  = dmem_addr;
+  assign ext_wdata = dmem_wdata;
+  assign ext_wstrb = dmem_wstrb;
 
   dmem #(.BASE(DMEM_BASE), .BYTES(DMEM_BYTES)) u_dmem (
     .clk   (clk),
     .addr  (dmem_addr),
     .wdata (dmem_wdata),
     .wstrb (dmem_wstrb),
-    .we    (dmem_we),
+    .we    (dmem_we_g),
     .rdata (dmem_rdata)
   );
 
@@ -301,7 +460,9 @@ module core
     .stall        (hold_mem),
     .ctrl_in      (ex_mem_ctrl),
     .alu_out_in   (ex_mem_alu_out),
-    .load_data_in (mem_load_data),
+    // 【寄存读版】load_data 不再经 MEM/WB 打第二拍: 它在 WB 拍由 LSU 组合给出
+    // (dmem 的输出寄存器就是"第一拍"), 写回 mux 直接用它。这里恒 0 让它被优化掉。
+    .load_data_in (32'h0),
     .pc_plus4_in  (ex_mem_pc_plus4),
     .rd_addr_in   (ex_mem_rd),
     .ctrl         (mem_wb_ctrl),
@@ -313,7 +474,8 @@ module core
 
   always_comb begin
     case (mem_wb_ctrl.wb_src)
-      WB_MEM:  wb_data = mem_wb_load_data;
+      // 直接用 LSU 的 WB 拍组合输出 (dmem 寄存读的数据此刻正好有效)
+      WB_MEM:  wb_data = mem_load_data;
       WB_PC4:  wb_data = mem_wb_pc_plus4;
       default: wb_data = mem_wb_alu_out;      // WB_ALU
     endcase
@@ -325,12 +487,33 @@ module core
   // ==========================================================================
   // 调试与仿真专用
   // ==========================================================================
+  // dbg_pc 必须与 dbg_instr 取自 *同一级*: if_pc 是 IF/ID 中那条指令的地址,
+  // if_instr 就是那条指令本身。原先这里接的是 IF 段正在取的 pc, 与 if_instr
+  // 永远差一拍 —— 超时/非法指令的失败诊断会指向错误的指令。
+  // 【为什么两个 PC 都要引出】
+  //   dbg_pc    = IF 段正在取的地址 —— 回答"现在跑到哪了", 超时诊断用它;
+  //   dbg_id_pc = IF/ID 中那条指令的地址, 与 dbg_instr 严格配对 —— 回答
+  //               "出问题的是哪条指令"。
+  // 只引出一个都有坑: 单用 pc 则与 if_instr 差一拍 (指错指令); 单用 if_pc
+  // 则 if_id_reg 在 flush 那一拍会把它清成 0, 诊断信息会变成 PC=0 (实测踩过)。
   assign dbg_pc    = pc;
+  assign dbg_id_pc = if_pc;
   assign dbg_instr = if_instr;
 
+  // 存储器写观测: wstrb 全零的"空写"不算 (LSU 在非写周期也拉高 dmem_we)
+  assign dbg_mem_we    = dmem_we && (dmem_wstrb != 4'b0000);
+  assign dbg_mem_addr  = dmem_addr;
+  assign dbg_mem_wdata = dmem_wdata;
+
+  // 非法指令粘滞标志。
+  // redirect=1 的这一拍, ID 段里装的是分支/跳转的 *错误路径* 后继指令, 它马上
+  // 就会被冲掉; 若它恰好译码非法, 标志会被误置 1, 而 tb_core 把该标志当硬失败
+  // -> 假失败。因此必须用 !redirect 排除。
+  // 反方向不会漏报: 一条真正执行的非法指令要进 ID/EX 就必须 !pipe_stall, 那种
+  // 情况下 redirect 只可能由别的指令(更老的)产生。
   always_ff @(posedge clk or posedge rst) begin
-    if (rst)                                  dbg_illegal <= 1'b0;
-    else if (id_ctrl.illegal && !pipe_stall)  dbg_illegal <= 1'b1;
+    if (rst)                                               dbg_illegal <= 1'b0;
+    else if (id_ctrl.illegal && !pipe_stall && !redirect)  dbg_illegal <= 1'b1;
   end
 
   // 跳转目标必须 4 字节对齐 (未来 trap 单元接管时删除此断言)
@@ -341,5 +524,12 @@ module core
     end
   end
   `endif
+
+  // ==========================================================================
+  // 流水线效率观测 (纯观测, 不参与逻辑; 未连接时会被综合优化掉)
+  // 必须放在所有信号声明之后
+  // ==========================================================================
+  assign dbg_stall    = pipe_stall;
+  assign dbg_redirect = redirect;
 
 endmodule
