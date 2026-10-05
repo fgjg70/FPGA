@@ -192,28 +192,34 @@ module core
   assign btb_upd_en   = is_ctrl_flow && !pipe_stall && !rst;
 
   // --------------------------------------------------------------------------
-  // 【取指相位对齐 —— 寄存读取指存储器的必要配套】
-  // imem 若用寄存读 (IMEM_REG_READ), rdata 比 pc 晚一拍出:
-  //     cycle N   : addr = pc_N,  rdata = instr(pc_{N-1})
-  // 而 if_id_reg 原来把 `pc` 和 `imem_rdata` 在同拍锁存 -> **PC 与指令错位一拍**,
-  // BTB 预测也跟着配错 (预测是对 pc_N 做的, 却贴到了 instr(pc_{N-1}) 上),
-  // 于是仿真直接跑挂。原先以为"两者由同一个寄存器锁存所以始终配对"是**错的**:
-  // 配对的前提是它们本来就是同一条指令的 PC 与指令字, 寄存读破坏了这个前提。
-  //
-  // 修法: 给 PC 也加一级寄存器, 让进 if_id 的 pc 与 imem_rdata 同源同拍。
-  //   组合读模式下 pc_d1 恒等于 pc (见下), 因此这条路径**零代价、行为不变**。
-  // 复位时就清成 PC_RESET, 避免第一拍配到一个未定义 PC。
+  // 【寄存读取指存储器: 需要重排取指流水, 当前**不做**】
   // --------------------------------------------------------------------------
-`ifdef IMEM_REG_READ
-  logic [31:0] pc_if;
-  always @(posedge clk) begin
-    if (rst) pc_if <= PC_RESET;
-    else     pc_if <= pc;      // pc 本身在 stall 时保持, 这里自然跟随
-  end
-`else
-  wire [31:0] pc_if = pc;
-`endif
-  wire [31:0] pc_if_plus4 = pc_if + 32'd4;
+  // 结论 (2026-10-05, 实测): 把 imem 改成寄存读**不是**"给 PC 加一级寄存器"
+  // 就能对齐的, 它要求重排取指流水。原因:
+  //
+  //   组合读: cycle N 内 addr=pc_N, rdata=instr(pc_N) —— pc 寄存器与"当前取回的
+  //           指令"是同一拍, 于是 pc / pc_plus4 可以直接喂给 IF/ID 与重定向逻辑。
+  //   寄存读: rdata 晚一拍, 于是 **pc 寄存器本身就成了"取指流水的一部分"**:
+  //           pc(N) = instr 的地址 + 1 拍。所有"用 pc 算出来的东西"
+  //           (pc_plus4 -> if_pc_plus4 -> id_ex_pc_plus4 -> 跳转链接值 /
+  //            分支不跳时的后继 / actual_target) 全部跟着早了一拍。
+  //
+  // 实测过程: 先错位 timeout -> 给 pc_if 加一级寄存器后, 取指对齐自检
+  // (tb_sw 的 [ALIGN]) 变成 0 次错位, 但 **tb_core_basic 第 2 组仍挂**;
+  // 查 trace 发现跳转目标是错的 (0x80000048 的 `j .` 被解析成跳去 0x80000050),
+  // 即 pc_plus4 那一串全部偏移。所以这是**取指级重排**, 不是局部补丁。
+  //
+  // 正确做法是引入标准的"取指地址寄存器 + 取指数据寄存器"两级结构, 并让
+  // 重定向在这一级上闭环 —— 那等于**改流水线级数/结构**, 与"不动流水线"的
+  // 约束冲突, 收益 (LUT −1228) 与风险不成比例, 故暂缓。
+  // 详见 results/p4-macro-failure.md 第 5.1 节。
+  //
+  // 当前 pc_if / pred_if_* 一律直通, 与组合读行为完全一致。
+  // --------------------------------------------------------------------------
+  wire [31:0] pc_if          = pc;
+  wire        pred_if_taken  = pred_taken;
+  wire [31:0] pred_if_target = pred_target;
+  wire [31:0] pc_if_plus4    = pc_plus4;
 
   if_id_reg #(.RESET_PC(PC_RESET)) u_if_id (
     .clk         (clk),
@@ -223,8 +229,8 @@ module core
     .pc_in       (pc_if),
     .pc_plus4_in (pc_if_plus4),
     .instr_in    (imem_rdata),
-    .pred_taken_in  (pred_taken),
-    .pred_target_in (pred_target),
+    .pred_taken_in  (pred_if_taken),
+    .pred_target_in (pred_if_target),
     .pc          (if_pc),
     .pc_plus4    (if_pc_plus4),
     .instr       (if_instr),

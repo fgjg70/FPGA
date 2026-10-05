@@ -61,8 +61,12 @@ read_xdc "D:/USER/Desktop/FPGA/FPGA/fpga/daVinciPro.xdc"
 # ===========================================================================
 set IMEM_DEFS ""
 if {[info exists ::env(IMEM_REG_READ)] && $::env(IMEM_REG_READ) ne ""} {
-  append IMEM_DEFS " IMEM_REG_READ=1"
-  puts "BUILD_IMEM_REG_READ=1"
+  # 【拦住它】寄存读需要重排取指流水 (pc_plus4 那一串会整体偏移一拍), 当前
+  # 直接开启会让程序行为错乱。见 results/p4-macro-failure.md 第 5.1 节。
+  puts "BUILD_ERROR: IMEM_REG_READ 当前不可用 —— 它要求重排取指流水;"
+  puts "BUILD_ERROR: 直接开启会让 pc_plus4/跳转目标偏移一拍, 程序行为错乱。"
+  puts "BUILD_ERROR: 详见 results/p4-macro-failure.md 第 5.1 节。"
+  exit 1
 } else {
   puts "BUILD_IMEM_COMB_READ=1"
 }

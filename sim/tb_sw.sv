@@ -165,6 +165,7 @@ module tb_sw;
   // 【条件分支误判再细分】决定该修 BTB 组织还是方向预测器:
   //   BTB 没命中      -> 预测"不跳", 若实际 taken 则误判 => 该扩表 / 改组织
   //   BTB 命中但方向错 -> 表命中了, 2 位计数器的方向判断错了 => 该改方向预测器
+  int unsigned n_align_err = 0;    // 取指对齐自检失败次数 (必须为 0)
   int unsigned n_mis_br_nohit = 0, n_mis_br_dir = 0;
   int unsigned n_br_hit = 0, n_br_nohit = 0;      // 条件分支的 BTB 命中情况
 
@@ -184,6 +185,35 @@ module tb_sw;
 
   always @(posedge clk) begin
     if (!rst) begin
+      // ----------------------------------------------------------------------
+      // 【取指对齐自检】if_pc 处的指令字必须真的等于 if_instr。
+      // 为什么必须有这条: 一旦取指存储器改成寄存读, rdata 会比 addr 晚一拍;
+      // 若 PC 与指令没有做对应的相位对齐, 就变成"pc_N 配 instr(pc_{N-1})",
+      // 症状是程序行为莫名错乱(先是 timeout, 之后是某个测试组失败), 而
+      // RTL 语法/编译全部正常 —— 属于极难定位的静默错位。
+      // 这条检查把"错位"变成一行直接报错。
+      //
+      // 两个坑 (都实测踩过, 见注释避免后人重踩):
+      //  1) 索引位宽必须是 imem 真实的 AW 位, 不是随便切 16 位。
+      //     16KB = 4096 字 -> AW=12 -> 用 if_pc[13:2]。
+      //  2) **flush 那一拍 if_id 里留的是上一拍的旧值, 而且 pc 被清成 0**。
+      //     所以必须跳过 flush 的拍, 否则会在 pc=0 上报一堆假错位。
+      //     用 if_pc==0 作废值判据 (PC_RESET=0x8000_0000, 合法 PC 不会是 0)。
+      // ----------------------------------------------------------------------
+      //  3) 前几拍要跳过: imem 的 initial 先把整块填成 NOP, $readmemh 在同一次
+      //     initial 里随后才覆盖。复位期间 if_id 先锁到的是"填 NOP 阶段"的内容,
+      //     于是 cycle 0 会报一次假错位。用 cycles 门限跳过启动窗口。
+      if (cycles > 4 && !u_dut.if_id_flush && u_dut.if_pc != 32'd0) begin
+        logic [31:0] exp_instr;
+        exp_instr = u_dut.u_imem.mem[u_dut.if_pc[13:2]];
+        if (u_dut.if_instr !== exp_instr) begin
+          n_align_err++;
+          if (n_align_err <= 5)
+            $display("[ALIGN] cycle %0d: if_pc=0x%08x if_instr=0x%08x 期望 0x%08x  <-- 取指错位!",
+                     cycles, u_dut.if_pc, u_dut.if_instr, exp_instr);
+        end
+      end
+
       if (!u_dut.if_id_flush && !u_dut.pipe_stall) n_fetch++;
       if (u_dut.redirect)    n_redirect++;
       if (u_dut.pipe_stall)  n_stall++;
@@ -285,6 +315,11 @@ module tb_sw;
     $display("  load-use   = %0d  (%0d%%)", n_stall_lu, (n_stall_lu * 100) / (cycles == 0 ? 1 : cycles));
     $display("  split-mem  = %0d", n_stall_ls);
     $display("  muldiv busy= %0d", n_stall_ex);
+    $display("  --- 取指对齐自检 (寄存读改动的守门人) ---");
+    if (n_align_err != 0)
+      $display("  *** 失败 %0d 次: if_pc 与 if_instr 不同源 (取指错位!) ***", n_align_err);
+    else
+      $display("  OK (0 次错位)");
     $display("  --- predictor accuracy ---");
     $display("  ctrl-flow  = %0d   mispredict = %0d   accuracy = %0d%%",
              n_ctrl, n_mis, n_ctrl == 0 ? 0 : 100 - (n_mis * 100) / n_ctrl);
