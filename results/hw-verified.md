@@ -29,7 +29,7 @@ fpga/timing_ila.rpt              -> "All user specified timing constraints are m
 | **tick 数** | **508,155,404** | 与 P1 之前**逐位相同**，预期 508,232,400，偏差 **0.015%** |
 | **CoreMark/MHz** | **2.3615** | 仿真 2.3611，吻合 **0.02%** |
 | done / pass / fail / illegal | 1 / 1 / 0 / 0 | ✅ `ila_ctrl = 0x42` |
-| ILA 版资源 | LUT 5434 / FF 3929 | 含 ILA + debug hub（评分版核身 LUT 2526）|
+| ILA 版资源 | LUT 5434 / FF 3929 | 含 ILA + debug hub（**当时**评分版核身 LUT 2526，已作废；当前评分版 LUT 4019）|
 
 > **tick 与 P1 之前逐位相同**是关键证据：P1/P2/P3 三项改动都**不改变指令数与周期数**
 > （P3 是纯时序优化，P1/P2 的陷阱逻辑不在热路径上）。硬件上逐位复现，说明
