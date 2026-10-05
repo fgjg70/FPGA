@@ -994,7 +994,7 @@ def cmd_report(args) -> int:
     kept = [d for d in rows if d.get("status") == "keep" and fnum(d, "coremark_per_mhz")]
     if len(kept) >= 2:
         base, cur = kept[0], kept[-1]
-        print("\n  最新保留配置 vs 基线:")
+        print("\n  最新保留配置 vs 基线 (表内数据 = CSV 记录值):")
         for key, label, unit, fmt in [
             ("coremark_per_mhz", "CoreMark/MHz", "", "{:.4f}"),
             ("fmax_mhz", "fmax", " MHz", "{:.1f}"),
@@ -1009,6 +1009,8 @@ def cmd_report(args) -> int:
         a = fnum(base, "coremark_per_mhz") * fnum(base, "fmax_mhz")
         b = fnum(cur, "coremark_per_mhz") * fnum(cur, "fmax_mhz")
         print(f"    {'绝对吞吐':14s} {a:.1f} -> {b:.1f}   ({100*(b-a)/a:+.1f}%)")
+    print("\n  提示: 上表数字是 CSV 里当初记录的值 (那一次构建的实测)。"
+          "\n        要看此刻的四项指标 (从最新仿真日志与归档报告实算), 用 metrics 子命令。")
     print("=" * 78)
     return 0
 
@@ -1133,11 +1135,22 @@ def parse_reports() -> dict:
 
 
 def latest_ticks(iters: int | None = None) -> tuple[int, int] | None:
-    """从 results/coremark.csv 取最近一次**仿真**测量的 (ticks, iters)。
+    """取 CoreMark 的 (ticks, iters)。
 
-    用仿真数据而不是硬件数据算 CoreMark/MHz: 仿真与硬件吻合到 0.02%
-    (见 HANDOFF 第 2 节), 而且不依赖板卡在场。
+    【优先用仿真日志的真值, 而不是 CSV 里的历史值】
+    CSV 里的 ticks 是"当初那次"的数字; 修改 RTL 后它可能已经变了 (或不变量本身
+    就该重测)。实测踩过: CSV 写 423,486, 而干净的仿真日志是 423,527 —— 两者
+    CoreMark/MHz 差 0.01%, 看起来无所谓, 但"用旧值算新架的指标"是错的口径。
+
+    所以: 有 tb_sw_coremark 日志就用日志里的 CoreMark ticks (它还同时给出 CRC,
+    可顺带校验正确性); 没有才回退到 CSV。
     """
+    p = parse_profile(read_text(os.path.join(LOG_DIR, "tb_sw_coremark.log"))) \
+        if os.path.exists(os.path.join(LOG_DIR, "tb_sw_coremark.log")) else {}
+    cm_ticks, it = p.get("cm_ticks"), p.get("iterations")
+    if cm_ticks and it and (iters is None or it == iters):
+        return cm_ticks, it
+
     try:
         lines = [l for l in read_text(abspath("results/coremark.csv")).splitlines()
                  if l and not l.startswith("#")]
@@ -1152,12 +1165,12 @@ def latest_ticks(iters: int | None = None) -> tuple[int, int] | None:
         if "HARDWARE" in tag:
             continue
         try:
-            tk, it = int(d["ticks"]), int(d["iters"])
+            tk, it2 = int(d["ticks"]), int(d["iters"])
         except (KeyError, ValueError):
             continue
-        if iters is not None and it != iters:
+        if iters is not None and it2 != iters:
             continue
-        best = (tk, it)
+        best = (tk, it2)
     return best
 
 
