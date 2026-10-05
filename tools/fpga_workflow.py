@@ -871,6 +871,10 @@ def cmd_verify(args) -> int:
             # 返回地址栈。实测有效但不划算 (CoreMark/MHz +0.38% 换 fmax -2.8%),
             # 故默认关闭 —— 见 results/p4-ras.md
             defs.append("RAS_EN")
+        if args.gemm:
+            # GEMM 加速单元。默认关闭 —— 实测打开会让 FF +916%、CoreMark/LUTs -60%,
+            # 且功能还没做对 (见 results/p5-ai-accelerator.md)
+            defs.append("GEMM_EN")
         defines = tuple(defs)
         rc, out, workdir = compile_sim(files, t["tb"], defines)
         if rc != 0:
@@ -1886,6 +1890,8 @@ def main() -> int:
                    help="方向预测器用 gshare (BTB_GSHARE); 默认纯局部 Smith")
     p.add_argument("--ras", action="store_true",
                    help="启用返回地址栈 (RAS_EN); 默认关闭 (实测综合指标净亏)")
+    p.add_argument("--gemm", action="store_true",
+                   help="启用 GEMM 加速单元 (GEMM_EN); 默认关闭 (实测面积翻倍且功能未完成)")
     p.add_argument("-v", "--verbose", action="store_true", help="通过时也打印摘要")
     p.set_defaults(func=cmd_verify)
 
@@ -1934,6 +1940,8 @@ def main() -> int:
                    help="方向预测器用 gshare (BTB_GSHARE); 默认纯 Smith")
     p.add_argument("--ras", action="store_true",
                    help="启用返回地址栈 (RAS_EN); 默认关闭 (实测综合指标净亏)")
+    p.add_argument("--gemm", action="store_true",
+                   help="启用 GEMM 加速单元 (GEMM_EN); 默认关闭 (实测面积翻倍且功能未完成)")
     p.add_argument("--timeout", type=int, default=3600, help="Vivado 超时秒数")
     p.add_argument("--lock-timeout", type=int, default=1800, help="等待构建锁的秒数")
     p.set_defaults(func=cmd_synth)
