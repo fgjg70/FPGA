@@ -703,6 +703,12 @@ def test_matrix() -> list[dict]:
         {"name": "tb_sw_coremark", "top": "tb_sw", "rtl": "rtl", "tb": "sim/tb_sw.sv",
          "imem": "sim/prog/cm_rv32im.hex", "dmem": "sim/prog/cm_rv32im.dmem.hex",
          "plus": [], "max_cycles": 5000000, "timeout": 1200, "desc": "CoreMark 仿真"},
+        # 应用场景: 神经网络推理的 GEMM 核心。当前是"软件基线", 加了加速单元后
+        # 同一程序走加速路径, 加速比才有可比基准。
+        {"name": "tb_sw_nn_demo", "top": "tb_sw", "rtl": "rtl", "tb": "sim/tb_sw.sv",
+         "imem": "sim/prog/nn_demo.hex", "dmem": "sim/prog/nn_demo.dmem.hex",
+         "plus": [], "max_cycles": 3000000, "timeout": 900,
+         "desc": "应用场景: 神经网络 GEMM 核心"},
     ]
 
 
