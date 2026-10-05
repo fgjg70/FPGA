@@ -314,6 +314,7 @@ module mmio_subsys
   assign gemm_sel = (addr == MMIO_GEMM_CTRL)   || (addr == MMIO_GEMM_STATUS) ||
                     (addr == MMIO_GEMM_M)      || (addr == MMIO_GEMM_K)      ||
                     (addr == MMIO_GEMM_N)      || (addr == MMIO_GEMM_CYCLES) ||
+                    (addr == MMIO_GEMM_DBGA)   || (addr == MMIO_GEMM_DBGV)   ||
                     (addr[31:11] == MMIO_GEMM_ARENA[31:11]);
 
   gemm_accel u_gemm (

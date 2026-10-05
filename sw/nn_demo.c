@@ -35,6 +35,8 @@ typedef unsigned long long u64;
 #define G_K       (*(volatile u32 *)0xA000004Cu)
 #define G_N       (*(volatile u32 *)0xA0000050u)
 #define G_CYCLES  (*(volatile u32 *)0xA0000054u)
+#define G_DBGA    (*(volatile u32 *)0xA0000058u)
+#define G_DBGV    (*(volatile u32 *)0xA000005Cu)
 #define G_ARENA   ((volatile u32 *)0xA0000400u)
 /* 缓冲窗口内的字偏移: A=0..63, B=64..127, C=128..383 */
 #define G_A_W(w)  G_ARENA[(w)]
@@ -284,6 +286,17 @@ int main(void) {
      * 后面的"结果不对"就只是它的下游现象。 */
     puts_("  regs M/K/N="); putu(G_M); puts_("/"); putu(G_K);
     puts_("/"); putu(G_N); puts_("\n");
+    /* 把 A/B 缓冲里第 i 行对应的**第一个字**从硬件读回来。
+     * 期望: A 的第 i 行 = 字 i*4。若第 0 行有值而其余行为 0, 说明"存"坏了;
+     * 若都有值, 说明问题在 gemm 的 a_byte_idx 算法, 不在缓冲。 */
+    puts_("  buf A row0..:");
+    for (int i = 0; i < N; i++) { puts_(" "); puthex(G_A_W(i * 4)); }
+    puts_("\n");
+    puts_("  dbg A_off="); puthex(G_DBGA);
+    puts_(" a_val/b_val="); puthex(G_DBGV); puts_("\n");
+    puts_("  buf B row0..:");
+    for (int i = 0; i < N; i++) { puts_(" "); puthex(G_B_W(i * 4)); }
+    puts_("\n");
     puts_("  accel_cycles=");  putu(accel_cycles);        puts_("\n");
     puts_("  ramp_cycles=");   putu((u32)(h2 - h0));     puts_("\n");
     /* 逐点看前几个元素: 排错时"哪里开始不对"比"有多少不对"有用得多 */

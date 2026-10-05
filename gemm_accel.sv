@@ -77,6 +77,11 @@ module gemm_accel
   logic [31:0] i_idx, j_idx, k_idx;
   logic signed [31:0] acc;
   logic        first_k;      // 当前输出元素的第一个积 (赋值而非累加)
+  // 【诊断用, 可综合】最近一拍用到的 A 下标与 A/B 操作数。软件可通过
+  // DBG 寄存器读回 —— 排"读不到操作数"这类问题时, 直接看状态机自己算出的
+  // 下标比逐层猜测快得多 (本轮就是靠它定位的)。
+  logic [31:0] dbg_addr;
+  logic [31:0] dbg_a, dbg_b;
 
   assign busy = (st != S_IDLE);
 
@@ -109,6 +114,8 @@ module gemm_accel
       else if (addr == MMIO_GEMM_K)      rdata = r_k;
       else if (addr == MMIO_GEMM_N)      rdata = r_n;
       else if (addr == MMIO_GEMM_CYCLES) rdata = cycles_r;
+      else if (addr == MMIO_GEMM_DBGA)   rdata = dbg_addr;
+      else if (addr == MMIO_GEMM_DBGV)   rdata = {dbg_b[15:0], dbg_a[15:0]};
       else if (is_C)                     rdata = c_buf[aoff - 8'd128];
       else if (is_A)                     rdata = a_buf[aoff];
       else if (is_B)                     rdata = b_buf[aoff - 8'd64];
@@ -196,6 +203,12 @@ module gemm_accel
           else begin
             acc <= acc + ($signed(a_val) * $signed(b_val));
           end
+          // 【可综合的诊断】把本拍实际用到的下标与操作数记下来。
+          // 排"读不到操作数"时, 直接看**状态机自己算出的下标**比逐层猜测快得多。
+          // 落点用 C 缓冲之外的两个专用寄存器 (见 dbg_addr/dbg_a 声明)。
+          dbg_addr <= a_byte_idx;
+          dbg_a    <= {{24{a_val[7]}}, a_val};
+          dbg_b    <= {{24{b_val[7]}}, b_val};
           if (k_idx + 1 < r_k) k_idx <= k_idx + 1;
           else                 st    <= S_STORE;
         end

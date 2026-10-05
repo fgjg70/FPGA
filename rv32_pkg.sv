@@ -269,6 +269,10 @@ package rv32_pkg;
   localparam logic [31:0] MMIO_GEMM_N      = 32'hA000_0050;  // W/R: B 的列数
   localparam logic [31:0] MMIO_GEMM_CYCLES = 32'hA000_0054;  // R:  本次运算周期数 (软件算加速比)
   localparam logic [31:0] MMIO_GEMM_ARENA  = 32'hA000_0400;  // W/R: 缓冲窗口基址 (1KB, 按字访问)
+  // 诊断寄存器 (可综合): 最近一拍状态机算出的 A 字节下标与 A/B 操作数。
+  // 留着是因为"加速单元读不到操作数"这类问题只能靠看内部下标来定位。
+  localparam logic [31:0] MMIO_GEMM_DBGA   = 32'hA000_0058;  // R: 最近用的 A 字节下标
+  localparam logic [31:0] MMIO_GEMM_DBGV   = 32'hA000_005C;  // R: {b_val, a_val} (各含符号扩展)
 
   // --------------------------------------------------------------------------
   // 陷阱原因码 (mcause 的低 4 位; 最高位由 csr_file 补 = 是否中断)
