@@ -315,6 +315,7 @@ module mmio_subsys
                     (addr == MMIO_GEMM_M)      || (addr == MMIO_GEMM_K)      ||
                     (addr == MMIO_GEMM_N)      || (addr == MMIO_GEMM_CYCLES) ||
                     (addr == MMIO_GEMM_DBGA)   || (addr == MMIO_GEMM_DBGV)   ||
+                    (addr == MMIO_GEMM_DBGW)   || (addr == MMIO_GEMM_DBGK)   ||
                     (addr[31:11] == MMIO_GEMM_ARENA[31:11]);
 
   gemm_accel u_gemm (

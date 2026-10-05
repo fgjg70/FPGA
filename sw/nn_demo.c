@@ -37,6 +37,8 @@ typedef unsigned long long u64;
 #define G_CYCLES  (*(volatile u32 *)0xA0000054u)
 #define G_DBGA    (*(volatile u32 *)0xA0000058u)
 #define G_DBGV    (*(volatile u32 *)0xA000005Cu)
+#define G_DBGW    (*(volatile u32 *)0xA0000060u)
+#define G_DBGK    (*(volatile u32 *)0xA0000064u)
 #define G_ARENA   ((volatile u32 *)0xA0000400u)
 /* 缓冲窗口内的字偏移: A=0..63, B=64..127, C=128..383 */
 #define G_A_W(w)  G_ARENA[(w)]
@@ -294,6 +296,27 @@ int main(void) {
     puts_("\n");
     puts_("  dbg A_off="); puthex(G_DBGA);
     puts_(" a_val/b_val="); puthex(G_DBGV); puts_("\n");
+    puts_("  dbg wr_cnt/idx="); puthex(G_DBGW);
+    puts_(" kn="); puthex(G_DBGK); puts_("\n");
+    /* 直接按字读回 C 的若干**代表性**条目 (第 0 个字与最后一个字):
+     * 写回计数已证明做了 256 次、最后下标 255, 所以只要这些字读回是 0,
+     * 就说明问题在"c_buf 的读通路"而不是写通路。 */
+    puts_("  C[0]=");   putu(G_C_W(0));
+    puts_(" C[1]=");    putu(G_C_W(1));
+    puts_(" C[255]=");  putu(G_C_W(255));
+    puts_("\n");
+    /* 【窗口测绘】在 C 区的代表性字地址上写已知值再读回 —— 一次划出
+     * "arena 窗口的哪个范围是通的"。比继续猜位宽直接得多。 */
+    {
+        const u32 probes[6] = { 0u, 16u, 64u, 200u, 255u, 300u };
+        puts_("  C win map:");
+        for (int t = 0; t < 6; t++) {
+            u32 w = probes[t];
+            G_C_W(w) = 0xAAAA0000u + w;
+            puts_(" "); putu(w); puts_("="); puthex(G_C_W(w));
+        }
+        puts_("\n");
+    }
     puts_("  buf B row0..:");
     for (int i = 0; i < N; i++) { puts_(" "); puthex(G_B_W(i * 4)); }
     puts_("\n");

@@ -273,6 +273,8 @@ package rv32_pkg;
   // 留着是因为"加速单元读不到操作数"这类问题只能靠看内部下标来定位。
   localparam logic [31:0] MMIO_GEMM_DBGA   = 32'hA000_0058;  // R: 最近用的 A 字节下标
   localparam logic [31:0] MMIO_GEMM_DBGV   = 32'hA000_005C;  // R: {b_val, a_val} (各含符号扩展)
+  localparam logic [31:0] MMIO_GEMM_DBGW   = 32'hA000_0060;  // R: {写回次数[15:0], 写回下标[15:0]}
+  localparam logic [31:0] MMIO_GEMM_DBGK   = 32'hA000_0064;  // R: {r_n, r_k} 运算期间的值
 
   // --------------------------------------------------------------------------
   // 陷阱原因码 (mcause 的低 4 位; 最高位由 csr_file 补 = 是否中断)
