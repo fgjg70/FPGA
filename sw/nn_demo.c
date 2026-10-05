@@ -161,12 +161,22 @@ static void gemm_hw_pack(void) {
     }
 }
 
+/* 加速单元是否在场: 往 A 窗口写已知值再读回。
+ * 【为什么必须先探活】若加速单元没被综合进去 (默认 GEMM_EN 关), 整个
+ * MMIO_GEMM_* 窗口都读回 0, 而 gemm_hw_run() 的轮询会**永远等不到 done** ——
+ * 死循环卡住。软件不能假设外设一定存在。 */
+static int gemm_hw_present(void) {
+    G_A_W(0) = 0xDEADBEEFu;
+    return G_A_W(0) == 0xDEADBEEFu;
+}
+
 static u32 gemm_hw_run(void) {
     G_M = N; G_K = N; G_N = N;
     G_CTRL = 1;                            /* bit0 = start */
-    /* 轮询完成。加速单元 busy 期间 CPU 只读状态寄存器, 不碰 dmem —— 这正是
-     * "本地缓冲"方案的用意: 零访存冲突。 */
-    while ((G_STATUS & 2u) == 0u) { }
+    /* 轮询完成, 但**必须有超时** —— 外设没响应时不能把 CPU 卡死。
+     * 这个上限远超正常耗时 (实测 4608 拍), 只用来兜住"外设不在/坏了"。 */
+    u32 guard = 0;
+    while (((G_STATUS & 2u) == 0u) && (guard < 2000000u)) guard++;
     return G_CYCLES;
 }
 
@@ -247,10 +257,17 @@ int main(void) {
      *       虽然两者应当相同 —— 用独立参考更硬)。
      * ====================================================================*/
     u64 h0, h1, h2;
-    /* 【自证加速单元在总线上】写已知值到 A 窗口再读回。放在启动**之前**:
-     * 读 STATUS 会清 done 标志, 放后面会把完成标志吃掉。 */
-    G_A_W(0) = 0xDEADBEEFu;
-    u32 rb = G_A_W(0);
+    /* 【先探活, 再决定跑不跑】加速单元默认未综合进评分版 (GEMM_EN 关),
+     * 此时整个 MMIO_GEMM_* 窗口读回 0。不在场就明确报告"未测试" ——
+     * 而不是让轮询卡死、也不是报一堆看起来像功能失败的假失败。
+     * (放在启动**之前**: 读 STATUS 会清 done 标志, 放后面会把完成标志吃掉。) */
+    if (!gemm_hw_present()) {
+        puts_("  --- accelerator ---\n");
+        puts_("  not_present=1 (未综合进本 bitstream; 设 GEMM_EN=1 重新构建)\n");
+        report_done();
+        return 0;
+    }
+    u32 rb = 0xDEADBEEFu;
 
     /* 【先把软件结果留下来再跑硬件】踩过的坑: gemm_hw_unpack() 会把 C 覆盖成
      * 硬件结果, 而 count_mismatch()/逐行直方图是拿 C 与"独立参考"比的 ——

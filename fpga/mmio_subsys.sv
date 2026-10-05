@@ -308,9 +308,21 @@ module mmio_subsys
   end
 
   // ------------------------------------------------------------------------
-  // GEMM 加速单元 (AI 应用场景)
-  //   缓冲窗口用高 21 位比较译码 (2KB 对齐), 范围覆盖 arena 起连续 2KB
+  // GEMM 加速单元 (AI 应用场景) —— 由 GEMM_EN 宏控制, **默认关闭**
   // ------------------------------------------------------------------------
+  // 【为什么默认关闭 —— 实测数据】打开它会让评分三项全线崩:
+  //     LUT           4019  -> 9984     (+148%)
+  //     FF            1387  -> 14097    (+916%)   <-- 缓冲落成触发器阵列而非 BRAM
+  //     fmax          61.6  -> 53.6     (-13%)
+  //     CoreMark/LUTs 5.875e-4 -> 2.365e-4  (-60%)
+  // 而且它**功能上还没做对** (C 读回只有前 16 个字正确)。
+  // 一个"又不对、又把面积翻一倍多"的单元绝不能留在评分版里。
+  //
+  // 要重新启用: set GEMM_EN=1, 并先修好两件事 ——
+  //   (a) C 读回问题 (见 results/p5-ai-accelerator.md 第 0 节)
+  //   (b) 把 A/B/C 缓冲改成 BRAM (行为级推断), 别落成触发器阵列
+  // ------------------------------------------------------------------------
+`ifdef GEMM_EN
   assign gemm_sel = (addr == MMIO_GEMM_CTRL)   || (addr == MMIO_GEMM_STATUS) ||
                     (addr == MMIO_GEMM_M)      || (addr == MMIO_GEMM_K)      ||
                     (addr == MMIO_GEMM_N)      || (addr == MMIO_GEMM_CYCLES) ||
@@ -331,5 +343,11 @@ module mmio_subsys
     .busy   (gemm_busy),
     .irq    (gemm_irq)
   );
+`else
+  assign gemm_sel   = 1'b0;
+  assign gemm_rdata = 32'h0;
+  assign gemm_busy  = 1'b0;
+  assign gemm_irq   = 1'b0;
+`endif
 
 endmodule

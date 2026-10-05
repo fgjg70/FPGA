@@ -654,6 +654,33 @@ def cmd_check(args) -> int:
     if not bat_bad and not tcl_bad:
         print("  OK    所有 .bat/.tcl 都是纯 ASCII")
 
+    # ---- [HIL] 硬件在环健康度 ------------------------------------------------
+    # 【为什么单独列一节】用户明确要求: 硬件在环是本项目的核心验证手段, 板子
+    # 掉线就等于闭环断了 —— 必须**立刻发现并停下报告**, 而不是自己继续推代码
+    # (那样就是在无验证的情况下积累未验证的改动, 正是本项目吃过三次亏的模式)。
+    # 这里做两件互不依赖的检查:
+    #   (a) 最后一次上板数据有多旧 -> 用来判断"当前代码是否已经上板验证过"
+    #   (b) bitstream 相对 RTL 是否过期
+    print("\n  [HIL] 硬件在环健康度")
+    import time as _t
+    hil_ok = True
+    csv = abspath("results/ila_done.csv")
+    if os.path.exists(csv):
+        age_min = (_t.time() - os.path.getmtime(csv)) / 60.0
+        stamp = _t.strftime("%m-%d %H:%M", _t.localtime(os.path.getmtime(csv)))
+        print(f"  最后一次上板数据: {stamp}  ({age_min:.0f} 分钟前)")
+        if age_min > 60:
+            print("  [warn] 已超过 1 小时没上板验证 —— 期间若改过 RTL, 那些改动**未经上板验证**")
+            warnings.append("上板验证数据超过 1 小时")
+    else:
+        print("  [warn] 没有 results/ila_done.csv —— 从未上板验证过")
+        warnings.append("从未上板验证")
+        hil_ok = False
+
+    if hil_ok:
+        print("  提示: 板子掉线时 `hw` 会因数据过期而拒绝给结论 (exit!=0)。")
+        print("        若要在改代码前确认板子在位, 跑: cmd /c fpga\\jtag_probe.bat")
+
     # ---- 汇总 ----
     print("\n" + "=" * 74)
     if problems:
