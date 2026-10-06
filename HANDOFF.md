@@ -57,40 +57,55 @@ cmd /c fpga\jtag_probe.bat                       REM 改 RTL 前先确认板子�
 
 | 工作 | 现状 | 从哪接 |
 |---|---|---|
-| **A 扩展的多周期"读-改-写"** | 工具链/编码表/包定义/**ALU 数据通路**/**译码**/**LSU 多周期相**均完成；**差最后两步**（见下），故**当前执行不了原子指令** | `results/p6-a-extension.md` 第 5 节 |
+| **A 扩展的多周期"读-改-写"** | **基本打通**：`amo_diag`(amoadd) / `amo_diag2`(amoswap) **PASS**；读旧值 ✅ / `rd`=旧值 ✅ / 三个算子 ✅ / LSU 写信号 ✅ / `amo_mode_r` ✅。**只剩 `amoor` 组**（`amo.S` 第 3 组，`tohost=4`）| `results/p6-a-extension.md` **第 5.11 节**（含下一步精确落点）|
 | **GEMM 的 C 读回 + 缓冲改 BRAM** | 寻址/取数/写回计数已验证正确；C 只有前 16 字对 | `results/p5-ai-accelerator.md` 第 0.2 节（含"改用 2×2 逐拍看"的建议）|
 
-#### A 扩展：差的就是这两步（Round 22 已完成 LSU 侧）
+#### A 扩展：唯一剩下的卡点与下一步（已收得很窄）
 
-**Round 22 的发现**：正确落点是 **LSU 已有的多周期 FSM**（为"非对齐跨字访存 2 拍
-拆分"建的），不是原先以为的 `core.sv` 加 mux + hazard_unit 加 `amo_busy`。原因：LSU
-本来就能按相选地址、按相控写使能、用 `lsu_stall` 冻结流水线、并在相内捕获读回数据
-—— AMO 需要的要素它全有。所以 **`load_store_unit.sv` 里已经加好了 `S_AMO` 相**
-（读相/写相由 `amo_wr` 区分），`core.sv` 里也把新端口**显式连接**了。
+**已确认正确的**（都有诊断打印为证）：
 
-**还差的两步**（根因：AMO 的新值**不能在 EX 段算** —— ALU 的 `ALU_AMO_*` 约定
-`a` = 从内存读回的旧值，而 dmem 是**寄存读**，旧值要到 MEM 段第二拍才到）：
+| 环节 | 证据 |
+|---|---|
+| AMO 的**地址** = `rs1+imm` | 改用**独立加法器** `ex_amo_addr`（不能复用 ALU —— `alu_op` 是算子）|
+| `amo_op` 跨段传递 | **自己锁存** `amo_op_r`（`ex_mem_reg` 的那份被 `hold_mem` 挡住锁不进去）|
+| `amo_rs2` | 加一级 `ex_rs2_d` 对齐采样窗口（AMO 在 EX 那一拍）|
+| 三相时序 | 等待 → 读相 → 写相（`[L]` 打印逐拍正确）|
+| LSU 写信号 | `WE=1 / strb=f / wdata=` 正确的算子结果 |
+| `amo_mode_r` | AMO 的 WB 拍确实为 1（选 `amo_old`）|
 
-1. `ctrl_s` 里再加一个 `amo_rs2[31:0]`，把 rs2 随流水送到 MEM 段
-   （`amo_op` 已经在 `ctrl_s` 里了）。
-2. 在 **MEM 段**用 `{amo_old, amo_rs2}` 算出新值 —— 最省事的做法是**再例化一个
-   `alu` 实例**专做 AMO 的"新值"，把它的 `out` 接到 LSU 的 `amo_newdata`。
-   然后删掉 `ctrl_s.amo_newdata`（不再需要，因为不在 EX 段算）。
+**卡点**：`amoor` 组（`0xF0F0F0F0 | 0x0F0F0F0F` 期望 `0xFFFFFFFF`）失败，
+而证据显示**该组算子结果是对的**（打印 `WDATA=ffffffff`），
+**紧随其后的 `lw` 却读回旧值**。所以问题在
+**"AMO 之后那条指令的 WB 数据/规格"**，**不在写通路**。
 
-**当前 `core.sv` 里 `amo_newdata` 明确系 `32'd0`**（并写了原因注释），所以
-**`A_EN` 必须保持关闭**（默认即如此）—— 打开会让 AMO 把 0 写进内存。
-不用"端口没接"的隐式默认，是因为那类静默失败本项目踩过（R8/R17）。
+**下一步（很具体）**：
+1. 打印 AMO 结束后**紧接着那条 `lw`** 的 WB 拍：`off_wb` / `size_wb` /
+   `uns_wb` / `rdata_eff` / `amo_mode_r` —— 确认规格是否被正确锁存。
+   （Round 37 我曾加过一个错的 `!(state==S_AMO)` 守卫，Round 39 已回退，
+   **回退后前两组更稳**。）
+2. 若 `rdata_eff` 仍为 0，要确认写是否真进了 `dmem.mem[]` ——
+   注意**不能**在 `core.sv` 里用 `u_dmem.mem[...]` 层次引用
+   （**vlog 直接编译失败**，本回合实测踩过），要在 testbench 里探。
 
-**测试不用改汇编器**：`tools/asm.py` **已支持 `.word <imm>`**（见 asm.py L10/L277），
-所以 `sim/prog/amo.S` 可以直接用 `.word 0x0021A0AF` 这样的**手工编码**写 AMO 指令
-（编码已实测确认，见 `results/p6-a-extension.md` 第 2 节）。
+**验收标准是现成的**：`tb_core_amo` / `tb_core_amo_diag` 都是 **XFAIL**，
+修好后自动翻 XPASS（`verify` 对翻转敏感）。
 
-**校验用现成的黄金向量**：`tools/amo_vectors.py` → `sim/prog/amo_vectors.hex`，
-**108 条**（9 算符 × 12 组操作数，含 `0x80000000`/`0xFFFFFFFF` 等符号边界），
-已与已验证的 RTL ALU **双向交叉验证 13/13 一致**。
+**调试方法（本轮最值钱的收获，见 PITFALLS R26/R27）**：
+1. **先用 tohost 上报** —— 把"哪一环错了"变成一个数字
+   （`2`=基础读写坏、`4`=AMO 读 0、`5`=`rd` 不对、`6`=写回不对）；
+2. **再逐拍打印中间量** —— `[ex-amo]` → `[amo-new]` → `[ex]` → `[amo-w]` → `[L]`，
+   每加一条消掉一个假设；
+3. **同一段新逻辑上往往不止一个 bug**（R26）：AMO 的**地址**与**数据来源**各叠了
+   两个 bug，**修掉一个不见效不代表方向错了**。
+
+**其它现成资产**：
+- `sim/prog/amo_diag.S` / `amo_diag2.S` —— 单步诊断程序（tohost 直接上报）
+- `tools/amo_vectors.py` → `sim/prog/amo_vectors.hex` —— **108 条黄金向量**
+  （9 算符 × 12 组操作数，含符号边界），已与 RTL ALU **双向交叉验证 13/13**
+- `tools/asm.py` **已支持 `.word`**，写 AMO 测试**不需要改汇编器**
 
 > **纪律提醒**：板子掉线就**立刻停下报告**，不要自己继续推（用户明确要求）。
-> `hw` 子命令有新鲜度门限，板子不在位时会拒绝给结论并返回非 0。
+> `hw` 有新鲜度门限；**另外上板前先 `Test-Path` 确认 bit 文件存在**（R28）。
 
 ---
 
