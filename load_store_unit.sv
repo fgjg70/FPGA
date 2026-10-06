@@ -173,7 +173,7 @@ module load_store_unit
   // AMO 读回的旧值: 写相那拍 amo_old 已有效, core 用它算新值
   assign amo_old_out = amo_old;
 
-  // (诊断打印已移除 —— 结论写进 results/p6-a-extension.md 第 5.4 节)
+  // (诊断打印已移除 —— 结论写进 results/p6-a-extension.md 第 5.5 节)
 
   // ---------------- load 路径 (WB 段组合) ----------------
   wire [4:0]  shamt_wb = {off_wb, 3'b000};

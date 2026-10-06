@@ -766,6 +766,15 @@ def test_matrix() -> list[dict]:
          "imem": "sim/prog/amo.hex", "plus": [], "max_cycles": 200000, "timeout": 600,
          "defines": ("A_EN",), "expect_fail_ok": True,
          "desc": "RV32A 原子指令 (AMO 读-改-写 + min/max 符号语义) [XFAIL: 待修]"},
+        # 【单步诊断程序】amo.S 一次测 9 组, 失败时只知道"第 1 组错", 不知道错在
+        # 地址/读/写哪一环。这一支只做最小一组, 并把**中间结论直接写进 tohost**:
+        #   1=全过 2=sw 后 lw 读不回(基础读写坏) 4=AMO 读到 0 5=AMO 旧值不对 6=写回不对
+        # 实测结论 (Round 32): tohost=5 —— sw/lw 基础读写**是好的**, 而 AMO 的
+        # **地址比 sw/lw 多 4** (0x90003004 vs 0x90003000), 是 AMO 特有的偏移。
+        {"name": "tb_core_amo_diag", "top": "tb_core", "rtl": "rtl", "tb": "sim/tb_core.sv",
+         "imem": "sim/prog/amo_diag.hex", "plus": [], "max_cycles": 200000, "timeout": 600,
+         "defines": ("A_EN",), "expect_fail_ok": True,
+         "desc": "RV32A 单步诊断 (tohost 直接上报失败环节) [XFAIL: 待修]"},
         {"name": "tb_soc", "top": "tb_soc", "rtl": "rtl", "tb": "sim/tb_soc.sv",
          "imem": "sim/prog/mmio.hex", "plus": [], "max_cycles": 400000, "timeout": 600,
          "desc": "外设 + UART 环回"},
