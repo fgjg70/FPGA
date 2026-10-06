@@ -145,6 +145,8 @@ module core
 
   // 流水线控制
   logic        pipe_stall, if_id_flush, hold_mem;
+  // 停顿释放脉冲 (见 IF 段注释: 寄存读时必须给 IF/ID 注气泡)
+  logic        pipe_stall_q, pipe_release;
 
   // ==========================================================================
   // IF 段
@@ -161,13 +163,105 @@ module core
     .pc_plus4  (pc_plus4)
   );
 
+  // --------------------------------------------------------------------------
+  // 取指相位配对 (IMEM_REG_READ)
+  // --------------------------------------------------------------------------
+  // 【为什么需要延迟副本 —— 这是前四轮都搞错的地方】
+  //
+  // 组合读: cycle N 内 addr=pc(N) 且 rdata=instr(pc(N)), **同一拍**。
+  //   所以 if_id 可以直接拿当前 pc / pc_plus4 去配当前 imem_rdata。
+  //
+  // 寄存读: imem 在 cycle N 锁存 mem[pc(N)], cycle N+1 才吐出 instr(pc(N))。
+  //   于是 cycle N+1 那一拍:
+  //       imem_rdata = instr(pc(N))          <- 上一拍 pc 处的指令
+  //       pc         = pc(N+1) = 下一拍要取的地址
+  //   两者差一拍 —— 必须拿 **pc 的延迟副本** 去配, 而不是当前 pc。
+  //
+  // 【关键】延迟副本必须是**纯延迟**, 一行 mux 都不能加。
+  //   前四轮的失败全在这里: 都试图在延迟副本上做"重定向/停顿补偿"的选择
+  //   (①只延迟; ②再用延迟 PC 查预测; ③加 stall 门控; ④照抄 pc 的下一拍值)。
+  //   但 pc 寄存器在寄存读结构下**本身就已经是取指地址寄存器**: 它的当前值
+  //   就是"下一拍要被取指的地址", 重定向/停顿对它的作用已经天然正确。
+  //   再在延迟副本上叠一层补偿, 等于把作用施加了两次 —— 症状是跳转目标整体偏移。
+  //
+  // 【周期代价 = 0】重定向距离仍是 2 拍, 只是相位平移:
+  //   组合读: redirect@N -> 目标是 IF/ID@N+1 -> ID/EX@N+2
+  //   寄存读: redirect@N -> 目标是 IF/ID@N+2 -> ID/EX@N+3
+  //   两者相对错误路径的领先量完全相同。
+  // --------------------------------------------------------------------------
+  logic [31:0] pc_d1, pc4_d1;     // 上一拍的取指地址 / pc+4 (仅寄存读时被赋值)
+  logic [31:0] imem_addr;         // 送给 imem 的取指地址
+`ifdef IMEM_REG_READ
+  // 【必须是**当前** pc, 不能是"下一拍的 pc"】
+  // BRAM/imem 的锁存发生在**时钟沿**, 它采样到的就是当拍的地址输入端 ——
+  // 也就是当拍的 pc。所以 addr 直接接 pc:
+  //   cycle N   : pc = pc(N)   -> imem 沿锁存 mem[pc(N)]
+  //   cycle N+1 : imem_rdata = instr(pc(N))  且  pc_d1 = pc(N)   ✓ 严格配对
+  //
+  // 实测教训 (写错过一次): 曾把它接成 `pc_src ? pc_target : pc_plus4`
+  // (即"下一拍的 pc 值"), 于是 imem 提前一拍取指:
+  //   cyc0 addr=0x80000004 -> cyc1 imem=instr(0x80000004) 而 pc_d1=0x80000000
+  // 配对整个错开一拍, 程序从第一条就乱序执行, 20000 拍后跑飞。
+  // 这与 pc.sv 内部 `pc <= pc_src ? pc_target : pc_plus4` 是**两件事**:
+  // 那句算的是下一拍装什么, 这里要的是当拍喂给存储器什么。
+  assign imem_addr = pc;
+  always_ff @(posedge clk or posedge rst) begin
+    if (rst) pc_d1 <= PC_RESET;
+    else if (!pipe_stall) pc_d1 <= pc;
+  end
+  always_ff @(posedge clk or posedge rst) begin
+    if (rst) pc4_d1 <= PC_RESET + 32'd4;
+    else if (!pipe_stall) pc4_d1 <= pc_plus4;
+  end
+`else
+  assign imem_addr = pc;
+  assign pc_d1  = pc;             // 组合读: 直通, 与原结构逐位一致
+  assign pc4_d1 = pc_plus4;
+`endif
+
   imem #(.BASE(IMEM_BASE), .BYTES(IMEM_BYTES)) u_imem (
     .clk   (clk),
-    .addr  (pc),
+    .addr  (imem_addr),
     .rdata (imem_rdata)
   );
 
+`ifdef IMEM_REG_READ
+  assign if_id_flush = any_redir || pipe_release;
+`else
+  // 组合读下 pc_plus4 领先一拍, 停顿释放的气泡是**天然**有的, 不能再注
+  // (实测: 无条件注入会把组合读路径也弄坏, tohost=3)。
   assign if_id_flush = any_redir;
+`endif
+
+`ifdef IMEM_REG_READ
+  // --------------------------------------------------------------------------
+  // 停顿释放时给 IF/ID 注一个气泡 (IMEM_REG_READ 必需)
+  // --------------------------------------------------------------------------
+  // 【为什么必须注入】寄存读下 `imem_rdata` 比 pc 滞后一拍, 而 IF/ID 的写口是
+  // `!stall` 门控。停顿期间 pc 冻结 -> imem 输出冻结 -> IF/ID 反复重写同一条
+  // 指令; 停顿释放那一拍流水开始流动, ID/EX 会从 IF/ID 取走**那条已经在 ID/EX
+  // 里的指令的副本** —— 同一条指令被执行两次, 紧随其后的一条被整条跳过。
+  //
+  // 实测证据 (basic.S load-use 组, 0x80000038 = `add t3,t2,t0`):
+  //   comb cyc15 stall=1 -> cyc16 if_id 装 pc+4=0x3c 的指令
+  //   reg  cyc15 stall=1 -> cyc16 if_id **又装一遍 0x38 的同一条指令**
+  //        -> 0x8000003c 的 `lui t4,0xA2345E78` 被整条跳过, tohost=3 (测试 2 失败)
+  //
+  // 组合读下 pc_plus4 领先一拍, 这个气泡是**天然**有的; 寄存读把它抵消掉了,
+  // 所以必须显式补回来。
+  //
+  // 【仍未闭环】注气泡的拍与组合读对不齐: 实测 `pipe_release` 落在 cyc17,
+  // 而需要被丢弃的 IF/ID 内容在 cyc16 就应该被拦住 —— 于是修补后
+  // tohost 从 3 变成另一处偏差 (0x8000004c 的分支被解析成跳去 0x80000050)。
+  // 完整证据链见 results/p4-macro-failure.md 5.1 节, 下一轮的起点就在那里。
+  always_ff @(posedge clk or posedge rst) begin
+    if (rst) pipe_stall_q <= 1'b0;
+    else     pipe_stall_q <= pipe_stall;
+  end
+  assign pipe_release = pipe_stall_q && !pipe_stall && !lsu_stall;
+`else
+  assign pipe_release = 1'b0;
+`endif
 
   // ==========================================================================
   // 分支预测 (IF 预测 / EX 校验)
@@ -248,6 +342,22 @@ module core
   assign pred_target = btb_pred_target;
 `endif
 
+  // --------------------------------------------------------------------------
+  // 预测结果也必须做同样的延迟 (同一原理, 见上面 IF 段注释)
+  // --------------------------------------------------------------------------
+  // BTB 的查表口保持用**当前 pc** —— 本拍查、本拍出结果, 由 pc_src 拿去装下一拍
+  // 的 pc; 同时这份结果打一拍, 正好配上"上一拍 pc 处的那条指令"。
+  // 两者用的是同一次查表, 所以天然一致, 不需要第二套预测逻辑。
+  logic pred_taken_d1;
+`ifdef IMEM_REG_READ
+  always_ff @(posedge clk or posedge rst) begin
+    if (rst) pred_taken_d1 <= 1'b0;
+    else if (!pipe_stall) pred_taken_d1 <= pred_taken;
+  end
+`else
+  assign pred_taken_d1 = pred_taken;   // 组合读: 直通
+`endif
+
   // 控制流指令解析完成且结果有效时才更新 (停顿期间操作数可能未就绪)
   assign is_ctrl_flow = (id_ex_ctrl.pc_sel != PC_NEXT);
   assign btb_upd_en   = is_ctrl_flow && !pipe_stall && !rst;
@@ -297,10 +407,12 @@ module core
     .rst         (rst),
     .flush       (if_id_flush),
     .stall       (pipe_stall),
-    .pc_in       (pc),
-    .pc_plus4_in (pc_plus4),
+    // 寄存读时 pc_d1/pc4_d1 是"上一拍取指地址" —— 与 imem_rdata 严格配对;
+    // 组合读时它们就是 pc/pc_plus4 直通, 逐位等价于原结构。
+    .pc_in       (pc_d1),
+    .pc_plus4_in (pc4_d1),
     .instr_in    (imem_rdata),
-    .pred_taken_in  (pred_taken),
+    .pred_taken_in  (pred_taken_d1),
     .pred_target_in (pred_target),
     .pc          (if_pc),
     .pc_plus4    (if_pc_plus4),

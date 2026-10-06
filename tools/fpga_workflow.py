@@ -793,8 +793,32 @@ def test_matrix() -> list[dict]:
     ]
 
 
-def test_fingerprint(t: dict) -> str:
-    """一个测试的缓存键 = 参与编译/运行的所有文件内容哈希 + 参数。"""
+def _global_defines(args) -> tuple[str, ...]:
+    """全局架构宏 (来自命令行开关)。verify 与 fingerprint 必须用同一份口径。"""
+    defs = []
+    if args.imem_reg_read:
+        defs.append("IMEM_REG_READ")
+    if args.load_reg:
+        defs.append("LOAD_RESULT_REG")
+    if args.gshare:
+        defs.append("BTB_GSHARE")
+    if args.ras:
+        defs.append("RAS_EN")
+    if args.gemm:
+        defs.append("GEMM_EN")
+    if args.a_ext:
+        defs.append("A_EN")
+    return tuple(defs)
+
+
+def test_fingerprint(t: dict, defines: tuple[str, ...] = ()) -> str:
+    """一个测试的缓存键 = 参与编译/运行的所有文件内容哈希 + 参数。
+
+    【defines 必须进指纹】曾经漏掉它, 于是 `verify` 跑完组合读配置后再跑
+    `verify --imem_reg_read`, 所有测试都被判为"未受影响"而 SKIP —— 明明换了
+    一套架构宏、跑的根本不是同一份设计。这类"缓存掩盖了配置差异"的坑与
+    PITFALLS R17 (宏没传到 ModelSim) 是同一族: 两边跑的不是同一个东西。
+    """
     h = hashlib.sha256()
     files = t["rtl"] if isinstance(t["rtl"], list) else canonical_rtl()
     for f in files + [t["tb"]]:
@@ -808,6 +832,7 @@ def test_fingerprint(t: dict) -> str:
             h.update(sha256_file(p).encode() if os.path.exists(p) else b"MISSING")
     h.update(json.dumps({k: t.get(k) for k in ("plus", "max_cycles")}, sort_keys=True).encode())
     h.update(("gcc=" + gcc_version()).encode())
+    h.update(("defines=" + ",".join(defines)).encode())
     return h.hexdigest()[:32]
 
 
@@ -896,7 +921,7 @@ def cmd_verify(args) -> int:
             results.append((name, "BLOCK", 0, "缺文件 " + ",".join(missing)))
             continue
 
-        fp = test_fingerprint(t)
+        fp = test_fingerprint(t, _global_defines(args) + tuple(t.get("defines", ())))
         prev = state.get(name, {})
         # XFAIL 类的测试永远重跑: 它记录的是"还没做"的状态, 一旦 RTL 接线完成就该
         # 从 XFAIL 翻成 XPASS, 缓存命中会把那个翻转发掩盖掉。
@@ -914,25 +939,7 @@ def cmd_verify(args) -> int:
         # (见 PITFALLS R17), 宏从未在仿真生效, 所以零代价是假的。
         # 修好后实测: IMEM_REG_READ / LOAD_RESULT_REG 单独开会 timeout;
         # BTB_GSHARE 能跑但慢 6%。要用请显式加 --gshare / --reg-read / --load-reg。
-        defs = []
-        if args.imem_reg_read:
-            defs.append("IMEM_REG_READ")
-        if args.load_reg:
-            defs.append("LOAD_RESULT_REG")
-        if args.gshare:
-            defs.append("BTB_GSHARE")
-        if args.ras:
-            # 返回地址栈。实测有效但不划算 (CoreMark/MHz +0.38% 换 fmax -2.8%),
-            # 故默认关闭 —— 见 results/p4-ras.md
-            defs.append("RAS_EN")
-        if args.gemm:
-            # GEMM 加速单元。默认关闭 —— 实测打开会让 FF +916%、CoreMark/LUTs -60%,
-            # 且功能还没做对 (见 results/p5-ai-accelerator.md)
-            defs.append("GEMM_EN")
-        if args.a_ext:
-            # RV32A 原子指令译码。默认关闭 —— 实测纯代价 (fmax 61.7->61.2 MHz),
-            # 见 results/p6-a-extension.md
-            defs.append("A_EN")
+        defs = list(_global_defines(args))
         # 【每条测试可以自带 defines】例如 tb_core_amo 必须定义 A_EN, 否则 0x2F
         # 译码为 illegal、程序第一步就掉陷阱 —— 它不该依赖全局开关, 也不该因为
         # 别人跑了 --a-ext 与否而改变结果。这里做并集, 去重保持稳定顺序。
