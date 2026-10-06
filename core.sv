@@ -100,6 +100,7 @@ module core
   // EX
   fwd_sel_e    fwd_a, fwd_b;
   logic [31:0] ex_rs1, ex_rs2, ex_a, ex_b, ex_alu_out, ex_pc_target, ex_sum;
+  logic [31:0] ex_amo_addr;      // RV32A: AMO 的访存地址 (rs1 + imm), 与算子解耦
   // RV32M
   logic [31:0] ex_result, md_result;
   logic        md_busy, is_muldiv;
@@ -391,6 +392,17 @@ module core
     ex_a = (id_ex_ctrl.alu_a_src == ALU_A_PC)   ? id_ex_pc :
            (id_ex_ctrl.alu_a_src == ALU_A_ZERO) ? 32'd0 : ex_rs1;
     ex_b = (id_ex_ctrl.alu_b_src == ALU_B_IMM)  ? id_ex_imm : ex_rs2;
+    // ---- RV32A: AMO 的**访存地址**必须单独算 ----
+    // 【为什么不能用 ex_alu_out】AMO 的 alu_op 是 ALU_AMO_* —— 那是用来算
+    // "应写回内存的新值"(old op rs2) 的,**不是地址**。而 ex_result 在
+    // `is_muldiv/is_csr` 之外直接取 ex_alu_out, 于是 LSU 拿到的"地址"
+    // 其实是 AMO 的算子结果 (old + imm)。
+    // 实测症状: 地址恒差一个 +4 (当时 imm=4 被当成加法项)。
+    //
+    // 正确语义: AMO 是 I 型, 访存地址 = rs1 + imm[11:0] (AMO 的 imm 恒为 0,
+    // 所以结果就等于 rs1)。这里用一个**独立加法器**算地址, 与算子计算解耦 ——
+    // 这正是本项目对跳转目标做过的事 (P3 的"独立加法器"), 有先例可循。
+    ex_amo_addr = ex_rs1 + id_ex_imm;
   end
 
   alu #(.XLEN(XLEN)) u_alu (
@@ -425,6 +437,7 @@ module core
   // ex_result —— 所以只要在这里加一路, CSR 读值就自然到了 WB 段。
   assign ex_result = is_muldiv ? md_result
                    : is_csr    ? csr_rdata
+                   : id_ex_ctrl.amo_en ? ex_amo_addr   // AMO: 地址 = rs1+imm
                    :             ex_alu_out;
 
   branch_unit #(.XLEN(XLEN)) u_branch (
