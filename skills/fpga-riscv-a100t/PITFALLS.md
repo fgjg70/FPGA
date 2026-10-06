@@ -337,6 +337,55 @@ bad = [i for i, x in enumerate(open(p, 'rb').read()) if x > 127]
 配合 R20 的新鲜度门限 (板子掉线时 `hw` 会拒绝给结论并返回非 0),
 **"板子不在位"这件事现在有两个地方会主动报出来**, 不再依赖我的自觉。
 
+### R23. 症状是"读回 0", 真因是**地址算错** —— 别一头扎进读通路 ✅绕了三轮
+**做 A 扩展时实测**: AMO 读回的内存值恒为 0。我连续三轮 (Round 25/26/27) 去查
+**读通路** —— 查 `dmem_rdata`、查译码 mux、查 `sel_dmem_r` 寄存器、查 dmem 写端口
+—— 每轮都"更接近", 每轮都不对。
+
+**真因与读通路毫无关系**: `control_unit.sv` 的 `OPC_AMO` 分支**只设了 `alu_op`,
+没设 `alu_a_src`/`alu_b_src`/`imm_fmt`**。而 `ctrl = '0` 的默认值恰好是
+
+| 字段 | 默认 | 对 AMO |
+|---|---|---|
+| `alu_a_src` | `ALU_A_RS1`(0) | ✅ |
+| `alu_b_src` | **`ALU_B_RS2`(0)** | ❌ b 取 rs2 而非立即数 |
+| `imm_fmt` | `IMM_I`(0) | 值对但用不上 |
+
+于是地址被算成 `rs1 + rs2`。实测: `sw` 写 `0x90003100`, 同一 `t0` 上的 AMO 却访问
+`0x90003114` —— **差的正是当时 `t1` 的值 `0x14`**。AMO 读的是一个**从没被写过的字**,
+当然是 0。
+
+**教训 (可复用)**: **"读回 0"时, 先确认"读的地址对不对", 再怀疑读通路。**
+一行打印 `addr` 就能省三轮。
+
+### R24. 一条指令同时要"算子"和"地址"时, **不能让两者复用同一个 ALU 输出** ✅第二次踩
+`core.sv` 里:
+```systemverilog
+ex_result = is_muldiv ? md_result : is_csr ? csr_rdata : ex_alu_out;
+```
+而 AMO 的 `alu_op` 是 `ALU_AMO_*` —— 那是算 **"应写回内存的新值"** (`old op rs2`)
+的, **不是地址**。于是 LSU 拿到的"地址"其实是**算子结果** (`old + imm`),
+地址恒差一个 `+4` (当时 `imm=4` 被当加法项加进去)。
+
+**修法**: 给 AMO 一个**独立的地址加法器**
+```systemverilog
+ex_amo_addr = ex_rs1 + id_ex_imm;                       // I 型: rs1 + imm
+assign ex_result = ... : id_ex_ctrl.amo_en ? ex_amo_addr : ex_alu_out;
+```
+
+> **这与 R?? (P3 的"跳转目标独立加法器") 是同一个坑的第二次出现** ——
+> 见 `results/p3-fmax.md`。**只要一条指令的 ALU 输出被复用于两个语义
+> (算子 / 地址), 就一定会错**。加新指令时先问一句:
+> "这条指令的 `alu_op` 算的是地址, 还是算子? 如果两者都要, 就必须分开通路。"
+
+### R25. 隐式 1 位网络: `assign` 一个未声明名字 ✅
+`assign amo_newdata = (cond) ? amo_new_comb : 32'd0;` 在 `amo_newdata` **未声明**时,
+ModelSim 把它当成**隐式 1 位网络**, 接到 32 位端口上只驱动了 1 位 → 其余位是 `Z`
+→ **AMO 把 `Z` 写进内存**。唯一提示是
+`vopt-2241 Connection width does not match width of port`。
+**修法**: 在例化**之前**显式声明, 宽度写全。
+(与 R8 同类: 未声明的名字被隐式推断, 静默出错 —— 但这次的提示更隐蔽, 是"宽度"不是"未定义"。)
+
 ---
 
 ## 二、SystemVerilog / Verilog 语法
