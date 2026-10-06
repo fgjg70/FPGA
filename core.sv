@@ -603,8 +603,10 @@ module core
   // 当成**隐式 1 位网络**, 接到 32 位端口上只驱动了 1 位 -> 其余位是 Z ->
   // AMO 把 Z 写进内存 (vopt-2241 "connection width does not match" 是唯一提示)。
   // 与 PITFALLS R8 同类: 未声明的名字被隐式推断, 静默出错。
-  logic [31:0] amo_newdata;    // 送给 LSU 的"应写回值"
-  logic [31:0] amo_new_comb;   // AMO 专用 ALU 的组合输出
+  logic [31:0] amo_newdata;    // 送给 LSU 的"应写回值" (A_EN 关时恒 0)
+`ifdef A_EN
+  logic [31:0] amo_new_comb;   // AMO 专用 ALU 的组合输出 (仅 A_EN 时有)
+`endif
 
   load_store_unit u_lsu (
     .clk          (clk),
@@ -646,8 +648,8 @@ module core
   // rs2 需要随流水送到 MEM 段: 用 ex_mem_reg 之外的一个简单寄存器锁存
   // (id_ex_rs2 在 ID/EX 有效, 到 MEM 段就是上一条了, 所以必须寄存)。
   // ------------------------------------------------------------------------
+`ifdef A_EN
   logic [31:0] amo_rs2;
-  // (amo_new_comb / amo_newdata 已在 MEM 段开头声明 —— 必须在例化之前)
 
   always_ff @(posedge clk or posedge rst) begin
     if (rst) amo_rs2 <= 32'd0;
@@ -676,6 +678,13 @@ module core
   assign amo_newdata = (amo_write_phase &&
                         ex_mem_ctrl.amo_op != AMO_LR &&
                         ex_mem_ctrl.amo_op != AMO_SC) ? amo_new_comb : 32'd0;
+`else
+  // 【A_EN 关闭时: 整个 AMO 新值计算单元不综合】
+  // 实测: 它虽然休眠却仍占面积与路径 (fmax 61.2 -> 59.1 MHz, LUT +14)。
+  // 既然默认不开 A 扩展, 就没有理由为它付这个代价 —— 用 `ifdef 让综合器
+  // 把它整体裁掉 (与 GEMM_EN/RAS_EN/BTB_GSHARE 同样的做法)。
+  assign amo_newdata = 32'd0;
+`endif
 
 
   // ------------------------------------------------------------------------
