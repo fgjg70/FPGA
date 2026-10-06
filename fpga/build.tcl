@@ -111,7 +111,14 @@ if {[info exists ::env(A_EN)] && $::env(A_EN) ne ""} {
 synth_design -top top_a100t -part $part -verilog_define "IMEM_INIT_FILE=\"$imem\" DMEM_INIT_FILE=\"$dmem\" $IMEM_DEFS"
 puts "BUILD_PROG=$PROG"
 opt_design
-place_design -directive ExtraTimingOpt
+# Place directive is overridable so the physical-optimization experiments
+# (todo #3) can be reproduced from the workflow instead of hand-run Vivado.
+set PLACE_DIR "ExtraTimingOpt"
+if {[info exists ::env(PLACE_DIRECTIVE)] && $::env(PLACE_DIRECTIVE) ne ""} {
+  set PLACE_DIR $::env(PLACE_DIRECTIVE)
+}
+puts "BUILD_PLACE_DIRECTIVE=$PLACE_DIR"
+place_design -directive $PLACE_DIR
 phys_opt_design -directive AggressiveExplore
 route_design -directive AggressiveExplore
 phys_opt_design -directive AggressiveExplore

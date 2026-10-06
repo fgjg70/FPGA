@@ -39,32 +39,43 @@ cmd /c fpga\jtag_probe.bat                       REM 改 RTL 前先确认板子�
 上板：`ila_ctrl=0x42`、CRC 判定=1、tick **508,155,404**、10.16 s、CoreMark/MHz 2.3615。
 回归：**PASS 10 | XFAIL 1**（`tb_units` **243** 项检查点；`tb_core_amo` 为预期失败）。
 
-### ⛔ 四条"不要再走"的已封路（都留了数据，别重复踩）
+### ⛔ 已封路（都留了数据，别重复踩）
 
-1. **`IMEM_REG_READ`（BRAM 化）** —— **相位配对已打通**（`--imem_reg_read` 从
-   "全部 timeout" 变成 **3 PASS 且不再 timeout**），但**剩下一个结构性约束**：
-   寄存读把"取指地址 ↔ 取回指令"变成跨周期回路，一个寄存器无法同时满足
-   "跟 pc 走"与"重定向那拍立刻改口"。三版实测排序：延迟副本+释放气泡 **3/11** >
-   统一 FAR **1/11** > 前四轮补偿 mux **0/11**。
-   **结论**：要么多一个取指气泡（重定向惩罚 2→3 拍，代价约 4.9%），要么把取指口
-   改成"地址寄存器+数据寄存器"两级（= 改流水线级数，本项目约束不允许）。
-   **完整证据链 + 三条已被证伪的错路**见 `results/p4-macro-failure.md` **5.1 节**。
-   （`LOAD_RESULT_REG` 单独开也曾 timeout —— 它要在 5.1 对齐之后再动。）
-2. **Cache（2 路组相联 + 突发）** —— **架构性无收益**：`dmem` 已是单周期命中的
-   片上 BRAM，且关键路径的**起点就是 dmem 的 BRAM 输出**。（`imem` 当前是组合
-   读的 LUT ROM，见第 1 条。）见 `results/p7-cache-analysis.md`。
-3. **RAS / gshare** —— 实测净亏已拒绝（RAS 机制有效但栈顶 mux 落在最紧路径上；
+1. ~~**`IMEM_REG_READ`（BRAM 化）**~~ ✅ **2026-10-06 打通** —— 见下方"可选配置"。
+2. **`LOAD_RESULT_REG`** —— 实测**更差**，已否决。见 `results/p4-macro-failure.md` 5.2。
+3. **Cache（2 路组相联 + 突发）** —— **架构性无收益**：`dmem` 已是单周期命中的
+   片上 BRAM，且关键路径的**起点就是 dmem 的 BRAM 输出**。见 `results/p7-cache-analysis.md`。
+4. **RAS / gshare** —— 实测净亏已拒绝（RAS 机制有效但栈顶 mux 落在最紧路径上；
    gshare 两个变体都输给纯局部 Smith）。见 `results/p4-ras.md`、`results/p4-gshare.md`。
-4. **GEMM 加速单元** —— 机制验证过（42.59× 计算加速）但缓冲落成**触发器阵列**
+5. **GEMM 加速单元** —— 机制验证过（42.59× 计算加速）但缓冲落成**触发器阵列**
    （FF 1387→14097，+916%），且 C 读回未修完 → 已 `GEMM_EN` 门控默认关闭。
    见 `results/p5-ai-accelerator.md`。
+
+### 🔀 两个可选架构配置（都通过全量回归，ticks 逐位一致）
+
+`IMEM_REG_READ` 打通后，本核有**两个都正确**的综合配置，按评分口径取舍：
+
+| 指标 | **评分版（默认，已上板验证）** | `--imem-reg-read`（BRAM imem） |
+|---|---|---|
+| CoreMark/MHz | **2.3611** | 2.3611（逐位一致）|
+| fmax | **61.2 MHz** | 58.9 MHz（`WLDrivenBlockPlacement`）|
+| LUT | 4079 | **2820** |
+| BRAM | 4 | 8（imem 落进 RAMB36 ×4）|
+| CoreMark/LUTs | 5.788e-4 | **8.373e-4** |
+| 绝对吞吐 | **144.4** | 139.1 |
+
+**取舍**：BRAM 版用 **−3.8% fmax** 换 **−30.8% LUT / +44.6% CoreMark/LUTs**。
+两者功能等价（CoreMark ticks 都是 423527），**BRAM 版尚未上板验证**。
+完整推导与五轮失败史见 `results/p4-macro-failure.md` **5.1 节**。
 
 ### 剩下的工作（设计与铺垫都已就绪）
 
 | 工作 | 现状 | 从哪接 |
 |---|---|---|
-| **A 扩展的多周期"读-改-写"** | **基本打通**：`amo_diag`(amoadd) / `amo_diag2`(amoswap) **PASS**；读旧值 ✅ / `rd`=旧值 ✅ / 三个算子 ✅ / LSU 写信号 ✅ / `amo_mode_r` ✅。**只剩 `amoor` 组**（`amo.S` 第 3 组，`tohost=4`）| `results/p6-a-extension.md` **第 5.11 节**（含下一步精确落点）|
-| **GEMM 的 C 读回 + 缓冲改 BRAM** | 寻址/取数/写回计数已验证正确；C 只有前 16 字对 | `results/p5-ai-accelerator.md` 第 0.2 节（含"改用 2×2 逐拍看"的建议）|
+| **A 扩展的多周期"读-改-写"** | **基本打通**：`amo_diag`(amoadd) / `amo_diag2`(amoswap) **PASS**；读旧值 ✅ / `rd`=旧值 ✅ / 三个算子 ✅ / LSU 写信号 ✅ / `amo_mode_r` ✅。**只剩 `amoor` 组**（`amo.S` 第 3 组，`tohost=4`）| `results/p6-a-extension.md` **第 5.12 节**（真根因已锁定：取指前端停顿失步，含三个候选修法）|
+| **GEMM 的 C 读回 + 缓冲改 BRAM** | 寻址/取数/写回计数已验证正确；C 只有前 16 字对 | `results/p5-ai-accelerator.md` 第 0.2 节 |
+| **取指前端停顿失步（新，正确性）** | **根因已锁定未修**：AMO 多周期停顿期间 pc 与 IF/ID 失步，释放那拍吞掉紧随的指令。**不只影响 A 扩展** —— 任何多周期停顿路径都可能踩 | `results/p6-a-extension.md` 5.12 节 |
+| **fmax 物理优化（待办 #3）** | 未动。关键路径 route 占 **67%**，`pc_sel` 扇出 **60**；已试 3 种 `place_design` 策略（最佳 `WLDrivenBlockPlacement`，仅 +0.5 MHz）| 需改逻辑（如把 `pc_sel` 的比较预计算成 1 位标志）而非只调布局 |
 | **`IMEM_REG_READ` 收尾（可选，收益大但有硬约束）** | 相位配对已打通（3 PASS），剩一处停顿释放气泡未对齐；**但要彻底解决必须改流水线级数或吃 4.9% 重定向惩罚** —— 见上文"已封路"第 1 条 | `results/p4-macro-failure.md` 5.1 节（含三条已证伪的错路）|
 
 #### A 扩展：唯一剩下的卡点与下一步（已收得很窄）

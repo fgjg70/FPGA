@@ -429,6 +429,29 @@ ModelSim 把它当成**隐式 1 位网络**, 接到 32 位端口上只驱动了 
 **修法/纪律**: 上板前先确认 **bit 文件本身存在**(`Test-Path`), 再谈新鲜度。
 (与 R20 同类: 验证工具不能把"上一次的产物"当成"这一次的结论"。)
 
+### R29. **PowerShell 5.1 的 `Get-Content | Set-Content` 会把 UTF-8 文件写成乱码** ✅毁过一次文件
+`Get-Content` 在没有 BOM 时按**系统 ANSI 代码页(GBK)** 解码 —— 于是读进来的中文
+已经是乱码, `Set-Content -Encoding UTF8` 再把乱码**按 UTF-8 写回**, 双重编码,
+中文**永久损坏**。实测: 用这条管道改 `results/p4-macro-failure.md` 的一节,
+整篇中文变成 `涓€鍙ヨ瘽绛旀` 这类乱码, 只能用 `git checkout --` 恢复。
+
+**修法**:
+- 改文本一律用 **edit / write 工具**(它们按 UTF-8 正确处理), **不要**用 PS 往返。
+- 需要脚本化改文件时, 把 Python 脚本**写成文件**再执行; Python 显式指定
+  `io.open(..., encoding='utf-8')`。**不要**用 `python -c "..."` 从 PowerShell
+  传中文/反引号进去 —— PS 会把反引号当转义符吃掉, 中文也会被代码页破坏。
+- 出事后 `git checkout -- <file>` 是唯一可靠的恢复手段 (前提是上一次提交是好的)。
+
+**判据**: 用 `read` 工具看文件, 若中文正常而 `Get-Content` 显示乱码, 那是**显示**
+问题; 若 `read` 工具也乱码, 文件**真的坏了**。
+
+### R30. 取指地址要接"**下一拍的 pc**", 不是当前 pc (IMEM 寄存读的配对口径)
+见 `results/p4-macro-failure.md` 5.1。一句话:
+`imem_addr = pc_next(组合推出)` ⇒ `imem_rdata(N) == mem[pc(N)]`,
+与组合读**逐位同口径**, IF/ID 一行都不用改, 重定向代价仍 2 拍。
+配套必须**复位后冻结取指一拍**, 否则 `PC_RESET` 处第一条指令从未进过 IMEM。
+前五轮的错法(延迟副本 + 补偿 mux / 统一 FAR)全部记录在案, 不要再走。
+
 ---
 
 ## 二、SystemVerilog / Verilog 语法

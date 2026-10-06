@@ -1446,9 +1446,12 @@ def cmd_synth(args) -> int:
             # 默认**一个都不设** = 三宏全关 = 上板验证过的配置。
             benv = clean_env()
             if args.imem_reg_read:
-                # build.tcl 检测到它时**直接报错退出** —— 该配置需重排取指流水,
-                # 当前会让 pc_plus4/跳转目标整体偏移。见 results/p4-macro-failure.md
+                # 寄存读 -> imem 可推断为 RAMB36, 省约 1228 LUT (全核 31%)。
+                # 2026-10-06 打通: 取指地址接组合推出的 pc_next, 配对口径与组合读
+                # 完全一致 -> 回归 PASS 10 | XFAIL 1 且 CoreMark ticks 逐位不变。
                 benv["IMEM_REG_READ"] = "1"
+            if args.place_directive:
+                benv["PLACE_DIRECTIVE"] = args.place_directive
             if args.load_reg:
                 benv["LOAD_REG"] = "1"
             if args.gshare:
@@ -2024,6 +2027,8 @@ def main() -> int:
                    help="启用 RV32A 原子指令译码 (A_EN); 默认关闭 (实测纯代价, 且多周期未实现)")
     p.add_argument("--timeout", type=int, default=3600, help="Vivado 超时秒数")
     p.add_argument("--lock-timeout", type=int, default=1800, help="等待构建锁的秒数")
+    p.add_argument("--place-directive", default=None,
+                   help="覆盖 place_design 策略 (默认 ExtraTimingOpt); 用于待办 #3 的物理优化实验")
     p.set_defaults(func=cmd_synth)
 
     args = ap.parse_args()
