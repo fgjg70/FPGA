@@ -98,3 +98,70 @@ assign ex_pc_target = (id_ex_ctrl.pc_sel == PC_JR)
 **6.5%** → 加一倍约 **+30,645 周期 ≈ +6.5% 时间**。fmax 需至少涨 **6.9%**
 （64.4 → 68.8 MHz）才刚打平；涨到 78.4 则是净赚约 +15%。
 **所以做之前要先用 `profile` 的 cost_if_load_use_2cyc_pct 把账算出来，不能凭感觉。**
+
+---
+
+# P3 · fmax 实验 B（2026-10-06）— BRAM imem 带来的新瓶颈：布局策略与 `cf` 预计算
+
+## 背景
+
+`IMEM_REG_READ` BRAM 化打通后（见 `p4-macro-failure.md` 5.1），关键路径的**终点
+从 `u_pc/pc_reg[7]/D` 变成了 `u_imem/.../ADDRARDADDR[12]`**：
+
+```
+Source:      u_core/u_dmem/mem_reg_1/CLKBWRCLK         (RAMB36_X1Y5)
+Destination: u_core/u_imem/rdata_reg_0/ADDRARDADDR[12] (RAMB36_X2Y4)
+Data Path:   16.598ns (logic 5.425 = 32.7%, route 11.173 = 67.3%), 19 级
+基线(comb):  16.045ns (logic 5.542 = 34.5%, route 10.503 = 65.5%)
+```
+
+即同一条 `dmem → LSU 提取 → 前递 → 分支比较 → pred_ok → pc_src → pc_next mux`
+的链，现在**还要驱动 imem 的 BRAM 地址脚**。逻辑级数没变、逻辑反而略降，
+**涨的全是布线**。路径上最贵的一跳是 `id_ex_ctrl.pc_sel`——**扇出 60，单跳 0.947ns**。
+
+## 实验 B1：`place_design` 策略（每项实测，均 BUILD_OK、ticks 不变）
+
+| 策略 | fmax | WNS | LUT | 适用配置 |
+|---|---|---|---|---|
+| `ExtraTimingOpt`（默认） | 58.4 | 2.879 | 2821 | regread |
+| **`WLDrivenBlockPlacement`** | **58.9** | 3.022 | 2820 | **regread（最佳）** |
+| `AltSpreadLogic_high` | 58.4 | 2.879 | 2821 | regread |
+
+**只收 +0.5 MHz** → 光调布局不够，必须动逻辑。
+
+## 实验 B2：控制流类型预计算（`cf`）
+
+把 EX 段 6 处 `id_ex_ctrl.pc_sel == CONST` 的比较**移到 ID 段**算好，
+寄存成 3 位 1-hot（`cf[0]`=条件分支 `cf[1]`=JAL `cf[2]`=JALR）带下来，
+使 EX 段不再比较 `pc_sel`、`pc_sel` 扇出从 60 降下来。
+
+| 配置 | 策略 | `cf` | fmax | LUT | CM/LUTs | 吞吐 |
+|---|---|---|---|---|---|---|
+| comb | ExtraTimingOpt | 无 | **61.2** | 4079 | 5.788e-4 | **144.4** |
+| comb | ExtraTimingOpt | 有 | 60.5 | 4089 | 5.774e-4 | 142.8 |
+| comb | WLDriven | 有 | 59.0 | 4088 | 5.776e-4 | 139.3 |
+| regread | WLDriven | 无 | 58.9 | 2820 | 8.373e-4 | 139.1 |
+| regread | WLDriven | **有** | **59.5** | 2820 | 8.373e-4 | **140.5** |
+| regread | ExtraTimingOpt | 有 | 57.6 | 2819 | 8.376e-4 | 136.1 |
+
+**结论：`cf` 帮 regread（+0.6 MHz）却拖累默认配置（−0.7 MHz）→ 按"
+默认配置不进反退则回退"的纪律，已回退 `cf`。**
+两条配置对布局策略的偏好正好相反（comb 爱 `ExtraTimingOpt`，regread 爱
+`WLDrivenBlockPlacement`），说明差距已在**布局噪声量级**，继续调收益很小。
+
+## 下一步若还要提 fmax（未做，留档）
+
+按路径实测，剩下可动的只有**逻辑**，且都在同一条"load 结果 → 分支决策 → 取指地址"
+的链上：
+
+1. **`pred_ok` 的目标比较**：现在比较的是 mux 后的 `actual_target`。因为
+   `!actual_taken ||` 已经门控，`actual_taken=1` 时 `actual_target == ex_pc_target`，
+   所以可以直接比较 `ex_pc_target`，把一级 32 位 mux 移出比较路径。
+2. **`pc_sel` 扇出**（已试 `cf`，与布局相互作用，见上表）。
+3. **BTB 预测寄存一级**（`pc <= pred_target_r`）：能把 BTB 的组合查表移出
+   `pc` 路径 —— 但会改变预测与指令的相位，属结构性改动，需重新验证配对
+   （`p4-macro-failure.md` 5.1 的教训：取指相位一动就要逐拍实测，不能推理）。
+
+> **判据**：以上任何一项都要**同时**报 comb 与 regread 的四项指标 ——
+> 实测证明两者对同一改动的反应可以相反，只看一个配置会得出错误结论。
+
