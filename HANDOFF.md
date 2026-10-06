@@ -11,19 +11,66 @@
 
 ## 0. 一句话现状
 
-**RV32IM 五级流水线 CPU 已在真实板卡上跑通 CoreMark v1.0（1200 次迭代 / 10.16 秒 / CRC 逐位正确），
-三项评分指标齐全；赛题的基础任务全部完成。异常/中断（P1）已于本轮接入 core 并通过全部回归。**
+**RV32IM 五级流水线 CPU 已在真实板卡上跑通 CoreMark v1.0（1200 次迭代 / 10.16 秒 /
+CRC 逐位匹配官方参考值），三项评分指标与绝对吞吐齐备，赛题基础任务全部完成，
+动态分支预测与完整异常/中断两项高阶任务完成，应用场景（神经网络 GEMM）已落地。
+当前 RTL 已上板验证（2026-10-06 10:12）。**
 
-仓库：`D:\USER\Desktop\FPGA\FPGA`（git，工作区干净，HEAD = `9083059`）
+仓库：`D:\USER\Desktop\FPGA\FPGA`（git，工作区干净）
 
-**上手第一件事（不要跳过，2 秒）**：
+**上手第一件事（不要跳过）**：
 ```bat
 cmd /c tools\doctor.bat                          REM 环境自检 + R1 漂移检测
-python tools\fpga_workflow.py verify             REM 增量回归, 期望 7 PASS
+python tools\fpga_workflow.py verify             REM 回归, 期望 9 PASS
+python tools\fpga_workflow.py check              REM 漂移/新鲜度自检
+cmd /c fpga\jtag_probe.bat                       REM 改 RTL 前先确认板子在位!
 ```
-工具集说明见 `tools/README.md`；本轮的教训已补进 `skills/fpga-riscv-a100t/PITFALLS.md`
-（新增 R4/R5 与"一·五 逐拍诊断"一节）。
 
+### 当前实测指标（评分版 = 四个架构宏全关）
+
+| 指标 | 基线 | **当前（上板验证）** |
+|---|---|---|
+| CoreMark/MHz | 0.8263 | **2.3611**（+185.8%）|
+| fmax | 78.4 MHz | **61.7 MHz**（−21.3%）|
+| CoreMark/LUTs | 2.361e-4 | **5.790e-4**（+145.2%）|
+| 绝对吞吐 | 64.8 | **145.6**（+124.7%）|
+| 资源 | — | LUT **4078** / FF 1377 / BRAM 4 / DSP 8 |
+
+上板：`ila_ctrl=0x42`、CRC 判定=1、tick **508,155,404**、10.16 s、CoreMark/MHz 2.3615。
+回归：**9 项全 PASS**（`tb_units` **243** 项检查点）。
+
+### ⛔ 四条"不要再走"的已封路（都留了数据，别重复踩）
+
+1. **`IMEM_REG_READ` / `LOAD_RESULT_REG`** —— 四轮尝试全部失败。宏修好后实测
+   两者单独开启**都仿真 timeout**（"零代价"是宏传递 bug 造成的假象）。
+   要做得先做**取指流水重排**。见 `results/p4-macro-failure.md` 5.1。
+2. **Cache（2 路组相联 + 突发）** —— **架构性无收益**：`imem`/`dmem` 已是
+   单周期命中的片上 BRAM，且关键路径的**起点就是 dmem 的 BRAM 输出**。
+   见 `results/p7-cache-analysis.md`。
+3. **RAS / gshare** —— 实测净亏已拒绝（RAS 机制有效但栈顶 mux 落在最紧路径上；
+   gshare 两个变体都输给纯局部 Smith）。见 `results/p4-ras.md`、`results/p4-gshare.md`。
+4. **GEMM 加速单元** —— 机制验证过（42.59× 计算加速）但缓冲落成**触发器阵列**
+   （FF 1387→14097，+916%），且 C 读回未修完 → 已 `GEMM_EN` 门控默认关闭。
+   见 `results/p5-ai-accelerator.md`。
+
+### 唯一剩下的两件（设计与铺垫都已就绪）
+
+| 工作 | 现状 | 从哪接 |
+|---|---|---|
+| **A 扩展的多周期"读-改-写"** | 工具链/编码表/包定义/**ALU 数据通路**/**译码**均完成并有单元检查；缺多周期控制，故**当前执行不了原子指令** | `results/p6-a-extension.md` 第 5 节（含三条路线与推荐方案、集成难点定位）|
+| **GEMM 的 C 读回 + 缓冲改 BRAM** | 寻址/取数/写回计数已验证正确；C 只有前 16 字对 | `results/p5-ai-accelerator.md` 第 0.2 节（含"改用 2×2 逐拍看"的建议）|
+
+**A 扩展多周期控制的具体落点**（已追到底，可直接开工）：
+`core.sv:606-612` 里 `dmem_addr`/`dmem_wdata`/`dmem_we` 都是 LSU 的直连线
+（`dmem_we_g` 在 647 行进 dmem），要做的是加一个 3 相 FSM
+（`AMO_READ -> AMO_WAIT -> AMO_WRITE`）+ 地址锁存寄存器，把这三个信号 mux 过来，
+再给 hazard_unit 加 `amo_busy`（照抄 `muldiv` 的 `ex_busy`/`hold_mem` 模式）。
+校验用 `tools/amo_vectors.py` 生成的 **108 条黄金向量**
+（`sim/prog/amo_vectors.hex`，已与已验证的 RTL ALU 双向交叉验证 13/13 一致）。
+
+> **纪律提醒**：板子掉线就**立刻停下报告**，不要自己继续推（用户明确要求）。
+> `hw` 子命令有新鲜度门限，板子不在位时会拒绝给结论并返回非 0。
+`
 ---
 
 ## 1. 项目定位
@@ -867,4 +914,8 @@ cmd /c fpga\build_ila.bat    REM 带 ILA 调试版 (工程模式, 慢; 产物在
 `PITFALLS` 本轮新增：R4（handler 破坏自己要用的寄存器）、R5（调试标志与事件不同流水级）、
 一·五（逐拍诊断: 粘滞标志 + `$fatal` 会让"猜"变成唯一手段）。
 
-git 提交：`e49f801`（原始）→ `97be06f` → `2ca639c` → `9083059`（HEAD）
+git 提交：`e49f801`（原始）→ `97be06f` → `2ca639c` → `9083059` → …（本项目累计 40+ 次提交）
+
+> ⚠️ **上面这张表与本节都是早期轮次的记录**（当时回归 6~7 项）。**当前状态以第 0 节为准**：
+> 回归 **9 PASS**、四项指标 CoreMark/MHz 2.3611 / fmax 61.7 MHz / CoreMark-LUTs 5.790e-4 /
+> 绝对吞吐 145.6，RTL 已上板验证。本节保留是为了记录当时的演进过程。
