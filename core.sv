@@ -693,6 +693,16 @@ module core
   end
   assign dmem_rdata_g = sel_dmem_r ? dmem_rdata : ext_rdata_r;
 
+  // ---- 临时诊断: 把读数据这条链一次打印完 (排查完删掉) ----
+  // 上一次只打到 LSU 侧, 看到 rdata 恒 0 却分不清是"译码丢了"还是"dmem 没输出"。
+  // 这一次把 u_dmem 的输出、译码选择、外部通路一次全打出来, 直接对半砍。
+  always @(posedge clk) begin
+    if (ex_mem_ctrl.amo_en || ex_mem_ctrl.mem_read || ex_mem_ctrl.mem_write)
+      $display("[rd] t=%0t we=%b re=%b addr=%h sel_dmem=%b sel_dmem_r=%b | u_dmem.rdata=%h ext_r=%h dmem_rdata_g=%h",
+               $time, dmem_we, ex_mem_ctrl.mem_read, dmem_addr,
+               sel_dmem, sel_dmem_r, dmem_rdata, ext_rdata_r, dmem_rdata_g);
+  end
+
   // 读选通同样必须送出: 外设的"数据就绪"标志需要软件读一次来清除, 若只给写
   // 选通, 粘滞标志永远清不掉 —— 表现为"第一次轮询正常, 之后每次都立即通过并
   // 读到上一次的数据"(UART RX 实测踩过)。mem_read 只在 load 的 MEM 段有效,
