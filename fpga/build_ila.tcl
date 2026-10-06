@@ -20,13 +20,17 @@ add_files -fileset constrs_1 -norecurse [list "$root/fpga/daVinciPro.xdc"]
 # 【必须给路径加引号】verilog_define 的值会原样展开成宏。不加引号的话
 # `IMEM_INIT_FILE 会展开成裸路径, Vivado 在路径里的 '/' 上报
 # "syntax error near /", 而且报的行号指向 $readmemh 那行, 极难联想去。
-# Architecture macros must be passable here too, otherwise "board-verified"
-# would silently mean "verified WITHOUT the macro" (PITFALLS R18 -- this
-# already happened once and produced a false PASS). Copy build.tcl's env gate.
+# Architecture macro pass-through. imem/dmem both use block RAM in the shipped
+# configuration, so the DEFAULT here (no macro) is already the BRAM build.
+# `IMEM_COMB_READ=1` is the fallback (combinational LUT ROM) for A-B compares.
+# Without this gate "board-verified" could silently mean "verified WITHOUT the
+# macro" (PITFALLS R18 -- that already produced a false PASS once).
 set ARCH_DEFS ""
-if {[info exists ::env(IMEM_REG_READ)] && $::env(IMEM_REG_READ) ne ""} {
-  append ARCH_DEFS " IMEM_REG_READ=1"
-  puts "ILA_BUILD_IMEM_REG_READ=1"
+if {[info exists ::env(IMEM_COMB_READ)] && $::env(IMEM_COMB_READ) ne ""} {
+  append ARCH_DEFS " IMEM_COMB_READ=1"
+  puts "ILA_BUILD_IMEM_COMB_READ=1"
+} else {
+  puts "ILA_BUILD_IMEM_BRAM=1"
 }
 set_property verilog_define "USE_ILA=1 IMEM_INIT_FILE=\"$root/sim/prog/cm_hw.hex\" DMEM_INIT_FILE=\"$root/sim/prog/cm_hw.dmem.hex\"$ARCH_DEFS" [current_fileset]
 

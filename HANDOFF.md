@@ -26,55 +26,47 @@ python tools\fpga_workflow.py check              REM 漂移/新鲜度自检
 cmd /c fpga\jtag_probe.bat                       REM 改 RTL 前先确认板子在位!
 ```
 
-### 当前实测指标（评分版 = 四个架构宏全关）
+### 当前实测指标（交付配置 = **IMEM 与 DMEM 都用 BRAM**）
 
 | 指标 | 基线 | **当前（上板验证）** |
 |---|---|---|
 | CoreMark/MHz | 0.8263 | **2.3611**（+185.8%）|
-| fmax | 78.4 MHz | **61.2 MHz**（−21.9%）|
-| CoreMark/LUTs | 2.361e-4 | **5.788e-4**（+145.1%）|
-| 绝对吞吐 | 64.8 | **144.4**（+122.9%）|
-| 资源 | — | LUT **4079** / FF 1377 / BRAM 4 / DSP 8 |
+| fmax | 78.4 MHz | **58.9 MHz** |
+| CoreMark/LUTs | 2.361e-4 | **8.373e-4**（+254.6%）|
+| 绝对吞吐 | 64.8 | **139.1**（+114.7%）|
+| 资源 | — | LUT **2820** / FF 1345 / **BRAM 8** / DSP 8 |
 
 上板：`ila_ctrl=0x42`、CRC 判定=1、tick **508,155,404**、10.16 s、CoreMark/MHz 2.3615
-（2026-10-06 18:05 复验，含 A 扩展修复后的 RTL —— tick 与修复前**逐位相同**）。
-回归：**PASS 11，无 XFAIL**（`tb_units` **243** 项检查点；A 扩展的 `tb_core_amo` 已打通）。
+（2026-10-06 19:20 复验 BRAM 版 —— tick 与历史各版本**逐位相同**）。
+回归：**PASS 11，无 XFAIL**（`tb_units` **243** 项检查点）。
+
+### 存储策略：**imem 与 dmem 全部走 BRAM**（默认，非可选）
+
+| 存储器 | 实现 | 资源 |
+|---|---|---|
+| `imem` | 寄存读 → 行为级推断 | **RAMB36 ×4** |
+| `dmem` | 寄存读（`always @(posedge clk) rdata <= mem[...]`）| **RAMB36 ×4** |
+
+合计 **8 块 RAMB36**，纯行为级推断、**不例化任何厂商 IP**（为迁移紫光同创保留）。
+
+回退开关：`--imem-comb-read`（仿真）/ `IMEM_COMB_READ=1`（综合）可退回组合读
+的 LUT ROM 做 A-B 对照；**组合读会多吃 1228 LUT（= 全核 31%）**，不是省资源的方向。
+
+> `imem` 的寄存读**零周期代价**：取指地址接**组合推出的下一拍 pc**（`pc_next`），
+> 于是 `imem_rdata(N) == mem[pc(N)]`，与组合读逐位同口径 —— IF/ID 一行都不用改、
+> 重定向代价仍 2 拍、CoreMark ticks 逐位一致。完整五轮失败史见
+> `results/p4-macro-failure.md` **5.1 节**。
 
 ### ⛔ 已封路（都留了数据，别重复踩）
 
-1. ~~**`IMEM_REG_READ`（BRAM 化）**~~ ✅ **2026-10-06 打通** —— 见下方"可选配置"。
-2. **`LOAD_RESULT_REG`** —— 实测**更差**，已否决。见 `results/p4-macro-failure.md` 5.2。
-3. **Cache（2 路组相联 + 突发）** —— **架构性无收益**：`dmem` 已是单周期命中的
-   片上 BRAM，且关键路径的**起点就是 dmem 的 BRAM 输出**。见 `results/p7-cache-analysis.md`。
-4. **RAS / gshare** —— 实测净亏已拒绝（RAS 机制有效但栈顶 mux 落在最紧路径上；
+1. **`LOAD_RESULT_REG`** —— 实测**更差**，已否决。见 `results/p4-macro-failure.md` 5.2。
+2. **Cache（2 路组相联 + 突发）** —— **架构性无收益**：`imem`/`dmem` 都是单周期
+   命中的片上 BRAM。见 `results/p7-cache-analysis.md`。
+3. **RAS / gshare** —— 实测净亏已拒绝（RAS 机制有效但栈顶 mux 落在最紧路径上；
    gshare 两个变体都输给纯局部 Smith）。见 `results/p4-ras.md`、`results/p4-gshare.md`。
-5. **GEMM 加速单元** —— 机制验证过（42.59× 计算加速）但缓冲落成**触发器阵列**
+4. **GEMM 加速单元** —— 机制验证过（42.59× 计算加速）但缓冲落成**触发器阵列**
    （FF 1387→14097，+916%），且 C 读回未修完 → 已 `GEMM_EN` 门控默认关闭。
    见 `results/p5-ai-accelerator.md`。
-
-### 🔀 两个可选架构配置（都通过全量回归，ticks 逐位一致）
-
-`IMEM_REG_READ` 打通后，本核有**两个都正确**的综合配置，按评分口径取舍：
-
-| 指标 | **评分版（默认，已上板验证）** | `--imem-reg-read`（BRAM imem） |
-|---|---|---|
-| CoreMark/MHz | **2.3611** | 2.3611（逐位一致）|
-| fmax | **61.2 MHz** | 58.9 MHz（`WLDrivenBlockPlacement`）|
-| LUT | 4079 | **2820** |
-| BRAM | 4 | 8（imem 落进 RAMB36 ×4）|
-| CoreMark/LUTs | 5.788e-4 | **8.373e-4** |
-| 绝对吞吐 | **144.4** | 139.1 |
-
-**取舍**：BRAM 版用 **−3.8% fmax** 换 **−30.8% LUT / +44.6% CoreMark/LUTs**。
-两者功能等价，且**都已上板验证**：
-
-| | comb（默认） | `--imem-reg-read` |
-|---|---|---|
-| 上板 `ila_ctrl` | 0x42（done+pass） | **0x42** ✅ |
-| 上板 CRC 判定 | bit31=1 | **bit31=1** ✅ |
-| 上板 tick | 508,155,404 | **508,155,404**（逐位相同）|
-
-完整推导与五轮失败史见 `results/p4-macro-failure.md` **5.1 节**。
 上板宏自证：`build_ila.tcl` 会打印 `ILA_BUILD_IMEM_REG_READ=1`（防 R18 假 PASS）。
 
 ### 剩下的工作（设计与铺垫都已就绪）

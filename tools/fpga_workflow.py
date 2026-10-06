@@ -795,10 +795,15 @@ def test_matrix() -> list[dict]:
 
 
 def _global_defines(args) -> tuple[str, ...]:
-    """全局架构宏 (来自命令行开关)。verify 与 fingerprint 必须用同一份口径。"""
+    """全局架构宏 (来自命令行开关)。verify 与 fingerprint 必须用同一份口径。
+
+    【默认 = imem/dmem 都用 BRAM】
+      imem 的寄存读(->RAMB36)是**不定义任何宏**的默认路径; 定义 `IMEM_COMB_READ`
+      才退回组合读(LUT ROM)。所以这里是一个**回退开关**, 不是开关式特性。
+    """
     defs = []
-    if args.imem_reg_read:
-        defs.append("IMEM_REG_READ")
+    if getattr(args, "imem_comb_read", False):
+        defs.append("IMEM_COMB_READ")
     if args.load_reg:
         defs.append("LOAD_RESULT_REG")
     if args.gshare:
@@ -935,11 +940,12 @@ def cmd_verify(args) -> int:
 
         print(f"\n--- {name}: {t['desc']}")
         t0 = time.time()
-        # 【默认三个宏全关】= 上板验证过的配置 (ILA 版 bitstream)。
-        # 三个宏都曾默认为开, 但那是基于无效实验 —— ModelSim 侧宏传递写错
-        # (见 PITFALLS R17), 宏从未在仿真生效, 所以零代价是假的。
-        # 修好后实测: IMEM_REG_READ / LOAD_RESULT_REG 单独开会 timeout;
-        # BTB_GSHARE 能跑但慢 6%。要用请显式加 --gshare / --reg-read / --load-reg。
+        # 【默认配置 = imem/dmem 都用 BRAM】= 上板验证过的配置。
+        # 历史上那些宏曾默认为开, 但那是基于无效实验 —— ModelSim 侧宏传递写错
+        # (见 PITFALLS R17), 宏从未在仿真生效, 所以"零代价"是假的。
+        # 修好后实测: IMEM_REG_READ 已打通并**转为默认**(回归 PASS 11, ticks 逐位一致);
+        # LOAD_RESULT_REG 会 timeout(已否决); BTB_GSHARE 能跑但慢 6%。
+        # 回退 imem 组合读用 --imem_comb_read; 其余用 --gshare / --load_reg / --a-ext。
         defs = list(_global_defines(args))
         # 【每条测试可以自带 defines】例如 tb_core_amo 必须定义 A_EN, 否则 0x2F
         # 译码为 illegal、程序第一步就掉陷阱 —— 它不该依赖全局开关, 也不该因为
@@ -1408,11 +1414,13 @@ def cmd_synth(args) -> int:
         h.update(sha256_file(p).encode())
     h.update(prog.encode())
     # 指纹必须覆盖**所有影响网表的开关**, 否则改开关会命中旧缓存、拿到旧数字。
-    # 注意与 build.tcl 里的默认保持一致 (默认三宏全关 + RAS 关)。
-    h.update(b"regread" if args.imem_reg_read else b"combread")
+    # 注意与 build.tcl 里的默认保持一致: **imem 默认 = 寄存读(BRAM)**, 其余宏关闭。
+    h.update(b"combread" if args.imem_comb_read else b"bramread")
     h.update(b"loadreg" if args.load_reg else b"loadcomb")
     h.update(b"gshare" if args.gshare else b"smith")
     h.update(b"ras" if args.ras else b"noras")
+    h.update(b"aen" if args.a_ext else b"aoff")
+    h.update(b"gemm" if args.gemm else b"gemmoff")
     fp = h.hexdigest()[:32]
 
     cache = os.path.join(CACHE_DIR, "synth-cache.json")
@@ -1446,11 +1454,9 @@ def cmd_synth(args) -> int:
             # 架构宏通过环境变量传给 build.tcl (Tcl 读 $::env)。
             # 默认**一个都不设** = 三宏全关 = 上板验证过的配置。
             benv = clean_env()
-            if args.imem_reg_read:
-                # 寄存读 -> imem 可推断为 RAMB36, 省约 1228 LUT (全核 31%)。
-                # 2026-10-06 打通: 取指地址接组合推出的 pc_next, 配对口径与组合读
-                # 完全一致 -> 回归 PASS 10 | XFAIL 1 且 CoreMark ticks 逐位不变。
-                benv["IMEM_REG_READ"] = "1"
+            if args.imem_comb_read:
+                # [回退] imem 组合读 -> LUT ROM。默认走寄存读 -> RAMB36 (无需设 env)。
+                benv["IMEM_COMB_READ"] = "1"
             if args.place_directive:
                 benv["PLACE_DIRECTIVE"] = args.place_directive
             if args.load_reg:
@@ -1480,7 +1486,9 @@ def cmd_synth(args) -> int:
             #        "A 扩展零代价" —— 我第一眼就差点这么认为)。
             # 所以这里把"宏是否生效"变成**构建后的硬判据**, 不靠人看。
             expect = []
-            if args.imem_reg_read: expect.append("BUILD_IMEM_REG_READ=1")
+            # imem: 默认必须是 BRAM 版(不定义宏的路径); 只有显式回退才是组合读。
+            expect.append("BUILD_IMEM_COMB_READ=1" if args.imem_comb_read
+                          else "BUILD_IMEM_BRAM=1")
             if args.load_reg:      expect.append("BUILD_LOAD_RESULT_REG=1")
             if args.gshare:        expect.append("BUILD_BTB_GSHARE=1")
             if args.ras:           expect.append("BUILD_RAS_EN=1")
@@ -1990,8 +1998,11 @@ def main() -> int:
     p = sub.add_parser("verify", help="ModelSim 增量回归")
     p.add_argument("--only", nargs="*", help="只跑指定测试名")
     p.add_argument("--force", action="store_true", help="忽略缓存全量重跑")
+    p.add_argument("--imem_comb_read", action="store_true",
+                   help="[回退] imem 用组合读 (IMEM_COMB_READ, LUT ROM); "
+                        "默认已是寄存读 -> BRAM, 一般不需要这个开关")
     p.add_argument("--imem_reg_read", action="store_true",
-                   help="取指存储器用寄存读 (IMEM_REG_READ); 默认组合读")
+                   help="[已废弃] imem 寄存读现已是默认行为; 保留仅为兼容旧命令")
     p.add_argument("--load_reg", action="store_true",
                    help="load 结果由 MEM/WB 寄存器给出 (LOAD_RESULT_REG); 默认组合")
     p.add_argument("--gshare", action="store_true",
@@ -2040,11 +2051,14 @@ def main() -> int:
     p.add_argument("--tag", help="记录进 results/coremark.csv 用的标签")
     p.add_argument("--record", action="store_true", help="追加一行到 results/coremark.csv")
     p.add_argument("--force", action="store_true", help="忽略缓存强制重建")
-    # 【注意默认值】四个架构宏默认**全关** —— 与上板验证过的配置一致。
-    # IMEM_REG_READ 已于 2026-10-06 打通 (仿真回归 PASS 10 | XFAIL 1,
-    # 且 CoreMark ticks 与组合读逐位一致)。要用请显式打开并记录四项指标。
+    # 【注意默认值】imem/dmem **都用 BRAM** —— 这是交付配置。
+    # imem 靠"寄存读"落 RAMB36 (不定义任何宏即为默认路径), 组合读只是回退。
+    # 其余宏 (load/gshare/ras/gemm/a) 默认关闭, 与上板验证过的配置一致。
+    p.add_argument("--imem-comb-read", action="store_true",
+                   help="[回退] imem 用组合读 (IMEM_COMB_READ, LUT ROM); "
+                        "默认已是寄存读 -> BRAM")
     p.add_argument("--imem-reg-read", action="store_true",
-                   help="取指存储器用寄存读 (IMEM_REG_READ) -> 可推断 BRAM, 省约 1228 LUT")
+                   help="[已废弃] imem 寄存读现已是默认行为; 保留仅为兼容旧命令")
     p.add_argument("--load-reg", action="store_true",
                    help="load 结果由 MEM/WB 寄存器给出 (LOAD_RESULT_REG); 默认组合")
     p.add_argument("--gshare", action="store_true",
@@ -2052,9 +2066,9 @@ def main() -> int:
     p.add_argument("--ras", action="store_true",
                    help="启用返回地址栈 (RAS_EN); 默认关闭 (实测综合指标净亏)")
     p.add_argument("--gemm", action="store_true",
-                   help="启用 GEMM 加速单元 (GEMM_EN); 默认关闭 (实测面积翻倍且功能未完成)")
+                   help="启用 GEMM 加速单元 (GEMM_EN); 默认关闭 (缓冲落成触发器阵列)")
     p.add_argument("--a-ext", action="store_true",
-                   help="启用 RV32A 原子指令译码 (A_EN); 默认关闭 (实测纯代价, 且多周期未实现)")
+                   help="启用 RV32A 原子指令 + 多周期读-改-写 (A_EN); 默认关闭 (评分零收益)")
     p.add_argument("--timeout", type=int, default=3600, help="Vivado 超时秒数")
     p.add_argument("--lock-timeout", type=int, default=1800, help="等待构建锁的秒数")
     p.add_argument("--place-directive", default=None,

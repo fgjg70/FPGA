@@ -39,40 +39,46 @@ read_verilog -sv [list "D:/USER/Desktop/FPGA/FPGA/rv32_pkg.sv" "D:/USER/Desktop/
 read_xdc "D:/USER/Desktop/FPGA/FPGA/fpga/daVinciPro.xdc"
 
 # ===========================================================================
-# 可选架构宏 —— 【三个默认全部关闭】
+# 架构宏
 # ---------------------------------------------------------------------------
-# 这三个曾被我默认打开过, 那是基于**无效实验**的判断, 现已推翻 (PITFALLS R17):
-#   ModelSim 侧的宏传递写错了 (`vlog +FOO` 而非 `+define+FOO`), 所以
-#   **这些宏在仿真里从来没生效过**; 而 Tcl 侧 (-verilog_define) 是生效的。
-#   于是"综合开了宏、仿真没开宏", 两边跑的不是同一份设计 —— 综合出的数字是真的,
-#   但"仿真 ticks 不变、零代价"是假的, 因为仿真跑的一直是**没开宏**的版本。
+# 【imem/dmem 都用 BRAM —— 这是默认配置, 不是可选项】
+#   imem: 默认寄存读 -> RAMB36 x4 (组合读会摊成 1228 LUT = 全核 31%, 见下)
+#   dmem: `always @(posedge clk) rdata <= mem[...]` -> RAMB36 x4
+#   即上述 RAMB36 x4 + x4 = **8 块**, 这是当前交付配置。
 #
-# 修好宏传递后实测 (verify --only tb_sw_coremark):
+# 【历史: 三个宏曾默认打开是基于无效实验, 已推翻 (PITFALLS R17)】
+#   ModelSim 侧的宏传递写错了 (`vlog +FOO` 而非 `+define+FOO`), 所以
+#   **那些宏在仿真里从来没生效过**; 而 Tcl 侧 (-verilog_define) 是生效的。
+#   于是"综合开了宏、仿真没开宏", 两边跑的不是同一份设计。
+#
+# 修好宏传递后实测:
+#   IMEM_REG_READ   2026-10-06 **已打通并转为默认**: 全量回归 PASS 11,
+#                   CoreMark ticks 与组合读**逐位一致** (423527), 已上板验证
 #   LOAD_RESULT_REG 单独开 -> 仿真 timeout (已否决, 见 results/p4-macro-failure.md 5.2)
 #   BTB_GSHARE      单独开 -> 能跑, 但 ticks 449317, 比基线 423527 **慢 6%**
-#   IMEM_REG_READ   2026-10-06 **已打通**: 全量回归 PASS 10 | XFAIL 1,
-#                   且 CoreMark ticks 与组合读**逐位一致** (423527)
 #
-# 上板验证过的配置是**四个宏全关** (ILA 版 bitstream, 2026-10-05 16:43):
+# 上板验证过的默认配置 (2026-10-06 18:05):
 #   PASS, CRC 判定=1, tick=508,155,404, 10.16 s。
 #
-# 想再试验时: set IMEM_REG_READ=1 / set LOAD_REG=1 / set BTB_GSHARE=1
+# 想再试验时: set LOAD_REG=1 / set BTB_GSHARE=1 / set A_EN=1 / set GEMM_EN=1
 # **但必须先跑 `python tools/fpga_workflow.py verify` 确认仿真通过** 再综合。
 # ===========================================================================
 set IMEM_DEFS ""
-if {[info exists ::env(IMEM_REG_READ)] && $::env(IMEM_REG_READ) ne ""} {
-  # Registered read -> imem becomes inferable as RAMB36, freeing the ~1228 LUTs
-  # (31% of the core) that the combinational LUT-ROM used to occupy.
-  # [WORKING since 2026-10-06] The key is to drive the fetch address with the
-  # COMBINATIONAL next-PC (pc_next): then imem_rdata(N) == mem[pc(N)], i.e. the
-  # exact same pairing as the combinational read, so IF/ID needs no change and
-  # the redirect penalty stays 2 cycles. Also freeze fetch for one cycle after
-  # reset so IMEM gets a chance to latch PC_RESET.
-  # See results/p4-macro-failure.md 5.1 and the pc_next comment in core.sv.
-  append IMEM_DEFS " IMEM_REG_READ=1"
-  puts "BUILD_IMEM_REG_READ=1"
-} else {
+# IMEM read style. **DEFAULT = REGISTERED READ (inferable as RAMB36)**.
+# Both imem and dmem are block RAM in the shipped configuration.
+#   (unset)           -> registered read -> RAMB36 x4, frees ~1228 LUTs (31%)
+#   IMEM_COMB_READ=1  -> combinational read -> LUT ROM (fallback / A-B compare)
+# The registered read costs ZERO cycles: core.sv drives the fetch address with the
+# COMBINATIONAL next-PC (pc_next), so imem_rdata(N) == mem[pc(N)] -- the exact same
+# pairing as the combinational read. IF/ID needs no change, the redirect penalty
+# stays 2 cycles, and CoreMark ticks are bit-identical (423527). The only extra is
+# freezing fetch for one cycle after reset so IMEM can latch PC_RESET.
+# See results/p4-macro-failure.md 5.1 and the pc_next comment in core.sv.
+if {[info exists ::env(IMEM_COMB_READ)] && $::env(IMEM_COMB_READ) ne ""} {
+  append IMEM_DEFS " IMEM_COMB_READ=1"
   puts "BUILD_IMEM_COMB_READ=1"
+} else {
+  puts "BUILD_IMEM_BRAM=1"
 }
 if {[info exists ::env(LOAD_REG)] && $::env(LOAD_REG) ne ""} {
   append IMEM_DEFS " LOAD_RESULT_REG=1"
@@ -122,9 +128,13 @@ if {[info exists ::env(GEMM_EN)] && $::env(GEMM_EN) ne ""} {
 synth_design -top top_a100t -part $part -verilog_define "IMEM_INIT_FILE=\"$imem\" DMEM_INIT_FILE=\"$dmem\" $IMEM_DEFS"
 puts "BUILD_PROG=$PROG"
 opt_design
-# Place directive is overridable so the physical-optimization experiments
-# (todo #3) can be reproduced from the workflow instead of hand-run Vivado.
-set PLACE_DIR "ExtraTimingOpt"
+# Place directive is overridable so physical-optimization experiments are
+# reproducible from the workflow instead of hand-run Vivado.
+# DEFAULT = WLDrivenBlockPlacement: measured better for the SHIPPED config
+# (imem/dmem both block RAM) -- 58.9 MHz vs 58.4 for ExtraTimingOpt, same LUTs.
+# ExtraTimingOpt is better for the combinational-ROM fallback, so pass
+# PLACE_DIRECTIVE=ExtraTimingOpt when building that variant.
+set PLACE_DIR "WLDrivenBlockPlacement"
 if {[info exists ::env(PLACE_DIRECTIVE)] && $::env(PLACE_DIRECTIVE) ne ""} {
   set PLACE_DIR $::env(PLACE_DIRECTIVE)
 }
