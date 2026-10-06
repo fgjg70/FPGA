@@ -16,6 +16,13 @@
 sim/prog/*.hex
 sim/prog/*.lst
 
+# 例外: RV32A 黄金向量**入账**。
+# 它是 tools/amo_vectors.py 用独立 Python 参考实现算出来的期望值, 将来给
+# testbench / 软件做端到端校验用 (108 条, 覆盖 min/max 的有符号/无符号边界)。
+# 与其它 .hex 不同 —— 它不是"编译中间产物", 而是**独立于被测实现的黄金参考**,
+# 应当随代码一起版本化, 这样校验时不必依赖"重新生成一遍"。
+!sim/prog/amo_vectors.hex
+
 # ---- 本机便携工具链 (只属于这台机器, 不入库) ----
 tools/riscv-tools/
 
