@@ -720,7 +720,7 @@ module core
                         ex_mem_ctrl.amo_op != AMO_LR &&
                         ex_mem_ctrl.amo_op != AMO_SC) ? amo_new_comb : 32'd0;
 
-  // (诊断打印已移除 —— 结论写进 results/p6-a-extension.md 第 5.6 节)
+  // (诊断打印已移除 —— 结论写进 results/p6-a-extension.md 第 5.7 节)
 `else
   // 【A_EN 关闭时: 整个 AMO 新值计算单元不综合】
   // 实测: 它虽然休眠却仍占面积与路径 (fmax 61.2 -> 59.1 MHz, LUT +14)。

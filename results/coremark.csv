@@ -44,3 +44,4 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-06,p6-a-addradder,1,423527,2.3611,4079,1377,4,8,61.2,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-06,p6-a-diag2,1,423527,2.3611,4079,1377,4,8,61.2,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-06,p6-a-rmw-works,1,423527,2.3611,4079,1377,4,8,61.2,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-06,p6-a-diag2,1,423527,2.3611,4079,1377,4,8,61.2,keep,fpga_workflow.py synth (PROG=cm_hw)
