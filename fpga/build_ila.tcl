@@ -20,7 +20,15 @@ add_files -fileset constrs_1 -norecurse [list "$root/fpga/daVinciPro.xdc"]
 # 【必须给路径加引号】verilog_define 的值会原样展开成宏。不加引号的话
 # `IMEM_INIT_FILE 会展开成裸路径, Vivado 在路径里的 '/' 上报
 # "syntax error near /", 而且报的行号指向 $readmemh 那行, 极难联想去。
-set_property verilog_define "USE_ILA=1 IMEM_INIT_FILE=\"$root/sim/prog/cm_hw.hex\" DMEM_INIT_FILE=\"$root/sim/prog/cm_hw.dmem.hex\"" [current_fileset]
+# Architecture macros must be passable here too, otherwise "board-verified"
+# would silently mean "verified WITHOUT the macro" (PITFALLS R18 -- this
+# already happened once and produced a false PASS). Copy build.tcl's env gate.
+set ARCH_DEFS ""
+if {[info exists ::env(IMEM_REG_READ)] && $::env(IMEM_REG_READ) ne ""} {
+  append ARCH_DEFS " IMEM_REG_READ=1"
+  puts "ILA_BUILD_IMEM_REG_READ=1"
+}
+set_property verilog_define "USE_ILA=1 IMEM_INIT_FILE=\"$root/sim/prog/cm_hw.hex\" DMEM_INIT_FILE=\"$root/sim/prog/cm_hw.dmem.hex\"$ARCH_DEFS" [current_fileset]
 
 create_ip -name ila -vendor xilinx.com -library ip -module_name ila_0
 set_property -dict [list CONFIG.C_NUM_OF_PROBES {4} CONFIG.C_PROBE0_WIDTH {32} CONFIG.C_PROBE1_WIDTH {32} CONFIG.C_PROBE2_WIDTH {8} CONFIG.C_PROBE3_WIDTH {32} CONFIG.C_DATA_DEPTH {2048} CONFIG.C_INPUT_PIPE_STAGES {2}] [get_ips ila_0]

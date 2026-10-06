@@ -129,7 +129,9 @@ IF/ID 一行都不用改、重定向代价仍 2 拍。配套需**复位后冻结
 | 绝对吞吐 | **144.4** | 139.1 |
 
 **结论**：BRAM 版用 **−3.8% fmax** 换 **−30.8% LUT / +44.6% CoreMark/LUTs**。
-两者功能等价，**BRAM 版尚未上板验证**，故默认仍为组合读版。
+两者功能等价，且**都已上板验证**（`ila_ctrl=0x42`、CRC bit31=1、
+**tick 均为 508,155,404 逐位相同**）。故默认仍为组合读版，`--imem-reg-read`
+作为面积优先的可选配置。
 `place_design` 三种策略实测：`ExtraTimingOpt` 58.4 / `WLDrivenBlockPlacement` **58.9** /
 `AltSpreadLogic_high` 58.4 —— 光调布局只收 0.5 MHz，瓶颈在**逻辑链**（见 #3）。
 

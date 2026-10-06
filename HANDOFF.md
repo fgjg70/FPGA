@@ -65,8 +65,16 @@ cmd /c fpga\jtag_probe.bat                       REM 改 RTL 前先确认板子�
 | 绝对吞吐 | **144.4** | 139.1 |
 
 **取舍**：BRAM 版用 **−3.8% fmax** 换 **−30.8% LUT / +44.6% CoreMark/LUTs**。
-两者功能等价（CoreMark ticks 都是 423527），**BRAM 版尚未上板验证**。
+两者功能等价，且**都已上板验证**：
+
+| | comb（默认） | `--imem-reg-read` |
+|---|---|---|
+| 上板 `ila_ctrl` | 0x42（done+pass） | **0x42** ✅ |
+| 上板 CRC 判定 | bit31=1 | **bit31=1** ✅ |
+| 上板 tick | 508,155,404 | **508,155,404**（逐位相同）|
+
 完整推导与五轮失败史见 `results/p4-macro-failure.md` **5.1 节**。
+上板宏自证：`build_ila.tcl` 会打印 `ILA_BUILD_IMEM_REG_READ=1`（防 R18 假 PASS）。
 
 ### 剩下的工作（设计与铺垫都已就绪）
 
