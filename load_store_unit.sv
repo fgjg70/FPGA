@@ -269,8 +269,17 @@ module load_store_unit
         amo_mode_r <= 1'b1;            // 让 WB 拍 load_data 选 amo_old
       end
       else begin
-        amo_mode_r <= 1'b0;
-        if ((req_read || req_write) && !lsu_stall) begin
+        // 【amo_mode_r 必须保持整个 AMO 序列, 不能下一拍就清】
+        // 它让 WB 拍选 amo_old (AMO 的旧值) 而不是 dmem_rdata。
+        // 原写法在 else 里无条件清 0 —— 而 amo_en 只在启动拍有效, 于是
+        // **下一拍就被清掉了**, 等到真正的 WB 拍它已经是 0,
+        // WB 去读 dmem_rdata (那时 dmem 上早就是别的地址) -> rd 错误。
+        // 新写法: 只要 AMO 序列还在进行 (amo_active), 就保持为 1;
+        // 序列收尾 (amo_active=0) 那一拍才落下 —— 正好在 WB 之后。
+        if (amo_active) amo_mode_r <= 1'b1;
+        else            amo_mode_r <= 1'b0;
+        if ((req_read || req_write) && !lsu_stall &&
+            !(state == S_AMO)) begin
           off_wb   <= off;
           size_wb  <= req_size;
           uns_wb   <= req_unsigned;

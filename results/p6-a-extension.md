@@ -615,6 +615,57 @@ t=475000  st=3 wr=1 stall=0 WE=1 strb=f WDATA=ffffffff  nd=ffffffff   -> amoor
 
 ---
 
+## 5.10 【Round 37】修掉 `amo_mode_r` 被过早清掉（真 bug），但 `amoor` 组仍挂
+
+### 修掉的 bug：`amo_mode_r` 只保持了**一拍**
+
+原代码：
+```systemverilog
+if (amo_en) begin
+  ...
+  amo_mode_r <= 1'b1;      // 启动拍置 1
+end
+else begin
+  amo_mode_r <= 1'b0;      // **下一拍就被清掉!**
+  ...
+end
+```
+`amo_en` **只在启动拍有效**，所以 `amo_mode_r` 在**进入序列的第二拍就变 0** ——
+而它本该让 **WB 拍**选 `amo_old`（AMO 的旧值）。等到真正的 WB 拍，它已经是 0，
+WB 于是去读 `dmem_rdata`（那时 dmem 上早就是别的地址）→ `rd` 错误。
+
+**修法**：只要序列还在进行（`amo_active`）就保持为 1，收尾那一拍才落下：
+```systemverilog
+if (amo_active) amo_mode_r <= 1'b1;
+else            amo_mode_r <= 1'b0;
+```
+（同时给 `off_wb/size_wb/...` 的捕获加了 `!(state == S_AMO)` 守卫，
+避免 AMO 期间被别的请求覆盖规格。）
+
+### 结果
+
+`amo_diag`（amoadd）与 `amo_diag2`（amoswap）**仍然 PASS**，
+但 `amo.S` **仍在第 3 组（`amoor`）挂**（`tohost=4`）。
+
+### 当前卡点（供下一轮）
+
+`amoor` 组：`0xF0F0F0F0 | 0x0F0F0F0F` 期望 `0xFFFFFFFF`。
+已有证据表明**该组的算子结果是对的**（`[L]` 打印 `WDATA=ffffffff strb=f WE=1`），
+**而紧随其后的 `lw` 读回旧值**。所以问题集中在
+**"AMO 之后紧接的那条 `lw` 为什么读到旧数据"**。
+
+**下一轮第一步**：打印 AMO 序列结束后**紧接着那条 `lw`** 的 WB 拍
+`rdata_eff` / `amo_mode_r` / `dmem_rdata` 三个值 —— 判断是不是
+`amo_mode_r` 又多保持了一拍（把 `lw` 自己的数据挤掉了），
+或者 `amo_old` 覆盖了 `lw` 的读值。
+
+> 这是一次**"修了一个真 bug 但没解决现象"**的典型情况：
+> `amo_mode_r` 的过早清零确实是个 bug（WB 拍选错来源），修掉它让
+> 前两组更稳，但第 3 组的主因在别处。**两个 bug 叠在同一段逻辑上** ——
+> 这与本项目之前"AMO 地址两个 bug 叠加"（`alu_b_src` + 独立加法器）是同一模式。
+
+---
+
 
 ## 1. 为什么要记这一篇
 
