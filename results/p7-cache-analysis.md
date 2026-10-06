@@ -20,9 +20,27 @@ end
 ```
 
 **`dmem` 已经是一个单周期命中的片上存储器**（16KB，行为级推断的 BRAM，
-1 拍延迟，带字节写使能）。`imem` 同理（16KB BRAM）。
+1 拍延迟，带字节写使能）。
 
-> **Cache 的意义是"掩盖慢速存储器的延迟"**。当存储器本身已经是
+> ### ⚠️ 更正（2026-10-06，实测发现）
+> 本文初版写的是"`imem` 同理（16KB BRAM）"——**这句话是错的**，现更正：
+>
+> | | 实测映射 | 依据 |
+> |---|---|---|
+> | **`dmem`** | ✅ **BRAM**（RAMB36 ×4，4K×32）| `synth.log` 的 BRAM 映射表：`dmem: mem_reg  4 K x 32` |
+> | **`imem`** | ❌ **组合读 LUT ROM**，**不是** BRAM | BRAM 表里**没有 imem**；`synth.log` 报 `design imem has unconnected port clk` |
+>
+> **根因**：`imem.sv` 由 `IMEM_REG_READ` 宏控制 —— 未定义（当前默认）走
+> `assign rdata = mem[addr]`（组合读，Vivado 只能摊成 ~1228 LUT 的 ROM 树）；
+> 定义了才走 `always @(posedge clk) rdata <= mem[addr]`（可推断 RAMB36）。
+> 而 `dmem.sv` **没有这个门控**，永远寄存读 → 必然 BRAM。
+>
+> **这个更正不改变本文结论，但改变了理由**：下面"读延迟依然是 1 拍"的论证
+> **只对 `dmem` 成立**；对 `imem` 而言，它是 **0 拍组合 ROM**，插 Cache 只会
+> **更慢**（多一拍 tag 比较 + 数据 mux），同时把那 1228 LUT 的负担变成 tag 存储。
+> 即：**结论（不做 Cache）不变，但理由更强了**。
+
+> **Cache 的意义是"掩盖慢速存储器的延迟"**。当数据存储器本身已经是
 > 单周期命中的片上 BRAM 时，在它前面插一层 Cache：
 > **读延迟依然是 1 拍**（Cache 命中要查 tag + 比较 + 数据 mux，而 BRAM
 > 本来就是 1 拍），却额外付出 tag 存储、命中/失效控制、替换逻辑的代价。
