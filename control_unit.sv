@@ -269,6 +269,22 @@ module control_unit
         ctrl.amo_rl    = instr[25];
         ctrl.reg_write = 1'b1;
         ctrl.wb_src    = WB_MEM;         // rd <- 旧值 / SC 的成功标志
+        // ----------------------------------------------------------------
+        // 【必须显式设这三个字段 —— 否则地址算错, AMO 会读到一个从没写过的字】
+        // AMO 是 I 型: 访存地址 = rs1 + imm[11:0] (AMO 的 imm 恒为 0)。
+        // 而 `ctrl = '0` 的默认值恰好是:
+        //     alu_a_src = ALU_A_RS1 (0)   -> 正确, a 取 rs1
+        //     alu_b_src = ALU_B_RS2 (0)   -> **错! b 取 rs2 而不是立即数**
+        //     imm_fmt   = IMM_I     (0)   -> 值对, 但只有 b 选 IMM 时才用得上
+        // 于是地址变成 `rs1 + rs2` 而不是 `rs1 + 0`。
+        //
+        // 实测症状: `sw` 写 0x90003100, 而同一个 t0 上的 AMO 去访问 0x90003114
+        // —— 差的正是当时 t1 的值 0x14。于是 AMO 读一个从没写过的字, 恒为 0。
+        // **这个 bug 极具欺骗性**: 状态机、相位、写使能、写数据全对, 只有地址错,
+        // 而"读回 0"看起来像读通路坏了 —— 我为此绕了三轮。
+        ctrl.alu_a_src = ALU_A_RS1;      // a = rs1 (基址)
+        ctrl.alu_b_src = ALU_B_IMM;      // b = imm  (AMO 恒为 0)  <- 关键修复
+        ctrl.imm_fmt   = IMM_I;          // I 型立即数
         if (funct3 != 3'b010) begin
           // 本核只实现 .W 变体 (RV32); funct3=010。其余 (如 .D/.B) 判非法。
           illegal = 1'b1;

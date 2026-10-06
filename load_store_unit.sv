@@ -173,15 +173,7 @@ module load_store_unit
   // AMO 读回的旧值: 写相那拍 amo_old 已有效, core 用它算新值
   assign amo_old_out = amo_old;
 
-  // AMO 诊断/逻辑整体由 A_EN 门控 —— 默认关闭时这段是纯死代码, 综合会裁掉
-`ifdef A_EN
-  always @(posedge clk) begin
-    if (amo_en || state == S_AMO || amo_mode_r)
-      $display("[amo] t=%0t st=%0d act=%b wait=%b ph=%b stall=%b we=%b addr=%h rdata=%h old=%h new=%h",
-               $time, state, amo_active, amo_wait, amo_phase,
-               lsu_stall, dmem_we, dmem_addr, dmem_rdata, amo_old, amo_newdata);
-  end
-`endif
+  // (诊断打印已移除 —— 结论写进 results/p6-a-extension.md 第 5.3 节)
 
   // ---------------- load 路径 (WB 段组合) ----------------
   wire [4:0]  shamt_wb = {off_wb, 3'b000};
