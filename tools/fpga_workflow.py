@@ -752,6 +752,20 @@ def test_matrix() -> list[dict]:
         {"name": "tb_core_m_ext", "top": "tb_core", "rtl": "rtl", "tb": "sim/tb_core.sv",
          "imem": "sim/prog/m_ext.hex", "plus": [], "max_cycles": 200000, "timeout": 600,
          "desc": "RV32M 边界"},
+        # RV32A 原子指令。**【必须定义 A_EN】** 否则 0x2F 译码为 illegal,
+        # 程序第一步就掉陷阱 —— 所以这条测试自带 defines, 不跟随全局开关。
+        # 程序用 .word 手工编码指令 (迷你汇编器不认 AMO 助记符, 但支持 .word)。
+        #
+        # 【当前状态: expect_fail_ok = 已知未通过】RTL 侧 AMO 的"读-改-写"还差
+        # 最后一步: LSU 读相捕获到的旧值恒为 0 (诊断打印 old=00000000),
+        # 也就是**读回的数据没有真正落到 amo_old 上**。标记为 XFAIL 是为了:
+        #   (1) 回归能保持全绿 (不掩盖别的失败);
+        #   (2) 它是一个**可执行的验收标准** —— 一旦 RTL 修好, 它会翻成 XPASS,
+        #       而 verify 对 XFAIL->XPASS 的翻转是敏感的 (见上面 force 逻辑)。
+        {"name": "tb_core_amo", "top": "tb_core", "rtl": "rtl", "tb": "sim/tb_core.sv",
+         "imem": "sim/prog/amo.hex", "plus": [], "max_cycles": 200000, "timeout": 600,
+         "defines": ("A_EN",), "expect_fail_ok": True,
+         "desc": "RV32A 原子指令 (AMO 读-改-写 + min/max 符号语义) [XFAIL: 待修]"},
         {"name": "tb_soc", "top": "tb_soc", "rtl": "rtl", "tb": "sim/tb_soc.sv",
          "imem": "sim/prog/mmio.hex", "plus": [], "max_cycles": 400000, "timeout": 600,
          "desc": "外设 + UART 环回"},
@@ -907,9 +921,15 @@ def cmd_verify(args) -> int:
             # 且功能还没做对 (见 results/p5-ai-accelerator.md)
             defs.append("GEMM_EN")
         if args.a_ext:
-            # RV32A 原子指令译码。默认关闭 —— 实测纯代价 (fmax -4.7%/吞吐 -4.6%),
-            # 且多周期读写未实现, 打开也执行不了原子指令
+            # RV32A 原子指令译码。默认关闭 —— 实测纯代价 (fmax 61.7->61.2 MHz),
+            # 见 results/p6-a-extension.md
             defs.append("A_EN")
+        # 【每条测试可以自带 defines】例如 tb_core_amo 必须定义 A_EN, 否则 0x2F
+        # 译码为 illegal、程序第一步就掉陷阱 —— 它不该依赖全局开关, 也不该因为
+        # 别人跑了 --a-ext 与否而改变结果。这里做并集, 去重保持稳定顺序。
+        for d in t.get("defines", ()):
+            if d not in defs:
+                defs.append(d)
         defines = tuple(defs)
         rc, out, workdir = compile_sim(files, t["tb"], defines)
         if rc != 0:

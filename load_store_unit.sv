@@ -60,15 +60,25 @@ module load_store_unit
 
   // 结果 (WB 段组合有效, 直接进写回 mux) 与流水线控制
   output logic [31:0]     load_data,
-  output logic            lsu_stall
+  output logic            lsu_stall,
+  // AMO 写相标志 (1 = 本拍 LSU 正在把"新值"写回内存)
+  // 【为什么引出来】core 要用它决定"现在该不该让 AMO 新值计算单元输出" ——
+  // 新值依赖 amo_old, 而 amo_old 在写相那拍才有效。所以 core 里的第二个 ALU
+  // 必须在写相那拍用 {amo_old, rs2} 算, 其余时候不参与。
+  output logic            amo_write_phase,
+  // AMO 读回的旧值 (写相那拍有效), 供 core 的 AMO 新值计算单元使用
+  output logic [31:0]     amo_old_out
 );
 
   // AMO 用两个新相接在拆分访存状态机后面 (编码 2'd3 做 AMO_READ,
   // 再用一个独立的标志区分 WAIT, 避免把 state 加宽 -> 少动现有逻辑)
   localparam logic [1:0] S_IDLE = 2'd0, S_HEAD = 2'd1, S_TAIL = 2'd2;
   localparam logic [1:0] S_AMO  = 2'd3;      // AMO 读相 / 写相 (由 amo_wr 区分)
-  logic                  amo_wr;             // 0 = AMO 读旧值, 1 = AMO 写新值
+  logic                  amo_wr;             // 1 = 写相 (组合导出, 见下)
+  logic                  amo_phase;          // 0=读相 1=写相
+  logic                  amo_active;         // AMO 序列进行中
   logic [31:0]           amo_old;            // 读回的旧值 (也是 rd 的值)
+  logic [31:0]           amo_addr_r;         // AMO 的字地址 (启动拍锁存, 两相都用它)
   logic                  amo_mode_r;         // AMO 已启动 (保持到 WB 拍, 供 load_data 选择)
 
   logic [1:0]  state;
@@ -101,8 +111,11 @@ module load_store_unit
   assign tail_addr = head_addr + 32'd4;
 
   // 地址选择: IDLE 送头字, HEAD/TAIL 送尾字 (TAIL 继续送尾字, 让 WB 拍数据仍是尾字)
-  //           AMO 两相都送同一个字地址 (AMO 只做字访问, 不拆分)
-  assign dmem_addr  = (state == S_AMO) ? head_addr
+  //           AMO 两相都送**锁存下来的** AMO 地址
+  // 【为什么必须锁存】AMO 序列跨多拍, 而 req_addr 来自 EX/MEM 流水寄存器 ——
+  // 冻结期间它虽然不变, 但一旦流水线推进就不对了。实测第一批诊断打印里
+  // 写相那拍 addr=00000000, 就是因为没有稳定的 AMO 地址来源。
+  assign dmem_addr  = (state == S_AMO) ? amo_addr_r
                     : (state == S_IDLE) ? head_addr : tail_addr;
 
   // ---------------- store 路径 ----------------
@@ -130,6 +143,38 @@ module load_store_unit
   assign lsu_stall  = (state == S_HEAD) || (state == S_IDLE && needs_split)
                    || (state == S_AMO && !amo_wr);   // 读相停, 写相放行
 
+  // ---------------------------------------------------------------------------
+  // 【关键修复】AMO 的相判断改为"由状态唯一决定", 不再用自翻转触发器
+  // ---------------------------------------------------------------------------
+  // 第一版写成:  `if (state == S_AMO) amo_wr <= ~amo_wr;`
+  // 实测**直接挂死**。AMO_TRACE 诊断打印给出根因: `st=3 wr=x` ——
+  //   amo_wr **从未复位**, 而 `~x` 仍是 `x`, 于是它永远停在 X:
+  //   写相判断不出来 -> dmem_we 为 X -> dmem_wstrb 为 X ->
+  //   状态机卡在 S_AMO 出不来 (lsu_stall 一直是 X)。
+  //
+  // 这与本项目反复出现的同类坑一致 (PITFALLS R6/R8: 未初始化的状态被当成
+  // "反正不会发生"): **多周期状态机的每个派生信号都必须有确定值**。
+  //
+  // 新写法: 用两个**复位过的**寄存器组成明确的两相 ——
+  //   amo_phase : 0 = 读相(送地址读旧值), 1 = 写相(写新值)
+  //   amo_active: 1 = AMO 序列进行中 (跨多拍保持, 因为 state 会停在 S_AMO)
+  // 由 state 与这两个寄存器组合出 amo_wr, 不可能为 X。
+  assign amo_wr = amo_active & amo_phase;
+  assign amo_write_phase = amo_wr;
+
+  // AMO 读回的旧值: 写相那拍 amo_old 已有效, core 用它算新值
+  assign amo_old_out = amo_old;
+
+`ifdef AMO_TRACE
+  // 临时诊断 (仅 AMO_TRACE 时编译; 排查完删掉)
+  always @(posedge clk) begin
+    if (amo_en || state == S_AMO)
+      $display("[amo] t=%0t en=%b st=%0d act=%b ph=%b wr=%b stall=%b we=%b addr=%h old=%h new=%h",
+               $time, amo_en, state, amo_active, amo_phase, amo_wr,
+               lsu_stall, dmem_we, dmem_addr, amo_old, amo_newdata);
+  end
+`endif
+
   // ---------------- load 路径 (WB 段组合) ----------------
   wire [4:0]  shamt_wb = {off_wb, 3'b000};
   // AMO 的"读回值"走同一条路: 旧值在 amo_old 里, 且 off/size 已按字对齐设好,
@@ -156,6 +201,13 @@ module load_store_unit
   always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
       state      <= S_IDLE;
+      // 【AMO 相关寄存器必须一起复位】第一版漏了 amo_wr, 而它的自翻转写法
+      // (`~x` = `x`) 让整个状态机卡死 (诊断打印: st=3 wr=x)。
+      amo_active <= 1'b0;
+      amo_phase  <= 1'b0;
+      amo_old    <= 32'd0;
+      amo_addr_r <= 32'd0;
+      amo_mode_r <= 1'b0;
       head_word_r<= 32'd0;
       off_wb     <= 2'd0;
       size_wb    <= MEM_WORD;
@@ -167,17 +219,26 @@ module load_store_unit
         S_IDLE:  if (amo_en)         state <= S_AMO;
                  else if (needs_split) state <= S_HEAD;
         S_HEAD:  state <= S_TAIL;
-        S_AMO:   state <= amo_wr ? S_IDLE : S_AMO;   // 写相做完就放行
+        S_AMO:   state <= amo_phase ? S_IDLE : S_AMO;   // 写相做完就放行
         default: state <= S_IDLE;
       endcase
 
-      if (state == S_AMO) amo_wr <= ~amo_wr;
+      // ---- AMO 两相推进 (全部复位过, 不会出现 X) ----
+      if (state == S_IDLE && amo_en) begin
+        amo_active <= 1'b1;
+        amo_phase  <= 1'b0;             // 先读
+        amo_addr_r <= head_addr;        // 锁存字地址 (字对齐), 两相都用它
+      end
+      else if (state == S_AMO) begin
+        if (!amo_phase) amo_phase <= 1'b1;   // 读完 -> 转写相
+        else            amo_active <= 1'b0;  // 写完 -> 收工
+      end
 
       // 头字捕获: HEAD 拍末尾 dmem_rdata 就是头字
       if (state == S_HEAD) head_word_r <= dmem_rdata;
       // 【AMO 旧值捕获】在读相那拍末尾 dmem_rdata 就是内存旧值。
       // 它就是 rd 要读到的值 (规范: AMO 的 rd = 操作前的值)。
-      if (state == S_AMO && !amo_wr) amo_old <= dmem_rdata;
+      if (state == S_AMO && !amo_phase) amo_old <= dmem_rdata;
 
       // 请求离开 MEM 那一拍, 记下它的规格给 WB 段用。
       // 【AMO 必须在启动那拍就记】因为放行发生在 S_AMO 的写相, 而那时

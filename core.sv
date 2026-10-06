@@ -66,6 +66,9 @@ module core
   logic        pc_src;
   logic        redirect, redirect_raw;
   logic        lsu_stall;
+  // RV32A: LSU 的写相标志与读回的旧值 (供 MEM 段的 AMO 新值计算用)
+  logic        amo_write_phase;
+  logic [31:0] amo_old;
   logic        id_ex_bubble;
 
   // 分支预测
@@ -596,6 +599,13 @@ module core
   // ==========================================================================
   // MEM 段
   // ==========================================================================
+  // 【必须在使用之前声明】曾经漏了这两行, 于是 ModelSim 把 `assign amo_newdata`
+  // 当成**隐式 1 位网络**, 接到 32 位端口上只驱动了 1 位 -> 其余位是 Z ->
+  // AMO 把 Z 写进内存 (vopt-2241 "connection width does not match" 是唯一提示)。
+  // 与 PITFALLS R8 同类: 未声明的名字被隐式推断, 静默出错。
+  logic [31:0] amo_newdata;    // 送给 LSU 的"应写回值"
+  logic [31:0] amo_new_comb;   // AMO 专用 ALU 的组合输出
+
   load_store_unit u_lsu (
     .clk          (clk),
     .rst          (rst),
@@ -615,19 +625,58 @@ module core
     // ---- RV32A 原子指令 ----
     // amo_en: 直接来自 EX/MEM 的控制束, 所以 A_EN 打开后译码出来的 amo_en
     //         能自然流到这里, LSU 的多周期序列即可启动。
-    // amo_newdata: **待完成的接线**。AMO 的"应写回值"不能在 EX 段算出来 ——
-    //   ALU 的 ALU_AMO_* 约定 a = 从内存读回的旧值, 而 dmem 是寄存读,
-    //   旧值要到 MEM 段第二拍才到。所以必须:
-    //     (1) ctrl_s 里再带一个 amo_rs2[31:0] 把 rs2 送到 MEM;
-    //     (2) 在 MEM 段用 {amo_old, amo_rs2} 组合算出新值 (可例化第二个 alu
-    //         实例, 复用 ALU_AMO_* 语义);
-    //     (3) 把那个结果接到这里。
-    //   在 (2) 完成之前这里**明确系 0**, 而不是靠"端口没接"的隐式默认 ——
-    //   那类静默失败本项目已经踩过 (见 PITFALLS R8/R17)。
-    //   AMO 写相会把 0 写进内存, 所以 **A_EN 必须保持关闭** (默认即如此)。
-    .amo_en       (ex_mem_ctrl.amo_en),
-    .amo_newdata  (32'd0)
+    .amo_en            (ex_mem_ctrl.amo_en),
+    .amo_newdata       (amo_newdata),
+    .amo_write_phase   (amo_write_phase),
+    .amo_old_out       (amo_old)
   );
+
+  // ------------------------------------------------------------------------
+  // RV32A: AMO 的"应写回内存的新值"计算
+  // ------------------------------------------------------------------------
+  // 【为什么必须在 MEM 段算, 不能在 EX 段】ALU 的 ALU_AMO_* 约定
+  //   a = **从内存读回的旧值**, b = rs2
+  // 而 dmem 是**寄存读**(地址第 N 拍、数据第 N+1 拍) —— EX 段根本拿不到旧值,
+  // 旧值要到 MEM 段第二拍 (LSU 的 S_AMO 写相) 才出现在 amo_old 里。
+  //
+  // 所以这里**再例化一个 alu 实例**专做这件事: 输入 {amo_old, rs2}, 输出新值。
+  // 复用 ALU_AMO_* 的语义, 不重复实现一遍 min/max 的符号判断 ——
+  // 那份逻辑已经有 14 条单元检查覆盖 (含 0x80000000 这类符号边界)。
+  //
+  // rs2 需要随流水送到 MEM 段: 用 ex_mem_reg 之外的一个简单寄存器锁存
+  // (id_ex_rs2 在 ID/EX 有效, 到 MEM 段就是上一条了, 所以必须寄存)。
+  // ------------------------------------------------------------------------
+  logic [31:0] amo_rs2;
+  // (amo_new_comb / amo_newdata 已在 MEM 段开头声明 —— 必须在例化之前)
+
+  always_ff @(posedge clk or posedge rst) begin
+    if (rst) amo_rs2 <= 32'd0;
+    else if (!hold_mem) amo_rs2 <= ex_rs2;   // 跟 EX/MEM 同步推进
+  end
+
+  alu #(.XLEN(XLEN)) u_amo_alu (
+    .a       (amo_old),            // 从内存读回的旧值
+    .b       (amo_rs2),            // rs2
+    .op      (ex_mem_ctrl.amo_op == AMO_SWAP ? ALU_AMO_SWAP :
+              ex_mem_ctrl.amo_op == AMO_ADD  ? ALU_AMO_ADD  :
+              ex_mem_ctrl.amo_op == AMO_XOR  ? ALU_AMO_XOR  :
+              ex_mem_ctrl.amo_op == AMO_AND  ? ALU_AMO_AND  :
+              ex_mem_ctrl.amo_op == AMO_OR   ? ALU_AMO_OR   :
+              ex_mem_ctrl.amo_op == AMO_MIN  ? ALU_AMO_MIN  :
+              ex_mem_ctrl.amo_op == AMO_MAX  ? ALU_AMO_MAX  :
+              ex_mem_ctrl.amo_op == AMO_MINU ? ALU_AMO_MINU :
+              ex_mem_ctrl.amo_op == AMO_MAXU ? ALU_AMO_MAXU :
+                                               ALU_AMO_ADD),
+    .out     (amo_new_comb),
+    .sum_out ()
+  );
+
+  // 只在该用的时候选它: LR/SC 不写内存 (由 amo_op 决定), 且必须处于写相。
+  // 其余时候给 0, 避免把无关数据当写值 (LSU 也只在写相才用 amo_newdata)。
+  assign amo_newdata = (amo_write_phase &&
+                        ex_mem_ctrl.amo_op != AMO_LR &&
+                        ex_mem_ctrl.amo_op != AMO_SC) ? amo_new_comb : 32'd0;
+
 
   // ------------------------------------------------------------------------
   // 地址译码: DMEM 窗口内 -> 内部 dmem; 窗口外 -> 外部 MMIO 总线
