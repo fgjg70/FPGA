@@ -21,7 +21,7 @@ CRC 逐位匹配官方参考值），三项评分指标与绝对吞吐齐备，�
 **上手第一件事（不要跳过）**：
 ```bat
 cmd /c tools\doctor.bat                          REM 环境自检 + R1 漂移检测
-python tools\fpga_workflow.py verify             REM 回归, 期望 PASS 10 | XFAIL 1
+python tools\fpga_workflow.py verify             REM 回归, 期望 PASS 11 (无 XFAIL)
 python tools\fpga_workflow.py check              REM 漂移/新鲜度自检
 cmd /c fpga\jtag_probe.bat                       REM 改 RTL 前先确认板子在位!
 ```
@@ -37,7 +37,7 @@ cmd /c fpga\jtag_probe.bat                       REM 改 RTL 前先确认板子�
 | 资源 | — | LUT **4079** / FF 1377 / BRAM 4 / DSP 8 |
 
 上板：`ila_ctrl=0x42`、CRC 判定=1、tick **508,155,404**、10.16 s、CoreMark/MHz 2.3615。
-回归：**PASS 10 | XFAIL 1**（`tb_units` **243** 项检查点；`tb_core_amo` 为预期失败）。
+回归：**PASS 11，无 XFAIL**（`tb_units` **243** 项检查点；A 扩展的 `tb_core_amo` 已打通）。
 
 ### ⛔ 已封路（都留了数据，别重复踩）
 
@@ -80,10 +80,9 @@ cmd /c fpga\jtag_probe.bat                       REM 改 RTL 前先确认板子�
 
 | 工作 | 现状 | 从哪接 |
 |---|---|---|
-| **A 扩展的多周期"读-改-写"** | **基本打通**：`amo_diag`(amoadd) / `amo_diag2`(amoswap) **PASS**；读旧值 ✅ / `rd`=旧值 ✅ / 三个算子 ✅ / LSU 写信号 ✅ / `amo_mode_r` ✅。**只剩 `amoor` 组**（`amo.S` 第 3 组，`tohost=4`）| `results/p6-a-extension.md` **第 5.12 节**（真根因已锁定：取指前端停顿失步，含三个候选修法）|
+| ~~**A 扩展的多周期"读-改-写"**~~ | ✅ **2026-10-06 打通** —— `tb_core_amo` 由 **XFAIL 翻 PASS**，全量回归 **PASS 11，无 XFAIL**。真根因是一行：LSU 在 AMO launch 拍漏拉 `lsu_stall`（与拆分访存不对称），导致紧随的 `lw` 的 WB 相位与 `amo_mode_r` 错开一拍 | `results/p6-a-extension.md` **5.13 节** |
 | **GEMM 的 C 读回 + 缓冲改 BRAM** | 寻址/取数/写回计数已验证正确；C 只有前 16 字对 | `results/p5-ai-accelerator.md` 第 0.2 节 |
-| **取指前端停顿失步（新，正确性）** | **根因已锁定未修**：AMO 多周期停顿期间 pc 与 IF/ID 失步，释放那拍吞掉紧随的指令。**不只影响 A 扩展** —— 任何多周期停顿路径都可能踩 | `results/p6-a-extension.md` 5.12 节 |
-| **fmax 物理优化（待办 #3）** | 未动。关键路径 route 占 **67%**，`pc_sel` 扇出 **60**；已试 3 种 `place_design` 策略（最佳 `WLDrivenBlockPlacement`，仅 +0.5 MHz）| 需改逻辑（如把 `pc_sel` 的比较预计算成 1 位标志）而非只调布局 |
+| **fmax 物理/逻辑优化（待办 #3）** | 已试 3 种 `place_design` 策略 + `cf` 预计算，收益都在噪声量级（已回退）。关键路径 route 占 **67%** | `results/p3-fmax.md` 实验 B（含未做的下一步）|
 | **`IMEM_REG_READ` 收尾（可选，收益大但有硬约束）** | 相位配对已打通（3 PASS），剩一处停顿释放气泡未对齐；**但要彻底解决必须改流水线级数或吃 4.9% 重定向惩罚** —— 见上文"已封路"第 1 条 | `results/p4-macro-failure.md` 5.1 节（含三条已证伪的错路）|
 
 #### A 扩展：唯一剩下的卡点与下一步（已收得很窄）

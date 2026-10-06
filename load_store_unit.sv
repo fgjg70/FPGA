@@ -148,7 +148,23 @@ module load_store_unit
 
   // 停顿: HEAD 拍 + "IDLE 且需要拆分" 的那一拍 + AMO 的**前两相**都要停
   // AMO 三个相位: 等待(amo_wait) -> 读相(phase=0) -> 写相(phase=1, 放行)
-  assign lsu_stall  = (state == S_HEAD) || (state == S_IDLE && needs_split)
+  //
+  // 【2026-10-06 修复】必须把 AMO 的 **launch 拍**(state==S_IDLE && amo_en) 也拉停,
+  // 与上面"IDLE 且 needs_split"完全对称。原来漏了它, 后果是一条极隐蔽的错位:
+  //
+  //   launch 拍不拉 lsu_stall -> hold_mem=0 -> 流水线**多前进一拍**:
+  //     EX/MEM 被后一条指令顶掉、MEM/WB 提前一拍让出 -> AMO 的 WB 落在 cyc41,
+  //     而紧随 AMO 的那条 lw 的 WB 提前到 cyc44 —— 恰好是 amo_mode_r 仍为 1 的
+  //     那一拍, 于是 lw 读到的是 amo_old 而不是 dmem_rdata。
+  //
+  // 实测证据 (amo.S 第 3 组: amoor 后面紧贴 lw t4, 0(t0)):
+  //   cyc44  wb_rd=29(=t4)  wb=0xf0f0f0f0  mode_r=1   <- 该给 0xFFFFFFFF, 给了旧值
+  //
+  // 拉停 launch 拍后: AMO 的 WB 推到 cyc44(mode_r=1, 正确取 amo_old),
+  // lw 的 WB 推到 cyc45(mode_r=0, 正确取 dmem_rdata)。
+  // 代价: AMO 每个多 1 拍停顿 —— 但 A_EN 默认关闭、CoreMark 不含原子指令,
+  //       对评分三项零影响 (实测 CoreMark ticks 不变)。
+  assign lsu_stall  = (state == S_HEAD) || (state == S_IDLE && (needs_split || amo_en))
                    || (state == S_AMO && (amo_wait || !amo_phase));
 
   // ---------------------------------------------------------------------------

@@ -756,16 +756,17 @@ def test_matrix() -> list[dict]:
         # 程序第一步就掉陷阱 —— 所以这条测试自带 defines, 不跟随全局开关。
         # 程序用 .word 手工编码指令 (迷你汇编器不认 AMO 助记符, 但支持 .word)。
         #
-        # 【当前状态: expect_fail_ok = 已知未通过】RTL 侧 AMO 的"读-改-写"还差
-        # 最后一步: LSU 读相捕获到的旧值恒为 0 (诊断打印 old=00000000),
-        # 也就是**读回的数据没有真正落到 amo_old 上**。标记为 XFAIL 是为了:
-        #   (1) 回归能保持全绿 (不掩盖别的失败);
-        #   (2) 它是一个**可执行的验收标准** —— 一旦 RTL 修好, 它会翻成 XPASS,
-        #       而 verify 对 XFAIL->XPASS 的翻转是敏感的 (见上面 force 逻辑)。
+        # 【2026-10-06: XFAIL -> 真 PASS, 已摘掉 expect_fail_ok】
+        # 根因不是"读通路"也不是"写通路"(这两处前几轮查了很久, 都证明是对的),
+        # 而是 LSU 在 AMO 的 **launch 拍漏拉了 lsu_stall**: 流水线因此多前进一拍,
+        # 紧随 AMO 的那条 lw 的 WB 提前落到 amo_mode_r 仍为 1 的那一拍, 于是
+        # lw 读的是 amo_old 而不是 dmem_rdata。
+        # 修法: lsu_stall 补上 `(state == S_IDLE && amo_en)`, 与拆分访存完全对称。
+        # 详见 load_store_unit.sv 的 lsu_stall 注释与 results/p6-a-extension.md 5.13。
         {"name": "tb_core_amo", "top": "tb_core", "rtl": "rtl", "tb": "sim/tb_core.sv",
          "imem": "sim/prog/amo.hex", "plus": [], "max_cycles": 200000, "timeout": 600,
-         "defines": ("A_EN",), "expect_fail_ok": True,
-         "desc": "RV32A 原子指令 (AMO 读-改-写 + min/max 符号语义) [XFAIL: 待修]"},
+         "defines": ("A_EN",),
+         "desc": "RV32A 原子指令 (AMO 读-改-写 + min/max 符号语义)"},
         # 【单步诊断程序】amo.S 一次测 9 组, 失败时只知道"第 1 组错", 不知道错在
         # 地址/读/写哪一环。这一支只做最小一组, 并把**中间结论直接写进 tohost**:
         #   1=全过 2=sw 后 lw 读不回(基础读写坏) 4=AMO 读到 0 5=AMO 旧值不对 6=写回不对
@@ -1458,12 +1459,41 @@ def cmd_synth(args) -> int:
                 benv["BTB_GSHARE"] = "1"
             if args.ras:
                 benv["RAS_EN"] = "1"
+            if args.a_ext:
+                # RV32A 原子指令 + 多周期读-改-写 (2026-10-06 起功能已打通:
+                # tb_core_amo 由 XFAIL 翻 PASS)。默认关闭 —— 三条评分指标零收益。
+                benv["A_EN"] = "1"
+            if args.gemm:
+                # GEMM 加速单元。默认关闭 (缓冲落成触发器阵列, FF +916%)。
+                benv["GEMM_EN"] = "1"
             rc, out, dt = run(["cmd", "/c", abspath("fpga/build.bat")],
                               cwd=abspath("fpga"), timeout=args.timeout, env=benv)
             with open(log, "w", encoding="utf-8") as f:
                 f.write(out)
+            # ---- 【自证】请求了宏, 就必须在日志里看到它生效的标记 --------------
+            # 为什么必须有: "改了没效果"有三种完全不同的成因, 而症状一样 ——
+            #   ① 算法真的无用; ② 宏没传到编译器; ③ 宏传到了但 build.tcl 不认。
+            # 本项目已踩过两次静默失效:
+            #   R17  `vlog +FOO` 而不是 `+define+FOO` -> 宏从未在仿真生效;
+            #   本次 `synth --a-ext/--gemm` 参数解析器接受, 但**没写进 benv**,
+            #        于是静默按默认配置构建 (三项指标与默认一字不差, 极易误读成
+            #        "A 扩展零代价" —— 我第一眼就差点这么认为)。
+            # 所以这里把"宏是否生效"变成**构建后的硬判据**, 不靠人看。
+            expect = []
+            if args.imem_reg_read: expect.append("BUILD_IMEM_REG_READ=1")
+            if args.load_reg:      expect.append("BUILD_LOAD_RESULT_REG=1")
+            if args.gshare:        expect.append("BUILD_BTB_GSHARE=1")
+            if args.ras:           expect.append("BUILD_RAS_EN=1")
+            if args.a_ext:         expect.append("BUILD_A_EN=1")
+            if args.gemm:          expect.append("BUILD_GEMM_EN=1")
+            missing = [e for e in expect if e not in out]
             ok = "BUILD_OK" in out
             print(f"  [2/2] vivado rc={rc} {'BUILD_OK' if ok else 'FAILED'}  {dt:.0f}s")
+            if ok and missing:
+                print(f"  [FAIL] 请求的架构宏**没有生效**: {missing}")
+                print("         -> build.tcl 不认这些 env, 或 synth 没把它们写进环境。")
+                print("         这些数字对应的是**默认配置**, 不能当作该宏的结果。")
+                return 1
             if not ok:
                 why = [l for l in out.splitlines()
                        if "BUILD_ERROR" in l or "ERROR:" in l or "BUILD_HINT" in l]
