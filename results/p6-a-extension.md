@@ -583,6 +583,38 @@ t=475000  op_r=01000(OR)    old=f0f0f0f0 rs2=0f0f0f0f comb=ffffffff   -> amoor  
 
 ---
 
+## 5.9 【Round 36】LSU 的写信号**全部正确** —— 问题不在"写"，在别处
+
+把 AMO 各相的写信号逐拍打出来（`[L]`），三组的写相都是**教科书式正确**：
+
+```
+t=175000  st=3 wr=1 stall=0 WE=1 strb=f WDATA=0000007b  nd=0000007b   -> amoadd
+t=325000  st=3 wr=1 stall=0 WE=1 strb=f WDATA=00002222  nd=00002222   -> amoswap
+t=475000  st=3 wr=1 stall=0 WE=1 strb=f WDATA=ffffffff  nd=ffffffff   -> amoor
+```
+
+**每一组都发出了正确的整字写**（`WE=1`、`strb=f`、写数据 = 正确的算子结果）。
+相位推进也完全正确：`en=1 → wait → 读相 → 写相(wr=1, stall=0)`。
+
+**所以"写回"这一环在 LSU 侧是对的**，前一轮"值没写进内存"的判断需要修正。
+
+### 新观察（下一轮的入口）
+
+1. `nd` 与 `WDATA` 存在**跨组的滞后**：第 3 组的写相打印出
+   `WDATA=0f0f0f0f`（那是本组 `sw` 写进去的旧值）而 `nd=00000000` ——
+   说明 `amo_newdata`（core 侧组合）与 LSU 侧看到的**不是同一拍的值**。
+   这指向 **core 的 `amo_write_phase` 与 LSU 内部 `amo_phase` 的相位差**。
+2. `amo.S` 在第 3 组失败，而 `amo_diag`/`amo_diag2`（各只测一组）都通过 ——
+   **"单独一组能过、连测多组就挂"** 是典型的**跨组残留状态**特征
+   （某个寄存器/预留位没有在组间清干净）。
+
+**下一轮第一步（更窄了）**：检查 AMO 序列的**收尾**是否彻底 ——
+`amo_active`/`amo_wait`/`amo_phase`/`amo_mode_r`/`amo_op_r` 在序列结束那一拍
+是否都回到确定值；特别是 `amo_mode_r`（它会让 WB 拍选 `amo_old`，
+若残留会让**下一条 lw 读到旧影子而不是真值** —— 这正好解释"第 3 组的 lw 读回旧值"）。
+
+---
+
 
 ## 1. 为什么要记这一篇
 
