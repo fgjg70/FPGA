@@ -57,20 +57,41 @@ cmd /c fpga\jtag_probe.bat                       REM 改 RTL 前先确认板子�
 
 | 工作 | 现状 | 从哪接 |
 |---|---|---|
-| **A 扩展的多周期"读-改-写"** | 工具链/编码表/包定义/**ALU 数据通路**/**译码**均完成并有单元检查；缺多周期控制，故**当前执行不了原子指令** | `results/p6-a-extension.md` 第 5 节（含三条路线与推荐方案、集成难点定位）|
+| **A 扩展的多周期"读-改-写"** | 工具链/编码表/包定义/**ALU 数据通路**/**译码**/**LSU 多周期相**均完成；**差最后两步**（见下），故**当前执行不了原子指令** | `results/p6-a-extension.md` 第 5 节 |
 | **GEMM 的 C 读回 + 缓冲改 BRAM** | 寻址/取数/写回计数已验证正确；C 只有前 16 字对 | `results/p5-ai-accelerator.md` 第 0.2 节（含"改用 2×2 逐拍看"的建议）|
 
-**A 扩展多周期控制的具体落点**（已追到底，可直接开工）：
-`core.sv:606-612` 里 `dmem_addr`/`dmem_wdata`/`dmem_we` 都是 LSU 的直连线
-（`dmem_we_g` 在 647 行进 dmem），要做的是加一个 3 相 FSM
-（`AMO_READ -> AMO_WAIT -> AMO_WRITE`）+ 地址锁存寄存器，把这三个信号 mux 过来，
-再给 hazard_unit 加 `amo_busy`（照抄 `muldiv` 的 `ex_busy`/`hold_mem` 模式）。
-校验用 `tools/amo_vectors.py` 生成的 **108 条黄金向量**
-（`sim/prog/amo_vectors.hex`，已与已验证的 RTL ALU 双向交叉验证 13/13 一致）。
+#### A 扩展：差的就是这两步（Round 22 已完成 LSU 侧）
+
+**Round 22 的发现**：正确落点是 **LSU 已有的多周期 FSM**（为"非对齐跨字访存 2 拍
+拆分"建的），不是原先以为的 `core.sv` 加 mux + hazard_unit 加 `amo_busy`。原因：LSU
+本来就能按相选地址、按相控写使能、用 `lsu_stall` 冻结流水线、并在相内捕获读回数据
+—— AMO 需要的要素它全有。所以 **`load_store_unit.sv` 里已经加好了 `S_AMO` 相**
+（读相/写相由 `amo_wr` 区分），`core.sv` 里也把新端口**显式连接**了。
+
+**还差的两步**（根因：AMO 的新值**不能在 EX 段算** —— ALU 的 `ALU_AMO_*` 约定
+`a` = 从内存读回的旧值，而 dmem 是**寄存读**，旧值要到 MEM 段第二拍才到）：
+
+1. `ctrl_s` 里再加一个 `amo_rs2[31:0]`，把 rs2 随流水送到 MEM 段
+   （`amo_op` 已经在 `ctrl_s` 里了）。
+2. 在 **MEM 段**用 `{amo_old, amo_rs2}` 算出新值 —— 最省事的做法是**再例化一个
+   `alu` 实例**专做 AMO 的"新值"，把它的 `out` 接到 LSU 的 `amo_newdata`。
+   然后删掉 `ctrl_s.amo_newdata`（不再需要，因为不在 EX 段算）。
+
+**当前 `core.sv` 里 `amo_newdata` 明确系 `32'd0`**（并写了原因注释），所以
+**`A_EN` 必须保持关闭**（默认即如此）—— 打开会让 AMO 把 0 写进内存。
+不用"端口没接"的隐式默认，是因为那类静默失败本项目踩过（R8/R17）。
+
+**测试不用改汇编器**：`tools/asm.py` **已支持 `.word <imm>`**（见 asm.py L10/L277），
+所以 `sim/prog/amo.S` 可以直接用 `.word 0x0021A0AF` 这样的**手工编码**写 AMO 指令
+（编码已实测确认，见 `results/p6-a-extension.md` 第 2 节）。
+
+**校验用现成的黄金向量**：`tools/amo_vectors.py` → `sim/prog/amo_vectors.hex`，
+**108 条**（9 算符 × 12 组操作数，含 `0x80000000`/`0xFFFFFFFF` 等符号边界），
+已与已验证的 RTL ALU **双向交叉验证 13/13 一致**。
 
 > **纪律提醒**：板子掉线就**立刻停下报告**，不要自己继续推（用户明确要求）。
 > `hw` 子命令有新鲜度门限，板子不在位时会拒绝给结论并返回非 0。
-`
+
 ---
 
 ## 1. 项目定位
