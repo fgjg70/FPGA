@@ -217,7 +217,7 @@ D:\USER\Desktop\FPGA\FPGA\
 │     link.ld  crt0.S  libc_min.c  portme.c  hello.c
 │     coremark/    CoreMark v1.0 源码 + 移植层
 ├── sim/           测试台
-│     tb_units.sv (194 项单元检查)  tb_core.sv  tb_soc.sv  tb_sw.sv
+│     tb_units.sv (243 项单元检查)  tb_core.sv  tb_soc.sv  tb_sw.sv
 │     prog/  basic.S  mmio.S  m_ext.S  trap.S (+ 生成的 .hex)
 ├── tools/         asm.py  build_sw.py  elf2hex.py  run_coremark.py
 │     fpga_workflow.py  ★统一入口: doctor/check/verify/report (见 tools/README.md)
@@ -294,7 +294,7 @@ bit30:0 = 实测 tick 数
 
 **ModelSim 全套回归（当前全部 PASS）**：
 ```
-tb_units  194 项单元检查 (ALU/立即数/控制单元/CSR/regfile/BTB...)
+tb_units  243 项单元检查 (ALU/立即数/控制单元/CSR/regfile/BTB...)
 tb_core   basic.hex (含非对齐访存) + m_ext.hex (RV32M 边界)
 tb_soc    mmio.hex (UART 回环)
 tb_sw     hello.hex / cm_rv32im.hex (CoreMark)

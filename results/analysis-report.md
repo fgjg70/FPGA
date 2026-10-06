@@ -109,7 +109,7 @@
 
 | 测试 | 内容 |
 |---|---|
-| `tb_units` | 194 项单元检查（ALU / 立即数 / 控制单元 / CSR / regfile / BTB）|
+| `tb_units` | 243 项单元检查（ALU / 立即数 / 控制单元 / CSR / regfile / BTB）|
 | `tb_core_basic` | 系统级自校验（含**非对齐访存**）|
 | `tb_core_trap` | Zicsr + ECALL/EBREAK/非法指令异常 + MRET |
 | `tb_core_m_ext` | RV32M 边界（含除零 / 溢出 / 有符号边界）|
@@ -169,7 +169,7 @@ CRC 全部匹配官方 2K PERFORMANCE_RUN 期望值：
 |---|---|
 | RTL | **20 个 .sv 文件，2388 行**（纯行为级，零厂商原语）|
 | 测试台 | 1124 行（4 个 tb）|
-| 回归 | **9 项**（`tb_units` 194 项单元检查 + 8 个系统级/软件级）|
+| 回归 | **9 项**（`tb_units` 243 项单元检查 + 8 个系统级/软件级）|
 | 资源（评分版）| **LUT 4078 / FF 1377 / BRAM 4 / DSP 8** |
 
 > `gemm_accel.sv`（GEMM 加速单元）由 `GEMM_EN` 宏门控，**默认关闭**，

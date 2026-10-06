@@ -1,40 +1,100 @@
-# RV32I 五级流水线处理器
+# RV32IM 五级流水线处理器
 
-SystemVerilog 实现的 RV32I 处理器：**5 级流水线 (IF/ID/EX/MEM/WB)**，
-含冒险处理、非对齐访存硬件自动拆分、自校验测试程序。
+SystemVerilog 实现的 **RV32IM** 处理器：**5 级流水线 (IF/ID/EX/MEM/WB)**，
+含动态分支预测、完整 M-mode 异常/中断、冒险处理、非对齐访存 2 拍自动拆分。
 
-当前 194 项单元检查 + 6 组系统级测试全部通过。
+```mermaid
+graph LR
+  IF[IF 取指] --> ID[ID 译码] --> EX[EX 执行] --> MEM[访存] --> WB[写回]
+```
+（mermaid 仅为示意；实际是标准 5 级，见 `core.sv`）
+
+---
+
+## 成绩速览（真实板卡实测）
+
+**平台**：正点原子 达芬奇Pro（XC7A100T-FGG484-2，板载 50 MHz）
+**赛题**：2026 紫光同创杯 · 选题一「基于紫光同创 RISC-V 指令集 CPU 设计」
+**基准**：CoreMark v1.0（PERFORMANCE_RUN）
+
+| 评分指标 | 基线 | **最终（上板验证）** | 变化 |
+|---|---|---|---|
+| **CoreMark/MHz** | 0.8263 | **2.3611** | **+185.8%** |
+| **最高时钟频率 fmax** | 78.4 MHz | **61.7 MHz** | −21.3% |
+| **CoreMark/LUTs** | 2.361e-4 | **5.790e-4** | **+145.2%** |
+| 绝对吞吐 (CM/MHz × fmax) | 64.8 | **145.6** | **+124.7%** |
+
+**资源**：LUT **4078** / FF 1377 / BRAM 4 / DSP 8（评分版，不含 ILA）
+**上板**：1200 迭代 / **10.16 s** / 与官方参考值 **逐位 CRC 匹配** / tick 508,155,404
+
+> **绝对吞吐是本项目的核心结论**：+124.7% 表示同一块板每秒能跑 **2.25 倍**的
+> CoreMark 迭代数。三项评分指标互相矛盾时，它是有意义的最终裁判。
+
+**回归**：243 项单元检查 + **9 组**系统级/软件级测试，全部 PASS。
+
+---
+
+## 功能一览
+
+| 项 | 状态 |
+|---|---|
+| RV32I + **M 扩展** + Zicsr + M-mode 异常/中断 | ✅ |
+| 动态分支预测（64 项 BTB + 2 位 Smith，精度 **88.7%** 实测）| ✅ |
+| 完整异常/中断（ECALL/EBREAK/非法指令/mtimecmp 定时器中断/MRET）| ✅ |
+| 外设：UART 115200 8N1 收发 / GPIO / 64 位定时器 | ✅ |
+| 应用场景：神经网络 GEMM 推理核心（与独立参考实现逐元素一致）| ✅ |
+| RV32A 原子指令 | ⚠ 数据通路+译码已完成，多周期读写未做（`A_EN` 门控关闭）|
+| AI 加速单元（GEMM） | ⚠ 机制已验证（42.59× 计算加速），因面积与正确性门控关闭 |
+| I/D Cache | ⚖ 经分析判定无收益（存储器已是单周期命中的片上 BRAM）|
+
+**详细的成绩、优化过程、失败记录与后续方向**见
+[`results/analysis-report.md`](results/analysis-report.md)；
+赛题逐项对照见 [`results/gap-analysis.md`](results/gap-analysis.md)。
+
+---
 
 ## 文件一览
 
 ### 基础模块 (单周期与流水线共用)
 | 文件 | 模块 | 说明 |
 |---|---|---|
-| `rv32_pkg.sv` | — | 编码包 (单一事实来源)：指令/ALU/分支/访存/写回编码、`ctrl_s` 控制束、地址映射、前递枚举、数据通路契约 |
-| `alu.sv` | `alu` | 10 条基础运算；M 扩展编码预留 (命中输出 x 报警) |
+| `rv32_pkg.sv` | — | 编码包 (单一事实来源)：指令/ALU/分支/访存/写回编码、`ctrl_s` 控制束、地址映射、前递枚举、**RV32A 的 AMO 编码** |
+| `alu.sv` | `alu` | RV32I 基础运算 + **RV32A 的 9 个 AMO 算符**（"待写回值"计算）|
 | `branch_unit.sv` | `branch_unit` | 6 种分支判定，利用编码结构只做 3 个比较 |
-| `control_unit.sv` | `control_unit` | RV32I 全译码 + 三级合法性检查；非法指令严格无副作用 |
+| `control_unit.sv` | `control_unit` | RV32IM 全译码 + 三级合法性检查；非法指令严格无副作用；**OPC_AMO 译码由 `A_EN` 门控** |
 | `imm_gen.sv` | `imm_gen` | I/S/B/U/J 五种立即数 |
 | `pc.sv` | `pc` | PC 寄存器，带 `stall`/`flush` 钩子 |
 | `regfile.sv` | `regfile` | 2R1W，x0 恒零，**组合读 + 写旁路**，调试读口 |
+| `muldiv.sv` | `muldiv` | RV32M：乘法走 DSP，除法 32 步恢复余数法（多周期 `busy`）|
+| `btb.sv` | `btb` | 64 项 BTB + 2 位 Smith 方向预测器 |
+| `csr_file.sv` | `csr_file` | Zicsr + mstatus/mie/mip/mtvec/mepc/mcause/mtval/mscratch |
+| `ras.sv` | `ras` | 8 项返回地址栈（`RAS_EN` 门控，默认关 —— 实测净亏）|
+| `gemm_accel.sv` | `gemm_accel` | int8 GEMM 加速单元（`GEMM_EN` 门控，默认关 —— 实测面积翻倍）|
 
 ### 流水线模块
 | 文件 | 模块 | 说明 |
 |---|---|---|
-| `imem.sv` / `dmem.sv` | — | 指令/数据存储器 (组合读 LUTRAM；dmem 带字节写使能) |
+| `imem.sv` / `dmem.sv` | — | 指令/数据存储器（**寄存读 → 行为级推断 BRAM**，各 16KB；dmem 带字节写使能）|
 | `if_id_reg.sv` 等 4 个 | `*_reg` | 4 个流水寄存器 (控制束整束传递，气泡 = 真实 NOP) |
 | `hazard_unit.sv` | `hazard_unit` | 前递选择 + load-use 停顿 + 重定向门控 |
 | `load_store_unit.sv` | `load_store_unit` | 字节通道 + **非对齐跨字访存 2 拍自动拆分** |
 | `core.sv` | `core` | 五级流水线顶层 + 调试口 |
+| `fpga/top_a100t.sv` 等 | — | 顶层 + MMIO 子系统（**唯一需要按厂商重写**的部分）|
 
 ### 验证
 | 文件 | 说明 |
 |---|---|
-| `sim/tb_units.sv` | 6 个基础模块的单元回归 (194 检查点，含全部历史 bug 定向回归) |
-| `sim/tb_core.sv` | 系统级自校验 (监视 tohost + illegal 粘滞标志 + 超时保护) |
-| `sim/prog/basic.S` | 6 组测试程序 (算术/冒险/访存/非对齐/分支/移位) |
-| `tools/asm.py` | 迷你 RV32I 汇编器 (两遍扫描，标签/伪指令 li/mv/nop/j/ret) |
+| `sim/tb_units.sv` | 基础模块单元回归（含**全部历史 bug 的定向回归** + RV32A 的 ALU/译码检查）|
+| `sim/tb_core*.sv` / `tb_soc*.sv` / `tb_sw*.sv` | **9 组**系统级/软件级回归 |
+| `sim/prog/*.S`、`sw/*.c` | 测试程序与裸机 C 程序（CoreMark、神经网络 GEMM、编译器探针）|
+| `tools/amo_vectors.py` | **RV32A 黄金向量生成器**（独立 Python 参考实现，108 条，双向交叉验证过）|
+| `tools/fpga_workflow.py` | 统一工作流入口：`doctor`/`check`/`verify`/`synth`/`report`/`metrics`/`profile`/`hw` |
+| `results/` | 成绩、逐轮优化记录、失败记录、赛题对照（25 份）|
+| `skills/fpga-riscv-a100t/PITFALLS.md` | 22 条踩坑记录（R1~R22）|
 | `legacy/` | 最初的 Verilog 单周期代码 (历史留档) |
+
+> **可移植性**：CPU 核**零厂商原语**（BRAM 全用行为级推断，不例化 IP），
+> 迁到紫光同创 PDS 只需重写顶层与约束文件。
 
 ## 跑测试
 
