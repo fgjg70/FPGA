@@ -90,7 +90,7 @@ graph LR
 | `tools/amo_vectors.py` | **RV32A 黄金向量生成器**（独立 Python 参考实现，108 条，双向交叉验证过）|
 | `tools/fpga_workflow.py` | 统一工作流入口：`doctor`/`check`/`verify`/`synth`/`report`/`metrics`/`profile`/`hw` |
 | `results/` | 成绩、逐轮优化记录、失败记录、赛题对照（25 份）|
-| `skills/fpga-riscv-a100t/PITFALLS.md` | 25 条踩坑记录（R1~R25）|
+| `skills/fpga-riscv-a100t/PITFALLS.md` | 28 条踩坑记录（R1~R28）|
 | `legacy/` | 最初的 Verilog 单周期代码 (历史留档) |
 
 > **可移植性**：CPU 核**零厂商原语**（BRAM 全用行为级推断，不例化 IP），
