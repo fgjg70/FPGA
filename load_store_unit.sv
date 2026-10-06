@@ -173,7 +173,7 @@ module load_store_unit
   // AMO 读回的旧值: 写相那拍 amo_old 已有效, core 用它算新值
   assign amo_old_out = amo_old;
 
-  // (诊断打印已移除 —— 结论写进 results/p6-a-extension.md 第 5.9 节)
+  // (诊断打印已移除 —— 结论写进 results/p6-a-extension.md 第 5.11 节)
 
   // ---------------- load 路径 (WB 段组合) ----------------
   wire [4:0]  shamt_wb = {off_wb, 3'b000};
@@ -278,8 +278,14 @@ module load_store_unit
         // 序列收尾 (amo_active=0) 那一拍才落下 —— 正好在 WB 之后。
         if (amo_active) amo_mode_r <= 1'b1;
         else            amo_mode_r <= 1'b0;
-        if ((req_read || req_write) && !lsu_stall &&
-            !(state == S_AMO)) begin
+        // 【不要给这里加 `!(state == S_AMO)` 守卫 —— 那是我上一轮引入的错】
+        // 理由: "请求离开 MEM"那一拍**正是 AMO 的写相** (state 还是 S_AMO,
+        // 写相把 lsu_stall 拉低放行)。加了 `!(state==S_AMO)` 就导致
+        // **紧随 AMO 之后那条指令的 off_wb/size_wb/uns_wb/split_wb 永远不被锁存**,
+        // 于是它的字节提取/符号扩展用的是上一条的规格 —— 表现为"AMO 之后那条
+        // lw 读回 0"(实际是真值被错误地按旧规格截取/扩展掉了)。
+        // 这正是 amoor 组失败的真正原因 (前面几轮一直在查写通路, 方向错了)。
+        if ((req_read || req_write) && !lsu_stall) begin
           off_wb   <= off;
           size_wb  <= req_size;
           uns_wb   <= req_unsigned;

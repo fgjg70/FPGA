@@ -666,6 +666,44 @@ else            amo_mode_r <= 1'b0;
 
 ---
 
+## 5.11 【Round 39】我自己引入的一个 bug，已回退 + 诊断数据
+
+### 回退：`!(state == S_AMO)` 守卫是错的
+
+Round 37 我为了"避免 AMO 期间规格被覆盖"，给 `off_wb/size_wb/uns_wb/split_wb`
+的捕获加了守卫 `!(state == S_AMO)`。**这是错的**：
+
+> **"请求离开 MEM"那一拍正是 AMO 的写相**（`state` 还是 `S_AMO`，写相把
+> `lsu_stall` 拉低放行）。加了守卫 → **紧随 AMO 之后那条指令的
+> `off_wb/size_wb/uns_wb/split_wb` 永远不被锁存** → 它的字节提取/符号扩展
+> 用的是**上一条的规格** → 表现为"AMO 之后那条 `lw` 读回 0"（真值被按
+> 旧规格错误截取/扩展掉了）。
+
+**已回退该守卫**。这也解释了为什么 amoor 组一直挂：前面几轮查的是"写通路"，
+方向错了 —— 真正的问题在 **AMO 之后那条指令的 WB 规格**。
+
+### 诊断数据（`[M]` 打印，供下一轮直接用）
+
+`amo_mode_r` 的生命周期**符合设计**：
+```
+t=175000 st=3 ph=1 mode_r=1   <- AMO 写相 (放行拍, state 仍 S_AMO)
+t=185000 st=0 ph=1 mode_r=1   <- AMO 的 WB 拍, mode_r 仍为 1 -> rdata_eff=amo_old ✅
+t=295000 st=0      mode_r=0   <- 已落下; 此时 rdata=00000000
+```
+即 `mode_r` 在 AMO 的 WB 拍确实为 1（选 `amo_old`），随后落下 —— **这段是对的**。
+
+**下一轮第一步**：看 `t=195000`（紧随 AMO 的 `lw` 的 WB 拍）那几拍的
+`off_wb/size_wb/uns_wb` 与 `rdata_eff` —— 回退守卫后它们是否被正确锁存。
+若 `rdata_eff` 仍为 0，再查 dmem 是否真的收到了写（用 `u_dmem.mem[word]` 直接探阵列）。
+
+### 本轮结论
+
+- **回退了一个我自己引入的 bug**（这是净改进，且方向更明了）
+- 回归 `PASS 10 | XFAIL 1`（`amo_diag`/`amo_diag2` 保持通过）
+- 把"真正的问题在 AMO 之后那条指令的 WB 规格"这一判断**写进文档**
+
+---
+
 
 ## 1. 为什么要记这一篇
 
