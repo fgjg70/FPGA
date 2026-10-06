@@ -190,8 +190,76 @@ output logic lsu_stall;                                           // 已能冻�
   这类边界值**（min/max 的符号语义只在边界上暴露），再加 `lr`/`sc` 的
   成功与**失败**（中途插一次 store 让预留失效）两条路径。
 
+---
+
+## 5.1 【当前卡点 · Round 25 定位】`dmem_rdata` 读回恒为 0
+
+`sim/prog/amo.S` + 回归项 `tb_core_amo` 已就绪（用 `.word` **手工编码** AMO 指令，
+9 组自校验，含 min/max 的符号边界；迷你汇编器不认 AMO 助记符但支持 `.word`，
+所以不必改汇编器）。当前标记为 **XFAIL** —— 它是一个可执行的验收标准。
+
+**已打通的部分**（诊断打印为证，形如
+`t=155000 st=3 act=1 ph=0 wr=0 stall=1 we=0 addr=90003114`）：
+
+| 环节 | 状态 |
+|---|---|
+| 译码 → `amo_en` → LSU 进入 `S_AMO` | ✅ |
+| 两相推进（读相 `ph=0` → 写相 `ph=1`）| ✅ |
+| `lsu_stall`（读相停、写相放行）| ✅ |
+| **AMO 地址锁存** | ✅ `addr=90003114`，与程序的 `sw` 目标一致 |
+| 写使能 / 写相 | ✅ `we=1` |
+| 程序能跑到 tohost（不再是 timeout）| ✅ |
+
+**卡点**：`dmem_rdata` **每一拍都是 `00000000`**：
+```
+t=145000 st=0 ... addr=90003114 rdata=00000000   <- AMO 启动拍
+t=155000 st=3 ... addr=90003114 rdata=00000000   <- 读相 (地址正确, 数据为 0)
+t=165000 st=3 ... addr=90003114 rdata=00000000   <- 写相
+```
+于是 `amo_old` 恒为 0，`amo_newdata` 算成 `0+23=23` 而非 `100+23=123`，
+第 1 组校验失败（`tohost=2`）。
+
+**关键推论**：**这不是 AMO 特有的问题** —— 连"读回刚 `sw` 进去的值"都拿不到。
+所以嫌疑集中在 **LSU 的 `dmem_rdata` 输入通路**（core 里 `dmem_rdata_g` 的译码，
+以及"窗口内取 dmem / 窗口外取 ext_rdata"那一段），**而不是 AMO 状态机本身**。
+
+**下一轮从这里查**（按能砍掉多少范围排序）：
+1. 加一条诊断打印 `dmem_rdata_g` 与 `u_dmem.rdata` —— 这一步就能判断是
+   **译码处**丢了还是 **dmem 本身**没输出，范围直接对半砍；
+2. 若 dmem 本身没输出：确认 `dmem_addr` 真的到得了 `u_dmem`。注意 dmem 的地址
+   位切片是 `addr[AW+1:2]`，而 AMO 相送的是 `amo_addr_r`（启动拍的 `head_addr`）
+   —— 要确认这个 mux 没把 dmem 的地址选错；
+3. 普通 `lw` 在仿真里是好的（`tb_core_basic` 等覆盖），所以更可能是
+   **AMO 相把 dmem 的输入搞成了 0/x**，而不是 dmem 坏了。
+
+> **验收标准是现成的**：修好后 `tb_core_amo` 由 XFAIL 翻成 XPASS。
+> `verify` 对 XFAIL→XPASS 的翻转是敏感的（见 `fpga_workflow.py` 里
+> `force`/`expect_fail_ok` 的处理），不会漏报。
+
+### 本轮修掉的三个真 bug（都有诊断/警告依据）
+
+1. **`amo_wr` 未复位 → 状态机卡死。** 第一版写成
+   `if (state==S_AMO) amo_wr <= ~amo_wr;`。诊断打印给出根因 `st=3 wr=x` ——
+   **`~x` 仍是 `x`**，于是永远停在 X：`dmem_we`/`wstrb`/`lsu_stall` 全是 X，
+   状态机出不来（表现为 timeout）。改成两个**复位过**的寄存器
+   `amo_active`/`amo_phase`，由 state 组合出 `amo_wr`。
+   **这是本项目反复出现的同类坑**（PITFALLS R6/R8：多周期状态机的每个派生
+   信号都必须有确定值，不能靠"反正会先经过某相"）。
+2. **AMO 地址没有锁存。** `req_addr` 来自 EX/MEM 流水寄存器，跨多拍不稳定；
+   诊断打印显示写相那拍 `addr=00000000`。改成启动拍把字地址锁进 `amo_addr_r`。
+3. **`amo_newdata` 未声明 → 隐式 1 位网络。** `assign amo_newdata = ...` 在未
+   声明时被 ModelSim 当成 **1 位**隐式网络，接到 32 位端口只驱动了 1 位 →
+   **AMO 把 `Z` 写进内存**。唯一提示是 `vopt-2241 connection width does not
+   match`。修法：在例化**之前**显式声明。（与 R8 同类：未声明的名字被隐式推断。）
+
+### 一条工具教训
+
+给测试加 `defines: ("A_EN", "AMO_TRACE")` 后**诊断打印没有出现** ——
+`+define+X` 在 ModelSim 侧对 `ifdef` 的生效路径又不可靠（与 R17 同类，
+本次是 `vlog` 与 `vsim` 两处都要传）。最后改成**无条件启用诊断**才拿到数据。
 
 ---
+
 
 ## 1. 为什么要记这一篇
 
