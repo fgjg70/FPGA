@@ -773,8 +773,8 @@ def test_matrix() -> list[dict]:
         # **地址比 sw/lw 多 4** (0x90003004 vs 0x90003000), 是 AMO 特有的偏移。
         {"name": "tb_core_amo_diag", "top": "tb_core", "rtl": "rtl", "tb": "sim/tb_core.sv",
          "imem": "sim/prog/amo_diag.hex", "plus": [], "max_cycles": 200000, "timeout": 600,
-         "defines": ("A_EN",), "expect_fail_ok": True,
-         "desc": "RV32A 单步诊断 (tohost 直接上报失败环节) [XFAIL: 待修]"},
+         "defines": ("A_EN",),
+         "desc": "RV32A 单步诊断 (tohost 直接上报失败环节)"},
         {"name": "tb_soc", "top": "tb_soc", "rtl": "rtl", "tb": "sim/tb_soc.sv",
          "imem": "sim/prog/mmio.hex", "plus": [], "max_cycles": 400000, "timeout": 600,
          "desc": "外设 + UART 环回"},

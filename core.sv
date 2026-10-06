@@ -402,7 +402,15 @@ module core
     // 正确语义: AMO 是 I 型, 访存地址 = rs1 + imm[11:0] (AMO 的 imm 恒为 0,
     // 所以结果就等于 rs1)。这里用一个**独立加法器**算地址, 与算子计算解耦 ——
     // 这正是本项目对跳转目标做过的事 (P3 的"独立加法器"), 有先例可循。
-    ex_amo_addr = ex_rs1 + id_ex_imm;
+    // ---- RV32A: AMO 的访存地址 (rs1 + 0) ----
+    // 【偏移必须写死为 0, 不能用 id_ex_imm】诊断打印 [ex-amo] 给出实测:
+    //     rs1=90003000 imm=00000006 addr=90003006
+    // 而 amoadd.w t2,t1,(t0) 的编码是 0x0062A3AF, 其 imm[11:0] **恒为 0**。
+    // imm_gen 的 I 型提取用的是 instr[31:20], 而 AMO 的 instr[31:27] 是 funct5、
+    // [24:20] 是 rs2 —— 于是它**把 rs2 当成了立即数**(本例 rs2=t1 的编号 6),
+    // 这个 6 就污染了地址 (历史上的 +4 也是同一个成因, 只是当时 rs2 恰好是 4)。
+    // 按规范 AMO 没有立即数字段, 所以这里**直接加 0**, 从根上避开 imm_gen。
+    ex_amo_addr = ex_rs1;
   end
 
   alu #(.XLEN(XLEN)) u_alu (
@@ -663,10 +671,30 @@ module core
   // ------------------------------------------------------------------------
 `ifdef A_EN
   logic [31:0] amo_rs2;
+  logic [31:0] ex_rs2_d;      // 打一拍的 ex_rs2, 用来对齐 amo_rs2 的采样窗口
+  logic        amo_en_d;      // 上一位的 amo_en (AMO 在 EX 那一拍为 1)
+
+  // 【为什么需要 ex_rs2_d】诊断打印 [ex] 给出实测:
+  //     t=175000 amo_en=1 rs2=00000017   <- AMO 在 EX, rs2 正确 (t1=23)
+  //     t=215000 amo_en=0 rs2=00000000   <- AMO 已在 MEM
+  // 而 amo_rs2 若直接锁存 ex_rs2, 取到的是**下一拍**的值 —— 那时 EX 里已经是
+  // 后续指令 (rs2=0), 于是 AMO 的算子变成 old+0, 写回旧值, 校验失败。
+  // 加一级延迟后, 采样窗口正好落在"AMO 在 EX 那一拍"。
+  always_ff @(posedge clk or posedge rst) begin
+    if (rst) ex_rs2_d <= 32'd0;
+    else     ex_rs2_d <= ex_rs2;
+  end
+
+  always_ff @(posedge clk or posedge rst) begin
+    if (rst) amo_en_d <= 1'b0;
+    else     amo_en_d <= id_ex_ctrl.amo_en;
+  end
 
   always_ff @(posedge clk or posedge rst) begin
     if (rst) amo_rs2 <= 32'd0;
-    else if (!hold_mem) amo_rs2 <= ex_rs2;   // 跟 EX/MEM 同步推进
+    // 只在 AMO 位于 EX 那一拍捕获 (用上一拍的 amo_en 对齐), 之后保持不变,
+    // 正好跨过整个多周期序列。
+    else if (amo_en_d) amo_rs2 <= ex_rs2_d;
   end
 
   alu #(.XLEN(XLEN)) u_amo_alu (
@@ -691,6 +719,8 @@ module core
   assign amo_newdata = (amo_write_phase &&
                         ex_mem_ctrl.amo_op != AMO_LR &&
                         ex_mem_ctrl.amo_op != AMO_SC) ? amo_new_comb : 32'd0;
+
+  // (诊断打印已移除 —— 结论写进 results/p6-a-extension.md 第 5.6 节)
 `else
   // 【A_EN 关闭时: 整个 AMO 新值计算单元不综合】
   // 实测: 它虽然休眠却仍占面积与路径 (fmax 61.2 -> 59.1 MHz, LUT +14)。
