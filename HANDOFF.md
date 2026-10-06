@@ -36,7 +36,8 @@ cmd /c fpga\jtag_probe.bat                       REM 改 RTL 前先确认板子�
 | 绝对吞吐 | 64.8 | **144.4**（+122.9%）|
 | 资源 | — | LUT **4079** / FF 1377 / BRAM 4 / DSP 8 |
 
-上板：`ila_ctrl=0x42`、CRC 判定=1、tick **508,155,404**、10.16 s、CoreMark/MHz 2.3615。
+上板：`ila_ctrl=0x42`、CRC 判定=1、tick **508,155,404**、10.16 s、CoreMark/MHz 2.3615
+（2026-10-06 18:05 复验，含 A 扩展修复后的 RTL —— tick 与修复前**逐位相同**）。
 回归：**PASS 11，无 XFAIL**（`tb_units` **243** 项检查点；A 扩展的 `tb_core_amo` 已打通）。
 
 ### ⛔ 已封路（都留了数据，别重复踩）

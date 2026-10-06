@@ -467,6 +467,31 @@ ModelSim 把它当成**隐式 1 位网络**, 接到 32 位端口上只驱动了 
 **通用规则**: 任何"开关型参数"都必须有**生效自证**, 因为
 "改了没效果"的三种成因(算法无用/宏没传到/工具不认)症状完全一样。
 
+### R33. ILA 构建失败后**必须删掉 `fpga/ila_proj*` 再重试**, 否则永远失败 ✅又踩一次
+一次 `IP_Flow 19-3505 Failed to generate IP 'ila_0'` 失败后, 项目目录被留在
+**损坏状态**, 于是之后**每一次**构建都在同一处失败, 看起来像是"Vivado 坏了":
+
+```
+ERROR: [IP_Flow 19-2234] Failed to initialize IP Tcl interpreter '::ipgen_iptclns':
+       couldn't read file ".../tps/tcl/tcl8/8.5/msgcat-1.5.1.tm": no such file or directory
+       while executing "package require msgcat"
+```
+
+**注意这个报错会把人带偏**: 它说"文件不存在", 但那个文件**实际存在且可读**
+(实测 `[System.IO.File]::Open(...)` 成功)。所以别去修 Vivado 安装。
+
+**修法**:
+```bat
+rmdir /s /q fpga\ila_proj  &  rmdir /s /q fpga\ila_proj.srcs
+rmdir /s /q fpga\ila_proj.cache  &  rmdir /s /q fpga\ila_proj.hw
+rmdir /s /q fpga\ila_proj.ip_user_files  &  del fpga\ila_proj.xpr
+cmd /c fpga\build_ila.bat          REM 一次就 ILA_BUILD_OK
+```
+(实测: 失败 2 次 -> 删干净 -> 立刻成功 1 次。)
+
+**并注意 R28**: 失败的那次会**把 `ila_proj.runs/impl_1/top_a100t.bit` 删掉**,
+所以上板前 `Test-Path` 一下, 别拿旧 CSV 当结论。
+
 ### R32. "值不对"先查**相位**, 再查数据通路 ✅(A 扩展用了三轮才明白)
 AMO 的 `amoor` 组挂了很久, 三轮都把方向指向数据通路(写通路 / WB 规格 /
 指令被吞), 真因是 **LSU 在 AMO launch 拍漏拉 `lsu_stall`**, 导致紧随的 `lw`
