@@ -673,6 +673,7 @@ module core
   logic [31:0] amo_rs2;
   logic [31:0] ex_rs2_d;      // 打一拍的 ex_rs2, 用来对齐 amo_rs2 的采样窗口
   logic        amo_en_d;      // 上一位的 amo_en (AMO 在 EX 那一拍为 1)
+  logic [4:0]  amo_op_r;      // 自己锁存的 amo_op (ex_mem_ctrl 里那份会被 hold_mem 挡住)
 
   // 【为什么需要 ex_rs2_d】诊断打印 [ex] 给出实测:
   //     t=175000 amo_en=1 rs2=00000017   <- AMO 在 EX, rs2 正确 (t1=23)
@@ -697,19 +698,35 @@ module core
     else if (amo_en_d) amo_rs2 <= ex_rs2_d;
   end
 
+  // 【为什么需要自己锁存 amo_op, 不用 ex_mem_ctrl.amo_op】
+  // 诊断打印给出实测: `ex_op=00001` (EX 段正确) 但 `mem_op=00000`。
+  // 根因在 ex_mem_reg.sv 第 35 行: `else if (!stall) ctrl <= ctrl_in;`
+  // 而 stall 接的是 hold_mem —— **AMO 在 EX 段停留期间 hold_mem 有效,
+  // 于是 ctrl_in 根本没被锁存**, MEM 段看到的还是上一条指令的 amo_op (0),
+  // 结果把 amoswap 当成 amoadd 算 (0x1111+0x2222=0x3333)。
+  //
+  // 而 AMO 停在 EX 期间 `id_ex_ctrl.amo_op` 是**稳定且正确**的 —— 但实测
+  // 它只在 `amo_en` 有效的那一拍为真值, 再往后就被后续指令冲掉了
+  // (打印 [d] 实测: amo_en_d=1 那一拍 idex_op 已经是 00000)。
+  // 所以锁存条件必须用 **id_ex_ctrl.amo_en 本身**, 而不是它的延迟 amo_en_d。
+  always_ff @(posedge clk or posedge rst) begin
+    if (rst) amo_op_r <= 5'd0;
+    else if (id_ex_ctrl.amo_en) amo_op_r <= id_ex_ctrl.amo_op;
+  end
+
   alu #(.XLEN(XLEN)) u_amo_alu (
     .a       (amo_old),            // 从内存读回的旧值
     .b       (amo_rs2),            // rs2
-    .op      (ex_mem_ctrl.amo_op == AMO_SWAP ? ALU_AMO_SWAP :
-              ex_mem_ctrl.amo_op == AMO_ADD  ? ALU_AMO_ADD  :
-              ex_mem_ctrl.amo_op == AMO_XOR  ? ALU_AMO_XOR  :
-              ex_mem_ctrl.amo_op == AMO_AND  ? ALU_AMO_AND  :
-              ex_mem_ctrl.amo_op == AMO_OR   ? ALU_AMO_OR   :
-              ex_mem_ctrl.amo_op == AMO_MIN  ? ALU_AMO_MIN  :
-              ex_mem_ctrl.amo_op == AMO_MAX  ? ALU_AMO_MAX  :
-              ex_mem_ctrl.amo_op == AMO_MINU ? ALU_AMO_MINU :
-              ex_mem_ctrl.amo_op == AMO_MAXU ? ALU_AMO_MAXU :
-                                               ALU_AMO_ADD),
+    .op      (amo_op_r == AMO_SWAP ? ALU_AMO_SWAP :
+              amo_op_r == AMO_ADD  ? ALU_AMO_ADD  :
+              amo_op_r == AMO_XOR  ? ALU_AMO_XOR  :
+              amo_op_r == AMO_AND  ? ALU_AMO_AND  :
+              amo_op_r == AMO_OR   ? ALU_AMO_OR   :
+              amo_op_r == AMO_MIN  ? ALU_AMO_MIN  :
+              amo_op_r == AMO_MAX  ? ALU_AMO_MAX  :
+              amo_op_r == AMO_MINU ? ALU_AMO_MINU :
+              amo_op_r == AMO_MAXU ? ALU_AMO_MAXU :
+                                     ALU_AMO_ADD),
     .out     (amo_new_comb),
     .sum_out ()
   );
@@ -717,10 +734,10 @@ module core
   // 只在该用的时候选它: LR/SC 不写内存 (由 amo_op 决定), 且必须处于写相。
   // 其余时候给 0, 避免把无关数据当写值 (LSU 也只在写相才用 amo_newdata)。
   assign amo_newdata = (amo_write_phase &&
-                        ex_mem_ctrl.amo_op != AMO_LR &&
-                        ex_mem_ctrl.amo_op != AMO_SC) ? amo_new_comb : 32'd0;
+                        amo_op_r != AMO_LR &&
+                        amo_op_r != AMO_SC) ? amo_new_comb : 32'd0;
 
-  // (诊断打印已移除 —— 结论写进 results/p6-a-extension.md 第 5.7 节)
+  // (诊断打印已移除 —— 结论写进 results/p6-a-extension.md 第 5.8 节)
 `else
   // 【A_EN 关闭时: 整个 AMO 新值计算单元不综合】
   // 实测: 它虽然休眠却仍占面积与路径 (fmax 61.2 -> 59.1 MHz, LUT +14)。

@@ -538,6 +538,51 @@ else if (!stall) begin
 
 ---
 
+## 5.8 【Round 35】再修两处，**三个算子全部算对**；剩"写没落进内存"
+
+### 修掉的两处
+
+1. **`amo_op` 跨 EX→MEM 丢失**（Round 34 定位）：根因是 `ex_mem_reg.sv` 的
+   `else if (!stall) ctrl <= ctrl_in;`，而 `stall` = `hold_mem` —— AMO 停在 EX
+   期间 `ctrl` 根本锁不进去。修法：**自己锁存一份** `amo_op_r`，
+   **完全不动 `hold_mem`/`ex_mem_reg` 的语义**（本项目最敏感处）。
+
+2. **`amo_op_r` 的锁存条件错了**：第一版写成 `else if (amo_en_d) ...`，
+   而诊断打印给出 `t=185000 amo_en_d=1` 时 `idex_op` **已经是 00000**
+   （AMO 已离开 EX）。改成 **`else if (id_ex_ctrl.amo_en)`** —— 用 `amo_en`
+   本身（AMO 正在 EX 的那一拍）。
+
+### 修完后的实测（诊断打印 `[d]`，只列各组的写相）
+
+```
+t=175000  op_r=00000(ADD)   old=00000064 rs2=00000017 comb=0000007b   -> amoadd  ✅
+t=325000  op_r=00001(SWAP)  old=00001111 rs2=00002222 comb=00002222   -> amoswap ✅
+t=475000  op_r=01000(OR)    old=f0f0f0f0 rs2=0f0f0f0f comb=ffffffff   -> amoor   ✅
+```
+
+**三个算子的"新值"全部算对**（`amoadd`/`amoswap` 的整组校验已通过）。
+
+### 仍剩最后一环：**写回没有落到内存**
+
+`amo.S` 现在在**第 3 组（`amoor`）**失败（`tohost=4`），而该组的
+`comb=ffffffff`、`nd=ffffffff` **都是对的** —— 说明**算子算对了，但那个值
+没有真正写进内存**（随后 `lw` 读回的仍是旧值 `0xF0F0F0F0`）。
+
+**下一轮第一步（很具体）**：在 AMO 写相那一拍打印 **LSU 的三件套** ——
+`dmem_we` / `dmem_wstrb` / `dmem_wdata`，以及 `core.sv` 里的 `dmem_we_g`
+（注意它还要 `&& sel_dmem`）。候选：
+1. `amo_write_phase` 与 LSU 内部 `amo_phase` 之间存在一拍相位差
+   （core 看到写相、LSU 还在读相，于是 `dmem_we` 没拉高）；
+2. `dmem_wstrb` 在那一拍是 `0000`（参考 diag 里 `newdata` 是 `00000000`
+   那几拍 —— 写相若是空转，写就不会发生）。
+
+> **注意一个观察**：`amo_diag`(amoadd) 与 `amo_diag2`(amoswap) 都 **PASS**，
+> 但 `amo.S` 的 `amoadd`/`amoswap` 组也过、第 3 组才挂 —— 说明**写回本身是
+> 会发生的**，问题更可能是**特定组的时序/相位**而非普遍失效。
+> 下一步把"写相那拍的 `dmem_we`/`wstrb`"打出来即可分辨。
+
+---
+
 
 ## 1. 为什么要记这一篇
 
