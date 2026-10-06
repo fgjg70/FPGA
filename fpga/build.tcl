@@ -48,25 +48,29 @@ read_xdc "D:/USER/Desktop/FPGA/FPGA/fpga/daVinciPro.xdc"
 #   但"仿真 ticks 不变、零代价"是假的, 因为仿真跑的一直是**没开宏**的版本。
 #
 # 修好宏传递后实测 (verify --only tb_sw_coremark):
-#   IMEM_REG_READ   单独开 -> 仿真 timeout (取指与 PC 配对错位)
-#   LOAD_RESULT_REG 单独开 -> 仿真 timeout
+#   LOAD_RESULT_REG 单独开 -> 仿真 timeout (已否决, 见 results/p4-macro-failure.md 5.2)
 #   BTB_GSHARE      单独开 -> 能跑, 但 ticks 449317, 比基线 423527 **慢 6%**
-#   三个都不开 (基线)      -> PASS, ticks 423527
+#   IMEM_REG_READ   2026-10-06 **已打通**: 全量回归 PASS 10 | XFAIL 1,
+#                   且 CoreMark ticks 与组合读**逐位一致** (423527)
 #
-# 上板验证过的配置正是**三个都不开** (ILA 版 bitstream, 2026-10-05 16:43):
-#   PASS, CRC 判定=1, tick=508,155,404, 10.16 s。默认关宏与硬件一致。
+# 上板验证过的配置是**四个宏全关** (ILA 版 bitstream, 2026-10-05 16:43):
+#   PASS, CRC 判定=1, tick=508,155,404, 10.16 s。
 #
 # 想再试验时: set IMEM_REG_READ=1 / set LOAD_REG=1 / set BTB_GSHARE=1
 # **但必须先跑 `python tools/fpga_workflow.py verify` 确认仿真通过** 再综合。
 # ===========================================================================
 set IMEM_DEFS ""
 if {[info exists ::env(IMEM_REG_READ)] && $::env(IMEM_REG_READ) ne ""} {
-  # 【拦住它】寄存读需要重排取指流水 (pc_plus4 那一串会整体偏移一拍), 当前
-  # 直接开启会让程序行为错乱。见 results/p4-macro-failure.md 第 5.1 节。
-  puts "BUILD_ERROR: IMEM_REG_READ 当前不可用 —— 它要求重排取指流水;"
-  puts "BUILD_ERROR: 直接开启会让 pc_plus4/跳转目标偏移一拍, 程序行为错乱。"
-  puts "BUILD_ERROR: 详见 results/p4-macro-failure.md 第 5.1 节。"
-  exit 1
+  # Registered read -> imem becomes inferable as RAMB36, freeing the ~1228 LUTs
+  # (31% of the core) that the combinational LUT-ROM used to occupy.
+  # [WORKING since 2026-10-06] The key is to drive the fetch address with the
+  # COMBINATIONAL next-PC (pc_next): then imem_rdata(N) == mem[pc(N)], i.e. the
+  # exact same pairing as the combinational read, so IF/ID needs no change and
+  # the redirect penalty stays 2 cycles. Also freeze fetch for one cycle after
+  # reset so IMEM gets a chance to latch PC_RESET.
+  # See results/p4-macro-failure.md 5.1 and the pc_next comment in core.sv.
+  append IMEM_DEFS " IMEM_REG_READ=1"
+  puts "BUILD_IMEM_REG_READ=1"
 } else {
   puts "BUILD_IMEM_COMB_READ=1"
 }

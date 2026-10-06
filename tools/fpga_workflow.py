@@ -2007,10 +2007,11 @@ def main() -> int:
     p.add_argument("--tag", help="记录进 results/coremark.csv 用的标签")
     p.add_argument("--record", action="store_true", help="追加一行到 results/coremark.csv")
     p.add_argument("--force", action="store_true", help="忽略缓存强制重建")
-    # 【注意默认值】三个架构宏默认**全关** —— 与上板验证过的配置一致。
-    # IMEM_REG_READ 目前不可用 (需重排取指流水, build.tcl 会直接拦住)。
+    # 【注意默认值】四个架构宏默认**全关** —— 与上板验证过的配置一致。
+    # IMEM_REG_READ 已于 2026-10-06 打通 (仿真回归 PASS 10 | XFAIL 1,
+    # 且 CoreMark ticks 与组合读逐位一致)。要用请显式打开并记录四项指标。
     p.add_argument("--imem-reg-read", action="store_true",
-                   help="取指存储器用寄存读 (IMEM_REG_READ); 当前不可用, 见 p4-macro-failure.md")
+                   help="取指存储器用寄存读 (IMEM_REG_READ) -> 可推断 BRAM, 省约 1228 LUT")
     p.add_argument("--load-reg", action="store_true",
                    help="load 结果由 MEM/WB 寄存器给出 (LOAD_RESULT_REG); 默认组合")
     p.add_argument("--gshare", action="store_true",
