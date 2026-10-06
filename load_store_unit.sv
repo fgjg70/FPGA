@@ -38,6 +38,19 @@ module load_store_unit
   input  logic [31:0]     req_addr,
   input  logic [31:0]     req_wdata,
 
+  // ---- RV32A 原子指令 (读-改-写) ----
+  // 【为什么接在 LSU 而不是另起一套】LSU 本来就有多周期 FSM (为"非对齐跨字
+  // 访存 2 拍拆分"建的): 它能按相选地址、按相控写使能、并且用 lsu_stall 冻结
+  // 流水线 —— 这正是 AMO 需要的全部要素。所以 AMO 接成**新增相**即可,
+  // 不必去动 core.sv 的内存路径接线或 ex_mem 流水寄存器的语义
+  // (本项目在"改流水寄存器语义"上吃过四轮亏, 见 IMEM_REG_READ)。
+  //
+  // amo_newdata: 由 EX 段 ALU 算好的"应写回内存的新值"随流水传下来。
+  //              (ALU 的 ALU_AMO_* 就是算这个; a=旧值要等读回来, 所以这里
+  //               传的是**已算好的结果**, 逻辑上等价于"新值"。)
+  input  logic            amo_en,
+  input  logic [31:0]     amo_newdata,
+
   // DMEM 接口 (寄存读: 地址第 N 拍, 数据第 N+1 拍)
   output logic [31:0]     dmem_addr,
   output logic [31:0]     dmem_wdata,
@@ -50,7 +63,13 @@ module load_store_unit
   output logic            lsu_stall
 );
 
+  // AMO 用两个新相接在拆分访存状态机后面 (编码 2'd3 做 AMO_READ,
+  // 再用一个独立的标志区分 WAIT, 避免把 state 加宽 -> 少动现有逻辑)
   localparam logic [1:0] S_IDLE = 2'd0, S_HEAD = 2'd1, S_TAIL = 2'd2;
+  localparam logic [1:0] S_AMO  = 2'd3;      // AMO 读相 / 写相 (由 amo_wr 区分)
+  logic                  amo_wr;             // 0 = AMO 读旧值, 1 = AMO 写新值
+  logic [31:0]           amo_old;            // 读回的旧值 (也是 rd 的值)
+  logic                  amo_mode_r;         // AMO 已启动 (保持到 WB 拍, 供 load_data 选择)
 
   logic [1:0]  state;
 
@@ -82,7 +101,9 @@ module load_store_unit
   assign tail_addr = head_addr + 32'd4;
 
   // 地址选择: IDLE 送头字, HEAD/TAIL 送尾字 (TAIL 继续送尾字, 让 WB 拍数据仍是尾字)
-  assign dmem_addr  = (state == S_IDLE) ? head_addr : tail_addr;
+  //           AMO 两相都送同一个字地址 (AMO 只做字访问, 不拆分)
+  assign dmem_addr  = (state == S_AMO) ? head_addr
+                    : (state == S_IDLE) ? head_addr : tail_addr;
 
   // ---------------- store 路径 ----------------
   // 注意: store 用 *当前请求* 的 off, 不是 WB 影子的 off_wb —— 影子属于上一条
@@ -93,19 +114,29 @@ module load_store_unit
   assign head_strb     = strobe8[3:0];
   assign tail_strb     = strobe8[7:4];
 
-  assign dmem_wdata = (state == S_IDLE) ? store_shifted[31:0] : store_shifted[63:32];
-  // TAIL 拍不再重复写 (跨字 store 在 IDLE 写头、HEAD 写尾即可)
-  assign dmem_wstrb = (req_write && state != S_TAIL)
+  assign dmem_wdata = (state == S_AMO)  ? amo_newdata          // AMO 写相写"新值"
+                    : (state == S_IDLE) ? store_shifted[31:0]
+                                        : store_shifted[63:32];
+  // ---- 写使能 ----
+  // 原逻辑: TAIL 拍不再重复写 (跨字 store 在 IDLE 写头、HEAD 写尾即可)
+  // AMO: 读相不写, 写相才写整个字 (4'b1111)
+  assign dmem_wstrb = (state == S_AMO)  ? (amo_wr ? 4'b1111 : 4'b0000)
+                    : (req_write && state != S_TAIL)
                       ? ((state == S_IDLE) ? head_strb : tail_strb) : 4'b0000;
-  assign dmem_we    = req_write && (state != S_TAIL);
+  assign dmem_we    = (state == S_AMO)  ? amo_wr
+                    : (req_write && (state != S_TAIL));
 
-  // 停顿: HEAD 拍 + "IDLE 且需要拆分" 的那一拍
-  assign lsu_stall  = (state == S_HEAD) || (state == S_IDLE && needs_split);
+  // 停顿: HEAD 拍 + "IDLE 且需要拆分" 的那一拍 + AMO 的两相都要停
+  assign lsu_stall  = (state == S_HEAD) || (state == S_IDLE && needs_split)
+                   || (state == S_AMO && !amo_wr);   // 读相停, 写相放行
 
   // ---------------- load 路径 (WB 段组合) ----------------
   wire [4:0]  shamt_wb = {off_wb, 3'b000};
-  wire [63:0] raw64    = split_wb ? {dmem_rdata, head_word_r}
-                                  : {32'b0, dmem_rdata};
+  // AMO 的"读回值"走同一条路: 旧值在 amo_old 里, 且 off/size 已按字对齐设好,
+  // 所以下面的移位与符号扩展对它是恒等操作。
+  wire [31:0] rdata_eff = amo_mode_r ? amo_old : dmem_rdata;
+  wire [63:0] raw64    = split_wb ? {rdata_eff, head_word_r}
+                                  : {32'b0, rdata_eff};
   // 注意: SystemVerilog 不允许对括号表达式做位选 ((a>>b)[31:0] 非法),
   // 必须先赋给中间 wire 再切片。
   wire [63:0] load_shifted = raw64 >> shamt_wb;
@@ -133,20 +164,39 @@ module load_store_unit
     end
     else begin
       case (state)
-        S_IDLE:  if (needs_split) state <= S_HEAD;
+        S_IDLE:  if (amo_en)         state <= S_AMO;
+                 else if (needs_split) state <= S_HEAD;
         S_HEAD:  state <= S_TAIL;
+        S_AMO:   state <= amo_wr ? S_IDLE : S_AMO;   // 写相做完就放行
         default: state <= S_IDLE;
       endcase
 
+      if (state == S_AMO) amo_wr <= ~amo_wr;
+
       // 头字捕获: HEAD 拍末尾 dmem_rdata 就是头字
       if (state == S_HEAD) head_word_r <= dmem_rdata;
+      // 【AMO 旧值捕获】在读相那拍末尾 dmem_rdata 就是内存旧值。
+      // 它就是 rd 要读到的值 (规范: AMO 的 rd = 操作前的值)。
+      if (state == S_AMO && !amo_wr) amo_old <= dmem_rdata;
 
-      // 请求离开 MEM 那一拍, 记下它的规格给 WB 段用
-      if ((req_read || req_write) && !lsu_stall) begin
-        off_wb   <= off;
-        size_wb  <= req_size;
-        uns_wb   <= req_unsigned;
-        split_wb <= needs_split;
+      // 请求离开 MEM 那一拍, 记下它的规格给 WB 段用。
+      // 【AMO 必须在启动那拍就记】因为放行发生在 S_AMO 的写相, 而那时
+      // req_* 已经不是 AMO 的请求了 (amo_en 只在启动拍有效)。
+      if (amo_en) begin
+        off_wb     <= 2'd0;            // AMO 一律字对齐字访问
+        size_wb    <= MEM_WORD;
+        uns_wb     <= 1'b0;
+        split_wb   <= 1'b0;
+        amo_mode_r <= 1'b1;            // 让 WB 拍 load_data 选 amo_old
+      end
+      else begin
+        amo_mode_r <= 1'b0;
+        if ((req_read || req_write) && !lsu_stall) begin
+          off_wb   <= off;
+          size_wb  <= req_size;
+          uns_wb   <= req_unsigned;
+          split_wb <= needs_split;
+        end
       end
     end
   end

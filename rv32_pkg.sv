@@ -251,6 +251,10 @@ package rv32_pkg;
     logic [4:0]  amo_op;         // funct5 (见 AMO_* 常量)
     logic        amo_aq;         // acquire 语义位 (单核无 cache, 译码后无副作用)
     logic        amo_rl;         // release 语义位 (同上)
+    // 【AMO 的"待写回值"】ALU 在 EX 段算出 (a=旧值, b=rs2), 但真正写内存发生在
+    // MEM 段的多周期序列里, 所以必须**随流水传下去**。放在 ctrl_s 里最省事 ——
+    // 这个束本来就在 ID/EX -> EX/MEM -> MEM/WB 整束打拍, 不用新开一条通路。
+    logic [31:0] amo_newdata;
   } ctrl_s;
 
   // --------------------------------------------------------------------------

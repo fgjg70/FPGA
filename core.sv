@@ -611,7 +611,22 @@ module core
     .dmem_we      (dmem_we),
     .dmem_rdata   (dmem_rdata_g),   // 译码后: 窗口内取 dmem, 窗口外取 ext_rdata
     .load_data    (mem_load_data),
-    .lsu_stall    (lsu_stall)
+    .lsu_stall    (lsu_stall),
+    // ---- RV32A 原子指令 ----
+    // amo_en: 直接来自 EX/MEM 的控制束, 所以 A_EN 打开后译码出来的 amo_en
+    //         能自然流到这里, LSU 的多周期序列即可启动。
+    // amo_newdata: **待完成的接线**。AMO 的"应写回值"不能在 EX 段算出来 ——
+    //   ALU 的 ALU_AMO_* 约定 a = 从内存读回的旧值, 而 dmem 是寄存读,
+    //   旧值要到 MEM 段第二拍才到。所以必须:
+    //     (1) ctrl_s 里再带一个 amo_rs2[31:0] 把 rs2 送到 MEM;
+    //     (2) 在 MEM 段用 {amo_old, amo_rs2} 组合算出新值 (可例化第二个 alu
+    //         实例, 复用 ALU_AMO_* 语义);
+    //     (3) 把那个结果接到这里。
+    //   在 (2) 完成之前这里**明确系 0**, 而不是靠"端口没接"的隐式默认 ——
+    //   那类静默失败本项目已经踩过 (见 PITFALLS R8/R17)。
+    //   AMO 写相会把 0 写进内存, 所以 **A_EN 必须保持关闭** (默认即如此)。
+    .amo_en       (ex_mem_ctrl.amo_en),
+    .amo_newdata  (32'd0)
   );
 
   // ------------------------------------------------------------------------

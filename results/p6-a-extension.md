@@ -122,17 +122,62 @@ AMO 需要的是"在 MEM 段先读旧值、算出新值、再写回去"，可问
 3. **`ex_mem_reg` 的 `stall` 接的是 `hold_mem`** —— 它能冻结 MEM/WB，但冻结的是
    "保持旧值"，**不能把新算出来的值注入进去**。
 
-### 可行的三条路（下一轮选一条）
+### 可行的三条路（Round 22 更新：**已找到正确落点**）
 
-| 路线 | 做法 | 代价 |
-|---|---|---|
-| **A. 在 EX 段做成多周期（仿照 muldiv）** | 把 AMO 当"多周期执行单元"：EX 段拉 `amo_busy` 冻结流水线，内部自己发读地址、等 dmem 寄存读回来、算新值、**在最后一个 EX 拍**把"地址"送 `ex_result`、把"旧值"送 rd 通路，然后让 EX/MEM 正常锁存（此时 ctrl 需带 `mem_write`）| 需要新增一条"读回来的旧值"从 dmem 绕回 EX 的通路 + AMO 自己的地址寄存器；**改动集中在 EX，不动 ex_mem 语义** ← 推荐 |
-| B. 给 `ex_mem_reg` 加"注入端口" | 新增 `alu_out_inject`/`inject_en`，RMW 第二拍把新值注入 `ex_mem_alu_out` | 会污染流水寄存器的接口语义，容易出隐蔽 bug |
-| C. 新增一个 MEM 段写回缓冲 | 记下"待写地址+待写数据+写使能"，下一拍由它驱动 dmem | 相当于加一个小状态机在 LSU 侧，改动面也不小 |
+#### ✅ 推荐路线（Round 22 发现）：扩展 **LSU 已有的多周期 FSM**
 
-**推荐 A**：理由与项目里已验证的模式一致（muldiv 就是这么做的），
-且**不动 EX/MEM 流水寄存器的语义** —— 本项目已经在"改流水寄存器语义"上
-吃过亏（`IMEM_REG_READ` 四轮失败）。
+原先我打算在 `core.sv` 里加 mux + 给 hazard_unit 加 `amo_busy`（下面路线 A）。
+**Round 22 读了 `load_store_unit.sv` 之后发现这是绕远路** —— LSU **已经有一套
+完全够用的多周期机制**，正是为"非对齐跨字访存 2 拍拆分"建的：
+
+```systemverilog
+localparam S_IDLE=0, S_HEAD=1, S_TAIL=2;
+logic [1:0] state;
+assign dmem_addr  = (state == S_IDLE) ? head_addr  : tail_addr;   // 已能按相选地址
+assign dmem_wdata = (state == S_IDLE) ? store_shifted[31:0] : store_shifted[63:32];
+assign dmem_we    = req_write && (state != S_TAIL);               // 已能按相控写使能
+assign dmem_wstrb = req_write && (state != S_TAIL) ? ... : 4'b0000;
+output logic lsu_stall;                                           // 已能冻结流水线
+```
+
+**它已经具备 AMO 需要的全部要素**：按相选地址、按相控写使能、多周期冻结流水线、
+并且在 `S_HEAD` 相**捕获读回的数据**。所以 AMO 应当作为**新增相**接进去，而不是
+在 core.sv 里另起一套。
+
+**要做的改动（很小，且集中在 LSU）**：
+
+1. `rv32_pkg` 的 LSU 端口加两个输入：`amo_en`、`amo_op[4:0]`
+   （或在 core 里先算出"新值"再送一个 `amo_newdata` 进来 —— 后者更简单，
+   因为 ALU 已经在 EX 段算好了 AMO 的"待写回值"，见 `alu.sv` 的 `ALU_AMO_*`）。
+2. 若走"送新值进来"：core 里只需把 `ex_mem_ctrl.amo_en` 与
+   **EX 段算出的 AMO 新值**（需要随流水寄存下来，跟 `ex_mem_alu_out` 并列）
+   接到 LSU。这比改内存路径的三个 mux 干净得多。
+3. LSU 状态机加相：`AMO_READ`（送地址读旧值）→ `AMO_WAIT`（旧值到，
+   此时把 `dmem_we` 拉高、`dmem_wdata` 换成新值）→ `AMO_DONE`（放行，
+   `lsu_stall` 落低，rd 取旧值）。
+4. LR/SC 预留：LSU 内加 `resv_valid`/`resv_addr`（单核一项即可）。
+   **任何 store / trap / 中断都要清预留**；`sc.w` 失败时**不写内存且 rd=1**。
+5. 校验：用 `tools/amo_vectors.py` 的 **108 条黄金向量**。
+
+> **为什么这条路线更安全**：它**不动 `ex_mem_reg` 的语义**，也不动 `core.sv` 的
+> 内存路径接线，只往一个**已经在正确工作**的状态机里加相。本项目在"改流水寄存器
+> 语义"上吃过四轮亏（`IMEM_REG_READ`），所以这点很关键。
+
+#### 路线 A（原计划，已被上面取代，保留供参考）
+
+把 AMO 做成 EX 段的多周期单元（仿 `muldiv` 的 `ex_busy`）：EX 拉 `amo_busy` 冻结
+流水线，内部自己发读地址、等 dmem 寄存读回来、算新值、在最后一个 EX 拍把地址送
+`ex_result`，让 EX/MEM 正常锁存（此时 ctrl 需带 `mem_write`）。
+代价：需要新增"读回来的旧值"绕回 EX 的通路 + AMO 自己的地址寄存器。
+
+#### 路线 B（不推荐）
+
+给 `ex_mem_reg` 加"注入端口"：会污染流水寄存器的接口语义，容易出隐蔽 bug。
+
+#### 路线 C（不推荐）
+
+新增 MEM 段写回缓冲：相当于在 LSU 侧再加一个状态机 —— 而 LSU 本来就有状态机，
+不如直接扩展它。
 
 ### 还要一并处理的点
 
