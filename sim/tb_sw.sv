@@ -155,6 +155,10 @@ module tb_sw;
   int unsigned n_stall_lu = 0;   // load-use 停顿
   int unsigned n_stall_ls = 0;   // 拆分访存停顿
   int unsigned n_stall_ex = 0;   // 多周期执行单元忙 (乘除法)
+  // 【为什么要数 load】用周期换频率的改动必须先把账算平: 例如"让 load 在 MEM
+  //   多停一拍"会让**每一次 load** 都多花 1 拍, 代价 = n_load / cycles。
+  //   没有这个数就只能凭感觉估。
+  int unsigned n_load = 0;       // load 在 MEM 且流水线前进的周期数 ≈ load 条数
   // 预测器精度
   int unsigned n_ctrl = 0;       // 控制流指令数 (每条做一次预测)
   int unsigned n_mis  = 0;       // 预测错误数
@@ -226,6 +230,8 @@ module tb_sw;
       if (u_dut.u_hazard.load_use) n_stall_lu++;   // load_use 在 hazard_unit 内部
       if (u_dut.lsu_stall) n_stall_ls++;
       if (u_dut.md_busy)   n_stall_ex++;
+      // load 在 MEM 段且本拍流水线前进 -> 一次 load "消耗" 一个 MEM 周期
+      if (u_dut.ex_mem_ctrl.mem_read && !u_dut.pipe_stall) n_load++;
 
       // RAS 自证 (仅在 RAS_EN 打开时存在)
 `ifdef RAS_EN
@@ -332,6 +338,9 @@ module tb_sw;
     $display("  load-use   = %0d  (%0d%%)", n_stall_lu, (n_stall_lu * 100) / (cycles == 0 ? 1 : cycles));
     $display("  split-mem  = %0d", n_stall_ls);
     $display("  muldiv busy= %0d", n_stall_ex);
+    // 【代价估算用】每让一次 load 多占 1 个 MEM 周期, 时间就多 n_load/cycles
+    $display("  load(MEM)  = %0d  (%0d%% of cycles)  <- 每次 load 多停 1 拍的代价就是这个百分比",
+             n_load, (n_load * 100) / (cycles == 0 ? 1 : cycles));
     $display("  --- 取指对齐自检 (寄存读改动的守门人) ---");
     if (n_align_err != 0)
       $display("  *** 失败 %0d 次: if_pc 与 if_instr 不同源 (取指错位!) ***", n_align_err);
