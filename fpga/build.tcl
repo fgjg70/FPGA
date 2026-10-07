@@ -125,7 +125,23 @@ if {[info exists ::env(GEMM_EN)] && $::env(GEMM_EN) ne ""} {
   puts "BUILD_GEMM_OFF=1"
 }
 
-synth_design -top top_a100t -part $part -verilog_define "IMEM_INIT_FILE=\"$imem\" DMEM_INIT_FILE=\"$dmem\" $IMEM_DEFS"
+# ---------------------------------------------------------------- retiming --
+# Vivado register retiming: automatically MOVES flip-flops across combinational
+# logic to balance stages. It is a formal equivalence transform, so cycle
+# behaviour -- and therefore CoreMark ticks -- must NOT change; if ticks move,
+# treat that as a red flag and drop it.
+# Note: it cannot move logic across a BRAM's internal DO register, so it will not
+# by itself decouple the dmem->EX chain; it can only rebalance the EX/branch/
+# redirect tail. RETIMING=1 enables it. OFF by default (not yet a measured win).
+set RETIM_OPT ""
+if {[info exists ::env(RETIMING)] && $::env(RETIMING) ne ""} {
+  set RETIM_OPT "-retiming"
+  puts "BUILD_RETIMING=1"
+} else {
+  puts "BUILD_RETIMING_OFF=1"
+}
+
+synth_design -top top_a100t -part $part {*}$RETIM_OPT -verilog_define "IMEM_INIT_FILE=\"$imem\" DMEM_INIT_FILE=\"$dmem\" $IMEM_DEFS"
 puts "BUILD_PROG=$PROG"
 
 # ---- Pblock (physical optimization) -- ON BY DEFAULT for this part ---------

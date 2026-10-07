@@ -1428,6 +1428,7 @@ def cmd_synth(args) -> int:
     h.update(("pblockcells=" + (args.pblock_cells or "u_core")).encode())
     h.update(b"containrt" if args.contain_routing else b"nortcontain")
     h.update(("route=" + (args.route_directive or "default")).encode())
+    h.update(b"retiming" if args.retiming else b"noretiming")
     fp = h.hexdigest()[:32]
 
     cache = os.path.join(CACHE_DIR, "synth-cache.json")
@@ -1474,6 +1475,8 @@ def cmd_synth(args) -> int:
                 benv["CONTAIN_ROUTING"] = "1"
             if args.route_directive:
                 benv["ROUTE_DIRECTIVE"] = args.route_directive
+            if args.retiming:
+                benv["RETIMING"] = "1"
             if args.load_reg:
                 benv["LOAD_REG"] = "1"
             if args.gshare:
@@ -2099,6 +2102,8 @@ def main() -> int:
                    help="给 Pblock 加 CONTAIN_ROUTING (纯物理, 不改功能)")
     p.add_argument("--route-directive", default=None,
                    help="覆盖 route_design 策略 (默认 AggressiveExplore)")
+    p.add_argument("--retiming", action="store_true",
+                   help="开启综合器寄存器重定时 (形式等价变换, ticks 必须不变)")
     p.set_defaults(func=cmd_synth)
 
     args = ap.parse_args()
