@@ -127,6 +127,39 @@ if {[info exists ::env(GEMM_EN)] && $::env(GEMM_EN) ne ""} {
 
 synth_design -top top_a100t -part $part -verilog_define "IMEM_INIT_FILE=\"$imem\" DMEM_INIT_FILE=\"$dmem\" $IMEM_DEFS"
 puts "BUILD_PROG=$PROG"
+
+# ---- Pblock (physical optimization) -- ON BY DEFAULT for this part ---------
+# Measured motivation: the datapath gets placed in CLOCKREGION_X1Y0 while the
+# memory BRAMs land in CLOCKREGION_X0Y0 -- crossing that boundary made the last
+# hop into u_imem/ADDRARDADDR cost 1.93ns by itself.
+# Measured (xc7a100tfgg484-2, same RTL, same WLDrivenBlockPlacement):
+#   no Pblock                          -> 62.8 MHz, path 15.276ns (route 10.898)
+#   CLOCKREGION_X1Y0:CLOCKREGION_X1Y3  -> 69.2 MHz, path 13.971ns (route  8.926) BEST
+#   CLOCKREGION_X1Y0:CLOCKREGION_X1Y2  -> 66.9 MHz
+#   CLOCKREGION_X1Y0:CLOCKREGION_X1Y1  -> 64.2 MHz
+#   (X1Y0:X1Y3) + ExtraTimingOpt       -> 63.3 MHz
+#   (X1Y0:X1Y3) + AltSpreadLogic_high  -> 63.3 MHz
+# Tighter is NOT better: lost placement freedom outweighs the shorter spans.
+# NOTE: the range is part-specific. For another device (or the 紫光同创 migration
+# target) pass PBLOCK_RANGE=off, or a valid range for that device.
+set PB_RANGE "CLOCKREGION_X1Y0:CLOCKREGION_X1Y3"
+set PB_CELLS "u_core"
+set PB_ON    1
+if {[info exists ::env(PBLOCK_RANGE)] && $::env(PBLOCK_RANGE) ne ""} {
+  if {$::env(PBLOCK_RANGE) eq "off"} { set PB_ON 0 } else { set PB_RANGE $::env(PBLOCK_RANGE) }
+}
+if {[info exists ::env(PBLOCK_CELLS)] && $::env(PBLOCK_CELLS) ne ""} {
+  set PB_CELLS $::env(PBLOCK_CELLS)
+}
+if {$PB_ON} {
+  create_pblock p_opt
+  add_cells_to_pblock p_opt [get_cells -quiet $PB_CELLS]
+  resize_pblock p_opt -add $PB_RANGE
+  puts "BUILD_PBLOCK=$PB_CELLS @ $PB_RANGE"
+} else {
+  puts "BUILD_PBLOCK_OFF=1"
+}
+
 opt_design
 # Place directive is overridable so physical-optimization experiments are
 # reproducible from the workflow instead of hand-run Vivado.

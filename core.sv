@@ -63,8 +63,13 @@ module core
   // ==========================================================================
   // IF
   logic [31:0] pc, pc_plus4, pc_target, imem_rdata;
-  logic        pc_src;
-  logic        redirect, redirect_raw;
+  // 【E2 扇出约束】实测关键路径上 `actual_taken` 的**扇出是 60**, 单是一跳布线
+  // 就 0.947ns(占全路径 5.8%); 另有 `pc_src`/`redirect` 广播扇出 34, 一跳 1.055ns。
+  // 两者合计约 2.0ns = 12% 的关键路径。给它们上限后, 综合器会自动**就近复制**
+  // 驱动单元, 让关键负载走短线。纯约束, 不改功能。
+  // (取 16: 再小会明显增面积, 再大不起作用; 这是 Vivado 常用的时序驱动档位。)
+  (* max_fanout = 16 *) logic  pc_src;
+  (* max_fanout = 16 *) logic  redirect, redirect_raw;
   logic        lsu_stall;
   // RV32A: LSU 的写相标志与读回的旧值 (供 MEM 段的 AMO 新值计算用)
   logic        amo_write_phase;
@@ -77,7 +82,8 @@ module core
   logic        pred_is_ret;          // 预测命中的 PC 是"函数返回" (RAS 用)
   logic        ex_is_call, ex_is_ret;// EX 解析出的 call / return (RAS 控制)
   logic        ex_is_cond;           // EX 段该指令是条件分支 (gshare 历史用)
-  logic        actual_taken, pred_ok;
+  // 【E2 扇出约束】见上方 pc_src/redirect 处的说明。
+  (* max_fanout = 16 *) logic  actual_taken, pred_ok;
   wire  [31:0] btb_pred_target;
 
   // IF/ID
@@ -548,8 +554,17 @@ module core
 
   // ---- 预测正确性判定 ----
   // 方向一致; 若实际 taken, 目标也必须一致。
+  //
+  // 【E1 关键路径优化, 逻辑等价】比较对象从 mux 后的 actual_target 改成
+  // **直接比 ex_pc_target**:
+  //   第二项本来就被 `!actual_taken ||` 门控 —— 即只在 actual_taken=1 时才有意义,
+  //   而 actual_taken=1 时 `actual_target ≡ ex_pc_target` (上面那行 mux 的定义)。
+  //   所以两种写法**逐位等价**, 但新写法把那个 32 位 2:1 mux **移出了比较路径** ——
+  //   比较器的输入不再需要等 mux 选完, 少一级逻辑。
+  //   实测证据: 该 mux 与后面的目标比较(CARRY4 x3)原本是串联的, 见
+  //   results/p3-fmax.md 实验 C 的关键路径逐级清单。
   assign pred_ok = (actual_taken == id_ex_pred_taken) &&
-                   (!actual_taken || (actual_target == id_ex_pred_target));
+                   (!actual_taken || (ex_pc_target == id_ex_pred_target));
 
   // 【关键】redirect 不再是"分支 taken", 而是"预测错误"。
   // 预测正确时绝不能冲刷, 否则两条正确路径被白白丢掉, 预测收益归零。

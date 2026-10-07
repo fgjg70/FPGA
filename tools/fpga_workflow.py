@@ -1421,6 +1421,11 @@ def cmd_synth(args) -> int:
     h.update(b"ras" if args.ras else b"noras")
     h.update(b"aen" if args.a_ext else b"aoff")
     h.update(b"gemm" if args.gemm else b"gemmoff")
+    # 【物理约束也必须进指纹】否则改 Pblock / place 策略会命中旧缓存、
+    # 直接拿到上一次的四个数字 —— 和 R31 是同一族静默失效。
+    h.update(("place=" + (args.place_directive or "default")).encode())
+    h.update(("pblock=" + (args.pblock_range or "off")).encode())
+    h.update(("pblockcells=" + (args.pblock_cells or "u_core")).encode())
     fp = h.hexdigest()[:32]
 
     cache = os.path.join(CACHE_DIR, "synth-cache.json")
@@ -1459,6 +1464,10 @@ def cmd_synth(args) -> int:
                 benv["IMEM_COMB_READ"] = "1"
             if args.place_directive:
                 benv["PLACE_DIRECTIVE"] = args.place_directive
+            if args.pblock_range:
+                benv["PBLOCK_RANGE"] = args.pblock_range
+                if args.pblock_cells:
+                    benv["PBLOCK_CELLS"] = args.pblock_cells
             if args.load_reg:
                 benv["LOAD_REG"] = "1"
             if args.gshare:
@@ -1489,6 +1498,9 @@ def cmd_synth(args) -> int:
             # imem: 默认必须是 BRAM 版(不定义宏的路径); 只有显式回退才是组合读。
             expect.append("BUILD_IMEM_COMB_READ=1" if args.imem_comb_read
                           else "BUILD_IMEM_BRAM=1")
+            # Pblock: build.tcl 默认已开启(该 part 专用), 只有传 off 才关。
+            expect.append("BUILD_PBLOCK_OFF=1" if args.pblock_range == "off"
+                          else "BUILD_PBLOCK=")
             if args.load_reg:      expect.append("BUILD_LOAD_RESULT_REG=1")
             if args.gshare:        expect.append("BUILD_BTB_GSHARE=1")
             if args.ras:           expect.append("BUILD_RAS_EN=1")
@@ -2072,7 +2084,11 @@ def main() -> int:
     p.add_argument("--timeout", type=int, default=3600, help="Vivado 超时秒数")
     p.add_argument("--lock-timeout", type=int, default=1800, help="等待构建锁的秒数")
     p.add_argument("--place-directive", default=None,
-                   help="覆盖 place_design 策略 (默认 ExtraTimingOpt); 用于待办 #3 的物理优化实验")
+                   help="覆盖 place_design 策略 (默认 WLDrivenBlockPlacement)")
+    p.add_argument("--pblock-range", default=None,
+                   help="给 PBLOCK_CELLS 加 Pblock, 例 CLOCKREGION_X1Y0:CLOCKREGION_X1Y3")
+    p.add_argument("--pblock-cells", default=None,
+                   help="Pblock 约束的层次 (默认 u_core), 例 u_core/u_imem")
     p.set_defaults(func=cmd_synth)
 
     args = ap.parse_args()
