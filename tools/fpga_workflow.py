@@ -1426,6 +1426,7 @@ def cmd_synth(args) -> int:
     h.update(("place=" + (args.place_directive or "default")).encode())
     h.update(("pblock=" + (args.pblock_range or "off")).encode())
     h.update(("pblockcells=" + (args.pblock_cells or "u_core")).encode())
+    h.update(b"containrt" if args.contain_routing else b"nortcontain")
     fp = h.hexdigest()[:32]
 
     cache = os.path.join(CACHE_DIR, "synth-cache.json")
@@ -1468,6 +1469,8 @@ def cmd_synth(args) -> int:
                 benv["PBLOCK_RANGE"] = args.pblock_range
                 if args.pblock_cells:
                     benv["PBLOCK_CELLS"] = args.pblock_cells
+            if args.contain_routing:
+                benv["CONTAIN_ROUTING"] = "1"
             if args.load_reg:
                 benv["LOAD_REG"] = "1"
             if args.gshare:
@@ -2089,6 +2092,8 @@ def main() -> int:
                    help="给 PBLOCK_CELLS 加 Pblock, 例 CLOCKREGION_X1Y0:CLOCKREGION_X1Y3")
     p.add_argument("--pblock-cells", default=None,
                    help="Pblock 约束的层次 (默认 u_core), 例 u_core/u_imem")
+    p.add_argument("--contain-routing", action="store_true",
+                   help="给 Pblock 加 CONTAIN_ROUTING (纯物理, 不改功能)")
     p.set_defaults(func=cmd_synth)
 
     args = ap.parse_args()

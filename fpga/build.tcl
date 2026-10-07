@@ -156,6 +156,15 @@ if {$PB_ON} {
   add_cells_to_pblock p_opt [get_cells -quiet $PB_CELLS]
   resize_pblock p_opt -add $PB_RANGE
   puts "BUILD_PBLOCK=$PB_CELLS @ $PB_RANGE"
+  # CONTAIN_ROUTING: force the Pblock's nets to route INSIDE the region.
+  # Purely physical (no RTL/functional effect). Try it when route dominates the
+  # critical path but the region is still roomy.
+  if {[info exists ::env(CONTAIN_ROUTING)] && $::env(CONTAIN_ROUTING) ne ""} {
+    set_property CONTAIN_ROUTING 1 [get_pblocks p_opt]
+    puts "BUILD_CONTAIN_ROUTING=1"
+  } else {
+    puts "BUILD_CONTAIN_ROUTING_OFF=1"
+  }
 } else {
   puts "BUILD_PBLOCK_OFF=1"
 }

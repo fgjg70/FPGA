@@ -330,3 +330,34 @@ WB 段就只剩"从寄存器取数"这一步。这是高频率 CPU 的标准做�
 > **所有**控制流都不需要它（例如改用"预测即信任 + 出错的下一拍修正"的方案），
 > 那是另一套机制，不在本轮范围内。
 
+---
+
+## 实验 E6 / E7（2026-10-07）— 物理手段已探尽：**69.2 MHz 是零 IPC 代价的上限**
+
+| 配置 | fmax | 结论 |
+|---|---|---|
+| **`CLOCKREGION_X1Y0:X1Y3`**（当前交付）| **69.2 MHz** | 最佳 |
+| `CLOCKREGION_X0Y0:X0Y3`（换到左列）| 66.5 MHz | 更差（右列对 BRAM/DSP 布局更友好）|
+| `X1Y0:X1Y3` + `CONTAIN_ROUTING=1` | 69.2 MHz | 与不加**完全相同**（区域已足够宽松，没起到作用）|
+
+再加上前面已试过的：`ExtraTimingOpt` / `AltSpreadLogic_high` / 更紧的 Pblock（3 区 66.9、2 区 64.2）
+—— **零 IPC 代价的旋钮已经全部试完，69.2 MHz 就是天花板。**
+
+### 当前关键路径的形态（说明为什么必须动结构）
+
+```
+dmem BRAM 输出(3.5ns, 26%)
+  → LSU 字节提取(3 级 LUT)
+    → wb_data mux + 前递网络
+      → 分支比较(CARRY4)
+        → pred_ok / redirect
+          → BTB 目标 LUTRAM + pc_target 优先级 mux(含 trap/mret)
+            → pc_next mux → imem 的 BRAM 地址脚(最后一跳 1.25ns)
+```
+
+- **route 8.926ns（64%）** —— 已用 Pblock 从 10.6 压到 8.9，继续压无路
+- **logic 18 级 / 5.045ns** —— 尾部是取指地址那条链
+
+**要再往上，只剩"把这条链从中间切断"，即路线 B（见上）。** 那个改动动的是
+`load_store_unit.sv` 的 FSM 停顿语义 + `core.sv` 的接线，属于结构性重构。
+
