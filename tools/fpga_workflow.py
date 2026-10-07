@@ -1427,6 +1427,7 @@ def cmd_synth(args) -> int:
     h.update(("pblock=" + (args.pblock_range or "off")).encode())
     h.update(("pblockcells=" + (args.pblock_cells or "u_core")).encode())
     h.update(b"containrt" if args.contain_routing else b"nortcontain")
+    h.update(("route=" + (args.route_directive or "default")).encode())
     fp = h.hexdigest()[:32]
 
     cache = os.path.join(CACHE_DIR, "synth-cache.json")
@@ -1471,6 +1472,8 @@ def cmd_synth(args) -> int:
                     benv["PBLOCK_CELLS"] = args.pblock_cells
             if args.contain_routing:
                 benv["CONTAIN_ROUTING"] = "1"
+            if args.route_directive:
+                benv["ROUTE_DIRECTIVE"] = args.route_directive
             if args.load_reg:
                 benv["LOAD_REG"] = "1"
             if args.gshare:
@@ -2094,6 +2097,8 @@ def main() -> int:
                    help="Pblock 约束的层次 (默认 u_core), 例 u_core/u_imem")
     p.add_argument("--contain-routing", action="store_true",
                    help="给 Pblock 加 CONTAIN_ROUTING (纯物理, 不改功能)")
+    p.add_argument("--route-directive", default=None,
+                   help="覆盖 route_design 策略 (默认 AggressiveExplore)")
     p.set_defaults(func=cmd_synth)
 
     args = ap.parse_args()

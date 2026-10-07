@@ -181,9 +181,17 @@ if {[info exists ::env(PLACE_DIRECTIVE)] && $::env(PLACE_DIRECTIVE) ne ""} {
   set PLACE_DIR $::env(PLACE_DIRECTIVE)
 }
 puts "BUILD_PLACE_DIRECTIVE=$PLACE_DIR"
+# Route directive is overridable too. AggressiveExplore is the default;
+# NoTimingRelaxation makes the router refuse to relax failed paths (worth trying
+# when route dominates the critical path -- measured ~64-80% here).
+set ROUTE_DIR "AggressiveExplore"
+if {[info exists ::env(ROUTE_DIRECTIVE)] && $::env(ROUTE_DIRECTIVE) ne ""} {
+  set ROUTE_DIR $::env(ROUTE_DIRECTIVE)
+}
+puts "BUILD_ROUTE_DIRECTIVE=$ROUTE_DIR"
 place_design -directive $PLACE_DIR
 phys_opt_design -directive AggressiveExplore
-route_design -directive AggressiveExplore
+route_design -directive $ROUTE_DIR
 phys_opt_design -directive AggressiveExplore
 report_timing_summary -file timing.rpt
 report_utilization -file util.rpt

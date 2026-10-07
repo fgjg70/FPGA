@@ -82,3 +82,7 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-07,ap-loadreg,1,488863,2.0456,2676,1378,8,8,76.0,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-07,ap-fanout,1,488863,2.0456,2703,1378,8,8,72.8,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-07,fmax-best-v1,1,423527,2.3611,2820,1345,8,8,69.2,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-07,rt-NoTimingRelaxation,1,423527,2.3611,2820,1345,8,8,69.2,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-07,rt-Explore,1,423527,2.3611,2820,1345,8,8,68.2,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-07,rt-HigherDelayCost,1,423527,2.3611,2820,1345,8,8,69.1,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-07,fmax-best-v1,1,423527,2.3611,2820,1345,8,8,69.2,keep,fpga_workflow.py synth (PROG=cm_hw)

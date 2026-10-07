@@ -421,3 +421,29 @@ A' 之后关键路径**完全换了位置**：
 - `check` 在本轮暴露过一次"bitstream 比 RTL 旧"：改 RTL 后**必须重建 bitstream**，
   否则拿的是上一版设计的产物（与 R28 同族）。
 
+---
+
+## 实验 G（2026-10-07）— 路由策略也试尽：69.2 MHz 是三方面（布局/布线/逻辑）的当前极值
+
+| `route_design -directive` | fmax | 说明 |
+|---|---|---|
+| **`AggressiveExplore`**（交付默认）| **69.2 MHz** | 最佳 |
+| `NoTimingRelaxation` | 69.2 MHz | 完全相同 |
+| `HigherDelayCost` | 69.1 MHz | 相同（−0.1） |
+| `Explore` | 68.2 MHz | 更差 |
+
+**至此，三大类"零 IPC 代价"旋钮全部试完并封顶在 69.2 MHz：**
+
+| 类别 | 试过的 | 最佳 |
+|---|---|---|
+| 布局策略 | `WLDrivenBlockPlacement` / `ExtraTimingOpt` / `AltSpreadLogic_high` | WLDriven |
+| 物理区域 | 自由 / `X1Y0:X1Y3` / `X1Y0:X1Y2` / `X1Y0:X1Y1` / `X0Y0:X0Y3` / `CONTAIN_ROUTING` | `X1Y0:X1Y3` |
+| 布线策略 | `AggressiveExplore` / `NoTimingRelaxation` / `HigherDelayCost` / `Explore` | AggressiveExplore |
+| 逻辑改写 | `pred_ok` 直接比较、`max_fanout`（3 组信号）、省 BR/JAL 目标校验 | 前两项 |
+
+> **总判断**：本核在这套架构下的**零 IPC 代价上限是 69.2 MHz**（WNS 5.543）。
+> 关键路径 route 占 64%，逻辑 5.045ns/18 级；任何"砍逻辑"的改动（实验 F 实测砍掉
+> 2.5ns 逻辑）净收益只有 0.2~0.3 倍，因为省下的逻辑被布线吃掉。
+> **下一步只能是更深的结构改动**（把 MEM 拆成地址相/数据相 = 路线 B，或 5→6 级流水线），
+> 且必须先解决布线（需要按模块细分的 floorplan，而不是整核一个大 Pblock）。
+
