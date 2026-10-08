@@ -135,7 +135,7 @@ module csr_file
 
   // 定时器优先级高于外部 (mtimecmp 是唯一的内核定时源)
   assign irq_pending = timer_irq_req || ext_irq_req;
-  assign irq_cause   = timer_irq_req ? {1'b1, CAUSE_IRQ_TIMER} : {1'b1, CAUSE_IRQ_EXT};
+  assign irq_cause   = timer_irq_req ? {1'b1, IRQ_TIMER} : {1'b1, IRQ_EXT};
 
   // 【mepc 取 trap_pc 本身, 不 +4】
   //   因为异常与中断都在 EX 段、指令提交之前裁决, 被抢占的那条指令还没产生任何

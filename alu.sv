@@ -21,13 +21,7 @@ module alu
   input  logic [XLEN-1:0] b,
   input  alu_op_e         op,
 
-  output logic [XLEN-1:0] out,
-
-  // 原始加法器输出 (未经操作码 mux)。
-  // 【为什么单独引出】BR/JAL/JALR 的 alu_op 恒为 ALU_ADD, 跳转目标就等于 sum;
-  // 直接从加法器出口取, 可以少走 ALU 的结果 mux (约 2 级 LUT) —— 那几级正好
-  // 在 pc 的关键路径上 (实测逻辑 3.7ns / 布线 11ns)。零面积代价。
-  output logic [XLEN-1:0] sum_out
+  output logic [XLEN-1:0] out
 );
 
   localparam int unsigned SHAMT_W = $clog2(XLEN);
@@ -36,7 +30,10 @@ module alu
   logic            slt, sltu;
 
   assign sum     = a + b;
-  assign sum_out = sum;
+  // 【2026-10-08 issue #1】原来的 `sum_out` 端口已删除 —— 控制流目标改用
+  // core.sv 的**专用加法器** (ex_ctrl_sum) 后, 它失去全部消费者 (core.sv 里
+  // 那个 ex_sum 也从未被读), 属于"某次架构演进后失去消费者的遗留"。
+  // 注意 `sum` 本身仍被 `out` 的 ADD 分支使用, 加法器**不会**被优化掉。
   assign diff    = a - b;
   assign and_out = a & b;
   assign or_out  = a | b;

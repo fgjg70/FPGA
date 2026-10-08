@@ -110,7 +110,7 @@ module core
 
   // EX
   fwd_sel_e    fwd_a, fwd_b;
-  logic [31:0] ex_rs1, ex_rs2, ex_a, ex_b, ex_alu_out, ex_pc_target, ex_sum;
+  logic [31:0] ex_rs1, ex_rs2, ex_a, ex_b, ex_alu_out, ex_pc_target;
   logic [31:0] ex_amo_addr;      // RV32A: AMO 的访存地址 (rs1 + imm), 与算子解耦
   // RV32M
   logic [31:0] ex_result, md_result;
@@ -540,8 +540,7 @@ module core
     .a       (ex_a),
     .b       (ex_b),
     .op      (id_ex_ctrl.alu_op),
-    .out     (ex_alu_out),
-    .sum_out (ex_sum)
+    .out     (ex_alu_out)
   );
 
   // ---- RV32M 乘除法单元 ----
@@ -859,8 +858,7 @@ module core
               amo_op_r == AMO_MINU ? ALU_AMO_MINU :
               amo_op_r == AMO_MAXU ? ALU_AMO_MAXU :
                                      ALU_AMO_ADD),
-    .out     (amo_new_comb),
-    .sum_out ()
+    .out     (amo_new_comb)
   );
 
   // 只在该用的时候选它: LR/SC 不写内存 (由 amo_op 决定), 且必须处于写相。

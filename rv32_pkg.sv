@@ -7,19 +7,31 @@
 // 消灭"同一编码两处维护"的幽灵 bug。
 //
 // 【数据通路接线契约】(供你自己编写 datapath 时对照)
+//   ⚠ 本契约描述的是**单周期基线**。当前 5 级流水实现以 `core.sv` 为准 ——
+//     下面第 2、3 条随 P3(fmax) 与分支预测的演进**已与 RTL 不一致**, 见各条末尾的更正。
 //   1. ALU 操作数选择:
 //        a_op = (alu_a_src==ALU_A_RS1) ? rs1_data
 //             : (alu_a_src==ALU_A_PC ) ? pc        // AUIPC / BR/JAL 目标计算
 //             :                          '0        // LUI
 //        b_op = (alu_b_src==ALU_B_IMM) ? imm : rs2_data
-//   2. 跳转目标契约 —— ALU 兼职目标加法器, 不需要独立的 32 位加法器:
-//        BR/JAL: alu_a=PC, alu_b=IMM, alu_op=ADD  => alu_out = pc+imm
-//        JALR  : alu_a=RS1, alu_b=IMM, alu_op=ADD => alu_out = rs1+imm
-//        pc_target = (pc_sel==PC_JR) ? {alu_out[XLEN-1:1],1'b0}  // JALR 最低位清零
-//                                   :  alu_out
-//   3. PC 选择:
-//        pc_src = (pc_sel==PC_BR && branch_taken) || pc_sel==PC_J || pc_sel==PC_JR
-//        其中 branch_taken 来自 branch_unit(rs1_data, rs2_data, branch_type)
+//   2. 跳转目标 —— **【已改, 不要照抄】不再让 ALU 兼职目标加法器**:
+//      原契约: BR/JAL: alu_a=PC, alu_b=IMM, ADD => alu_out = pc+imm
+//              JALR  : alu_a=RS1, alu_b=IMM, ADD => alu_out = rs1+imm
+//              pc_target = (pc_sel==PC_JR) ? {alu_out[31:1],1'b0} : alu_out
+//      现实现(core.sv:517-536): 为把 ALU 的两级操作数 mux 移出关键路径, 控制流目标
+//      改走**专用 32 位加法器**:
+//              ex_ctrl_sum = (pc_sel==PC_JR ? ex_rs1 : id_ex_pc) + id_ex_imm
+//              pc_target   = (pc_sel==PC_JR) ? {ex_ctrl_sum[31:1],1'b0} : ex_ctrl_sum
+//      代价约 32 LUT (0.8%), 无周期代价; 数据见 results/p3-fmax.md 实验 A。
+//      连带: `alu.sum_out` 端口因此失去消费者, 已于 2026-10-08 (issue #1) 删除。
+//   3. PC 选择 —— **【已改, 不要照抄】**:
+//      原契约: pc_src = (pc_sel==PC_BR && branch_taken) || PC_J || PC_JR
+//      加入分支预测后 `redirect` 的语义从"分支 taken"变成"**预测错了**"(core.sv:566-571),
+//      于是现实现是 (core.sv:636):
+//              pc_src = any_redir || pred_taken
+//              any_redir = redirect(预测错误) || trap_enter || mret_taken
+//      真实判定仍来自 branch_unit(rs1_data, rs2_data, branch_type) -> ex_taken,
+//      但要先与 BTB 预测比对 (pred_ok) 才决定是否冲刷 —— 预测正确时**绝不冲刷**。
 //   4. 写回选择: WB_ALU->alu_out | WB_MEM->load_unit 输出 | WB_PC4->pc_plus4
 //   5. 访存: mem_size/mem_unsigned 送 load/store 处理单元;
 //        地址用 alu_out (字节地址), 字节通道选择用 alu_out[1:0]
@@ -217,6 +229,27 @@ package rv32_pkg;
   // 流水线化时在 ID/EX 整体打拍, 按注释的消费阶段向 EX/MEM/WB 切片。
   // 注意: 全零值 ('0) 恰好是安全的"NOP"默认 (所有枚举 0 值均合法且无害),
   // control_unit 以 ctrl = '0 起步再覆盖, 不存在锁存器问题。
+  //
+  // 【位宽构成与各级消费量 —— 实测, issue #4】当前 ctrl_s = **56 位**:
+  //   alu_op 5 | alu_a_src 2 | alu_b_src 1 | branch_type 3 | pc_sel 2
+  //   mem_read 1 | mem_write 1 | mem_size 2 | mem_unsigned 1
+  //   reg_write 1 | wb_src 2 | imm_fmt 3 | illegal 1 | sys_op 3
+  //   csr_addr 12 | csr_cmd 2 | csr_src_imm 1 | csr_uimm 5
+  //   amo_en 1 | amo_op 5 | amo_aq 1 | amo_rl 1        => 合计 56
+  //
+  //   各流水级**实际消费量**:  ID 3/56 (译码当场用, 不进流水)   EX 44/56
+  //                            MEM 16/56                        WB 3/56 (reg_write + wb_src)
+  //   ⇒ **EX/MEM 之后理论上只剩约 3 位需要布线** —— 综合器对未消费字段做常量
+  //     传播, 会自动把 MEM/WB 段里那 53 位优化掉。全宽走完三级的就是 EX 那 44 位,
+  //     而它是真实需要的。
+  //
+  // 【结论: 不要为"省布线"去拆 ctrl_s】位宽不是本核的瓶颈, **扇出与走线长度才是**:
+  //   实测 actual_taken 扇出 60(单跳 0.947ns)、pc_src/redirect 扇出 34(1.055ns),
+  //   合计约 2.0ns = 12% 关键路径; 且 results/p3-fmax.md 的结论是本核瓶颈已转为
+  //   布线 (零 IPC 代价上限 69.2 MHz)。
+  //   更要紧的教训来自 results/p3-imem.md: **"不要凭'用了多少'推断'能省多少'"**
+  //   (缩容 16KB→12KB 想省 LUT, 实测反而多 883 个 LUT)。
+  //   真要压布线: 先出 report_route_status / 拥塞报告, 再决定动不动控制束。
   // --------------------------------------------------------------------------
   typedef struct packed {
     // ---- EX 段消费 ----
@@ -249,8 +282,17 @@ package rv32_pkg;
     // 进入多周期序列。amo_en 就是告诉流水线控制"这条指令要走原子序列"。
     logic        amo_en;         // 1 = 本条是 LR/SC/AMO (opcode=0x2F)
     logic [4:0]  amo_op;         // funct5 (见 AMO_* 常量)
-    logic        amo_aq;         // acquire 语义位 (单核无 cache, 译码后无副作用)
-    logic        amo_rl;         // release 语义位 (同上)
+    logic        amo_aq;         // acquire 语义位
+    logic        amo_rl;         // release 语义位
+    // 【这两个字段"只写不读"是**有意**的, 不要当死代码删掉 (issue #3 更正)】
+    //   设计上单核无 cache, aq/rl 译码后**无副作用**, 全工程确实没有消费者 ——
+    //   这一半 issue #3 说对了。但 issue #3 的另一半 ("没有任何测试引用") **与
+    //   实际不符**: `sim/tb_units.sv:471-472` 有 2 条定向检查专门验证它们的译码:
+    //       chk({31'd0, cu_ctrl.amo_aq}, 32'd1, "AMO aq 位译码");
+    //       chk({31'd0, cu_ctrl.amo_rl}, 32'd1, "AMO rl 位译码");
+    //   删字段就必须连这 2 条检查一起删 —— 那是拿"回归覆盖"换 6 个 FF 的可读性,
+    //   不划算 (本仓库明确把 tb_units 定位为"含**全部历史 bug** 的定向回归", 见
+    //   PITFALLS)。所以这里的处理是**只补文档、不动字段**。
     // 【注意: 这里**不放** amo_newdata】
     // AMO 的"待写回值"是在 **MEM 段**算出来的 (因为要等 dmem 寄存读回的旧值),
     // 它不随流水走, 而是 core.sv 里一个专用组合单元的直接产物 -> 直接接给 LSU。
@@ -323,16 +365,36 @@ package rv32_pkg;
   localparam logic [31:0] MMIO_GEMM_DBGK   = 32'hA000_0064;  // R: {r_n, r_k} 运算期间的值
 
   // --------------------------------------------------------------------------
-  // 陷阱原因码 (mcause 的低 4 位; 最高位由 csr_file 补 = 是否中断)
+  // 陷阱原因码
   // --------------------------------------------------------------------------
+  // 【为什么分成两组命名 (issue #2)】RISC-V 规范把"异常"与"中断"放在**不同的
+  // 取值空间**里: mcause 的 bit31 = 是否中断, 低 4 位才是原因码。而机器定时器
+  // (7) 与机器外部 (11) 这两个**中断编号**, 恰好与 LOAD_MISALIGN(4) / ECALL_M(11)
+  // 这两个**异常编号**数值重复 —— 于是放在同一组 `CAUSE_*` 常量里会让人误读
+  // (issue 作者自己在核对时就被绊了一次)。
+  //
+  // 注意: **行为本来就是对的**, 不是 bug —— `csr_file.sv:138` 生成 irq_cause 时
+  // 是 `{1'b1, 编号}` 显式补上最高位的, 所以 mcause 得到 0x8000_0007 / 0x8000_000B,
+  // 两个值都符合规范。这里只是**改名分组**以消除误读 (issue #2 已从 fix 降为 style)。
+  //
+  // ⚠ 这个文件已经因为 `mcause` 位布局吃过一次真 bug: `csr_file.sv:169-175` 记录
+  //   过"bit4 写成 bit31 之外的位 -> mcause 读回 0x00000017 而不是 0x80000007 ->
+  //   中断处理程序全部走错分支"。所以同一处的"异常码/中断码混读"值得防复发。
+  // --------------------------------------------------------------------------
+
+  // ---- 异常原因码 (同步, mcause[31] = 0) ----
   localparam logic [3:0] CAUSE_INSN_MISALIGN  = 4'd0;
   localparam logic [3:0] CAUSE_ILLEGAL        = 4'd2;
   localparam logic [3:0] CAUSE_BREAKPOINT     = 4'd3;
   localparam logic [3:0] CAUSE_LOAD_MISALIGN  = 4'd4;
   localparam logic [3:0] CAUSE_STORE_MISALIGN = 4'd6;
   localparam logic [3:0] CAUSE_ECALL_M        = 4'd11;
-  localparam logic [3:0] CAUSE_IRQ_TIMER      = 4'd7;    // 机器定时器中断
-  localparam logic [3:0] CAUSE_IRQ_EXT        = 4'd11;   // 机器外部中断
+
+  // ---- 中断编号 (异步, mcause[31] = 1) ----
+  // 这两项与上面的异常码**数值表面重复** (7 / 11), 但它们属于规范定义的中断编号,
+  // 与异常码不是一个取值空间; 使用时一律由 `{1'b1, code}` 补上最高位。
+  localparam logic [3:0] IRQ_TIMER            = 4'd7;    // machine timer    -> mcause 0x8000_0007
+  localparam logic [3:0] IRQ_EXT              = 4'd11;   // machine external -> mcause 0x8000_000B
 
   // --------------------------------------------------------------------------
   // EX 段操作数前递来源
