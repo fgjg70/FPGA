@@ -1,7 +1,7 @@
 # 我的工作流 + 给你的集成建议
 
 > **写给接手本项目的 AI。**
-> 我已经用下面这套循环做了 10 轮迭代（三项指标从 0.8263 提到 2.3615）。
+> 我已经用下面这套循环做了 10 轮迭代（三项指标从 0.8263 提到 **2.4209**）。
 > 你已经建了 `tools/fpga_workflow.py`（doctor/check/verify/report/synth）—— 那是**工程纪律**层，做得很好。
 > 本文补两件事：**① 我实际怎么迭代的（优化循环本身）；② 建议你把它固化成 skill / 子命令的设计**。
 >
@@ -54,7 +54,7 @@ if (u_dut.id_ex_ctrl.pc_sel == 2'd1) n_bcond++;   // 条件分支总数
 **这一步是整个方法的支点。** 第 1 轮就是靠它发现「分支惩罚吃掉 29% 的周期」，
 才决定先做分支预测而不是 M 扩展 —— 如果拍脑袋做 M 扩展，收益会小很多。
 
-当前账（CoreMark，423,486 ticks）：
+当前账（CoreMark；下面是**旧基线 423,486 ticks** 时的口径，**现基线为 413,070 ticks**）：
 ```
 load-use 停顿  30,644  (7.1%)   <- 最大项
 分支误判       23,002  (5.4%)   (11,501 次 x 2 拍)
@@ -64,12 +64,12 @@ load-use 停顿  30,644  (7.1%)   <- 最大项
 
 #### [3] 仿真验证
 
-一条 .bat 跑完 7 个测试（`fpga_workflow.py verify` 已经把它自动化了，很好）：
+一条 .bat 跑完 11 个测试（`fpga_workflow.py verify` 已经把它自动化了，很好）：
 ```bat
 set "LM_LICENSE_FILE=D:\software\tools\Modelsim\win64\LICENSE.TXT"
 set "PATH=D:\software\tools\Modelsim\win64;%PATH%"
 vlib work
-vlog -sv -work work <19 个 RTL> fpga\mmio_subsys.sv sim\tb_units.sv sim\tb_core.sv sim\tb_soc.sv sim\tb_sw.sv
+vlog -sv -work work <20 个 RTL> fpga\mmio_subsys.sv sim\tb_units.sv sim\tb_core.sv sim\tb_soc.sv sim\tb_sw.sv
 vsim -c -do "run -all; quit -f" work.tb_units
 vsim -c -do "run -all; quit -f" work.tb_core +imem=<abs>\basic.hex
 vsim -c -do "run -all; quit -f" work.tb_sw   +imem=<abs>\cm_rv32im.hex +dmem=<abs>\cm_rv32im.dmem.hex
@@ -132,7 +132,7 @@ ABS    = CM_MHZ * fmax         # 绝对吞吐 = 每秒多少次迭代
 
 | 环节 | 通过 | **可疑信号（要停下来查）** |
 |---|---|---|
-| 仿真 | 7 个测试都打印 `RESULT : PASS` | 某个测试没输出 / 输出为空 / 编译有 Error 但测试仍「过」 |
+| 仿真 | 11 个测试都打印 `RESULT : PASS` | 某个测试没输出 / 输出为空 / 编译有 Error 但测试仍「过」 |
 | CoreMark | `crclist 0xe714` `crcmatrix 0x1fd7` `crcstate 0x8e3a` | ticks 与上次**完全相同** → 大概率镜像没重建 |
 | 综合 | `BUILD_OK` 且 WNS > 0 | LUT 只有几十个 → 没装程序，被常量折叠 |
 | 上板 | `score_result` bit31 = 1 | `score_result` = 0 → 程序没跑完 / ILA 是旧 RTL |
@@ -176,12 +176,15 @@ python tools/fpga_workflow.py profile --prog cm_rv32im --json results/profile.js
 跑一次 tb_sw，把第 [1] 步那些计数器抽成 JSON：
 ```json
 {
-  "ticks": 423527, "retire": 426281, "cpi": 1.09,
-  "stall": {"load_use": 30644, "split_mem": 0, "muldiv": 14415},
-  "redirect": {"total": 11501, "cond": 6041, "jal": 1096, "jalr": 2823},
-  "predictor": {"ctrl": 101961, "mispredict": 11501, "accuracy": 0.887}
+  "ticks": 413070, "retire": 426281, "cpi": 1.09,
+  "stall": {"load_use": 30645, "split_mem": 0, "muldiv": 14415},
+  "redirect": {"total": 11535, "cond": 6041, "jal": 1096, "jalr": 2823},
+  "predictor": {"ctrl": 101961, "mispredict": 11535, "accuracy": 0.887}
 }
 ```
+> ⚠️ 上面是**格式示意**（键名以 `profile` 的真实输出为准，见 `fpga_workflow.py`
+> 里解析它的正则）；`ticks` 已按当前基线（**413,070**）校正，其余计数值随改动而变，
+> **一律以 `profile` 当次打印为准，不要抄这里的数**。
 **为什么值得做**：这是「先测量再优化」的抓手。没有它，优化就是猜。
 有它之后，选靶子可以变成一个规则：**取占比最大的那一项**。
 
@@ -204,10 +207,10 @@ stale = [f for f in RTL_AND_TOP_FILES if mtime(f) > mtime(ILA_BIT)]
 **`--capture` 的输出**应该是解析好的结论，不是原始 CSV：
 ```json
 {
-  "program": "cm_hw", "iterations": 1200,
+  "program": "cm_hw", "iterations": 1300,
   "done": 1, "pass": 1, "fail": 0, "illegal": 0,
-  "crc_ok": 1, "ticks": 508155404, "seconds": 10.16,
-  "cm_per_mhz": 2.3615, "csv": "results/ila_done.csv"
+  "crc_ok": 1, "ticks": 536943384, "seconds": 10.74,
+  "cm_per_mhz": 2.4211, "csv": "results/ila_done.csv"
 }
 ```
 

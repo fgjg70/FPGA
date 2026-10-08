@@ -20,10 +20,11 @@
 
 ```
 ila_ctrl     = 0x42  ->  done=1  pass=1  fail=0  illegal=0
-score_result = 0x9E49D60C
+score_result = 0xA0011B18
   bit31 = 1  ->  crclist/crcmatrix/crcstate 全部匹配 CoreMark 官方参考值
-  tick  =  508,155,404   (预期 508,232,400, 偏差 0.015%)
-  时长  =  10.16 s       (满足赛题 >=10 秒硬性要求)
+  tick  =  536,943,384
+  时长  =  10.74 s       (满足赛题 >=10 秒硬性要求, 1300 迭代 @50 MHz)
+  CoreMark/MHz = 2.4211  (仿真 2.4209)
 ```
 
 ---
@@ -54,7 +55,7 @@ IDCODE 0x13631093, part xc7a100tfgg484-2
 cmd /c D:\USER\Desktop\FPGA\FPGA\fpga\ila_cap_done.bat
 ```
 
-它做四件事：**烧录 → 等 16 秒（让 CoreMark 跑完 10.16 秒）→ 抓 2048 拍 → 写 `results/ila_done.csv`**。
+它做四件事：**烧录 → 等 16 秒（让 CoreMark 跑完 10.74 秒）→ 抓 2048 拍 → 写 `results/ila_done.csv`**。
 
 脚本内容（`fpga/ila_cap_done.tcl`，已可用）：
 
@@ -69,7 +70,7 @@ program_hw_devices [current_hw_device]
 puts "PROGRAMMED"
 current_hw_device [lindex [get_hw_devices] 0]
 refresh_hw_device -update_hw_probes true [current_hw_device]
-after 16000                     ;# CoreMark 1200 迭代 ≈ 10.16 s, 留余量
+after 16000                     ;# CoreMark 1300 迭代 ≈ 10.74 s, 留约 5 s 余量
 set ila [lindex [get_hw_ilas -of_objects [current_hw_device]] 0]
 if {$ila eq ""} { error "NO_ILA_FOUND" }
 reset_hw_ila $ila
@@ -94,7 +95,7 @@ c = lines[1].split(',')
 ctrl, res = px(c[iC]), px(c[iR])
 print('done=%d pass=%d fail=%d illegal=%d' % ((ctrl>>6)&1,(ctrl>>1)&1,ctrl&1,(ctrl>>2)&1))
 print('CRC 判定 =', (res>>31)&1, ' tick =', res & 0x7fffffff)
-print('CoreMark/MHz =', 1200e6 / (res & 0x7fffffff))
+print('CoreMark/MHz =', 1300e6 / (res & 0x7fffffff))
 ```
 
 ### 2.3 抓流水线波形（分析报告用）
@@ -239,21 +240,33 @@ cmd /c D:\USER\Desktop\FPGA\FPGA\fpga\ila_info.bat    REM 列出 ILA 与所有�
 
 ---
 
-## 7. 当前硬件状态（接手时的真实情况）
+## 7. 当前硬件状态
 
-| 项 | 状态 |
+> ⚠️ 下表是**快照**，且时间/mtime 类字段一定会过时 —— **别照抄，用工具查**：
+> ```bat
+> python tools\fpga_workflow.py hw --stale     REM ILA bit 与 RTL 的新鲜度
+> python tools\fpga_workflow.py check          REM bitstream 是否比 RTL/镜像新
+> ```
+> （R20/R28：拿上一次的 CSV 当本次结论 = 虚假证据，所以新鲜度必须现查。）
+
+| 项 | 状态（2026-10-08 交付配置）|
 |---|---|
-| 评分版 bitstream `fpga/cpu_a100t.bit` | ✅ 新（07:02，含 csr_file 与参数化镜像）|
-| 评分版时序 | WNS 3.710 ns → fmax **61.4 MHz**（50 MHz 约束满足）|
-| 评分版资源 | LUT 3923 / FF 1333 / BRAM 4 / DSP 8 |
-| **ILA 版 bitstream** | ⚠️ **旧**（06:19，早于 core.sv 的 CSR 接线）|
-| `fpga/cpu_a100t.bit` 里嵌的程序 | `cm_hw`（CoreMark 1200 迭代）|
+| 评分版时序 | fmax **69.8 MHz**（WNS 5.673 @20 ns，50 MHz 约束满足）|
+| 评分版资源 | LUT **2649** / FF **1234** / BRAM **8** / DSP 8 |
+| `fpga/cpu_a100t.bit` 里嵌的程序 | `cm_hw`（CoreMark **1300** 迭代）|
+| **ILA 版 bitstream** | 改过 RTL 就必须按 §3 重建（约 5–6 分钟），否则抓到的是旧设计 |
 
-**关于 LUT 数字对不上**：`results/coremark.csv` 里 `bram-v1` / `HARDWARE-VERIFIED`
-两行写的 LUT=2481，用车**当前**代码复现不出来（现在是 3923）。原因不是测量错误，而是
+> ℹ️ **`fpga/ila_cap_done.tcl` 里的注释与等待时间仍是旧的**（写的是
+> `ITERATIONS=1200 -> 508M cycles -> 10.16 s`）—— `.tcl` 一律纯 ASCII 且属于
+> 构建脚本，本文档不改它。1300 迭代 ≈ **10.74 s**，`after 16000` 仍有约 5 s 余量，
+> 所以当前**可用**；但**下次改迭代数时必须同步改这里的 `after`**（见注意事项 3 与 R35）。
+
+**关于历史 LUT 数字对不上**：`results/coremark.csv` 里 `bram-v1` / `HARDWARE-VERIFIED`
+两行写的 LUT=2481，用**后来**的代码复现不出来（当时是 3923）。原因不是测量错误，而是
 **代码在那之后变了**：CSR 接线给 `ctrl_s` 加了 5 个字段（`sys_op`/`csr_addr`/`csr_cmd`/
 `csr_src_imm`/`csr_uimm`），控制束变宽 → 流水线寄存器与布线都变多。
 CSV 里那两行是**当时那版代码**的实测值，不该改；新代码的数字应当**追加新行**。
+当前最新一行是 `review-fix`（413,070 / 2.4209 / 2649 / 69.8）。
 
 ---
 
@@ -263,7 +276,8 @@ CSV 里那两行是**当时那版代码**的实测值，不该改；新代码的
    手动跑 `build_ila.bat` 前先确认没有别的 Vivado 在跑（`tasklist | findstr vivado`）。
 2. **ILA 只应该在调试版里** —— CPU 核本身零厂商原语，ILA 被 ``ifdef USE_ILA`` 隔绝在顶层。
    评分版（`build.bat`）不带 ILA，别把带 ILA 的 bitstream 拿去当交付物。
-3. **`after 16000` 是给 ITERATIONS=1200 的** —— 换迭代次数要同步改等待时间，
+3. **`after 16000` 是给 CoreMark 的** —— **每次性能提升后都要按 R35 重算 `ITERATIONS`
+   并同步这个等待时间**（1300 迭代 ≈ 10.74 s，16 s 仍有约 5 s 余量；再快下去就不够了），
    否则会在 CoreMark 还没跑完时就抓，读到 `score_result = 0`。
 4. **上板结果要落盘** —— 抓完的 CSV 写进 `results/`，并在 `results/` 里留一份文字结论
    （照 `results/hw-verified.md` 的格式）。不落盘就等于没测。

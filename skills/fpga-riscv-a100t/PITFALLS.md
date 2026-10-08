@@ -467,6 +467,19 @@ ModelSim 把它当成**隐式 1 位网络**, 接到 32 位端口上只驱动了 
 **通用规则**: 任何"开关型参数"都必须有**生效自证**, 因为
 "改了没效果"的三种成因(算法无用/宏没传到/工具不认)症状完全一样。
 
+### R32. "值不对"先查**相位**, 再查数据通路 ✅(A 扩展用了三轮才明白)
+AMO 的 `amoor` 组挂了很久, 三轮都把方向指向数据通路(写通路 / WB 规格 /
+指令被吞), 真因是 **LSU 在 AMO launch 拍漏拉 `lsu_stall`**, 导致紧随的 `lw`
+的 WB 相位比 `amo_mode_r` 错开一拍 -> 读了 `amo_old` 而不是 `dmem_rdata`。
+
+**修法**: `lsu_stall` 的 `S_IDLE` 分支要**同时**覆盖 `needs_split` 和 `amo_en`
+(两条多周期路径必须对称)。
+
+**关键手法**: 打印里**必须带"这是哪条指令"**(`wb_rd` / `pc`),
+否则看到错值也不知道是谁的。当时就是靠
+`cyc44 wb_rd=29(=t4, lw 的目的寄存器) wb=0xf0f0f0f0 mode_r=1`
+一行定位 —— 正确写法应给 `0xFFFFFFFF`。
+
 ### R33. ILA 构建失败后**必须删掉 `fpga/ila_proj*` 再重试**, 否则永远失败 ✅又踩一次
 一次 `IP_Flow 19-3505 Failed to generate IP 'ila_0'` 失败后, 项目目录被留在
 **损坏状态**, 于是之后**每一次**构建都在同一处失败, 看起来像是"Vivado 坏了":
@@ -492,18 +505,53 @@ cmd /c fpga\build_ila.bat          REM 一次就 ILA_BUILD_OK
 **并注意 R28**: 失败的那次会**把 `ila_proj.runs/impl_1/top_a100t.bit` 删掉**,
 所以上板前 `Test-Path` 一下, 别拿旧 CSV 当结论。
 
-### R32. "值不对"先查**相位**, 再查数据通路 ✅(A 扩展用了三轮才明白)
-AMO 的 `amoor` 组挂了很久, 三轮都把方向指向数据通路(写通路 / WB 规格 /
-指令被吞), 真因是 **LSU 在 AMO launch 拍漏拉 `lsu_stall`**, 导致紧随的 `lw`
-的 WB 相位比 `amo_mode_r` 错开一拍 -> 读了 `amo_old` 而不是 `dmem_rdata`。
+### R34. 把"寄存器输出"改成"组合别名"时, 必须复查这个寄存器原来是否切断了反馈环/长路径 ✅(P8 去掉 `if_id_reg` 时踩到)
+`if_id_reg` 表面上是"纯搬运寄存器"(前面没有组合逻辑), 看起来白拿。但它同时还在干三件事:
+**①一级流水 ②反馈环的切点 ③晚间信号的屏障** —— 去掉它等于把三个作用一起撤掉。
 
-**修法**: `lsu_stall` 的 `S_IDLE` 分支要**同时**覆盖 `needs_split` 和 `amo_en`
-(两条多周期路径必须对称)。
+实测两个后果:
 
-**关键手法**: 打印里**必须带"这是哪条指令"**(`wb_rd` / `pc`),
-否则看到错值也不知道是谁的。当时就是靠
-`cyc44 wb_rd=29(=t4, lw 的目的寄存器) wb=0xf0f0f0f0 mode_r=1`
-一行定位 —— 正确写法应给 `0xFFFFFFFF`。
+1. **组合环**。把 `id_rs1/id_rs2/id_rd` 也用 `id_valid = !if_id_flush && boot_done` 门控后,
+   `if_id_flush → id_valid → id_rs* → load_use → pipe_stall → redirect` 形成回路,
+   Vivado 直接报:
+   ```
+   ERROR: [DRC LUTLP-1] Combinatorial Loop Alert: 17 LUT cells form a combinatorial loop.
+   One net in the loop is u_core/u_id_ex/if_id_flush
+   ```
+   原设计没这个环, 因为 `if_id_rs*` 来自 `if_id_reg` 的**输出寄存器**。
+2. **fmax 掉**。把 `id_ctrl` 用含 `if_id_flush` 的 `id_valid` 门控后,
+   fmax **69.2 → 67.5**, 关键路径终点变成 `u_id_ex/imm_reg[11]/D`
+   —— 因为 `if_id_flush` 是全核最晚、扇出最大的信号之一(实测 fo=125)。
+
+**修法**: 只用**早期寄存器** `boot_done` 门控 (`id_ctrl = id_en ? id_ctrl_raw : ctrl_s'(0);`),
+三个寄存器号**不加门控**(直接用指令字段); 冲刷期不需要在这里门控
+(`id_ex_reg` 的 `flush` 接的就是 `any_redir`, 同拍已清成气泡)。
+修完 fmax **67.5 → 69.5**(反超改动前的 69.2)。
+
+**通用教训**: 删/改一个寄存器之前先问三句:
+**"它是不是某条反馈环的唯一切点?""它是不是某个晚信号的屏障?""它的输出去哪儿了?"**
+—— 与 R24 同类(ALU 输出被复用于两个语义): **一个"看着多余"的东西, 往往还在承担
+别的职责, 只是没写在它名字里。** 详见 `results/p8-ifid-elide.md` §4。
+
+### R35. **每次性能提升后必须重算上板跑分镜像的 `ITERATIONS`** ✅(P8 差点交了个无效成绩)
+CoreMark 的赛题硬性要求是**运行 ≥10 秒**。设计变快以后, **固定的迭代数会不再满足**:
+实测 P8(去掉冗余 `if_id_reg`)之后, 原来的 `ITERATIONS=1200` 只跑 **9.91 s**
+⇒ **不满足 10 秒, 成绩无效** —— 而它看起来"跑得更快了", 极容易被当成好消息收下。
+
+**修法**: 重算并重建跑分镜像:
+```
+ITER_new = ceil(ITER_old × 10.0 / 实测秒数 × 1.05)      # 留 5~7% 余量
+```
+本次: `1200 × 10.0 / 9.91 × 1.05 ≈ 1271` → 取整 **1300** → 实测 **10.74 s** ✓(CRC 仍匹配)。
+
+**工具**: `tools/mk_cm_hw.py` (用 subprocess **列表**传参重建 `cm_hw.hex`,
+顺带解决两件事: ①工作流印的配方缺 `FLAGS_STR`, 照抄会编译失败;
+②PowerShell 会吃掉 `FLAGS_STR` 的引号 —— 见 R15)。
+
+**注意连带项**: 迭代数变了, **imem 与 dmem 两个镜像都要重建并重新综合**
+(见 R14 的哈佛结构), 并且 `fpga/ila_cap_done.tcl` 里的 `after 16000`
+(等待时间)与文档里的 tick/时长**都要同步更新**, 否则会在 CoreMark 还没跑完时就抓,
+读到 `score_result = 0`。公式与完整记录见 `results/p8-ifid-elide.md` §5。
 
 ---
 
@@ -605,7 +653,10 @@ AMO 的 `amoor` 组挂了很久, 三轮都把方向指向数据通路(写通路 
 - [ ] 软件改了 → 重新构建 .hex **并重新综合 bitstream**?
 - [ ] .S 改了 → 重新汇编 .hex?
 - [ ] 地址/布局改了 → 所有引用点都同步了 (含 tb 和 .S)?
-- [ ] 全套仿真回归跑过 (units / basic / m_ext / soc / hello / coremark)?
+- [ ] 全套仿真回归跑过 (units / basic / trap / timer_irq / m_ext / amo / amo_diag / soc / hello / coremark / nn_demo, 共 11 项)?
 - [ ] CoreMark 三个数据类 CRC (0xe714 / 0x1fd7 / 0x8e3a) 仍匹配?
 - [ ] 三项指标 + 绝对吞吐 都重新量并记进 results/coremark.csv?
+- [ ] **变快了 → 按 R35 重算 `ITERATIONS`**, 重建 imem+dmem 两个镜像并重新综合,
+      同步 `ila_cap_done.tcl` 的等待时间与文档里的 tick/时长?
+- [ ] **删/改过流水寄存器 → 按 R34 检查**它是否曾是某条反馈环的切点或晚信号的屏障?
 - [ ] .bat 是纯 ASCII?

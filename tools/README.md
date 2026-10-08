@@ -50,9 +50,9 @@ python tools\fpga_workflow.py report
 - `[warn]` = 建议修，不阻塞
 - `[info]` = 已知在研项，**预期如此**
 
-`csr_file.sv` 目前不在任何清单里，这是**正确的**（`core.sv` 还没例化它）。
-工具把它报成 `info` 而不是 `FAIL`，靠的是文件顶部的 `KNOWN_UNWIRED` 白名单。
-**P1 做完后应该把 `csr_file.sv` 从 `KNOWN_UNWIRED` 删掉**，检查会自动开始强制要求它。
+`csr_file.sv` **曾经**被 `KNOWN_UNWIRED` 白名单放过（P1 之前 `core.sv` 还没例化它），
+那个白名单**现已清空** —— 它已经在三处 RTL 清单与 `CORE_SV_ORDER` 里，`check` 会强制要求。
+（`[info]` 这一级仍然保留：以后在研未接线的模块先挂白名单，别让它变成每次必红的噪音。）
 
 同一份白名单思路用在 RTL 编译顺序上：`CORE_SV_ORDER` 显式列举顺序，
 `rv32_pkg.sv` 必须第一个编译（其余模块 `import` 它）。
@@ -62,20 +62,24 @@ python tools\fpga_workflow.py report
 
 ### `verify` — ModelSim 增量回归
 
-跑 7 个测试，每个测试的缓存键 = **参与编译的所有文件的内容哈希** + plusargs + 编译器版本。
+跑 **11 个**测试，每个测试的缓存键 = **参与编译的所有文件的内容哈希** + plusargs + 编译器版本。
 内容没变就跳过（首次约 30 秒，之后未受影响时 < 1 秒）。
 
 | 测试 | 程序 | 内容 |
 |---|---|---|
-| `tb_units` | — | 194 项单元检查 |
+| `tb_units` | — | 单元检查（ALU/立即数/控制单元/CSR/regfile/BTB/AMO…）**数量以运行时打印为准** |
 | `tb_core_basic` | `basic.hex` | 系统级自校验（含非对齐访存）|
-| `tb_core_m_ext` | `m_ext.hex` | RV32M 边界 |
 | `tb_core_trap` | `trap.hex` | Zicsr + 异常/中断 + MRET（带 `+illegal_trace` 诊断探针）|
+| `tb_soc_timer_irq` | `timer_irq.hex` | P2 定时器中断（mtime/mtimecmp → mip.MTIP）|
+| `tb_core_m_ext` | `m_ext.hex` | RV32M 边界 |
+| `tb_core_amo` | `amo.hex` | RV32A 原子指令（AMO 读-改-写 + min/max 符号语义）|
+| `tb_core_amo_diag` | `amo_diag.hex` | RV32A 单步诊断（tohost 直接上报失败环节）|
 | `tb_soc` | `mmio.hex` | 外设 + UART 环回 |
 | `tb_sw_hello` | `hello.hex` | 裸机 hello |
 | `tb_sw_coremark` | `cm_rv32im.hex` | CoreMark 仿真 |
+| `tb_sw_nn_demo` | `nn_demo.hex` | 应用场景：神经网络 GEMM 核心 |
 
-当前基线：**7 PASS**，全量约 23 秒，未受影响时 2.8 秒。
+当前基线：**PASS 11**，全量约 23 秒，未受影响时 2.8 秒。
 
 **判定依据是 testbench 自己打印的 `RESULT : PASS`，不是 `vsim` 的退出码。**
 > ModelSim 用 `quit -f` 结束时，无论测试成败都返回 0。
@@ -88,7 +92,8 @@ python tools\fpga_workflow.py report
 
 XFAIL 测试**永远重跑、永不缓存** —— 缓存命中会把"从失败翻转成通过"这个重要信号掩盖掉。
 > P1（异常/中断接线）就是用这个机制收尾的：`tb_core_trap` 由 XFAIL 翻成 XPASS，
-> 提示标记已过时，去掉后全套变成 7 PASS。
+> 提示标记已过时，去掉后全套变成 7 PASS。P8 时 `tb_core_amo` / `tb_core_amo_diag`
+> 也是同一路径（XFAIL → PASS），**当前 `expect_fail_ok` 已全部摘掉，没有 XFAIL 项**。
 
 选项：`--only tb_units tb_soc`（只跑指定）、`--force`（忽略缓存）、`-v`（通过时也打印摘要）。
 日志落在 `.fpga-cache/logs/<test>.log`。
@@ -148,8 +153,9 @@ CoreMark/MHz  |  fmax (由 WNS 推)  |  CoreMark/LUTs  |  绝对吞吐 = CoreMar
   所以 SoC 侧文件在 `SOC_SV` 里显式列举
 - **解析而不是重写清单**：工具**读**三处清单来对账，不自动改写它们。
   自动改写会把"漂移"变成"被掩盖的漂移"，失去检查意义
-- **严重度必须准确**：报警不准 = 没人看报警。`csr_file.sv` 报 `info` 而不是 `FAIL`
-  是刻意的，否则每次跑 `check` 都有一条红色，很快就被无视
+- **严重度必须准确**：报警不准 = 没人看报警。`KNOWN_UNWIRED` 白名单（配合 `[info]` 级）
+  就是为这个存在的 —— 在研未接线的模块先挂白名单，别让它变成每次必红的噪音。
+  它现在是**空的**（`csr_file.sv` 已接线），但机制保留
 
 ---
 

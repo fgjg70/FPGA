@@ -24,11 +24,11 @@
 
 ```
 rv32_pkg.sv           ← 先看类型定义 (ctrl_s / 各 enum)，10 分钟
-core.sv:156-253       ← IF 段:  pc -> imem (其输出寄存器直接充当 IF/ID)
-core.sv:372-433       ← ID 段:  imem_rdata -> regfile/译码 -> id_ex
-core.sv:435-482       ← EX 段:  id_ex -> ALU/分支 -> ex_mem
-core.sv:689-859       ← MEM 段: ex_mem -> dmem/LSU -> mem_wb
-core.sv:860-886       ← WB 段:  mem_wb -> regfile 写口
+core.sv:160-263       ← IF 段:  pc -> imem (其输出寄存器直接充当 IF/ID)
+core.sv:416-503       ← ID 段:  imem_rdata -> regfile/译码 -> id_ex
+core.sv:504-641       ← EX 段:  id_ex -> ALU/分支/乘除 -> ex_mem
+core.sv:757-926       ← MEM 段: ex_mem -> dmem/LSU/MMIO -> mem_wb
+core.sv:927-978       ← WB 段:  mem_wb -> wb_data mux -> regfile 写口
 ```
 
 **这一遍要能回答**：`id_ex` / `ex_mem` / `mem_wb` 三个寄存器各自
@@ -40,8 +40,8 @@ core.sv:860-886       ← WB 段:  mem_wb -> regfile 写口
 ```
 control_unit.sv       ← 译码器: 产生 ctrl_s (EX/MEM/WB 三段控制束) + pc_sel + wb_src
 hazard_unit.sv        ← 前递选择 fwd_a/fwd_b + load-use 停顿 + 重定向门控
-core.sv:517-572       ← 分支/跳转目标 + 预测校验 (actual_taken / pred_ok)
-core.sv:573-642       ← 陷阱判定 + 重定向仲裁 (pc_src / pc_target)
+core.sv:586-641       ← 分支/跳转目标 + 预测校验 (actual_taken / pred_ok)
+core.sv:642-711       ← 陷阱判定 + 重定向仲裁 (pc_src / pc_target)
 ```
 
 **这一遍要能回答**：一条 `lw` 紧跟一条依赖它的 `add`，会停几拍、由谁决定？
@@ -59,48 +59,56 @@ gemm_accel.sv         ← 自选题 GEMM 加速器
 
 ---
 
-## 2. 核心 RTL 清单（20 个文件，约 3200 行）
+## 2. 核心 RTL 清单（20 个文件，3849 行）
 
 | 文件 | 行 | 角色 | 阅读要点 |
 |---|---:|---|---|
-| `rv32_pkg.sv` | 279 | **全局包**：类型 / 枚举 / 参数 / 接线契约 | `ctrl_s` 控制束；`pc_sel_e` / `wb_src_e` / `fwd_sel_e` / `sys_op_e`；存储器基址。**第一份该读的** |
-| `pc.sv` | 37 | PC 寄存器 | 优先级 **flush > stall > pc_src**；`pc_plus4` |
-| `imem.sv` | 61 | 指令存储器 | **默认寄存读（→ BRAM）**；定义 `IMEM_COMB_READ` 才回退成 LUT ROM |
-| `control_unit.sv` | 322 | **主译码器** | 输出三段控制束；覆盖 RV32IM_Zicsr + RV32A |
-| `imm_gen.sv` | 40 | 立即数生成 | I/S/B/U/J 五种 |
-| `regfile.sv` | 57 | 32×32 寄存器堆 | 同拍写读的**写优先旁路** |
-| `id_ex_reg.sv` | 88 | ID/EX 流水寄存器 | |
-| `alu.sv` | 83 | ALU | |
-| `branch_unit.sv` | 35 | 分支条件判定 | `taken` 由 BR_EQ/NE/LT/GE 决定 |
-| `load_store_unit.sv` | **286** | **访存单元（最复杂）** | ① 非对齐访存硬件拆分（HEAD/TAIL FSM）② AMO 三相位 ③ 字节提取+符号扩展 ④ WB 影子寄存器 |
-| `muldiv.sv` | 155 | RV32M 乘除 | 多周期，`busy` 期间冻结流水线 |
-| `csr_file.sv` | 171 | **CSR + 陷阱** | `mtvec`→`trap_vector`、`mepc`→`mret_pc`、mcause / mtval / mstatus、trap 入口与 mret |
-| `btb.sv` | 144 | BTB + 方向预测 | **命中要求 `vld && tag`**（这条不变量在 fmax 实验里被用作论证依据）；Smith 2 位默认，`BTB_GSHARE` 可选；`is_ret` 给 RAS |
-| `ras.sv` | 63 | 返回地址栈 | |
-| `gemm_accel.sv` | 222 | GEMM 加速器 | 自选题部分 |
-| `hazard_unit.sv` | 101 | **冒险/前递** | `fwd_a/fwd_b` 选择；`pipe_stall` / `id_ex_bubble` / `hold_mem` / `redirect` |
-| `ex_mem_reg.sv` | 38 | EX/MEM 流水寄存器 | |
-| `mem_wb_reg.sv` | 39 | MEM/WB 流水寄存器 | |
-| `dmem.sv` | 57 | 数据存储器 | 字节使能写 + 寄存读（→ RAMB36） |
-| **`core.sv`** | **886** | **顶层 CPU** | 例化全部 + 下一拍 PC + 预测校验 + 重定向 + 陷阱整合 + MMIO |
+| `rv32_pkg.sv` | 408 | **全局包**：类型 / 枚举 / 参数 / 接线契约 | `ctrl_s` 控制束；`pc_sel_e` / `wb_src_e` / `fwd_sel_e` / `sys_op_e`；存储器基址。**第一份该读的** |
+| `pc.sv` | 50 | PC 寄存器 | 优先级 **flush > stall > pc_src**；`pc_plus4` |
+| `imem.sv` | 83 | 指令存储器 | **默认寄存读（→ BRAM）**；定义 `IMEM_COMB_READ` 才回退成 LUT ROM |
+| `control_unit.sv` | 372 | **主译码器** | 输出三段控制束；覆盖 RV32IM_Zicsr + RV32A |
+| `imm_gen.sv` | 49 | 立即数生成 | I/S/B/U/J 五种 |
+| `regfile.sv` | 67 | 32×32 寄存器堆 | 同拍写读的**写优先旁路** |
+| `id_ex_reg.sv` | 94 | ID/EX 流水寄存器 | |
+| `alu.sv` | 105 | ALU | |
+| `branch_unit.sv` | 43 | 分支条件判定 | `taken` 由 BR_EQ/NE/LT/GE 决定 |
+| `load_store_unit.sv` | **314** | **访存单元（最复杂）** | ① 非对齐访存硬件拆分（HEAD/TAIL FSM）② AMO 三相位 ③ 字节提取+符号扩展 ④ WB 影子寄存器 |
+| `muldiv.sv` | 215 | RV32M 乘除 | 多周期，`busy` 期间冻结流水线 |
+| `csr_file.sv` | 205 | **CSR + 陷阱** | `mtvec`→`trap_vector`、`mepc`→`mret_pc`、mcause / mtval / mstatus、trap 入口与 mret |
+| `btb.sv` | 191 | BTB + 方向预测 | **命中要求 `vld && tag`**（这条不变量在 fmax 实验里被用作论证依据）；Smith 2 位默认，`BTB_GSHARE` 可选；`is_ret` 给 RAS |
+| `ras.sv` | 87 | 返回地址栈 | |
+| `gemm_accel.sv` | 240 | GEMM 加速器 | 自选题部分 |
+| `hazard_unit.sv` | 115 | **冒险/前递** | `fwd_a/fwd_b` 选择；`pipe_stall` / `id_ex_bubble` / `hold_mem` / `redirect` |
+| `ex_mem_reg.sv` | 48 | EX/MEM 流水寄存器 | |
+| `mem_wb_reg.sv` | 49 | MEM/WB 流水寄存器 | |
+| `dmem.sv` | 76 | 数据存储器 | 字节使能写 + 寄存读（→ RAMB36） |
+| **`core.sv`** | **1038** | **顶层 CPU** | 例化全部 + 下一拍 PC + 预测校验 + 重定向 + 陷阱整合 + MMIO |
 
-### `core.sv` 章节地图（886 行，按行号跳读）
+> 行数是 **2026-10-08** 实测（`[System.IO.File]::ReadAllLines(...).Length`），
+> 含大量注释 —— 本工程把口径、取舍与踩过的坑都写在代码注释里，所以行数偏高。
+
+### `core.sv` 章节地图（1038 行，按行号跳读）
 
 | 行 | 章节 | 里面有什么 |
 |---|---|---|
-| 61-113 | 信号声明 | 集中声明，避免隐式线网 |
-| 115-153 | Zicsr / 陷阱信号 | `exc_req` / `trap_enter` / `mret_taken` … |
-| **156-253** | **IF 段** | `u_pc` 例化(179)、imem 接口、**`pc_next` (222)** |
-| 255-282 | 分支预测（IF 预测 / EX 校验） | BTB 例化、`pred_taken` / `pred_target` |
-| **372-433** | **ID 段** | regfile / control_unit / imm_gen / ID 门控(`id_en`) |
-| **435-482** | **EX 段** | ALU、**前递 mux (445)** |
-| 483-516 | RV32M 乘除单元 | |
-| 517-537 | 跳转/分支目标独立加法器 | 历史遗留：为 fmax 单独拉的加法器 |
-| 538-572 | **控制流真实结果 + 预测校验** | `actual_taken`(553)、`pred_ok`(566) |
-| 573-642 | CSR / 陷阱 / 重定向 | `trap_enter` 判定(616)、**`pc_src`/`pc_target`(636-641)** |
-| **644-688** | **冒险单元** | `u_hazard` 例化(646) |
-| **689-859** | **MEM 段** | LSU 例化、MMIO 选择、`u_dmem`(852) |
-| **860-886** | **MEM/WB 与 WB 段** | `u_mem_wb`(864)、**`wb_data` mux** |
+| 61-119 | 信号声明 | 集中声明，避免隐式线网 |
+| 120-159 | Zicsr / 陷阱信号 | `exc_req` / `trap_enter` / `mret_taken` … |
+| **160-263** | **IF 段** | `u_pc` 例化(190)、`u_imem`(242)、**`pc_next` (233)**、`imem_addr = pc_next`(239)、历史记录(250-263) |
+| 265-293 | 分支预测（IF 预测） | `u_btb` 例化(275)、`pred_taken` / `pred_target` |
+| 294-362 | 返回地址栈（`RAS_EN`，默认关） | `u_ras` |
+| 363-415 | **去掉冗余 `if_id_reg` 的说明**（issue #5） | IF/ID 落在 IMEM 输出寄存器上；两个坑（组合环 / `if_id_flush` 串进 ID 路径）|
+| **416-503** | **ID 段** | regfile(459) / control_unit / imm_gen / ID 门控(`id_en`) |
+| **504-641** | **EX 段** | **前递 mux(517)**、AMO 地址加法器(524-541)、ALU(545)、乘除(561)、跳转目标独立加法器(586)、**`actual_taken`(608)**、`pred_ok`(635) |
+| 642-711 | CSR / 陷阱 / 重定向 | `u_csr`(650)、`trap_enter` 判定(685)、**`pc_src`/`pc_target`(705-710)** |
+| **712-737** | **冒险单元** | `u_hazard` 例化(715) |
+| 738-756 | EX/MEM | `u_ex_mem`(741) |
+| **757-926** | **MEM 段** | LSU 例化、AMO 新值(785-808)、MMIO 地址译码(886-891)、`u_dmem`(918) |
+| **927-978** | **MEM/WB 与 WB 段** | `u_mem_wb`(930)、**`wb_data` mux(965-972)** |
+| 979-1030 | 调试与仿真专用 | `dbg_pc`/`dbg_instr` 同级口径(981)、`dbg_illegal`(1009) |
+| 1031-1038 | 流水线效率观测 | 纯观测信号，不参与逻辑 |
+
+> ⚠️ 行号按 **2026-10-08**（删掉冗余 `if_id_reg` + 死代码清理之后）的 `core.sv` 实测；
+> 改过 RTL 后再看本表，请先按 `// ====` 分节注释重新对一遍章节边界。
 
 ---
 
@@ -122,8 +130,8 @@ python tools/fpga_workflow.py check       # 漂移检测 (文件清单/编码/�
 
 | 文件 | 作用 |
 |---|---|
-| `fpga/build.tcl` (188) | **非工程模式**综合流程：`synth → opt → Pblock → place → phys_opt → route → bitstream`；宏开关集中在文件头 |
-| `fpga/daVinciPro.xdc` (17) | 引脚 + **`create_clock -period 20.000`**（"20 ns 周期"的来源） |
+| `fpga/build.tcl` (215) | **非工程模式**综合流程：`synth → opt → Pblock → place → phys_opt → route → bitstream`；宏开关集中在文件头 |
+| `fpga/daVinciPro.xdc` (25) | 引脚 + **`create_clock -period 20.000`**（"20 ns 周期"的来源） |
 | `fpga/build_ila.tcl` + `ila_cap_*.tcl` | 上板 ILA 调试闭环（`jtag_probe` / `build_ila` / `ila_cap_done`） |
 
 > ⚠️ **踩坑 R33**：ILA 构建失败后**必须删掉 `fpga/ila_proj*`** 才能重建成功（出现过两次）。
@@ -132,17 +140,17 @@ python tools/fpga_workflow.py check       # 漂移检测 (文件清单/编码/�
 
 | 文件 | 作用 |
 |---|---|
-| `sim/tb_units.sv` (503) | 单元测试（ALU/前递/冒险/CSR…） |
-| `sim/tb_core.sv` (148) | 定向汇编程序；`+illegal_trace` 打**逐拍轨迹** |
-| `sim/tb_soc.sv` (228) | SoC 级（定时器/中断/MMIO） |
-| `sim/tb_sw.sv` (333) | 跑完整软件（hello / CoreMark / NN）；输出**停顿构成剖析** |
+| `sim/tb_units.sv` (563) | 单元测试（ALU/前递/冒险/CSR/AMO…），**检查点数以运行时打印为准** |
+| `sim/tb_core.sv` (175) | 定向汇编程序；`+illegal_trace` 打**逐拍轨迹** |
+| `sim/tb_soc.sv` (269) | SoC 级（定时器/中断/MMIO） |
+| `sim/tb_sw.sv` (406) | 跑完整软件（hello / CoreMark / NN）；输出**停顿构成剖析** |
 
 ### 辅助脚本
 
-`tools/asm.py`(279) 汇编器 · `tools/elf2hex.py`(73) · `tools/build_sw.py`(119) ·
-`tools/run_coremark.py`(109) · `tools/amo_vectors.py`(102) ·
+`tools/asm.py`(326) 汇编器 · `tools/elf2hex.py`(93) · `tools/build_sw.py`(143) ·
+`tools/run_coremark.py`(131) · `tools/amo_vectors.py`(131) ·
 `tools/mk_cm_hw.py` **重建跑分镜像并重算 `ITERATIONS`（见 PITFALLS R35）** ·
-`tools/trace_diff.py`(125) **逐拍轨迹比对（找 RTL 改动的第一处分歧）**
+`tools/trace_diff.py`(152) **逐拍轨迹比对（找 RTL 改动的第一处分歧）**
 
 ---
 
