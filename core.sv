@@ -170,10 +170,16 @@ module core
   //   cycle 1: imem_rdata = 第一条指令, 且 pc 仍 = PC_RESET -> 配对正确 ✓
   // 组合读不需要它 (当拍递地址当拍出数据, 第一条指令本来就能取到)。
   logic fetch_hold;
+  // 【boot_done 必须在 ifdef 之外声明】ID 段的 id_en 门控无条件引用它
+  // (core.sv 的 `assign id_en = boot_done;`)。2026-10-08 审阅抓到过一次真 bug:
+  // 当时它只在 `else`(寄存读) 分支里声明, 一旦定义 IMEM_COMB_READ 就变成
+  // **未声明标识符 -> 隐式 1 位 net -> id_en 恒 0 -> 全核每拍译码成 NOP**。
+  // 组合读下它恒为 1 (当拍递地址当拍出数据, 不需要 boot 冻结, 见上)。
+  logic boot_done;
 `ifdef IMEM_COMB_READ
   assign fetch_hold = pipe_stall;
+  assign boot_done  = 1'b1;
 `else
-  logic boot_done;
   always_ff @(posedge clk or posedge rst) begin
     if (rst) boot_done <= 1'b0;
     else     boot_done <= 1'b1;
@@ -373,12 +379,12 @@ module core
   // 且 **BTB 用当前 pc 查询** (u_btb 的 .pred_pc(pc)) —— 所以第 N 拍的
   //      指令 (imem_rdata) / PC (pc) / 预测 (pred_taken,pred_target)
   // 三者**天然对应同一条指令**。if_id_reg 只是把同一份信息再打一拍,
-  // 白多一级流水 —— 去掉它即为 4 级:
-  //      IMEM 输出寄存器(=IF/ID) -> ID/EX -> EX/MEM -> MEM/WB
+  // 白多一级流水 —— 去掉它后 pc 之后只剩 4 个寄存器, 仍是 5 级 (教科书口径):
+  //      [IF] pc -> IMEM -> IMEM 输出寄存器(=IF/ID) -> [ID] ID/EX -> [EX] EX/MEM -> [MEM] MEM/WB -> [WB]
   //
   // 【收益】误判恢复少穿一级: 重定向发生在 cycle T 时, 正确路径指令进 EX
-  //   由 T+4 提前到 T+3, 每次误判省 1 拍。误判 11501 次 -> ticks −2.72%。
-  //   (口径: 权威基线 423527, 见 tools/fpga_workflow.py 的说明)
+  //   由 T+4 提前到 T+3, 每次误判省 1 拍。**实测**: 11535 次重定向 -> ticks
+  //   423527 → 413070 (**−10457 = −2.47%**; 事前按 11501 次估的是 −2.72%, 略偏乐观)。
   // 【代价】id_ctrl 上一级 AND 门控 (见下), 净省 111 位 FF。赛题要求 >=3 级, 5 级合格。
   //
   // 【为什么用"组合别名"而不是把这些名字删掉】if_pc / if_instr 被

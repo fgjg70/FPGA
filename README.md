@@ -19,18 +19,19 @@ graph LR
 
 | 评分指标 | 基线 | **最终（上板验证）** | 变化 |
 |---|---|---|---|
-| **CoreMark/MHz** | 0.8263 | **2.3611** | **+185.8%** |
-| **最高时钟频率 fmax** | 78.4 MHz | **61.2 MHz** | −21.9% |
-| **CoreMark/LUTs** | 2.361e-4 | **5.788e-4** | **+145.1%** |
-| 绝对吞吐 (CM/MHz × fmax) | 64.8 | **144.4** | **+122.9%** |
+| **CoreMark/MHz** | 0.8263 | **2.4209** | **+193.0%** |
+| **最高时钟频率 fmax** | 78.4 MHz | **69.8 MHz** | −11.0% |
+| **CoreMark/LUTs** | 2.361e-4 | **9.139e-4** | **+287.1%** |
+| 绝对吞吐 (CM/MHz × fmax) | 64.8 | **169.0** | **+160.8%** |
 
-**资源**：LUT **4079** / FF 1377 / BRAM 4 / DSP 8（评分版，不含 ILA）
-**上板**：1200 迭代 / **10.16 s** / 与官方参考值 **逐位 CRC 匹配** / tick 508,155,404
+**资源**：LUT **2649** / FF **1234** / BRAM **8** / DSP 8（交付配置，不含 ILA）
+**上板**：1300 迭代 / **10.74 s** @50 MHz / 与官方参考值 **逐位 CRC 匹配** /
+`ila_ctrl=0x42`、CRC bit31=1、tick **536,943,384**、硬件 CoreMark/MHz **2.4211**
 
-> **绝对吞吐是本项目的核心结论**：+122.9% 表示同一块板每秒能跑 **2.23 倍**的
+> **绝对吞吐是本项目的核心结论**：+160.8% 表示同一块板每秒能跑 **2.61 倍**的
 > CoreMark 迭代数。三项评分指标互相矛盾时，它是有意义的最终裁判。
 
-**回归**：243 项单元检查 + **9 组**系统级/软件级测试，全部 PASS。
+**回归**：**PASS 11**（`tb_units` 的检查点数以**运行时打印**为准 + **10 组**系统级/软件级测试），无 XFAIL。
 
 ---
 
@@ -43,7 +44,7 @@ graph LR
 | 完整异常/中断（ECALL/EBREAK/非法指令/mtimecmp 定时器中断/MRET）| ✅ |
 | 外设：UART 115200 8N1 收发 / GPIO / 64 位定时器 | ✅ |
 | 应用场景：神经网络 GEMM 推理核心（与独立参考实现逐元素一致）| ✅ |
-| RV32A 原子指令 | ⚠ 数据通路+译码已完成，多周期读写未做（`A_EN` 门控关闭）|
+| RV32A 原子指令 | ✅ **已完成**（多周期"读-改-写"已打通，`tb_core_amo` PASS；`A_EN` 宏默认关 —— 对 CoreMark 三项零贡献）见 `results/p6-a-extension.md` §5.13 |
 | AI 加速单元（GEMM） | ⚠ 机制已验证（42.59× 计算加速），因面积与正确性门控关闭 |
 | I/D Cache | ⚖ 经分析判定无收益（存储器已是单周期命中的片上 BRAM）|
 
@@ -75,7 +76,7 @@ graph LR
 | 文件 | 模块 | 说明 |
 |---|---|---|
 | `imem.sv` / `dmem.sv` | — | 指令/数据存储器（**寄存读 → 行为级推断 BRAM**，各 16KB；dmem 带字节写使能）|
-| `id_ex_reg.sv` 等 3 个 | `*_reg` | 3 个流水寄存器 (控制束整束传递，气泡 = 真实 NOP) |
+| `id_ex_reg.sv` / `ex_mem_reg.sv` / `mem_wb_reg.sv` | `*_reg` | **3 个**流水寄存器 (控制束整束传递，气泡 = 真实 NOP)。IF/ID 由 IMEM 的输出寄存器承担 ⇒ 连同它共 **4 个**流水寄存器 ⇒ **5 级**（`results/p8-ifid-elide.md`）|
 | `hazard_unit.sv` | `hazard_unit` | 前递选择 + load-use 停顿 + 重定向门控 |
 | `load_store_unit.sv` | `load_store_unit` | 字节通道 + **非对齐跨字访存 2 拍自动拆分** |
 | `core.sv` | `core` | 五级流水线顶层 + 调试口 |
@@ -85,12 +86,12 @@ graph LR
 | 文件 | 说明 |
 |---|---|
 | `sim/tb_units.sv` | 基础模块单元回归（含**全部历史 bug 的定向回归** + RV32A 的 ALU/译码检查）|
-| `sim/tb_core*.sv` / `tb_soc*.sv` / `tb_sw*.sv` | **9 组**系统级/软件级回归 |
+| `sim/tb_core*.sv` / `tb_soc*.sv` / `tb_sw*.sv` | **10 组**系统级/软件级回归（连同 `tb_units` 共 **11 项**，全部 PASS）|
 | `sim/prog/*.S`、`sw/*.c` | 测试程序与裸机 C 程序（CoreMark、神经网络 GEMM、编译器探针）|
 | `tools/amo_vectors.py` | **RV32A 黄金向量生成器**（独立 Python 参考实现，108 条，双向交叉验证过）|
 | `tools/fpga_workflow.py` | 统一工作流入口：`doctor`/`check`/`verify`/`synth`/`report`/`metrics`/`profile`/`hw` |
 | `results/` | 成绩、逐轮优化记录、失败记录、赛题对照（25 份）|
-| `skills/fpga-riscv-a100t/PITFALLS.md` | 28 条踩坑记录（R1~R28）|
+| `skills/fpga-riscv-a100t/PITFALLS.md` | 踩坑记录 **R1~R35**（35 条编号记录，症状优先）|
 | `legacy/` | 最初的 Verilog 单周期代码 (历史留档) |
 
 > **可移植性**：CPU 核**零厂商原语**（BRAM 全用行为级推断，不例化 IP），
@@ -158,14 +159,19 @@ store: shifted = {32'b0, rs2} << (8*addr[1:0]), 写使能为掩码移位到两�
 
 ## 已知取舍与后续路线
 
-- **M 扩展**：ALU 操作码已扩到 5 位，8 条 M 指令编码已预留
-  (`ALU_MUL..ALU_REMU`)，当前译码为 illegal。启用时在 `control_unit` 加
-  `funct7==F7_MULDIV` 分支 + ALU 实现 (乘法走 DSP；除法建议多周期状态机 +
-  `pc.stall`)。
-- **CSR/trap**：`illegal` 标志与 `pc.flush/flush_pc` 钩子已就位，
-  下一步实现 `mtvec/mepc/mcause/mstatus` 后可支持非法指令/非对齐/断点异常。
-- **存储器升级 BRAM**：`imem`/`dmem` 改寄存输出即可，接口不变，
-  流水线无需改动 (需相应调整取指时序)。
+> 本节原先写的是单周期时代的计划（"M 扩展译码待做 / CSR,trap 待实现 / 存储器待改 BRAM"）——
+> **那三项早已全部落地**。下面是**当前真实的**取舍与剩余方向。
+
+- **默认关闭的四个宏**（都留了实测数据与复现开关，不要重复试）：
+  `A_EN`（RV32A：功能已完成，但对 CoreMark 三项零贡献）、
+  `GEMM_EN`（面积翻倍 + C 读回未修完）、`RAS_EN` 与 `BTB_GSHARE`（实测净亏）。
+- **Cache（2 路组相联 + 总线突发）**：**分析判定架构性无收益**，不实现 ——
+  `imem`/`dmem` 都已是单周期命中的片上 BRAM，没有它要掩盖的存储器延迟。
+  定量依据见 `results/p7-cache-analysis.md`。
+- **fmax 剩余空间**：当前 **69.8 MHz**（基线 78.4，−11.0%）；关键路径 route 占比高，
+  纯改 RTL 收益有限。
+- **`LOAD_RESULT_REG`**：实测更差，已否决（`results/p4-macro-failure.md` 5.2）。
+- **唯一未完成项**：GEMM 加速单元的 C 读回 + 缓冲改 BRAM（不计入成绩）。
 - **设计坑记录** (都踩过并已修复，代码注释里有详细说明)：
   1. `logic x = expr;` 是**声明式初始化**，只在 0 时刻求值一次，
      不是连续赋值 —— 多处曾因此产生恒 X 信号。全部改为显式 `assign`。

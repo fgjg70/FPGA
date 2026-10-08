@@ -59,7 +59,7 @@ gemm_accel.sv         ← 自选题 GEMM 加速器
 
 ---
 
-## 2. 核心 RTL 清单（21 个文件，约 3200 行）
+## 2. 核心 RTL 清单（20 个文件，约 3200 行）
 
 | 文件 | 行 | 角色 | 阅读要点 |
 |---|---:|---|---|
@@ -106,7 +106,7 @@ gemm_accel.sv         ← 自选题 GEMM 加速器
 
 ## 3. 工具链（`tools/` + `fpga/`）
 
-### 一站式入口：`tools/fpga_workflow.py`（1870 行）
+### 一站式入口：`tools/fpga_workflow.py`（2114 行）
 
 ```powershell
 python tools/fpga_workflow.py doctor      # 环境自检
@@ -141,6 +141,7 @@ python tools/fpga_workflow.py check       # 漂移检测 (文件清单/编码/�
 
 `tools/asm.py`(279) 汇编器 · `tools/elf2hex.py`(73) · `tools/build_sw.py`(119) ·
 `tools/run_coremark.py`(109) · `tools/amo_vectors.py`(102) ·
+`tools/mk_cm_hw.py` **重建跑分镜像并重算 `ITERATIONS`（见 PITFALLS R35）** ·
 `tools/trace_diff.py`(125) **逐拍轨迹比对（找 RTL 改动的第一处分歧）**
 
 ---
@@ -149,12 +150,12 @@ python tools/fpga_workflow.py check       # 漂移检测 (文件清单/编码/�
 
 | 文件 | 内容 |
 |---|---|
-| `HANDOFF.md` (611) | **总入口**：当前交付配置、四项指标、存储策略、上板结论 |
-| `HANDOFF-HW-LOOP.md` (186) | 上板闭环操作的逐步说明 |
-| `HANDOFF-WORKFLOW.md` (202) | 工作流用法 |
-| `results/*.md` (21 篇) | 每项工作的**完整实测记录**（含所有失败尝试与原因） |
+| `HANDOFF.md` (975) | **总入口**：当前交付配置、四项指标、存储策略、上板结论 |
+| `HANDOFF-HW-LOOP.md` (269) | 上板闭环操作的逐步说明 |
+| `HANDOFF-WORKFLOW.md` (280) | 工作流用法 |
+| `results/*.md` (22 篇) | 每项工作的**完整实测记录**（含所有失败尝试与原因） |
 | `results/coremark.csv` | 所有配置 × 四项指标的总表 |
-| `skills/fpga-riscv-a100t/PITFALLS.md` | **37 条踩坑记录**（改代码前扫一眼能省很多时间） |
+| `skills/fpga-riscv-a100t/PITFALLS.md` | **R1~R35 踩坑记录**（改代码前扫一眼能省很多时间） |
 
 ---
 
@@ -162,9 +163,9 @@ python tools/fpga_workflow.py check       # 漂移检测 (文件清单/编码/�
 
 | 指标 | 值 |
 |---|---|
-| CoreMark/MHz | **2.3611**（ticks 423,527） |
-| fmax | **69.2 MHz**（WNS 5.543 @20ns） |
-| LUT / FF / BRAM / DSP | **2820 / 1345 / 8 / 8** |
-| CoreMark/LUTs | **8.373e-4** |
-| 绝对吞吐 | **163.3**（= CM/MHz × fmax） |
-| 上板 | `ila_ctrl=0x42`、CRC bit31=1、tick 508,155,404、10.16 s @50 MHz |
+| CoreMark/MHz | **2.4209**（仿真 ticks 413,070） |
+| fmax | **69.8 MHz**（WNS 5.673 @20ns，由 `1000/(20−WNS)` 推得） |
+| LUT / FF / BRAM / DSP | **2649 / 1234 / 8 / 8** |
+| CoreMark/LUTs | **9.139e-4** |
+| 绝对吞吐 | **169.0**（= CM/MHz × fmax） |
+| 上板 | `ila_ctrl=0x42`、CRC bit31=1、tick **536,943,384**、**10.74 s** @50 MHz（1300 迭代）、硬件 CM/MHz **2.4211** |
