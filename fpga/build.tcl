@@ -210,6 +210,19 @@ phys_opt_design -directive AggressiveExplore
 route_design -directive $ROUTE_DIR
 phys_opt_design -directive AggressiveExplore
 report_timing_summary -file timing.rpt
+# ---- EVIDENCE: fully expanded critical paths (per-hop net fanout) -----------
+# report_timing_summary gives no per-hop `net (fo=NN)` detail, but this core is
+# ROUTE-bound (PITFALLS R36) -> optimization targets must be picked by FANOUT,
+# not by signal name (R37: max_fanout gains are position-specific; the same
+# name did not replicate on this core). This line does NOT change the
+# implementation; it only adds fpga/timing_paths.rpt for path analysis.
+# Placed before write_bitstream so it reports the exact same netlist as
+# timing.rpt. NOTE: keep this file pure ASCII (Vivado + check both care).
+# `-nworst 50` was tried first and is WRONG here: with no -from/-to it made
+# Vivado print the SAME worst path 50 times (measured 2026-10-08: 50 identical
+# blocks) instead of 50 distinct paths. Dropping -nworst yields 50 distinct
+# worst-slack paths, each fully expanded with per-hop `net (fo=NN)`.
+report_timing -max_paths 50 -input_pins -file $root/fpga/timing_paths.rpt
 report_utilization -file util.rpt
 write_bitstream -force cpu_a100t.bit
 puts "BUILD_OK"

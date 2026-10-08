@@ -145,7 +145,17 @@ module core
   // ---- Zicsr / 陷阱 (M-mode) ----
   logic [31:0] csr_rdata, csr_wdata, csr_src;
   logic        csr_we, is_csr;
-  logic        exc_req, irq_take, trap_req, trap_enter, trap_redir, any_redir;
+  logic        exc_req, irq_take, trap_req, trap_enter, trap_redir;
+  // 【X1 扇出约束 —— 按 fo 选目标, 不按信号名 (PITFALLS R36/R37)】
+  // 2026-10-08 实测 (fpga/timing_paths.rpt, 基线 WNS 5.624 / fmax 69.6):
+  //   **top-50 最差路径全部经过 any_redir**, 而它是关键路径上扇出最大的网:
+  //     fo=122, 单这一跳布线 0.704~0.975ns。
+  //   它同时喂两类负载: (a) 取指地址 mux -> u_imem/ADDRARDADDR (路径族 A),
+  //                     (b) ID/EX 的 flush mux -> rs1/rs2_data_reg 的 D/CE (族 B)。
+  //   旁证: 同一份报告里 pc_src / redirect / redirect_raw / actual_taken 已有
+  //   max_fanout=16, 它们都不再出现在前 25 名的 fo 榜上 —— 只有 any_redir 漏了。
+  // 纯约束, 不改功能 (组合网 -> 综合器复制的是驱动 LUT, 不是触发器)。
+  (* max_fanout = 16 *) logic  any_redir;
   logic [4:0]  trap_cause, irq_cause;
   logic [3:0]  exc_cause;
   logic [31:0] trap_vector, mret_pc;
