@@ -55,13 +55,22 @@ module gemm_accel
   output logic        irq
 );
 
-  // 2KB 对齐的缓冲窗口; 窗口内字偏移用 addr[9:2]
+  // 窗口: base=MMIO_GEMM_ARENA(0xA000_0400), 按 addr[10:0] 解码 = 2KB。
+  // 布局(AW+BW+CW = 64+64+256 = **384 字** = 1.5KB):
+  //     A = aoff [  0,  64)      B = aoff [ 64, 128)      C = aoff [128, 384)
+  //
+  // 【真 bug 修正 2026-10-08 (审阅发现)】原写法 `aoff = addr[9:2]` **只切 8 位**
+  // (1KB = 256 字), 而布局要 384 字 —— 于是 C[128..255] 的字节偏移 0x400..0x5FF
+  // 被截断回绕成 0..127, **落进 A/B 窗口**: 读回的是 A/B 数据(写还会破坏 A/B)。
+  // 这正是 results/p5-ai-accelerator.md 记录的"C[128..255] 读回只有前 ~16 个字、
+  // C[255] 恒 0"的真根因 —— 不是 C 没算对, 而是**地址解码把它指到了 A/B**。
+  // 改法: 9 位 + **补上界** (旧尝试用 10 位且无上界 -> c_buf 索引最大 895 -> X 传播)。
   wire        in_arena = (addr[31:11] == MMIO_GEMM_ARENA[31:11]);
-  wire [7:0]  aoff     = addr[9:2];
+  wire [8:0]  aoff     = addr[10:2];
 
-  wire is_A = in_arena && (aoff < 8'd64);
-  wire is_B = in_arena && (aoff >= 8'd64)  && (aoff < 8'd128);
-  wire is_C = in_arena && (aoff >= 8'd128);
+  wire is_A = in_arena && (aoff < 9'd64);
+  wire is_B = in_arena && (aoff >= 9'd64)  && (aoff < 9'd128);
+  wire is_C = in_arena && (aoff >= 9'd128) && (aoff < 9'd384);
 
   logic [31:0] r_m, r_k, r_n;
   logic        r_irq_en;
@@ -116,9 +125,9 @@ module gemm_accel
       else if (addr == MMIO_GEMM_CYCLES) rdata = cycles_r;
       else if (addr == MMIO_GEMM_DBGA)   rdata = dbg_addr;
       else if (addr == MMIO_GEMM_DBGV)   rdata = {dbg_b[15:0], dbg_a[15:0]};
-      else if (is_C)                     rdata = c_buf[aoff - 8'd128];
-      else if (is_A)                     rdata = a_buf[aoff];
-      else if (is_B)                     rdata = b_buf[aoff - 8'd64];
+      else if (is_C)                     rdata = c_buf[aoff - 9'd128];
+      else if (is_A)                     rdata = a_buf[aoff[5:0]];
+      else if (is_B)                     rdata = b_buf[aoff - 9'd64];
     end
   end
 
@@ -164,16 +173,16 @@ module gemm_accel
         else if (addr == MMIO_GEMM_K) r_k <= wdata;
         else if (addr == MMIO_GEMM_N) r_n <= wdata;
         else if (is_A) begin
-          if (wstrb[0]) a_buf[aoff][7:0]   <= wdata[7:0];
-          if (wstrb[1]) a_buf[aoff][15:8]  <= wdata[15:8];
-          if (wstrb[2]) a_buf[aoff][23:16] <= wdata[23:16];
-          if (wstrb[3]) a_buf[aoff][31:24] <= wdata[31:24];
+          if (wstrb[0]) a_buf[aoff[5:0]][7:0]   <= wdata[7:0];
+          if (wstrb[1]) a_buf[aoff[5:0]][15:8]  <= wdata[15:8];
+          if (wstrb[2]) a_buf[aoff[5:0]][23:16] <= wdata[23:16];
+          if (wstrb[3]) a_buf[aoff[5:0]][31:24] <= wdata[31:24];
         end
         else if (is_B) begin
-          if (wstrb[0]) b_buf[aoff - 8'd64][7:0]   <= wdata[7:0];
-          if (wstrb[1]) b_buf[aoff - 8'd64][15:8]  <= wdata[15:8];
-          if (wstrb[2]) b_buf[aoff - 8'd64][23:16] <= wdata[23:16];
-          if (wstrb[3]) b_buf[aoff - 8'd64][31:24] <= wdata[31:24];
+          if (wstrb[0]) b_buf[aoff - 9'd64][7:0]   <= wdata[7:0];
+          if (wstrb[1]) b_buf[aoff - 9'd64][15:8]  <= wdata[15:8];
+          if (wstrb[2]) b_buf[aoff - 9'd64][23:16] <= wdata[23:16];
+          if (wstrb[3]) b_buf[aoff - 9'd64][31:24] <= wdata[31:24];
         end
       end
       // 读 STATUS 清 done

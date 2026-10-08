@@ -8,7 +8,8 @@ mk_cm_hw.py -- 重新构建上板跑分镜像 sim/prog/cm_hw.hex。
 形式传参（与 tools/run_coremark.py 完全相同的写法），一次成功。
 
 【为什么要重调 ITERATIONS】CoreMark 的有效成绩要求运行 >= 10 秒。
-本核变快后会跌破 10 秒（实测 4 级流水把它从 10.16 s 拉到 9.91 s），
+本核变快后会跌破 10 秒（实测去掉那个冗余 IF/ID 寄存器把它从 10.16 s 拉到 9.91 s；
+注意本核**始终是 5 级**，见 core.sv 头部口径说明），
 所以**每次性能提升都要重算 ITERATIONS**：
 
     ITERATIONS_new = ceil(ITERATIONS_old * 10.0 / 实测秒数 * 1.05)   # 留 5% 余量

@@ -103,7 +103,13 @@ module csr_file
   logic [31:0] mtval;
   logic        ie_mtie, ie_meie;   // mie
 
-  wire [31:0] mip_val = {20'b0, irq_ext, 19'b0, irq_timer, 7'b0};
+  // 【位布局修正 2026-10-08 (审阅发现)】
+  // 原写法 `{20'b0, irq_ext, 19'b0, irq_timer, 7'b0}` 拼出来是 **48 位**, 赋给 32 位
+  // 只保留低 32 位 —— 于是 `irq_ext` 落到 **bit27** 而不是 bit11。定时器那两位
+  // 恰好仍在 bit7, 所以定时器测试没暴露; 但软件 `csrrs mie, 0x800` 后读回恒 0,
+  // mip 的 MEIP 也读不到。写路径(见下 wdata[11]/wdata[7])本来就是对的, 读必须对齐:
+  //   bit31:12 = 0 | bit11 = MEIP/MEIE | bit10:8 = 0 | bit7 = MTIP/MTIE | bit6:0 = 0
+  wire [31:0] mip_val = {20'b0, irq_ext, 3'b0, irq_timer, 7'b0};
 
   // ------------------------------------------------------------------------
   // 组合读
@@ -112,7 +118,7 @@ module csr_file
     case (raddr)
       CSR_MSTATUS : rdata = {19'b0, st_mpp, 3'b0, st_mpie, 3'b0, st_mie, 3'b0};
       CSR_MISA    : rdata = MISA_VALUE;
-      CSR_MIE     : rdata = {20'b0, ie_meie, 19'b0, ie_mtie, 7'b0};
+      CSR_MIE     : rdata = {20'b0, ie_meie, 3'b0, ie_mtie, 7'b0};   // 同上: 48->32 位截断修正
       CSR_MTVEC   : rdata = mtvec;
       CSR_MSCRATCH: rdata = mscratch;
       CSR_MEPC    : rdata = mepc;
