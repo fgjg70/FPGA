@@ -20,7 +20,7 @@ GCC_DIR = r'D:\software\tools\riscv-none-elf\xpack-riscv-none-elf-gcc-15.2.0-1\b
 PY = sys.executable
 
 RTL = ['rv32_pkg.sv','alu.sv','branch_unit.sv','control_unit.sv','imm_gen.sv','pc.sv','regfile.sv',
-       'if_id_reg.sv','id_ex_reg.sv','ex_mem_reg.sv','mem_wb_reg.sv','hazard_unit.sv',
+       'id_ex_reg.sv','ex_mem_reg.sv','mem_wb_reg.sv','hazard_unit.sv',
        'load_store_unit.sv','imem.sv','dmem.sv','btb.sv','ras.sv','gemm_accel.sv','muldiv.sv','csr_file.sv','core.sv']
 CM_SRC = ['core_main.c','core_list_join.c','core_matrix.c','core_state.c','core_util.c','core_portme.c','ee_printf.c']
 

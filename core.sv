@@ -93,6 +93,11 @@ module core
 
   // ID
   ctrl_s       id_ctrl;
+  // 【4 级流水, issue #5】译码器的**原始**输出, 经 id_valid 门控后才成为 id_ctrl。
+  // 分开取名是为了让"门控挂在译码输出上"这件事在代码里显式可见 ——
+  // 门控绝不能做成 32 位指令 mux (那会插进关键路径), 见 ID 段注释。
+  ctrl_s       id_ctrl_raw;
+  logic        id_en;       // ID 门控使能: 恒等于 boot_done (见 ID 段注释)
   logic [31:0] id_imm, id_rs1_data, id_rs2_data;
   logic [4:0]  id_rs1, id_rs2, id_rd;
 
@@ -349,36 +354,85 @@ module core
   // 完整五轮失败史(含三条已证伪的错路)见 results/p4-macro-failure.md 5.1 节。
   // --------------------------------------------------------------------------
 
-  if_id_reg #(.RESET_PC(PC_RESET)) u_if_id (
-    .clk         (clk),
-    .rst         (rst),
-    .flush       (if_id_flush),
-    .stall       (fetch_hold),
-    // 【寄存读也用它, 不是延迟副本】因为取指地址接的是 pc_next, 于是
-    // imem_rdata(N) == mem[pc(N)] —— 与组合读同口径, 见 IF 段 pc_next 注释。
-    .pc_in       (pc),
-    .pc_plus4_in (pc_plus4),
-    .instr_in    (imem_rdata),
-    .pred_taken_in  (pred_taken),
-    .pred_target_in (pred_target),
-    .pc          (if_pc),
-    .pc_plus4    (if_pc_plus4),
-    .instr       (if_instr),
-    .pred_taken  (if_pred_taken),
-    .pred_target (if_pred_target)
-  );
+  // ==========================================================================
+  // 【issue #5 已实施】4 级流水: IMEM 输出寄存器直接充当 IF/ID
+  // ==========================================================================
+  // 原来 IF 段有**两个寄存器装同一条指令**: imem 的输出寄存器 + if_id_reg。
+  // 实测不变量 (见 imem.sv:11-14 与上面 pc_next 注释):
+  //      imem_rdata(N) == mem[pc(N)]
+  // 且 **BTB 用当前 pc 查询** (u_btb 的 .pred_pc(pc)) —— 所以第 N 拍的
+  //      指令 (imem_rdata) / PC (pc) / 预测 (pred_taken,pred_target)
+  // 三者**天然对应同一条指令**。if_id_reg 只是把同一份信息再打一拍,
+  // 白多一级流水 —— 去掉它即为 4 级:
+  //      IMEM 输出寄存器(=IF/ID) -> ID/EX -> EX/MEM -> MEM/WB
+  //
+  // 【收益】误判恢复少穿一级: 重定向发生在 cycle T 时, 正确路径指令进 EX
+  //   由 T+4 提前到 T+3, 每次误判省 1 拍。误判 11501 次 -> ticks −2.72%。
+  //   (口径: 权威基线 423527, 见 tools/fpga_workflow.py 的说明)
+  // 【代价】id_ctrl 上一级 AND 门控 (见下), 净省 ~105 位 FF。赛题要求 >=3 级, 4 级合格。
+  //
+  // 【为什么用"组合别名"而不是把这些名字删掉】if_pc / if_instr 被
+  //   tb_core 的逐拍 trace 与 tb_sw 的"取指对齐自检"**直接引用**;
+  //   保留这几个名字当别名 => 两个 testbench 一行都不用改, 而且自检的
+  //   不变量 (imem_rdata == mem[pc]) 完全不变、继续有效。
+  assign if_pc          = pc;
+  assign if_pc_plus4    = pc_plus4;
+  assign if_instr       = imem_rdata;
+  assign if_pred_taken  = pred_taken;
+  assign if_pred_target = pred_target;
+
+  // 【ID 门控只用 boot_done —— 绝不能用 if_id_flush】两条独立的实测理由:
+  //   ① 组合环 (Vivado 综合报 [DRC LUTLP-1], 17 个 LUT):
+  //        if_id_flush → id_valid → id_rs* → load_use → pipe_stall
+  //          → redirect → any_redir → if_id_flush
+  //      原设计没有它, 因为 if_id_rs* 来自 if_id_reg 的**输出寄存器**;
+  //      去掉 IF/ID 后这条反馈路径暴露出来。
+  //   ② 关键路径: if_id_flush 是全核最晚、扇出最大的信号之一 (实测 fo=125)。
+  //      一旦让它串进 `id_ctrl -> imm_gen -> ID/EX` 的 D 端, fmax 立刻
+  //      69.2 → 67.5 MHz (实测)。
+  //   **冲刷期不需要在这里门控**: id_ex_reg 的 flush 接的就是 any_redir ——
+  //   同一拍就把 ID/EX 清成气泡了, D 端是什么值都无所谓。
+  //   **启动期 (boot_done=0) 必须门控**: 原来靠 if_id_reg 的 stall(fetch_hold)
+  //   把 IF/ID 冻在复位值 (NOP), 去掉 IF/ID 后只能在这里补 ——
+  //   否则第一条指令会在 boot 期间就流进 EX。
+  assign id_en = boot_done;
 
   // ==========================================================================
   // ID 段
   // ==========================================================================
+  // 【门控必须挂在译码输出上, 不能把 32 位 mux 插进指令路径】(issue #5 §4.3)
+  //   ❌ 错误: id_instr = id_valid ? imem_rdata : NOP;  -> 32 位 mux 进关键路径
+  //   ✅ 正确: 指令直连 imem_rdata, 只门控"译码结果"与三个寄存器号 ——
+  //            id_ctrl 本来就是"译码 -> ID/EX"这条路径的终点, 加一级 AND 不影响。
+  // 为什么必须有门控: 去掉 if_id_reg 后 imem 的输出寄存器**无条件每拍更新**,
+  //   冲刷期它仍是一条真实指令。若不门控, id_rs1/id_rs2 会在冲刷期携带真实
+  //   寄存器号 -> hazard_unit 可能误判 load-use -> 平白拉停 pipe_stall ->
+  //   而 redirect 被 !pipe_stall 门控 -> **重定向被推迟一拍** (历史同类 bug:
+  //   random "配错对象", 见 core.sv 早期停顿气泡的记录)。
+  // 【⚠ 这三个寄存器号**绝不能**用 id_valid 门控 —— 会形成组合环!】
+  //   实测 (Vivado 综合): [DRC LUTLP-1] Combinatorial Loop Alert, 17 个 LUT:
+  //     if_id_flush → id_valid → id_rs* → hazard_unit.load_use
+  //       → pipe_stall → redirect → any_redir → if_id_flush
+  //   原设计没有这个环, 因为 `if_id_rs*` 来自 if_id_reg 的**输出寄存器**;
+  //   改成组合别名 (去掉 if_id_reg) 后, 这条反馈路径就暴露出来了。
+  //   所以这里直接用指令字段, **不加门控** —— 语义与原来"IF/ID 输出"一致:
+  //   唯一差别是"冲刷期 IF/ID 原本是气泡 (rs=0)"。但重定向只可能由 EX 里的
+  //   控制流指令产生 (pred_ok 只对 pc_sel!=PC_NEXT 才有意义), 而
+  //   branch/jal/jalr 的 mem_read=0 ⇒ load_use 恒为 0 ⇒ 无影响。
+  //   三个号的消费者 (regfile 读口 / ID-EX 入口) 在冲刷那拍都被 ID/EX 的
+  //   flush 拦住, 真值流不进 EX。
   assign id_rs1 = if_instr[19:15];
   assign id_rs2 = if_instr[24:20];
   assign id_rd  = if_instr[11:7];
 
   control_unit u_ctrl (
     .instr (if_instr),
-    .ctrl  (id_ctrl)
+    .ctrl  (id_ctrl_raw)
   );
+
+  always_comb begin
+    id_ctrl = id_en ? id_ctrl_raw : ctrl_s'(0);
+  end
 
   imm_gen u_imm (
     .instr   (if_instr),

@@ -10,7 +10,7 @@
 | 要求 | 状态 | 证据 |
 |---|---|---|
 | RV32I 通用处理单元 | ✅ | 9 个 opcode 全部译码: OP/OPIMM/LOAD/STORE/BRANCH/LUI/AUIPC/JAL/JALR |
-| **≥3 级流水线** | ✅ | 5 级 IF/ID/EX/MEM/WB |
+| **≥3 级流水线** | ✅ | **4 级** ID/EX/MEM/WB（IMEM 输出寄存器直接充当 IF/ID，issue #5）|
 | 数据冲突处理 | ✅ | EX/MEM + MEM/WB 前递 + load-use 停顿 1 拍 |
 | 分支处理 | ✅ | 64 项 BTB + 2 位 Smith 方向预测器, 精度 88.7%（实测) |
 | **外设集成 UART** | ✅ | mmio_subsys: 115200 8N1 TX+RX, 回环自测通过 |

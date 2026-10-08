@@ -18,7 +18,7 @@
 # 输出: fpga/hier_util.rpt
 
 set root "D:/USER/Desktop/FPGA/FPGA"
-read_verilog -sv [list "$root/rv32_pkg.sv" "$root/alu.sv" "$root/branch_unit.sv" "$root/control_unit.sv" "$root/imm_gen.sv" "$root/pc.sv" "$root/regfile.sv" "$root/if_id_reg.sv" "$root/id_ex_reg.sv" "$root/ex_mem_reg.sv" "$root/mem_wb_reg.sv" "$root/hazard_unit.sv" "$root/load_store_unit.sv" "$root/imem.sv" "$root/dmem.sv" "$root/btb.sv" "$root/muldiv.sv" "$root/csr_file.sv" "$root/core.sv" "$root/fpga/mmio_subsys.sv" "$root/fpga/top_a100t.sv"]
+read_verilog -sv [list "$root/rv32_pkg.sv" "$root/alu.sv" "$root/branch_unit.sv" "$root/control_unit.sv" "$root/imm_gen.sv" "$root/pc.sv" "$root/regfile.sv" "$root/id_ex_reg.sv" "$root/ex_mem_reg.sv" "$root/mem_wb_reg.sv" "$root/hazard_unit.sv" "$root/load_store_unit.sv" "$root/imem.sv" "$root/dmem.sv" "$root/btb.sv" "$root/muldiv.sv" "$root/csr_file.sv" "$root/core.sv" "$root/fpga/mmio_subsys.sv" "$root/fpga/top_a100t.sv"]
 # 必须同时定义两个镜像, 否则整个数据通路会被常量折叠成几个 LUT
 # (PITFALLS: "综合出 25 个 LUT" —— 实测把 imem 换成常量 NOP 后全核只剩 3 个 LUT)
 synth_design -top top_a100t -part xc7a100tfgg484-2 -verilog_define "IMEM_INIT_FILE=\"$root/sim/prog/cm_hw.hex\" DMEM_INIT_FILE=\"$root/sim/prog/cm_hw.dmem.hex\""

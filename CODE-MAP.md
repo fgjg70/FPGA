@@ -8,7 +8,7 @@
 
 ## 0. 一句话
 
-一个 **RV32IM_Zicsr + RV32A、M-mode、五级顺序单发射流水线** CPU，
+一个 **RV32IM_Zicsr + RV32A、M-mode、四级顺序单发射流水线** CPU，
 带 2 位 Smith 分支预测 + BTB（可选 RAS / gshare）、非对齐访存硬件拆分、
 精确陷阱、以及一个自选题目用的 **GEMM 加速器**；目标器件
 **XC7A100T-FGG484-2（正点原子达芬奇Pro）**，板载 50 MHz 晶振
@@ -24,15 +24,16 @@
 
 ```
 rv32_pkg.sv           ← 先看类型定义 (ctrl_s / 各 enum)，10 分钟
-core.sv:156-253       ← IF 段:  pc -> imem -> if_id
-core.sv:372-433       ← ID 段:  if_id -> regfile/译码 -> id_ex
+core.sv:156-253       ← IF 段:  pc -> imem (其输出寄存器直接充当 IF/ID)
+core.sv:372-433       ← ID 段:  imem_rdata -> regfile/译码 -> id_ex
 core.sv:435-482       ← EX 段:  id_ex -> ALU/分支 -> ex_mem
 core.sv:689-859       ← MEM 段: ex_mem -> dmem/LSU -> mem_wb
 core.sv:860-886       ← WB 段:  mem_wb -> regfile 写口
 ```
 
-**这一遍要能回答**：`if_id` / `id_ex` / `ex_mem` / `mem_wb` 四个寄存器各自
-携带哪些字段？它们分别由哪个模块例化？
+**这一遍要能回答**：`id_ex` / `ex_mem` / `mem_wb` 三个寄存器各自
+携带哪些字段？它们分别由哪个模块例化？（本核是 **4 级**：IMEM 的输出寄存器就是 IF/ID，
+见 `results/p8-4stage-pipeline.md`）
 
 ### 第 2 遍：控制（约 1 小时）—— 谁在控制这条流水线
 
@@ -44,7 +45,7 @@ core.sv:573-642       ← 陷阱判定 + 重定向仲裁 (pc_src / pc_target)
 ```
 
 **这一遍要能回答**：一条 `lw` 紧跟一条依赖它的 `add`，会停几拍、由谁决定？
-一次分支预测错误，是怎么把 IF/ID 和 ID/EX 冲掉的？
+一次分支预测错误，是怎么把 ID/EX 冲成气泡的？（ID 由 `id_en=boot_done` 门控）
 
 ### 第 3 遍：按需深入（各自独立）
 
@@ -65,7 +66,6 @@ gemm_accel.sv         ← 自选题 GEMM 加速器
 | `rv32_pkg.sv` | 279 | **全局包**：类型 / 枚举 / 参数 / 接线契约 | `ctrl_s` 控制束；`pc_sel_e` / `wb_src_e` / `fwd_sel_e` / `sys_op_e`；存储器基址。**第一份该读的** |
 | `pc.sv` | 37 | PC 寄存器 | 优先级 **flush > stall > pc_src**；`pc_plus4` |
 | `imem.sv` | 61 | 指令存储器 | **默认寄存读（→ BRAM）**；定义 `IMEM_COMB_READ` 才回退成 LUT ROM |
-| `if_id_reg.sv` | 49 | IF/ID 流水寄存器 | 带 flush/stall |
 | `control_unit.sv` | 322 | **主译码器** | 输出三段控制束；覆盖 RV32IM_Zicsr + RV32A |
 | `imm_gen.sv` | 40 | 立即数生成 | I/S/B/U/J 五种 |
 | `regfile.sv` | 57 | 32×32 寄存器堆 | 同拍写读的**写优先旁路** |
@@ -92,7 +92,7 @@ gemm_accel.sv         ← 自选题 GEMM 加速器
 | 115-153 | Zicsr / 陷阱信号 | `exc_req` / `trap_enter` / `mret_taken` … |
 | **156-253** | **IF 段** | `u_pc` 例化(179)、imem 接口、**`pc_next` (222)** |
 | 255-282 | 分支预测（IF 预测 / EX 校验） | BTB 例化、`pred_taken` / `pred_target` |
-| **372-433** | **ID 段** | regfile / control_unit / imm_gen / `u_if_id` |
+| **372-433** | **ID 段** | regfile / control_unit / imm_gen / ID 门控(`id_en`) |
 | **435-482** | **EX 段** | ALU、**前递 mux (445)** |
 | 483-516 | RV32M 乘除单元 | |
 | 517-537 | 跳转/分支目标独立加法器 | 历史遗留：为 fmax 单独拉的加法器 |

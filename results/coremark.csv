@@ -92,3 +92,7 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-07,pb-CLOCKREGIONX1Y1CLOCKREGIONX1Y2,1,423527,2.3611,2819,1345,8,8,65.0,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-07,fmax-best-v1,1,423527,2.3611,2820,1345,8,8,69.2,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-07,fmax-best-v1,1,423527,2.3611,2820,1345,8,8,69.2,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-08,lv4-noidid,1,413070,2.4209,2770,1234,8,8,67.5,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-08,lv4-noidid,1,413070,2.4209,2769,1234,8,8,69.5,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-08,lv4-it1300,1,413070,2.4209,2769,1234,8,8,69.5,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-08,lv4-final,1,413070,2.4209,2769,1234,8,8,69.5,keep,fpga_workflow.py synth (PROG=cm_hw)

@@ -40,7 +40,7 @@ if not exist prog\basic.hex (
 )
 if not exist prog\basic.hex ( echo [ERROR] assembly failed & exit /b 1 )
 
-set "RTLPIPE=%RTL% ..\if_id_reg.sv ..\id_ex_reg.sv ..\ex_mem_reg.sv ..\mem_wb_reg.sv ..\hazard_unit.sv ..\load_store_unit.sv ..\imem.sv ..\dmem.sv ..\core.sv"
+set "RTLPIPE=%RTL% ..\..\id_ex_reg.sv ..\ex_mem_reg.sv ..\mem_wb_reg.sv ..\hazard_unit.sv ..\load_store_unit.sv ..\imem.sv ..\dmem.sv ..\core.sv"
 
 iverilog -g2012 -Wall -o tb_core.vvp %RTLPIPE% tb_core.sv
 if errorlevel 1 ( echo [ERROR] core compile failed & exit /b 1 )

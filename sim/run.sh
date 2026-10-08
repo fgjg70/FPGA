@@ -25,7 +25,7 @@ echo "=== [2/2] system test (tb_core, 5-stage pipeline) ==="
 echo "--- assembling prog/basic.S ---"
 python3 ../tools/asm.py prog/basic.S -o prog/basic.hex > prog/basic.lst
 
-RTLPIPE="$RTL ../if_id_reg.sv ../id_ex_reg.sv ../ex_mem_reg.sv ../mem_wb_reg.sv ../hazard_unit.sv ../load_store_unit.sv ../imem.sv ../dmem.sv ../core.sv"
+RTLPIPE="$RTL ../../id_ex_reg.sv ../ex_mem_reg.sv ../mem_wb_reg.sv ../hazard_unit.sv ../load_store_unit.sv ../imem.sv ../dmem.sv ../core.sv"
 
 iverilog -g2012 -Wall -o tb_core.vvp $RTLPIPE tb_core.sv
 vvp tb_core.vvp +imem=prog/basic.hex
