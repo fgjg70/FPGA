@@ -93,7 +93,7 @@ module core
 
   // ID
   ctrl_s       id_ctrl;
-  // 【4 级流水, issue #5】译码器的**原始**输出, 经 id_valid 门控后才成为 id_ctrl。
+  // 【issue #5】译码器的**原始**输出, 经 id_en 门控后才成为 id_ctrl。
   // 分开取名是为了让"门控挂在译码输出上"这件事在代码里显式可见 ——
   // 门控绝不能做成 32 位指令 mux (那会插进关键路径), 见 ID 段注释。
   ctrl_s       id_ctrl_raw;
