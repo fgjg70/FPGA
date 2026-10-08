@@ -19,6 +19,9 @@ module ref5_imem #(
 )(
   input  logic        clk,
   input  logic [31:0] addr,
+`ifdef REF5_ENARDEN
+  input  logic        rd_en,      // 【E1 实验】读使能: 0 = 输出寄存器冻结 (BRAM ENARDEN)
+`endif
   output logic [31:0] rdata
 );
   localparam int unsigned WORDS = BYTES / 4;
@@ -34,9 +37,19 @@ module ref5_imem #(
     end
   end
 
+`ifdef REF5_ENARDEN
+  // 【E1 实验: 停顿改用"读使能冻结输出"代替"摁住地址"】
+  // 停顿拍 rd_en=0 -> 推断成 RAMB36 的 ENARDEN(读端口使能), 输出寄存器 DOADO
+  // 保持上一拍的值。于是 imem_addr 上不再需要 pipe_stall 的 mux, 取指地址
+  // 只由**已寄存的 pc** 决定 (见 ref5_core.sv 的 E1 分支)。
+  always_ff @(posedge clk) begin
+    if (rd_en) rdata <= mem[addr[AW+1:2]];
+  end
+`else
   always_ff @(posedge clk) begin
     rdata <= mem[addr[AW+1:2]];
   end
+`endif
 endmodule
 
 
@@ -93,6 +106,9 @@ module ref5_top (
 `endif
 
   logic [31:0] imem_addr, imem_rdata;
+`ifdef REF5_ENARDEN
+  logic        imem_rd_en;      // 【E1 实验】imem 读使能 (0 = 冻结输出寄存器)
+`endif
   logic [31:0] dmem_addr, dmem_wdata, dmem_rdata;
   logic [3:0]  dmem_wstrb;
   logic        dmem_we;
@@ -101,6 +117,9 @@ module ref5_top (
     .clk        (clk),
     .rst        (rst),
     .imem_addr  (imem_addr),
+`ifdef REF5_ENARDEN
+    .imem_rd_en (imem_rd_en),
+`endif
     .imem_rdata (imem_rdata),
     .dmem_addr  (dmem_addr),
     .dmem_wdata (dmem_wdata),
@@ -113,6 +132,9 @@ module ref5_top (
   ref5_imem #(.BYTES(IMEM_BYTES)) u_imem (
     .clk   (clk),
     .addr  (imem_addr),
+`ifdef REF5_ENARDEN
+    .rd_en (imem_rd_en),
+`endif
     .rdata (imem_rdata)
   );
 

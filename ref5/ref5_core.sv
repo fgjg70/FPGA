@@ -41,6 +41,9 @@ module ref5_core #(
 
   // ---- 指令存储器 (同步读, 1 拍延迟) ----
   output logic [31:0] imem_addr,
+`ifdef REF5_ENARDEN
+  output logic        imem_rd_en,   // 【E1 实验】停顿拍 = 0 -> 冻结 imem 输出寄存器
+`endif
   input  logic [31:0] imem_rdata,
 
   // ---- 数据存储器 (同步读 + 字节写使能) ----
@@ -111,7 +114,17 @@ module ref5_core #(
 
   // ID/EX
   logic [31:0] id_ex_pc, id_ex_pc_plus4, id_ex_rs1_data, id_ex_rs2_data, id_ex_imm;
+`ifdef REF5_ALU_MFOUT
+  // 【E5 实验: ALU 操作数广播网的扇出上限】
+  // E1 实验把关键路径暴露到 ALU 之后实测: 这条路 83% 是布线, 其中最贵的一跳是
+  // `u_core/ex_b[3]` **单根网驱动 115 个负载 = 3.0ns** (整个 6.857ns 的 44%)。
+  // max_fanout 让综合器把该寄存器位复制成若干副本, 每份副本就近驱动一部分负载。
+  // 值由 build_ref5.tcl 的 REF5_ALU_MF 给 (默认 16): 值越小副本越多,
+  // ALU 侧越松但 D 侧(选择逻辑)负载越重, 是个要实测的折中。
+  (* max_fanout = `REF5_ALU_MF *) logic [31:0] id_ex_a, id_ex_b;
+`else
   logic [31:0] id_ex_a, id_ex_b;
+`endif
   logic [4:0]  id_ex_rd;
   logic [3:0]  id_ex_alu_op;
   logic [1:0]  id_ex_pc_sel, id_ex_wb_sel, id_ex_mem_size;
@@ -309,9 +322,38 @@ module ref5_core #(
   // 取指地址 = 组合推出的下一拍 pc (与主核同一条不变式)
   // 【V6 优先级】redirect 优先于 fetch_hold: 重定向是"必须立刻改地址"的事件,
   //   停顿那拍可能同时成立, 但此时 ID 里是错路指令, 停不停都无所谓。
+`ifdef REF5_ENARDEN
+  // ==========================================================================
+  // 【E1 实验: 取指环去地址 mux】见 REPORT_E1.md
+  // --------------------------------------------------------------------------
+  // V7: imem_addr = pc_next, 于是 `pipe_stall -> fetch_hold -> 地址 mux ->
+  //     imem 地址脚` 是同一拍里的组合环 (实测 6.760ns / 4 级, 最坏路径)。
+  // E1: 停顿不再改地址, 而是把 imem 的**读使能**拉低 -> 输出寄存器冻结。
+  //     * imem_addr 只由**已寄存的 pc**(+EX 的 redirect)决定,
+  //       pipe_stall 彻底离开地址脚;
+  //     * pc 仍然在停顿拍冻结 (pc_next 里的 fetch_hold) —— 这是配对正确性
+  //       的必要条件, 只是它的终点变成 pc 这个普通 FF, 不再是 BRAM 的地址脚。
+  //
+  // 配对不变式 imem_rdata(N) == mem[pc(N)] 的推理 (N 为周期号):
+  //   addr(N-1) = redirect(N-1) ? T : (boot_done ? pc(N-1)+4 : pc(N-1))
+  //   pc(N)     = redirect(N-1) ? T : (fetch_hold ? pc(N-1) : pc(N-1)+4)
+  //   rd_en(N-1)= !pipe_stall | redirect | !boot_done
+  //   ① redirect(N-1)=1: addr=T=pc(N), 且 rd_en=1 -> rdata(N)=mem[T]=mem[pc(N)] ✓
+  //   ② 无 redirect、boot_done=1、!pipe_stall: addr=pc(N-1)+4=pc(N), rd_en=1 ✓
+  //   ③ 无 redirect、boot_done=1、pipe_stall: pc(N)=pc(N-1) 且 rd_en=0
+  //      -> rdata(N)=rdata(N-1)=mem[pc(N-1)]=mem[pc(N)] (归纳) ✓
+  //   ④ boot_done=0: addr=pc(N-1)=pc(N) (pc 冻结), rd_en=1 -> rdata(N)=mem[pc(N)] ✓
+  //   即: 停顿拍地址可以随便跑, 因为输出被冻结; 而"冻结输出"与"冻结 pc"
+  //   同时成立, 所以解冻那一刻 addr 正好又等于 pc(N)+4 = 下一拍 pc。位序/配对不变。
+  // ==========================================================================
+  assign pc_next    = redirect ? ex_target : (fetch_hold ? pc : pc_plus4);
+  assign imem_addr  = redirect ? ex_target : (boot_done ? pc_plus4 : pc);
+  assign imem_rd_en = !pipe_stall || redirect || !boot_done;
+`else
   assign pc_next   = redirect ? ex_target
                               : (fetch_hold ? pc : pc_plus4);
   assign imem_addr = pc_next;
+`endif
 
   // ==========================================================================
   // ID/EX
