@@ -32,6 +32,15 @@ if {[info exists ::env(IMEM_COMB_READ)] && $::env(IMEM_COMB_READ) ne ""} {
 } else {
   puts "ILA_BUILD_IMEM_BRAM=1"
 }
+# DIV_RADIX4: radix-4 divider variant (exp/radix4-div branch). Default OFF ->
+# radix-2 baseline. Same self-attest discipline as above: without this gate the
+# board test could silently measure the BASELINE while claiming radix-4.
+if {[info exists ::env(DIV_RADIX4)] && $::env(DIV_RADIX4) ne ""} {
+  append ARCH_DEFS " DIV_RADIX4=1"
+  puts "ILA_BUILD_DIV_RADIX4=1"
+} else {
+  puts "ILA_BUILD_DIV_RADIX4_OFF=1"
+}
 set_property verilog_define "USE_ILA=1 IMEM_INIT_FILE=\"$root/sim/prog/cm_hw.hex\" DMEM_INIT_FILE=\"$root/sim/prog/cm_hw.dmem.hex\"$ARCH_DEFS" [current_fileset]
 
 create_ip -name ila -vendor xilinx.com -library ip -module_name ila_0
