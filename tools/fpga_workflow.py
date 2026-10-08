@@ -804,6 +804,8 @@ def _global_defines(args) -> tuple[str, ...]:
     defs = []
     if getattr(args, "imem_comb_read", False):
         defs.append("IMEM_COMB_READ")
+    if getattr(args, "div_radix4", False):
+        defs.append("DIV_RADIX4")
     if args.load_reg:
         defs.append("LOAD_RESULT_REG")
     if args.gshare:
@@ -907,6 +909,15 @@ def cmd_verify(args) -> int:
     print("=" * 74)
     print("  ModelSim 增量回归")
     print(f"  RTL 规范集 {len(canonical_rtl())} 个文件 | 工具 {MSIM}")
+    # 【自证: 这一轮到底跑的是哪一版】
+    # "改了没效果"有三种成因 (算法无用 / 宏没传到 vlog / 工具不认这个开关), 症状
+    # 完全一样 (PITFALLS R17/R31)。所以开跑前先把版本和编译宏打出来, 不靠人猜;
+    # 另外 muldiv 在宏生效时会自己 $display 一行 "[muldiv] DIV_RADIX4 ACTIVE",
+    # 那句会落进每个用例的 log —— 两层证据互相独立。
+    print("  除法器 : " + ("radix-4 (DIV_RADIX4, 16 步)"
+                          if getattr(args, "div_radix4", False)
+                          else "radix-2 (默认, 32 步)"))
+    print("  编译宏 : " + (", ".join(_global_defines(args)) or "(无)"))
     print("=" * 74)
 
     if not os.path.exists(os.path.join(MSIM, "vsim.exe")):
@@ -1416,6 +1427,7 @@ def cmd_synth(args) -> int:
     # 指纹必须覆盖**所有影响网表的开关**, 否则改开关会命中旧缓存、拿到旧数字。
     # 注意与 build.tcl 里的默认保持一致: **imem 默认 = 寄存读(BRAM)**, 其余宏关闭。
     h.update(b"combread" if args.imem_comb_read else b"bramread")
+    h.update(b"divr4" if args.div_radix4 else b"divr2")
     h.update(b"loadreg" if args.load_reg else b"loadcomb")
     h.update(b"gshare" if args.gshare else b"smith")
     h.update(b"ras" if args.ras else b"noras")
@@ -1465,6 +1477,8 @@ def cmd_synth(args) -> int:
             if args.imem_comb_read:
                 # [回退] imem 组合读 -> LUT ROM。默认走寄存读 -> RAMB36 (无需设 env)。
                 benv["IMEM_COMB_READ"] = "1"
+            if args.div_radix4:
+                benv["DIV_RADIX4"] = "1"
             if args.place_directive:
                 benv["PLACE_DIRECTIVE"] = args.place_directive
             if args.pblock_range:
@@ -1507,6 +1521,8 @@ def cmd_synth(args) -> int:
             # imem: 默认必须是 BRAM 版(不定义宏的路径); 只有显式回退才是组合读。
             expect.append("BUILD_IMEM_COMB_READ=1" if args.imem_comb_read
                           else "BUILD_IMEM_BRAM=1")
+            expect.append("BUILD_DIV_RADIX4=1" if args.div_radix4
+                          else "BUILD_DIV_RADIX4_OFF=1")
             # Pblock: build.tcl 默认已开启(该 part 专用), 只有传 off 才关。
             expect.append("BUILD_PBLOCK_OFF=1" if args.pblock_range == "off"
                           else "BUILD_PBLOCK=")
@@ -2017,6 +2033,12 @@ def main() -> int:
     p.set_defaults(func=cmd_check)
 
     p = sub.add_parser("verify", help="ModelSim 增量回归")
+    # 两种拼写都收: 验收命令写的是连字符 `--div-radix4`, 但本文件里 verify 的
+    # 既有开关是下划线风格 (`--imem_comb_read`)、synth 是连字符风格
+    # (`--imem-comb-read`) —— 与其赌别人记哪一种, 不如两个都注册 (argparse 允许
+    # 一个 add_argument 给多个选项串, dest 仍由第一个推出 = div_radix4)。
+    p.add_argument("--div-radix4", "--div_radix4", action="store_true",
+                   help="除法器用 radix-4 (DIV_RADIX4, 16 步); 默认 radix-2 (32 步)")
     p.add_argument("--only", nargs="*", help="只跑指定测试名")
     p.add_argument("--force", action="store_true", help="忽略缓存全量重跑")
     p.add_argument("--imem_comb_read", action="store_true",
@@ -2067,6 +2089,12 @@ def main() -> int:
     p.set_defaults(func=cmd_hw)
 
     p = sub.add_parser("synth", help="Vivado 综合 -> 四项指标 (自动串行化 + 缓存)")
+    # 两种拼写都收: 验收命令写的是连字符 `--div-radix4`, 但本文件里 verify 的
+    # 既有开关是下划线风格 (`--imem_comb_read`)、synth 是连字符风格
+    # (`--imem-comb-read`) —— 与其赌别人记哪一种, 不如两个都注册 (argparse 允许
+    # 一个 add_argument 给多个选项串, dest 仍由第一个推出 = div_radix4)。
+    p.add_argument("--div-radix4", "--div_radix4", action="store_true",
+                   help="除法器用 radix-4 (DIV_RADIX4, 16 步); 默认 radix-2 (32 步)")
     p.add_argument("--prog", default="cm_hw",
                    help="要综合进 imem/dmem 的程序基名 (默认 cm_hw = 跑分版)")
     p.add_argument("--tag", help="记录进 results/coremark.csv 用的标签")

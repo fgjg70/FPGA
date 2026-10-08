@@ -6,6 +6,7 @@
 // 乘法: 组合, 单周期。三个 64 位积并行算 (signed×signed / signed×unsigned /
 //       unsigned×unsigned), 综合映射到 DSP48。
 // 除法: 多周期, 32 步恢复余数法。busy 期间 EX 保持 (core 拉 pipe_stall)。
+//       [可选] 定义 DIV_RADIX4 换成 radix-4 (16 步) —— 默认关闭, 见下方说明。
 //
 // RISC-V 对除法的边界定义 (必须精确, 否则 riscv-tests 不过):
 //   - 除零: 商 = 全 1 (-1), 余数 = 被除数
@@ -71,7 +72,8 @@ module muldiv
   wire want_rem     = (op == ALU_REM) || (op == ALU_REMU);
 
   // ------------------------------------------------------------------------
-  // 除法: 32 步无符号恢复余数 + 外层符号修正
+  // 除法: 无符号迭代 + 外层符号修正
+  //   radix-2 (默认, 32 步) / radix-4 (DIV_RADIX4, 16 步)
   // ------------------------------------------------------------------------
   logic [5:0]  cnt;              // 0 = 空闲
   logic [31:0] dvnd, dvsr;
@@ -81,6 +83,13 @@ module muldiv
   logic        busy_r;           // 正在迭代
   logic        done_r;           // 单拍脉冲: 本次除法刚出结果
   logic [31:0] div_result;
+`ifdef DIV_RADIX4
+  logic [33:0] dvsr3;            // 3*dvsr, 启动时算一次 (radix-4 专用)
+  // 【宏生效自证】(PITFALLS R17/R31 的通用规则: 任何开关都要能自证生效)
+  // 综合会忽略这条 initial (里面没有寄存器赋值); 仿真里每个用例开头打一行,
+  // 于是"vlog 到底有没有带 +define+DIV_RADIX4"不靠人猜。
+  initial $display("[muldiv] DIV_RADIX4 ACTIVE: radix-4 divider, 16 iterations");
+`endif
 
   wire [31:0] a_abs = (is_signed_op && a[31]) ? (~a + 32'd1) : a;
   wire [31:0] b_abs = (is_signed_op && b[31]) ? (~b + 32'd1) : b;
@@ -111,13 +120,51 @@ module muldiv
   //   而加深 muldiv 的组合(其输出正对 EX/MEM, 路径含 DSP48E1x2 -> 13 级
   //   CARRY4)有掉 fmax 的风险, 收益却只有 0.29% -> **明确的净亏**。
   // ---------------------------------------------------------------------------
-
-  // 一次迭代的组合结果
+  // 【追加: radix-4 已实现, 但**宏门控 + 默认关闭** (DIV_RADIX4)】
+  //   上面的结论没有被推翻: 默认仍是 radix-2, 基线逐位不变。
+  //   radix-4 只作为"要压除法延迟时才开"的可选项存在 —— 迭代 32->16 次, 每次
+  //   省 ~16 拍, 84 条除法共 ~1,344 拍 (~0.29%, 理论上限 ~0.32%); 代价是
+  //   rem_shift 变 34 位并要同时和 1x/2x/3x 除数比较 = **多两个减法器**, 且它
+  //   的输出正对 EX/MEM -> fmax 是否掉, 只能实测 (见 results/ 对照表)。
+  //   两条路径的**协议完全一致**: busy 覆盖启动拍、cnt==1 拉低 busy_r 并给一拍
+  //   done_r、除零/溢出同样占一拍、div_result 寄存器 + 符号修正 —— 都在下面
+  //   共享的时序块里, 分叉只在"迭代体 + 计数值"。
+  // ---------------------------------------------------------------------------
+`ifdef DIV_RADIX4
+  // ---- radix-4: 每拍吃 2 位被除数, 商数字 digit ∈ {0,1,2,3} ----
+  //   rem_shift = {rem[31:0], dvnd[31:30]}  (34 位)
+  //   digit     = 使 rem_shift >= digit*dvsr 成立的最大 digit
+  //   rem_n     = rem_shift - digit*dvsr   (仍 < dvsr, 不变量成立)
+  //   quo_n     = {quo[29:0], digit}
+  //
+  // 【digit 的符号判据必须用 35 位减法 —— 34 位的最高位不可靠】
+  //   dvsr3 最大到 3*(2^32-1) ≈ 0.75*2^34。若只做 34 位减法, 当 rem_shift < dvsr3
+  //   时回绕值 = 2^34 - (dvsr3 - rem_shift) 可以小到 2^34 - 3*(2^32-1) = 2^32+3
+  //   < 2^33, 最高位是 0 -> 被判成 "rem_shift >= dvsr3", digit 直接错选 3。
+  //   多留 1 位 (35 位) 后差的取值范围是 (-2^34, 2^34), 恰好落在 35 位补码内,
+  //   最高位才严格等于借位。除数 > 2^31 时 34 位版本必然出错, 别退回去。
+  wire [33:0] rem_shift = {rem[31:0], dvnd[31:30]};
+  wire [33:0] dvsr_x2   = {1'b0, dvsr, 1'b0};             // 2*dvsr
+  // 三个"减完看符号"的比较器 (= 0/1/2/3 x dvsr 的比较)
+  wire [34:0] rem_s1 = {1'b0, rem_shift} - {1'b0, dvsr};
+  wire [34:0] rem_s2 = {1'b0, rem_shift} - {1'b0, dvsr_x2};
+  wire [34:0] rem_s3 = {1'b0, rem_shift} - {1'b0, dvsr3};
+  wire [1:0]  digit  = ~rem_s3[34] ? 2'd3 :
+                       ~rem_s2[34] ? 2'd2 :
+                       ~rem_s1[34] ? 2'd1 : 2'd0;
+  // rem_n = rem_shift - digit*dvsr: 被选中的那个差**就是**结果, 不必再减一次。
+  wire [33:0] rem_n  = (digit == 2'd3) ? rem_s3[33:0] :
+                       (digit == 2'd2) ? rem_s2[33:0] :
+                       (digit == 2'd1) ? rem_s1[33:0] : rem_shift;
+  wire [31:0] quo_n  = {quo[29:0], digit};
+`else
+  // 一次迭代的组合结果 (radix-2 恢复余数法 —— 默认路径, 逐位保持原样)
   wire [32:0] rem_shift = {rem[31:0], dvnd[31]};
   wire [32:0] rem_sub   = rem_shift - {1'b0, dvsr};
   wire        rem_ge    = (rem_shift >= {1'b0, dvsr});
   wire [32:0] rem_n     = rem_ge ? rem_sub : rem_shift;
   wire [31:0] quo_n     = {quo[30:0], rem_ge};
+`endif
 
   wire [31:0] rem_final = r_sign ? (~rem_n[31:0] + 32'd1) : rem_n[31:0];
   wire [31:0] quo_final = q_sign ? (~quo_n + 32'd1) : quo_n;
@@ -154,11 +201,19 @@ module muldiv
       q_sign     <= 1'b0;
       r_sign     <= 1'b0;
       div_result <= 32'd0;
+`ifdef DIV_RADIX4
+      dvsr3      <= 34'd0;
+`endif
     end
     else begin
       done_r <= 1'b0;                       // 默认清零 (单拍脉冲)
       if (busy_r) begin
+`ifdef DIV_RADIX4
+        // radix-4: 每拍吃掉被除数的最高 2 位
+        dvnd <= {dvnd[29:0], 2'b00};
+`else
         dvnd <= {dvnd[30:0], 1'b0};
+`endif
         rem  <= rem_n;
         quo  <= quo_n;
         cnt  <= cnt - 6'd1;
@@ -184,7 +239,14 @@ module muldiv
         end
         else if (!done_r) begin
           busy_r <= 1'b1;                   // 启动
+`ifdef DIV_RADIX4
+          // radix-4: 16 步; 3*dvsr 只在启动拍算一次 (它是 34 位, 不进迭代的
+          // 关键路径 —— 迭代里只做比较, 不再算倍数)。
+          cnt    <= 6'd16;
+          dvsr3  <= {1'b0, b_abs, 1'b0} + {2'b0, b_abs};
+`else
           cnt    <= 6'd32;
+`endif
           dvnd   <= a_abs;
           dvsr   <= b_abs;
           rem    <= 33'd0;

@@ -92,6 +92,16 @@ if {[info exists ::env(BTB_GSHARE)] && $::env(BTB_GSHARE) ne ""} {
 } else {
   puts "BUILD_BTB_SMITH=1"
 }
+
+# DIV_RADIX4: radix-4 divider (exp/radix4-div branch). Default OFF -> radix-2.
+# Self-attest line: without it we could silently measure the BASELINE while
+# claiming radix-4 (PITFALLS R31 -- silent macro no-op already bit us once).
+if {[info exists ::env(DIV_RADIX4)] && $::env(DIV_RADIX4) ne ""} {
+  append IMEM_DEFS " DIV_RADIX4=1"
+  puts "BUILD_DIV_RADIX4=1"
+} else {
+  puts "BUILD_DIV_RADIX4_OFF=1"
+}
 # RAS_EN: 返回地址栈。【默认关闭】实测有效但不划算:
 #   CoreMark/MHz +0.38% (JALR 误判 4378->3558), 但 fmax -2.8%
 #   (栈顶 mux 落在已经最紧的 pc_target 路径上), 绝对吞吐 -2.3%。

@@ -101,3 +101,5 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-08,review-fix,1,413070,2.4209,2649,1234,8,8,69.8,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-08,review-fix2,1,413070,2.4209,2649,1234,8,8,69.8,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-08,bugfix-csr-gemm,1,413070,2.4209,2653,1234,8,8,69.6,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-08,r2-base,1,413070,2.4209,2653,1234,8,8,69.6,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-08,r4-div,1,413070,2.4209,2765,1267,8,8,66.9,keep,fpga_workflow.py synth (PROG=cm_hw)
