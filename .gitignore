@@ -79,3 +79,6 @@ fpga/*.srcs/
 fpga/*.runs/
 fpga/*.html
 fpga/*_webtalk.*
+
+# ---- 手动备份 (不进仓库) ----
+sim/prog/*.bak
