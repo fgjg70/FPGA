@@ -11,7 +11,7 @@
 
 ## 0. 一句话现状
 
-**RV32IM 四级流水线 CPU 已在真实板卡上跑通 CoreMark v1.0（1300 次迭代 / 约 10.7 秒 /
+**RV32IM 五级流水线 CPU 已在真实板卡上跑通 CoreMark v1.0（1300 次迭代 / 约 10.7 秒 /
 CRC 逐位匹配官方参考值），三项评分指标与绝对吞吐齐备，赛题基础任务全部完成，
 动态分支预测与完整异常/中断两项高阶任务完成，应用场景（神经网络 GEMM）已落地。
 当前 RTL 已上板验证（2026-10-06 10:12）。**
@@ -348,7 +348,7 @@ D:\USER\Desktop\FPGA\FPGA\
 
 | 特性 | 实现 | 效果 |
 |---|---|---|
-| **4 级**流水 ID/EX/MEM/WB（IMEM 输出寄存器即 IF/ID）| `core.sv` | 见 `results/p8-4stage-pipeline.md` |
+| **5 级**流水 IF/ID/EX/MEM/WB（IF/ID 由 IMEM 输出寄存器承担）| `core.sv` | 见 `results/p8-ifid-elide.md` |
 | EX/MEM + MEM/WB 前递 | `hazard_unit.sv` | load-use 停顿仅 1 拍 |
 | **分支预测** | `btb.sv` 64 项 BTB + 2 位 Smith | 精度 89%，CoreMark/MHz +24% |
 | **RV32M** | `muldiv.sv` | CoreMark/MHz **+130%** |

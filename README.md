@@ -1,13 +1,13 @@
-# RV32IM 四级流水线处理器
+# RV32IM 五级流水线处理器
 
-SystemVerilog 实现的 **RV32IM** 处理器：**4 级流水线 (ID/EX/MEM/WB —— IMEM 的输出寄存器直接充当 IF/ID)**，
+SystemVerilog 实现的 **RV32IM** 处理器：**5 级流水线 (IF/ID/EX/MEM/WB)** —— 其中 IF/ID 由 IMEM 的输出寄存器承担，
 含动态分支预测、完整 M-mode 异常/中断、冒险处理、非对齐访存 2 拍自动拆分。
 
 ```mermaid
 graph LR
   IF[IF 取指] --> ID[ID 译码] --> EX[EX 执行] --> MEM[访存] --> WB[写回]
 ```
-（mermaid 仅为示意；实际是 **4 级**，见 `core.sv` 与 `results/p8-4stage-pipeline.md`）
+（mermaid 仅为示意；实际是 **5 级**，见 `core.sv` 与 `results/p8-ifid-elide.md`）
 
 ---
 
@@ -78,7 +78,7 @@ graph LR
 | `id_ex_reg.sv` 等 3 个 | `*_reg` | 3 个流水寄存器 (控制束整束传递，气泡 = 真实 NOP) |
 | `hazard_unit.sv` | `hazard_unit` | 前递选择 + load-use 停顿 + 重定向门控 |
 | `load_store_unit.sv` | `load_store_unit` | 字节通道 + **非对齐跨字访存 2 拍自动拆分** |
-| `core.sv` | `core` | 四级流水线顶层 + 调试口 |
+| `core.sv` | `core` | 五级流水线顶层 + 调试口 |
 | `fpga/top_a100t.sv` 等 | — | 顶层 + MMIO 子系统（**唯一需要按厂商重写**的部分）|
 
 ### 验证

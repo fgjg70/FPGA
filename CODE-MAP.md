@@ -8,7 +8,7 @@
 
 ## 0. 一句话
 
-一个 **RV32IM_Zicsr + RV32A、M-mode、四级顺序单发射流水线** CPU，
+一个 **RV32IM_Zicsr + RV32A、M-mode、五级顺序单发射流水线** CPU，
 带 2 位 Smith 分支预测 + BTB（可选 RAS / gshare）、非对齐访存硬件拆分、
 精确陷阱、以及一个自选题目用的 **GEMM 加速器**；目标器件
 **XC7A100T-FGG484-2（正点原子达芬奇Pro）**，板载 50 MHz 晶振
@@ -32,8 +32,8 @@ core.sv:860-886       ← WB 段:  mem_wb -> regfile 写口
 ```
 
 **这一遍要能回答**：`id_ex` / `ex_mem` / `mem_wb` 三个寄存器各自
-携带哪些字段？它们分别由哪个模块例化？（本核是 **4 级**：IMEM 的输出寄存器就是 IF/ID，
-见 `results/p8-4stage-pipeline.md`）
+携带哪些字段？它们分别由哪个模块例化？（仍是 **5 级**：IF/ID 由 IMEM 的输出寄存器承担 —— 注意口径是
+“**4 个流水寄存器 ⇒ 5 级**”，别差一。见 `results/p8-ifid-elide.md`）
 
 ### 第 2 遍：控制（约 1 小时）—— 谁在控制这条流水线
 
