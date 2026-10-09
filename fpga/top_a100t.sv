@@ -11,12 +11,16 @@
 //   uart_rxd    E14  LVCMOS33
 //
 // LED 语义 (已在真实硬件上验证过, 不要随意改动):
-//   led[0] = 心跳 ~3 Hz          led[1] = PASS (tohost 写入 1)
+//   led[0] = 心跳 ~4 Hz          led[1] = PASS (tohost 写入 1)
 //   led[2] = FAIL                led[3] = 非法指令
 //
 // 结构: core (纯 CPU) + mmio_subsys (GPIO/周期计数器/UART), 二者用 ext_* 总线相连。
-// 不例化任何厂商 IP; 时钟不做 MMCM, 直接用板载 50 MHz —— 迁移紫光同创时
-// 只需重写本文件与约束, 下层 RTL 可原样搬。
+// 不例化任何厂商 IP; 时钟用 MMCME2_BASE **原语**(非 IP)把板载 50 MHz 倍频到
+// 70 MHz (VCO = 50*21 = 1050 MHz, CLKOUT0 = 1050/15 = 70.000 MHz), 见下方
+// u_mmcm 的核算注释。写原语而不是 IP 有两个原因: ① CPU core 侧保持"零厂商 IP";
+// ② 本机 Vivado 2018.3 的 IP 生成流程会撞上 IP_Flow 19-3505 (PITFALLS R33),
+// 原语不需要工程模式、不产生 IP 目录。迁移紫光同创时只需重写本文件与约束,
+// 下层 RTL 可原样搬。
 // ============================================================================
 
 module top_a100t
@@ -31,13 +35,78 @@ module top_a100t
 
   localparam logic [31:0] TOHOST_ADDR = DMEM_BASE + 32'h2000;   // 与 sw/link.ld 保持一致
 
-  // ---- 复位同步: 异步置位 / 同步释放 ----
+  // ==========================================================================
+  // 时钟: 板载 50 MHz -> MMCM -> 70 MHz  (MMCME2_BASE 原语 + BUFG, 不用 IP)
+  // --------------------------------------------------------------------------
+  // 核算 (XC7A100T-2, Artix-7 MMCME2 的合法区间):
+  //   Fvco = Fclkin * CLKFBOUT_MULT_F / DIVCLK_DIVIDE
+  //        = 50 MHz * 21 / 1 = **1050.000 MHz**
+  //   Artix-7 MMCME2 的 VCO 合法区间 = 600 ~ 1200 MHz (SpeedGrade -2, BANDWIDTH
+  //   OPTIMIZED) ==> 1050 MHz 落在区间内, 且距上下限都有余量。
+  //   Fclkout0 = Fvco / CLKOUT0_DIVIDE_F = 1050 / 15 = **70.000 MHz** (精确相等,
+  //   无小数误差)  ==> 周期 1/70 MHz = 14.2857 ns。
+  //   PFD 频率 = Fclkin / DIVCLK_DIVIDE = 50 / 1 = 50 MHz, 合法区间 10 ~ 500 MHz。
+  //   为什么是 21/1 而不是 7/5: CLKFBOUT_MULT_F / DIVCLK_DIVIDE 是 MMCM 内部
+  //   反馈分频比, 它决定"输出对输入的倍率" = 21/1 = 21; 而 1050/15 = 70 正好是
+  //   50 的 7/5。两个比值的乘积才是最终结果: 21/1 * 1/15 = 7/5。XDC 里的
+  //   create_generated_clock 用 -multiply_by 21 -divide_by 15 (等价于 7/5) 与本例化
+  //   **逐项对齐**, 不靠人脑换算。
+  // ==========================================================================
+  logic clk_fb;
+  logic clk_70_raw;
+  logic sys_clk_70;
+  logic mmcm_locked;
+
+  MMCME2_BASE #(
+    .BANDWIDTH          ("OPTIMIZED"),
+    .CLKFBOUT_MULT_F    (21.0),     // VCO = 50 * 21 / 1 = 1050 MHz  (600~1200 OK)
+    .CLKFBOUT_PHASE     (0.0),
+    .CLKIN1_PERIOD      (20.000),   // 板载 50 MHz
+    .CLKOUT0_DIVIDE_F   (15.0),     // 1050 / 15 = 70.000 MHz
+    .CLKOUT0_DUTY_CYCLE (0.5),
+    .CLKOUT0_PHASE      (0.0),
+    .DIVCLK_DIVIDE      (1),
+    .REF_JITTER1        (0.010),
+    .STARTUP_WAIT       ("FALSE")
+  ) u_mmcm (
+    .CLKOUT0  (clk_70_raw),
+    .CLKOUT0B (),
+    .CLKOUT1  (),
+    .CLKOUT1B (),
+    .CLKOUT2  (),
+    .CLKOUT2B (),
+    .CLKOUT3  (),
+    .CLKOUT3B (),
+    .CLKOUT4  (),
+    .CLKOUT5  (),
+    .CLKOUT6  (),
+    .CLKFBOUT (clk_fb),
+    .CLKFBOUTB(),
+    .LOCKED   (mmcm_locked),
+    .CLKIN1   (sys_clk),
+    .PWRDWN   (1'b0),
+    .RST      (1'b0)                // 复位走 sys_rst_n -> 下方的复位同步链
+  );
+
+  // MMCM 出来的时钟**必须**过 BUFG 才能上全局时钟树。
+  // BUFG 的输出网就叫 sys_clk_70, 与 XDC 里 create_generated_clock -name sys_clk_70
+  // 同名, 所以 timing summary 的时钟表里能直接看到这条约束的名字与周期
+  // (14.286 ns), 不用靠自动推导名去反推。
+  BUFG u_bufg_sys (
+    .I (clk_70_raw),
+    .O (sys_clk_70)
+  );
+
+  // ---- 复位同步: 异步置位 / 同步释放, 且**要求 MMCM 已锁定** ----
+  // rst 只有在 "sys_rst_n 释放" 且 "MMCM 已锁定" 之后才会拉低; 未锁定时
+  // (上电 / 掉锁) 内核一直被复位, 不会在 70 MHz 未稳的时钟上跑。
   (* ASYNC_REG = "TRUE" *) logic [2:0] rst_sync;
   logic rst;
 
-  always @(posedge sys_clk or negedge sys_rst_n) begin
-    if (!sys_rst_n) rst_sync <= 3'b000;
-    else            rst_sync <= {rst_sync[1:0], 1'b1};
+  always @(posedge sys_clk_70 or negedge sys_rst_n) begin
+    if (!sys_rst_n)      rst_sync <= 3'b000;
+    else if (mmcm_locked) rst_sync <= {rst_sync[1:0], 1'b1};
+    else                  rst_sync <= 3'b000;
   end
   assign rst = ~rst_sync[2];
 
@@ -52,7 +121,7 @@ module top_a100t
   logic        irq_timer;
 
   core u_core (
-    .clk            (sys_clk),
+    .clk            (sys_clk_70),
     .rst            (rst),
     .dbg_pc         (dbg_pc),
     .dbg_id_pc      (dbg_id_pc),
@@ -79,10 +148,10 @@ module top_a100t
   logic        score_mark, score_done;
 
   mmio_subsys #(
-    .CLK_HZ  (50_000_000),
+    .CLK_HZ  (70_000_000),         // 必须跟着 MMCM 改: 周期计数器/定时器按它分频
     .BAUD_HZ (115_200)
   ) u_mmio (
-    .clk           (sys_clk),
+    .clk           (sys_clk_70),
     .rst           (rst),
     .we            (ext_we),
     .re            (ext_re),
@@ -104,7 +173,7 @@ module top_a100t
 
   // ---- 结果观测: 监视程序对 tohost 的写入 ----
   logic pass_r, fail_r;
-  always @(posedge sys_clk) begin
+  always @(posedge sys_clk_70) begin
     if (rst) begin
       pass_r <= 1'b0;
       fail_r <= 1'b0;
@@ -115,9 +184,9 @@ module top_a100t
     end
   end
 
-  // ---- 心跳: 50 MHz / 2^24 ≈ 3 Hz ----
+  // ---- 心跳: 70 MHz / 2^24 ≈ 4.2 Hz (LED 接线不变, 只随时钟变快) ----
   logic [23:0] heartbeat;
-  always @(posedge sys_clk) begin
+  always @(posedge sys_clk_70) begin
     if (rst) heartbeat <= 24'd0;
     else     heartbeat <= heartbeat + 24'd1;
   end
@@ -146,7 +215,7 @@ module top_a100t
   assign ila_ctrl = {1'b0, score_done, score_mark, dbg_redirect, dbg_stall, dbg_illegal, pass_r, fail_r};
 
   ila_0 u_ila (
-    .clk    (sys_clk),
+    .clk    (sys_clk_70),
     .probe0 (dbg_pc),        // IF 段取指地址: 看流水线推进
     .probe1 (dbg_instr),     // 与 dbg_id_pc 配对的指令
     .probe2 (ila_ctrl),      // {done, mark, redirect, stall, illegal, pass, fail}

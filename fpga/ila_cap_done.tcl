@@ -23,8 +23,9 @@ program_hw_devices [current_hw_device]
 puts "PROGRAMMED"
 current_hw_device [lindex [get_hw_devices] 0]
 refresh_hw_device -update_hw_probes true [current_hw_device]
-# ITERATIONS=1200 -> ~508M cycles -> 10.16 s @50MHz; wait 16 s for margin
-after 16000
+# ITERATIONS=3000 -> ~1.239e9 cycles -> 17.70 s @70MHz (was 508M / 10.16 s @50MHz);
+# wait 22 s (= 17.70 s + 4.3 s margin) for the CoreMark run to finish.
+after 22000
 puts "WAITED"
 set ila [lindex [get_hw_ilas -of_objects [current_hw_device]] 0]
 if {$ila eq ""} { error "NO_ILA_FOUND" }

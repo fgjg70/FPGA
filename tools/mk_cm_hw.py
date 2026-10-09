@@ -14,8 +14,17 @@ mk_cm_hw.py -- 重新构建上板跑分镜像 sim/prog/cm_hw.hex。
 
     ITERATIONS_new = ceil(ITERATIONS_old * 10.0 / 实测秒数 * 1.05)   # 留 5% 余量
 
+【2026-10-09 系统时钟 50 -> 70 MHz（MMCM 原语）后的取整】
+R35 的公式按">=10 s"给下限；但**时钟变快不影响拍数**，只压缩墙钟时间：
+    ticks(3000) = 536,943,384 / 1300 * 3000 = 1,239,100,117 拍（外推值，以实测为准）
+    t(70 MHz)   = 1,239,100,117 / 70e6     = 17.70 s   （50 MHz 下同一镜像要 24.8 s）
+所以 3000 迭代与频率无关地满足 >= 10 s，并且给未来继续提速留了很大余量。
+**上界**：上板 tick 是 31 位计数器（见 mmio_subsys.sv），上限 2^31-1 = 2,147,483,647 拍
+    => ITERATIONS_max = 1300 * 2,147,483,647 / 536,943,384 = 5,199 次
+    => 3000 次用掉 57.7% 量程，安全。
+
 用法:
-    python tools/mk_cm_hw.py 1300
+    python tools/mk_cm_hw.py 3000
 """
 import os
 import subprocess
@@ -33,7 +42,7 @@ def main():
     if len(sys.argv) > 1:
         iters = int(sys.argv[1])
     else:
-        iters = 1300
+        iters = 3000
     opt = "-Os"
     march = "rv32im"
     out = os.path.join(REPO, "sim", "prog", "cm_hw.hex")
