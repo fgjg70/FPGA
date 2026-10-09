@@ -112,3 +112,10 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-08,x2-enarden-a,1,413070,2.4209,2666,1234,8,8,70.3,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-08,x3-exab-mf-a,1,413070,2.4209,2702,1234,8,8,71.0,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-08,main-x1-final,1,413070,2.4209,2668,1234,8,8,71.8,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-09,jal-ifdec-a,1,411719,2.4288,2688,1234,8,8,68.8,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-09,jal-ifdec-b,1,411719,2.4288,2688,1234,8,8,68.8,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-09,ras2-ifdec-a,1,410688,2.4349,2800,1251,8,8,62.5,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-09,ras2-ifdec-b,1,410688,2.4349,2800,1251,8,8,62.5,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-09,jal-ifdec-c,1,411725,2.4288,2688,1234,8,8,68.8,keep,fpga_workflow.py synth (PROG=cm_hw) | [Lead 2026-10-09 修正] 原 ticks/cm 字段被 --record 误取为 RAS 配置(410688/2.4349); 按 B 的实测 2.4288 回填 411725. lut/ff/fmax 原本即正确(2688/1234/68.8); 复现性权威证据是两次强制重跑 WNS 逐位一致(5.458)。
+2026-10-09,ras2-ifdec-c,1,410688,2.4349,2800,1251,8,8,62.5,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-09,pred-revert-final,1,413070,2.4209,2668,1234,8,8,71.8,keep,fpga_workflow.py synth (PROG=cm_hw)
