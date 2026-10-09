@@ -1,0 +1,654 @@
+================ help create_hw_cfgmem ================
+create_hw_cfgmem
+
+Description: 
+Read cfgmem file into memory
+
+Syntax: 
+create_hw_cfgmem  -hw_device <arg> [-quiet] [-verbose] <mem_device>
+
+Usage: 
+  Name          Description
+  -------------------------
+  -hw_device    hw_device object with which to associate hw_cfgmem object
+  [-quiet]      Ignore command errors
+  [-verbose]    Suspend message limits during command execution
+  <mem_device>  name of flash memory device as returned by get_cfgmem_parts
+
+Categories: 
+Hardware
+
+Description:
+
+  Create a hw_cfgmem object associated with the specified hw_device.
+
+  The process whereby the bitstream data is loaded or programmed into the
+  Xilinx FPGA is called configuration. Configuration is designed to be
+  flexible to accommodate different application needs and, wherever possible,
+  to leverage existing system resources to minimize system costs.
+
+  Xilinx FPGAs are configured by loading design-specific configuration data,
+  in the form of a bitstream file, into the internal memory of the hw_device.
+  The hw_cfgmem defines a flash memory device used for configuring and
+  booting the Xilinx FPGA device. Once the hw_cfgmem object is created, and
+  associated with the hw_device, the configuration memory can be programmed
+  with the bitstream and other data using the program_hw_cfgmem command.
+
+  The hw_cfgmem object is associated with the specified hw_device object
+  through the PROGRAM.HW_CFGMEM property on the device object. Use the
+  get_hw_cfgmems command to work with the hw_cfgmem object, or use the
+  get_property command to obtain the object from the hw_device:
+
+    get_property PROGRAM.HW_CFGMEM [current_hw_device]  
+    
+
+  Note: When creating a new hw_cfgmem object, you can also associate the
+  object with a Tcl variable as shown in the example below. By referring to
+  the variable, you can set properties on the object, and use the object with
+  other Tcl commands like program_hw_cfgmem or readback_hw_cfgmem.
+
+  This command returns the created hw_cfgmem object, or returns an error if
+  it fails.
+
+Arguments:
+
+  -hw_device <arg> - (Required) Specify the hw_device object to associate the
+  memory configuration device with. The hw_device must be specified as an
+  object as returned by the get_hw_devices command or current_hw_device
+  command.
+
+  -quiet - (Optional) Execute the command quietly, returning no messages from
+  the command. The command also returns TCL_OK regardless of any errors
+  encountered during execution.
+
+  Note: Any errors encountered on the command-line, while launching the
+  command, will be returned. Only errors occurring inside the command will be
+  trapped.
+
+  -verbose - (Optional) Temporarily override any message limits and return
+  all messages from this command.
+
+  Note: Message limits can be defined with the set_msg_config command.
+
+  <mem_device> - (Required) Specify the flash memory device to use for
+  configuring the associated hw_device. The configuration memory must be
+  specified as a cfgmem_part object object using the get_cfgmem_parts
+  command.
+
+  Note: The COMPATIBLE_PARTS property of the cfgmem_part object identifies
+  which Xilinx devices a configuration memory is compatible with.
+
+Example:
+
+  The following example:
+
+   *  Gets the PART associated with the current_hw_device.
+
+   *  Gets a list of cfgmem_parts that are compatible with the device part.
+
+   *  Uses one of the compatible parts to create a new hw_cfgmem object.
+
+   *  Sets the PROGRAM.FILE property of the current hw_cfgmem object to the
+      cfgmem file created with the write_cfgmem command.
+
+   *  Programs the current hw_cfgmem object.
+
+    set devPart [get_property PART [current_hw_device]]  
+    set cfgParts [get_cfgmem_parts -of [get_parts $devPart]]  
+    create_hw_cfgmem -hw_device [current_hw_device] [lindex $cfgParts 0 ]  
+    set_property PROGRAM.FILE {C:/Data/cfgmem_file.mcs} [current_hw_cfgmem]  
+    program_hw_cfgmem [current_hw_cfgmem] 
+    
+
+See Also:
+
+   *  current_hw_cfgmem
+   *  current_hw_device
+   *  delete_hw_cfgmem
+   *  get_cfgmem_parts
+   *  get_hw_cfgmems
+   *  get_property
+   *  program_hw_cfgmem
+   *  readback_hw_cfgmem
+   *  write_cfgmem
+
+================ help program_hw_cfgmem ================
+program_hw_cfgmem
+
+Description: 
+Program Cfgmem object
+
+Syntax: 
+program_hw_cfgmem  [-svf_file <arg>] [-force] [-append] [-quiet] [-verbose]
+                   [<hw_cfgmem>...]
+
+Usage: 
+  Name           Description
+  --------------------------
+  [-svf_file]    svf file to be generated
+  [-force]       overwrite svf_file if it already exists
+  [-append]      append to svf file
+  [-quiet]       Ignore command errors
+  [-verbose]     Suspend message limits during command execution
+  [<hw_cfgmem>]  list of hardware cfgmems
+                 Default: current hardware cfgmem
+
+Categories: 
+Hardware
+
+Description:
+
+  Erase, blank check, program, and/or verify the specified hw_cfgmem object
+  with the memory configuration file defined in the object's PROGRAM.FILE
+  property. The memory configuration file is created with the write_cfgmem
+  command, and associated with the hw_cfgmem object using the set_property
+  command as shown in the example.
+
+  The process whereby the design specific data is loaded or programmed into
+  the Xilinx FPGA is called configuration. The create_hw_cfgmem command
+  defines a flash memory device used for configuring and booting the FPGA
+  device.
+
+  After the hw_cfgmem object is created, and associated with the hw_device,
+  the configuration memory can be programmed with the bitstream and other
+  data from a memory configuration file created with the write_cfgmem
+  command. The hw_cfgmem object is programmed using the program_hw_cfgmem
+  command.
+
+  The program_hw_cfgmem command will run a multi-step process to erase the
+  configuration memory device, perform a blank check to validate that the
+  device is empty, program the device with the memory configuration file, and
+  verify the programming on the device. Properties on the hw_cfgmem object
+  determine which steps of the programming process are performed. These
+  properties include:
+
+   *  PROGRAM.FILES - Specifies the memory configuration files to use for
+      programming the device. The memory configuration files are created with
+      the write_cfgmem command.
+
+   *  PROGRAM.ADDRESS_RANGE - Specifies the address range of the
+      configuration memory device to program. The address range values can
+      be:
+
+       -  {use_file} - Use only the address space required by the memory
+          configuration file to erase, blank check, program, and verify.
+
+       -  {entire_device} - Erase, blank check, program, and verify the
+          entire device.
+
+   *  PROGRAM.ERASE - Erases the contents of the flash memory when true. This
+      is a boolean property with a value of 0 (false) or 1 (true).
+
+   *  PROGRAM.BLANK_CHECK - Checks the device to make sure the device is void
+      of data prior to programming. This is a boolean property with a value
+      of 0 (false) or 1 (true).
+
+   *  PROGRAM.CFG_PROGRAM - Program the device with the specified
+      PROGRAM.FILE. This is a boolean property with a value of 0 (false) or 1
+      (true).
+
+   *  PROGRAM.VERIFY - Verify the device after programming. This is a boolean
+      property with a value of 0 (false) or 1 (true).
+
+  The program_hw_cfgmem command can also generate an SVF file for in-system
+  and remote programming of Xilinx devices. SVF is an industry standard file
+  format that is used to describe JTAG chain operations by describing the
+  information that needs to be shifted into the device chain. SVF files are
+  ASCII files that can be written and modified in any text editor. Many
+  third-party programming utilities can use the SVF file to program Xilinx
+  devices in a JTAG chain.
+
+  This command returns a transcript of its process when successful, or
+  returns an error if it fails.
+
+Arguments:
+
+  -svf_file <arg> - (Optional) Create an SVF output file for programming SPI
+  and BPI Flash configuration memories. The SVF file can be used by third
+  party tools, and also supports JTAG transaction tracing and improving
+  Bullseye coverage.
+
+  Note: If the path is not specified as part of the file name, the file will
+  be written into the current working directory, or the directory from which
+  the tool was launched.
+
+  -force - (Optional) Overwrite the specified SVF file if it already exists.
+
+  Note: If -force is specified with -append, the -append option is ignored,
+  and a new SVF file is created overwriting the existing file.
+
+  -append - (Optional) Append the SVF output to the specified file rather
+  than overwriting it.
+
+  -quiet - (Optional) Execute the command quietly, returning no messages from
+  the command. The command also returns TCL_OK regardless of any errors
+  encountered during execution.
+
+  Note: Any errors encountered on the command-line, while launching the
+  command, will be returned. Only errors occurring inside the command will be
+  trapped.
+
+  -verbose - (Optional) Temporarily override any message limits and return
+  all messages from this command.
+
+  Note: Message limits can be defined with the set_msg_config command.
+
+  <hw_cfgmem> - (Required) Specify a hw_cfgmem object to program. The
+  hw_cfgmem must be specified as an object by get_hw_cfgmems or
+  current_hw_cfgmem, rather than simply by name.
+
+Example:
+
+  The following example creates a hw_cfgmem object associated with the
+  current_hw_device, defines the memory configuration file created from the
+  bitstream with the write_cfgmem command, defines other properties of the
+  programming process, and then programs the hw_cfgmem object:
+
+    create_hw_cfgmem -hw_device [current_hw_device] [lindex $cfgParts 0 ]  
+    set cfgMem [current_hw_cfgmem]  
+    set_property PROGRAM.FILE {C:/Data/config_n25q128.mcs} $cfgMem  
+    set_property PROGRAM.ADDRESS_RANGE  {use_file} $cfgMem  
+    set_property PROGRAM.BLANK_CHECK  1 $cfgMem  
+    set_property PROGRAM.ERASE  1 $cfgMem  
+    set_property PROGRAM.CFG_PROGRAM  1 $cfgMem  
+    set_property PROGRAM.VERIFY  1 $cfgMem  
+    program_hw_cfgmem $cfgMem 
+    
+
+  Note: In this example, the current hw_cfgmem object is assigned to the
+  variable $cfgMem.
+
+  The following example programs the current hw_cfgmem object:
+
+    program_hw_cfgmem [current_hw_cfgmem] 
+    
+
+See Also:
+
+   *  create_hw_cfgmem
+   *  current_hw_cfgmem
+   *  current_hw_device
+   *  delete_hw_cfgmem
+   *  get_cfgmem_parts
+   *  get_hw_cfgmems
+   *  get_property
+   *  readback_hw_cfgmem
+   *  set_property
+   *  write_cfgmem
+
+================ help write_cfgmem ================
+write_cfgmem
+
+Description: 
+Create file(s) for programming flash memory.
+
+Syntax: 
+write_cfgmem  [-force] -format <arg> -size <arg> [-interface <arg>] [-checksum]
+              [-disablebitswap] [-loadbit <arg>] [-loaddata <arg>] [-quiet]
+              [-verbose] <file>
+
+Usage: 
+  Name               Description
+  ------------------------------
+  [-force]           Overwrite existing file
+  -format            Format of the file to generate
+  -size              Size of memory that is being targeted in M Bytes (must 
+                     be power of 2).
+  [-interface]       Interface used to program device.
+                     Default: SMAPx8
+  [-checksum]        Calculate a 32-bit checksum for each file. Memory will 
+                     be filed with value of 0xFF unless a different byte 
+                     value is specified.
+                     Default: 0xFF
+  [-disablebitswap]  Disable bit swapping in a byte for bitfiles.
+  [-loadbit]         Load bit files into memory from given address.
+  [-loaddata]        Load data into memory from given address.
+  [-quiet]           Ignore command errors
+  [-verbose]         Suspend message limits during command execution
+  <file>             The name of the file to generate
+
+Categories: 
+FileIO
+
+Description:
+
+  This command formats a design specific configuration bitstream (.bit) file,
+  and any specified data files, into a specified memory configuration file
+  format to program into a flash memory device using the program_hw_cfgmem
+  command. Supported memory configuration file formats are MCS, BIN, and HEX.
+
+  Note: When you generate a cfgmem file with write_cfgmem, by default the
+  bits within a byte are bit-swapped, or mirrored, compared to bytes in the
+  original input bitstream. You can disable bitswap using the -disablebitswap
+  option as described below.
+
+  The process whereby the design specific data is loaded or programmed into
+  the Xilinx FPGA is called configuration. The create_hw_cfgmem command
+  defines a flash memory device used for configuring and booting the hardware
+  device.
+
+  After the hw_cfgmem object is created, and associated with the hw_device,
+  the configuration memory can be programmed with the bitstream and other
+  data from a memory configuration file created with the write_cfgmem
+  command. The hw_cfgmem object is programmed using the program_hw_cfgmem
+  command.
+
+  The write_cfgmem -loadbit command loads one or more specified bitstream
+  files into the memory configuration file, filling the available memory of
+  the device in an upward or downward direction from a specified starting
+  address. You can also add data files to the memory configuration file, by
+  specifying the starting address to load the file with -loaddata.
+
+  Note: When using -loadbit and -loaddata to fill the memory of the device,
+  you must exercise care to insure that the bitstream and data files fit into
+  the available memory and do not overwrite each other. Any data collisions
+  will cause the write_cfgmem command to fail with an error.
+
+  The write_cfgmem command returns a transcript of its process when
+  successful, or returns an error if it fails.
+
+Arguments:
+
+  -force - (Optional) Overwrite a file of the same name if one exists.
+
+  -format [ BIN | HEX | MCS ] - (Required) The format of the memory
+  configuration file to write. Supported values include BIN, HEX, and MCS.
+
+  -size <arg> - (Required) Specify the size limit in MBytes of the PROM
+  device that is being targeted. The size must be specified as a power of 2.
+
+  -interface <arg> - (Optional) Specify the interface used to program the
+  PROM device. Valid values include SMAPx8 (default), SMAPx16, SMAPx32,
+  SERIALx1, SPIx1, SPIx2, SPIx4, SPIx8, BPIx8, BPIx16. This also determines
+  if byte swapping is enabled or disabled. The default interface is SMAPx8.
+
+  Note: The specified interface format of the configuration memory file is
+  critical to properly programming the flash memory device with the
+  program_hw_cfgmem command. You should be careful to use this option to
+  match the generated file with the target cfgmem_part.
+
+  -checksum - (Optional) Calculate a 32-bit checksum for the PROM file. The
+  device memory will be filled with the default value of 0xFF unless a
+  different byte value is specified. This option generates a checksum value
+  appearing in the memory configuration file. This value should match the
+  checksum in the device programmer. Use this option to verify that correct
+  data was programmed into the flash memory.
+
+  -disablebitswap - (Optional) Disable the default bit swapping for bytes in
+  the bitstream files. By default, in the files written by write_cfgmem, the
+  bits within a byte are bit-swapped, or mirrored, compared to bytes in the
+  original input BIT files. This option disables the bit swapping in the
+  output files.
+
+  -loadbit <arg> - (Optional) Specify the starting address of the PROM device
+  to begin loading one or more bitstream files. The option is specified as a
+  string with the form:
+
+    "up|down 0x0 <bitfile1>.bit <bitfile2>.bit" 
+    
+
+  Where:
+
+   *  up | down - This option loads one or more BIT files into memory,
+      starting from the specified address, in either and upward or a downward
+      direction.
+
+   *  0x0 - The starting address to load the bitstream, specified as a
+      hexadecimal value.
+
+   *  <bitfile>.bit - The bitstream (.bit) file to load into the flash memory
+      device. You can specify multiple bitstream files, causing the files to
+      be concatenated in a daisy chain.
+
+  Note: You can only specify the -loadbit option once, but you can repeat the
+  arguments as needed to load multiple bitstream files from different
+  starting addresses:
+
+    -loadbit "up 0 bitfile1.bit up 0xFFFFFF bitfile2.bit"  
+    
+
+  -loaddata <arg> - (Optional) Load the specified data files into the memory
+  of the configuration device from the starting address. The -loaddata option
+  is a string in the same form as the -loadbit argument, specifying the
+  direction, starting address, and data file names to add into the memory
+  configuration file. Data files will be added to the flash memory device as
+  is, with no additional formatting.
+
+   *  up | down - This option loads one or more DATA files into memory,
+      starting from the specified address, in either and upward or a downward
+      direction.
+
+   *  0x0 - The starting address to load the data file, specified as a
+      hexadecimal value.
+
+   *  <data_file> - A data file to load into the flash memory device. You can
+      specify multiple data files, causing the files to be concatenated in a
+      daisy chain.
+
+  Note: Although both -loadbit and -loaddata are marked as optional, at least
+  one argument must be used to provide the data for the memory configuration
+  file.
+
+  -quiet - (Optional) Execute the command quietly, returning no messages from
+  the command. The command also returns TCL_OK regardless of any errors
+  encountered during execution.
+
+  Note: Any errors encountered on the command-line, while launching the
+  command, will be returned. Only errors occurring inside the command will be
+  trapped.
+
+  -verbose - (Optional) Temporarily override any message limits and return
+  all messages from this command.
+
+  Note: Message limits can be defined with the set_msg_config command.
+
+  <file> - (Required) The filename of the memory configuration file to write.
+  The file extension will match the format specified (.mcs), and is not
+  required as part of the file name.
+
+  Note: If the path is not specified as part of the file name, the file will
+  be written into the current working directory, or the directory from which
+  the tool was launched.
+
+Example:
+
+  The following example writes the specified memory configuration file in the
+  MCS format, with a size limit of 64 MB, loading the specified bitstream
+  file moving up from the starting address:
+
+    write_cfgmem -format MCS -size 64 -loadbit "up 0x0 \  
+    C:/Data/Vivado_Debug/project_debug/project_debug.runs/impl_1/sinegen_demo.bit" \  
+    config_memory1 
+    
+
+See Also:
+
+   *  create_hw_cfgmem
+   *  current_hw_device
+   *  delete_hw_cfgmem
+   *  get_cfgmem_parts
+   *  get_property
+   *  program_hw_cfgmem
+   *  readback_hw_cfgmem
+   *  set_property
+   *  write_bitstream
+
+================ help get_cfgmem_parts ================
+get_cfgmem_parts
+
+Description: 
+Get a list of cfgmem_parts available in the software
+
+Syntax: 
+get_cfgmem_parts  [-regexp] [-nocase] [-filter <arg>] [-of_objects <args>]
+                  [-quiet] [-verbose] [<patterns>]
+
+Returns: 
+list of cfgmem_part objects
+
+Usage: 
+  Name           Description
+  --------------------------
+  [-regexp]      Patterns are full regular expressions
+  [-nocase]      Perform case-insensitive matching. (valid only when -regexp 
+                 specified)
+  [-filter]      Filter list with expression
+  [-of_objects]  Get 'cfgmem_part' objects of these types: 'part hw_device'.
+  [-quiet]       Ignore command errors
+  [-verbose]     Suspend message limits during command execution
+  [<patterns>]   Match the 'cfgmem_part' objects against patterns.
+                 Default: *
+
+Categories: 
+Hardware, Object
+
+Description:
+
+  Get a list of configuration flash memory devices supported by the Vivado
+  Design Suite or Vivado Lab Edition.
+
+  Xilinx FPGAs can be configured from an external nonvolatile memory device,
+  or they can be configured by an external smart source, such as a
+  microprocessor, DSP processor, microcontroller, PC, or board tester. The
+  two configuration datapaths include a serial datapath that is used to
+  minimize the device pin requirements for configuration, and a parallel
+  8-bit, 16-bit, or 32-bit datapath used for higher performance or link to
+  industry-standard interfaces ideal for external data sources like
+  processors, or x8- or x16-parallel flash memory.
+
+  The process whereby the design specific data is loaded or programmed into
+  the Xilinx FPGA is called configuration. The create_hw_cfgmem command
+  defines a flash memory device used for configuring and booting the hardware
+  device.
+
+  After the hw_cfgmem object is created, and associated with the hw_device,
+  the configuration memory can be programmed with the bitstream and other
+  data from a memory configuration file created with the write_cfgmem
+  command. The hw_cfgmem object is programmed using the program_hw_cfgmem
+  command.
+
+  The configuration memory part can be used to define the hardware
+  configuration memory in the Hardware Manager of the Vivado Design Suite, to
+  enable programming and debugging the design in the FPGA hardware. Use the
+  create_hw_cfgmem command to define the configuration memory for use with
+  the current hardware device.
+
+  This command returns a list of cfgmem_part objects that match the specified
+  search criteria, or returns an error if it fails.
+
+Arguments:
+
+  -regexp - (Optional) Specifies that the search <patterns> are written as
+  regular expressions. Both search <patterns> and -filter expressions must be
+  written as regular expressions when this argument is used. Xilinx regular
+  expression Tcl commands are always anchored to the start of the search
+  string. You can add ".*" to the beginning or end of a search string to
+  widen the search to include a substring. See
+  http://perldoc.perl.org/perlre.html for help with regular expression
+  syntax.
+
+  Note: The Tcl built-in command regexp is not anchored, and works as a
+  standard Tcl command. For more information refer to
+  http://www.tcl.tk/man/tcl8.5/TclCmd/regexp.htm.
+
+  -nocase - (Optional) Perform case-insensitive matching when a pattern has
+  been specified. This argument applies to the use of -regexp only.
+
+  -filter <args> - (Optional) Filter the results list with the specified
+  expression. The -filter argument filters the list of objects returned by
+  get_cfgmem_parts based on property values on the cfgmem_parts objects. You
+  can find the properties on an object with the report_property or
+  list_property commands. In the case of the "cfgmem_part" object,
+  "COMPATIBLE_PARTS", "DATA_WIDTH", and "MEM_DENSITY" are some of the
+  properties that can be used to filter results.
+
+  The filter search pattern should be quoted to avoid having to escape
+  special characters that may be found in net, pin, or cell names, or other
+  properties. String matching is case-sensitive and is always anchored to the
+  start and to the end of the search string. The wildcard "*" character can
+  be used at the beginning or at the end of a search string to widen the
+  search to include a substring of the property value.
+
+  Note: The filter returns an object if a specified property exists on the
+  object, and the specified pattern matches the property value on the object.
+  In the case of the "*" wildcard character, this will match a property with
+  a defined value of "".
+
+  For string comparison, the specific operators that can be used in filter
+  expressions are "equal" (==), "not-equal" (!=), "match" (=~), and
+  "not-match" (!~). Numeric comparison operators <, >, <=, and >= can also be
+  used. Multiple filter expressions can be joined by AND and OR (&& and ||).
+  The following gets input pins that do NOT contain the "RESET" substring
+  within their name:
+
+    get_pins * -filter {DIRECTION == IN && NAME !~ "*RESET*"} 
+    
+
+  Boolean (bool) type properties can be directly evaluated in filter
+  expressions as true or not true:
+
+    -filter {IS_PRIMITIVE && !IS_LOC_FIXED} 
+    
+
+  -of_objects <arg> - (Optional) Get the cfgmem_parts of the specified part
+  or hw_device objects.
+
+  Note: The Vivado Lab Edition does not support part objects, and only
+  supports hw_device objects. The part or hw_device objects must be specified
+  as objects returned by get_parts, get_hw_devices, or current_hw_device
+  commands, rather than specified by name.
+
+  -quiet - (Optional) Execute the command quietly, returning no messages from
+  the command. The command also returns TCL_OK regardless of any errors
+  encountered during execution.
+
+  Note: Any errors encountered on the command-line, while launching the
+  command, will be returned. Only errors occurring inside the command will be
+  trapped.
+
+  -verbose - (Optional) Temporarily override any message limits and return
+  all messages from this command.
+
+  Note: Message limits can be defined with the set_msg_config command.
+
+  <patterns> - (Optional) Match cfgmem_parts against the specified patterns.
+  The default pattern is the wildcard `*` which gets a list of all
+  cfgmem_parts currently available in the Vivado Design Suite.
+
+Example:
+
+  The following example gets the cfgmem parts compatible with the current
+  hw_device:
+
+    get_cfgmem_parts -of_objects [current_hw_device] 
+    
+
+  The following example gets the cfgmem_part compatible with the target part,
+  filtered to return only the cfgmem_parts with more than a specified amount
+  of memory:
+
+    get_cfgmem_parts -of [get_parts [get_property PART [current_hw_device]]] \  
+    -filter {MEM_DENSITY > 128} 
+    
+
+See Also:
+
+   *  create_hw_cfgmem
+   *  current_hw_device
+   *  delete_hw_cfgmem
+   *  get_hw_device
+   *  get_parts
+   *  get_property
+   *  program_hw_cfgmem
+   *  set_property
+   *  write_cfgmem
+
+================ commands matching *cfgmem* / *flash* ================
+create_hw_cfgmem
+current_hw_cfgmem
+delete_hw_cfgmem
+get_cfgmem_parts
+get_hw_cfgmems
+program_hw_cfgmem
+readback_hw_cfgmem
+write_cfgmem

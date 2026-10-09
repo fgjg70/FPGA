@@ -752,6 +752,33 @@ ITER_new = ceil(ITER_old × 10.0 / 实测秒数 × 1.05)      # 留 5~7% 余量
 - **顺带**: `dbg_pc` 静止有**两种相反含义** —— `0x80000000` 静止 = 复位未释放 ✗;
   `0x0000006F`(`j .`) 静止 = **程序正常跑完** ✓。工具不能只报“冻结不动”, 会把成功读成失败。
 
+### R44. `program_hw_cfgmem` 报 **`27-3347 Failure to set flash parameters` 不是 part 不匹配** ✅(绕了两轮才明白)
+- 真因: **SPI flash accessor 设计没有被加载进 FPGA** ✗。hw_server 的 `XicomFlash` 服务由一个小设计提供,
+  纯 Tcl 流程里 `program_hw_cfgmem` **不会自己加载它** => 日志里 `C 77 XicomFlash override` -> `Invalid context`
+  -> 表面上就是 `[Labtools 27-3347] Failure to set flash parameters`。
+- **修法** (必须在 cfgmem 流程**之前**):
+  `set_property PROGRAM.FILE <Vivado>/data/xicom/cfgmem/bitfile/spi_xc7a100t_pullnone.bit [current_hw_device]`
+  `program_hw_devices [current_hw_device]`
+  成功时器件会报 **"programmed with a design that has 1 SPI core(s)"** ✓
+- 教训: 别在 part 名上兜圈子 (我试了 20+ 个 part 全指向同一个错误描述 ✗)。
+
+### R45. `PROGRAM.CFG_PROGRAM` 必须为 1 —— 否则会**打印“成功”却什么都没写** ✅
+- `CFG_PROGRAM 0`: 工具**擦除后只发一次假 `programVerify`、4ms 就失败(`Byte N does not match`)、什么都没写** ✗
+- **最阴的坑**: `VERIFY 0` + `CFG_PROGRAM 0` **仍打印 `[Labtoolstcl 44-377] Flash programming completed successfully`** ✗✗
+- 正确集合: `ERASE/BLANK_CHECK/CFG_PROGRAM/VERIFY = 1` → 会发出长串 `programVerify`（每次约 1.4s）真正写入 ✓
+- ⇒ **必须读回比对才算数** (本例工具: `tools/flash_boot.ps1`, 自带 16MB 读回 diff, 输出 `VERDICT=PROGRAM_OK` + `VERIFY=PASS`)
+
+### R46. 器件身份要用**硬件 ID**定案, 不要用“搜不到名字”推断 ✅
+- 读回打印 `Mfg 20 / Type ba / Capacity 18` = JEDEC **20 BA 18** = **Micron N25Q128** ≡ `mt25ql128` 3.3V ✓
+- `n25q128-3.3v-spi-x1_x2_x4` 只是 `MEM_DEVICE_ALIAS` 属性、**不可搜索**(解析为 0 个对象 ✗)
+  => **“`*n25q128*` 搜不到” 不等于“不支持”** ✗ (我就这么误判了)
+- `hw_server` 自己会报 `[Labtools 27-3291] Part selected <X>, but part mt25ql128 detected` => 它能告诉你真正的型号 ✓
+- 注: **Winbond `w25q128*` 是 Zynq-only** (`COMPATIBLE_PARTS` 只有 xa7z*/xc7z*) => 在 Artix-7 上**无论什么接口模式都不能用** ✗ (`44-655`)
+- 厂家指南确认: 《达芬奇Pro之FPGA开发指南 V2.2》§5.3.13 程序固化 (书 p.239/245):
+  `BITSTREAM.CONFIG.SPI_BUSWIDTH 4` / `CONFIG_MODE SPIx4` / `CONFIGRATE 50` / `CFGBVS VCCO` /
+  `CONFIG_VOLTAGE 3.3` / `UNUSEDPIN PULLUP`, 然后选 **`mt25ql128-spi-x1_x2_x4`** ✓
+  (地址带内嵌文本需用 ToUnicode CMap 解析, 已写成 `tools/pdf_text.py` ✓)
+
 ## 六、优化决策纪律
 
 1. **赛题记三项指标, 改一项必须同时量三项** + 绝对吞吐 (CoreMark/MHz × fmax)。

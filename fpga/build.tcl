@@ -224,5 +224,63 @@ report_timing_summary -file timing.rpt
 # worst-slack paths, each fully expanded with per-hop `net (fo=NN)`.
 report_timing -max_paths 50 -input_pins -file $root/fpga/timing_paths.rpt
 report_utilization -file util.rpt
-write_bitstream -force cpu_a100t.bit
+# ===========================================================================
+# QSPI BOOT IMAGE SUPPORT  (2026-10-09, flash 固化)
+# ---------------------------------------------------------------------------
+# Everything up to here builds a JTAG-loadable bitstream. A bitstream that the
+# FPGA can also read back OUT OF THE QSPI FLASH AT POWER-UP additionally needs
+# its configuration header to describe the flash interface, and that header is
+# written by write_bitstream -- so the properties must be set BEFORE it.
+#
+# DEFAULT = NOTHING CHANGES (empty list -> no set_property, same output file).
+# Set SPI_BOOT_X4=1 for the vendor-recommended x4 image. These are the exact
+# primitives 正点原子 documents for this board in 《达芬奇Pro之FPGA开发指南 V2.2》
+# §5.3.13 程序固化 (book p.239), quoted verbatim:
+#     set_property BITSTREAM.CONFIG.SPI_BUSWIDTH 4 [current_design]
+#     set_property CONFIG_MODE SPIx4 [current_design]
+#     set_property BITSTREAM.CONFIG.CONFIGRATE 50 [current_design]
+#     set_property CFGBVS VCCO [current_design]
+#     set_property CONFIG_VOLTAGE 3.3 [current_design]
+#     set_property BITSTREAM.CONFIG.UNUSEDPIN PULLUP [current_design]
+# Their stated reason: "为了生成的bit流文件转换成固化文件后能够适用于4bit位宽
+# SPI通信的Flash器件" (so the converted image suits a 4-bit-wide SPI flash).
+#
+# SPIBUSWIDTH is mandatory for the x4 image: write_cfgmem refuses to build an
+# SPIx4 image from a bitstream whose header says 1 --
+#   [Writecfgmem 68-20] SPI_BUSWIDTH property is set to "1" ... has to be "4".
+# Each set_property is inside catch() so a name this Vivado build does not know
+# can never break the normal build; the verify lines below print what stuck, and
+# those lines are the evidence that the header really changed.
+#
+# BIT_NAME keeps the default artifact identical; variants go to their own file
+# so the scoring bitstream is never silently overwritten.
+# ===========================================================================
+set SPI_BOOT_PROPS {}
+if {[info exists ::env(SPI_BOOT_X4)] && $::env(SPI_BOOT_X4) ne ""} {
+  set SPI_BOOT_PROPS [list \
+    BITSTREAM.CONFIG.SPI_BUSWIDTH 4 \
+    CONFIG_MODE                   SPIx4 \
+    BITSTREAM.CONFIG.CONFIGRATE   50 \
+    CFGBVS                        VCCO \
+    CONFIG_VOLTAGE                3.3 \
+    BITSTREAM.CONFIG.UNUSEDPIN    PULLUP ]
+} elseif {[info exists ::env(SPI_BOOT)] && $::env(SPI_BOOT) ne ""} {
+  set SPI_BOOT_PROPS [list BITSTREAM.CONFIG.SPI_BUSWIDTH $::env(SPI_BOOT)]
+}
+foreach {p v} $SPI_BOOT_PROPS {
+  if {[catch {set_property $p $v [current_design]} e]} {
+    puts "BUILD_SPIBOOT_FAIL: $p=$v -> $e"
+  } else {
+    puts "BUILD_SPIBOOT_SET: $p=$v"
+  }
+}
+foreach p {BITSTREAM.CONFIG.SPI_BUSWIDTH BITSTREAM.CONFIG.CONFIGRATE \
+           BITSTREAM.CONFIG.UNUSEDPIN CONFIG_MODE} {
+  if {[catch {set x [get_property $p [current_design]]} e]} { set x "<n/a>" }
+  puts "BUILD_SPIBOOT_VERIFY: $p=$x"
+}
+set BIT_NAME "cpu_a100t.bit"
+if {[info exists ::env(BIT_NAME)] && $::env(BIT_NAME) ne ""} { set BIT_NAME $::env(BIT_NAME) }
+puts "BUILD_BIT_NAME=$BIT_NAME"
+write_bitstream -force $BIT_NAME
 puts "BUILD_OK"
