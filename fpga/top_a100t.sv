@@ -51,6 +51,18 @@ module top_a100t
   //   50 的 7/5。两个比值的乘积才是最终结果: 21/1 * 1/15 = 7/5。XDC 里的
   //   create_generated_clock 用 -multiply_by 21 -divide_by 15 (等价于 7/5) 与本例化
   //   **逐项对齐**, 不靠人脑换算。
+  //
+  // 【R43 根因修复 / 必须保留 CLKFBIN】70 MHz 版首次上板时 CPU 被永久复位:
+  //   ILA 抓到 2048 拍全是 ila_ctrl=0x00 / score_result=0, dbg_pc 冻在 0x80000000,
+  //   而 dbg_instr 能读出合法指令 0x10003117 => 时钟在跑, 但复位从未释放。
+  //   原因: 本实例**漏接了 .CLKFBIN** —— CLKFBOUT 只驱动了悬空的 clk_fb,
+  //   反馈环断开 => MMCM 永远不锁定 => LOCKED=0 => rst 恒有效。
+  //   综合期唯一的证据是这条警告(当时被当成"标准提示"放过):
+  //     [Timing 38-1] DLL output pin(s) used on clock modifying cell u_mmcm
+  //                   without a feedback net: CLKOUT0
+  //   **修复判据: 重新综合后该警告必须消失。**
+  //   MMCME2_BASE 用内部反馈(CLKFBOUT -> CLKFBIN 直连)即可, 不需要外部 BUFG;
+  //   绝不能把这行删掉, 也不要改成空连接。
   // ==========================================================================
   logic clk_fb;
   logic clk_70_raw;
@@ -82,6 +94,7 @@ module top_a100t
     .CLKOUT6  (),
     .CLKFBOUT (clk_fb),
     .CLKFBOUTB(),
+    .CLKFBIN  (clk_fb),             // 【关键】反馈必须回到 CLKFBIN: 缺这行 => MMCM 不锁定
     .LOCKED   (mmcm_locked),
     .CLKIN1   (sys_clk),
     .PWRDWN   (1'b0),
@@ -184,7 +197,10 @@ module top_a100t
     end
   end
 
-  // ---- 心跳: 70 MHz / 2^24 ≈ 4.2 Hz (LED 接线不变, 只随时钟变快) ----
+  // ---- 心跳: heartbeat[23] 作 LED => 翻转间隔 2^23 拍, 方波**全周期 2^24 拍** ----
+  // 70 MHz / 2^24 = **4.172 Hz** (板上 50 MHz 时是 2.98 Hz), 肉眼可辨。
+  // 注意: 心跳计数器被 rst 清零, 而 rst 依赖 mmcm_locked => MMCM 没锁时
+  // led[0] **熄灭**。这正好是一个不用 ILA 的粗判据: LED0 不闪 => 先查 MMCM/复位。
   logic [23:0] heartbeat;
   always @(posedge sys_clk_70) begin
     if (rst) heartbeat <= 24'd0;
@@ -209,16 +225,22 @@ module top_a100t
   //
   // ILA 只在 `USE_ILA 时例化: CPU core 本身保持纯净、不含任何厂商 IP,
   // 正式评分构建不带 ILA。
+  //
+  // 【R43 可观测性】bit7 现在 = mmcm_locked (原来是常数 0)。这样下次上板一眼就能
+  //   区分两种失败: bit7=0 => 时钟/MMCM 没锁定(复位没释放); bit7=1 但 PC 不动
+  //   => MMCM 已锁, 是别的问题(复位同步/逻辑)。软件语义位完全不变 ——
+  //   0x42 = 0100_0010 的 bit7 本来就是 0, 所以 bit1=pass / bit6=done 的解释
+  //   一个字都不用改; 锁定成功后读出来应是 0xC2。
   // ==========================================================================
 `ifdef USE_ILA
   logic [7:0]  ila_ctrl;
-  assign ila_ctrl = {1'b0, score_done, score_mark, dbg_redirect, dbg_stall, dbg_illegal, pass_r, fail_r};
+  assign ila_ctrl = {mmcm_locked, score_done, score_mark, dbg_redirect, dbg_stall, dbg_illegal, pass_r, fail_r};
 
   ila_0 u_ila (
     .clk    (sys_clk_70),
     .probe0 (dbg_pc),        // IF 段取指地址: 看流水线推进
     .probe1 (dbg_instr),     // 与 dbg_id_pc 配对的指令
-    .probe2 (ila_ctrl),      // {done, mark, redirect, stall, illegal, pass, fail}
+    .probe2 (ila_ctrl),      // {mmcm_locked, done, mark, redirect, stall, illegal, pass, fail}
     .probe3 (score_result)   // 最终 tick 数
   );
 `endif

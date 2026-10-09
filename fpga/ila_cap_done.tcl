@@ -1,5 +1,8 @@
 # Read back the packed CRC verdict + tick count after the 10 s CoreMark run.
-# ila_ctrl[7:0]: 7=unused 6=done 5=mark 4=redirect 3=stall 2=illegal 1=pass 0=fail
+# ila_ctrl[7:0]: 7=mmcm_locked 6=done 5=mark 4=redirect 3=stall 2=illegal 1=pass 0=fail
+# (bit7 was constant 0, now = mmcm_locked: 0 => MMCM not locked / reset never released;
+#  1 => locked. Expected value once locked and finished = 0xC2 = locked|done|pass.
+#  The software bits are unchanged: 0x42 still means done=1,pass=1,fail=0.)
 #
 # NO TRIGGER IS SET ON PURPOSE. The probe default is eq8'hXX (don't care) which
 # means "always true", so the capture starts as soon as it is armed.

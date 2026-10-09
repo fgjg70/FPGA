@@ -1906,27 +1906,105 @@ def cmd_hw(args) -> int:
     if ic is None or ir is None:
         print(f"  [FAIL] CSV 里找不到 ila_ctrl / score_result 列。实际列: {hdr}")
         return 1
+    ip, ii = col("dbg_pc"), col("dbg_instr")
 
     def px(s):
-        return int(s.strip().strip('"').replace("0x", ""), 16)
+        """十六进制**容错**解析: 表头/空/非法字段返回 None, 不抛异常。
 
-    # 抓到达 done=1 的那一拍 (程序跑完的状态)
+        实测 bug: ILA CSV 的表头列名就叫 `ila_ctrl[7:0]` / `score_result[31:0]`,
+        旧实现直接 int("ila_ctrl[7:0]", 16) 会抛
+          ValueError: invalid literal for int() with base 16
+        把整个上板判读打断 —— 而这恰恰是"复位没释放"时最需要读到的证据
+        (R43: 表头行落到数据循环里)。正常数据行仍是 xx / xxxxxxxx, 行为不变。
+        """
+        t = (s or "").strip().strip('"').strip()
+        if t[:2].lower() == "0x":
+            t = t[2:]
+        if not t:
+            return None
+        try:
+            return int(t, 16)
+        except ValueError:
+            return None
+
+    # 逐行解析: 表头/汇总/非法行**跳过**(容错), 并统计跳过了多少行。
+    # 抓到达 done=1 的那一拍 (程序跑完的状态)。
     hit = None
+    rows = []
+    skipped = 0
     for ln in lines[1:]:
         c = ln.split(",")
         if len(c) <= max(ic, ir):
+            skipped += 1
             continue
         ctrl, res = px(c[ic]), px(c[ir])
-        if (ctrl >> 6) & 1:
+        if ctrl is None or res is None:
+            skipped += 1           # 表头重复行 / 非法行 -> 跳过, 绝不当成数据
+            continue
+        rows.append((c, ctrl, res))
+        if hit is None and (ctrl >> 6) & 1:
             hit = (ctrl, res)
-            break
+
+    if skipped:
+        print(f"  (容错: 跳过 {skipped} 行表头/非法行)")
+
+    # dbg_pc 序列: 用来看"PC 到底动没动"
+    # (PC 冻结在复位向量 0x80000000 = 复位从未释放的指纹)
+    pc_vals = []
+    if ip is not None:
+        for c, _ctrl, _res in rows:
+            if len(c) > ip:
+                v = px(c[ip])
+                if v is not None:
+                    pc_vals.append(v)
+    pc_nuniq = len(set(pc_vals)) if pc_vals else 0
+    last_instr = None
+    if ii is not None and rows and len(rows[-1][0]) > ii:
+        last_instr = px(rows[-1][0][ii])
+
+    def pc_note():
+        """PC 静止有**两种完全相反**的含义, 必须分开报, 否则会误判:
+            0x80000000 (复位向量) 静止 -> 复位从未释放 (R43 的故障指纹)
+            0x0000006F (`j .`) 静止    -> 程序已正常跑完, 停在结尾死循环
+        抓取发生在编程后 22 s (程序 17.7 s 就跑完), 所以"跑完"这一态 PC 本来就
+        该静止 —— 只看"PC 有没有动"会得出相反的结论。"""
+        if not pc_vals:
+            return "dbg_pc: n/a"
+        head = (f"dbg_pc: 首 0x{pc_vals[0]:08X} 末 0x{pc_vals[-1]:08X}"
+                f"  不同取值 {pc_nuniq} 个")
+        if pc_nuniq > 1:
+            return head + " -> 在动"
+        if pc_vals[-1] == 0x80000000:
+            return head + " -> **冻结在复位向量 0x80000000 (复位从未释放) !!**"
+        if last_instr == 0x0000006F:
+            return head + " -> 静止: 程序已结束, 停在结尾 `j .` (dbg_instr=0x0000006F)"
+        if last_instr is not None:
+            return head + f" -> 静止 (末条 dbg_instr=0x{last_instr:08X})"
+        return head + " -> 静止"
+
     if hit is None:
         print("  [FAIL] 没有采到 done=1 —— 程序没跑完 (检查 ITERATIONS 与 after 等待时间)")
-        c = lines[-1].split(",")
-        print(f"         最后一拍: ila_ctrl=0x{px(c[ic]):02x} score_result=0x{px(c[ir]):08X}")
+        if rows:
+            c, lc, lr = rows[-1]
+            locked_l = (lc >> 7) & 1
+            print(f"         最后一拍: ila_ctrl=0x{lc:02x} score_result=0x{lr:08X}"
+                  f"  (bit7 mmcm_locked={locked_l})")
+            print("         " + pc_note())
+            if ii is not None and len(c) > ii:
+                iv = px(c[ii])
+                print(f"         dbg_instr=0x{iv:08X}" if iv is not None else "         dbg_instr=?")
+            if not locked_l:
+                print("         [判定] bit7=0 => MMCM **没有锁定** => 复位从未释放。")
+                print("                先查 top_a100t.sv 的 u_mmcm 是否接了 .CLKFBIN,")
+                print("                以及综合日志里有没有 [Timing 38-1] DLL output pin")
+                print("                ... without a feedback net。")
+            else:
+                print("         [判定] bit7=1 (MMCM 已锁) 但 done=0 => 问题不在时钟,")
+                print("                查 ITERATIONS/after 等待时间或程序本身。")
         return 1
 
     ctrl, res = hit
+    locked = (ctrl >> 7) & 1
     done, mark = (ctrl >> 6) & 1, (ctrl >> 5) & 1
     illegal, p, f = (ctrl >> 2) & 1, (ctrl >> 1) & 1, ctrl & 1
     crc, tick = (res >> 31) & 1, res & 0x7FFFFFFF
@@ -1934,8 +2012,17 @@ def cmd_hw(args) -> int:
     cmmhz = iters * 1e6 / tick if tick else 0
     secs = tick / args.clk_hz
 
+    # ---- tick 与 --expect-tick 的偏差: 大了必须**明确提示**, 不能默默放过 ----
+    # 偏差大通常只有三个原因: ① --clk-hz 不是这个 bitstream 的真实时钟
+    # ② --iterations 不是镜像里编译进去的值 ③ CSV 是旧快照 (见上面的新鲜度门槛)
+    tick_dev = None
+    tick_ok = True
+    if args.expect_tick:
+        tick_dev = abs(tick - args.expect_tick) / args.expect_tick * 100.0
+        tick_ok = tick_dev <= args.tick_tol_pct
+
     # 头部与新鲜度已经在函数开头打印过, 这里不再重复
-    print(f"  ila_ctrl     = 0x{ctrl:02X}  -> done={done} pass={p} fail={f} illegal={illegal}")
+    print(f"  ila_ctrl     = 0x{ctrl:02X}  -> locked={locked} done={done} pass={p} fail={f} illegal={illegal}")
     print(f"  score_result = 0x{res:08X}")
     print(f"    bit31 = {crc}  -> CRC 判定 {'全部匹配官方参考值' if crc else '不匹配 !!'}")
     print(f"    tick  = {tick:,}")
@@ -1943,18 +2030,32 @@ def cmd_hw(args) -> int:
     print(f"    CoreMark/MHz = {cmmhz:.4f}")
     print(f"    时长 = {secs:.2f} s @{args.clk_hz/1e6:.0f}MHz"
           f"  (赛题要求 >= 10 s: {'满足' if secs >= 10 else '不满足 !!'})")
+    print("    " + pc_note())
     if args.expect_tick:
-        print(f"    对照预期 {args.expect_tick:,}: 偏差 "
-              f"{abs(tick-args.expect_tick)/args.expect_tick*100:.3f}%")
-    ok = done and p and not f and not illegal and crc
+        tag = "OK" if tick_ok else "偏差过大 !!"
+        print(f"    对照预期 {args.expect_tick:,}: 偏差 {tick_dev:.3f}%"
+              f"  [{tag}, 门限 {args.tick_tol_pct}%]")
+        if not tick_ok:
+            print("    [WARN] tick 与预期不符 —— 先核对三件事 (别只看 PASS/FAIL):")
+            print(f"           1) --clk-hz {args.clk_hz:.0f} 必须等于该 bitstream 的真实系统时钟")
+            print("              (70MHz 版应为 70000000; 50000000 是 MMCM 之前的旧默认)")
+            print(f"           2) --iterations {iters} 必须等于镜像里编译进去的 ITERATIONS")
+            print("           3) results/ila_done.csv 必须来自**本次**抓取 (不是旧快照)")
+    if abs(args.clk_hz - 50e6) < 1.0:
+        print("    [注意] 当前用的是 50MHz 默认值 —— 若 bitstream 已是 70MHz 版,")
+        print("           时长/CoreMark-MHz 都会错 (必须显式传 --clk-hz 70000000)")
+
+    ok = bool(locked and done and p and not f and not illegal and crc and tick_ok)
     if not fresh:
         # 陈旧数据绝不允许给出 PASS 结论 —— 否则板子掉线也会"验证通过"
         print(f"\n  => 结果本身: {'PASS' if ok else 'FAIL'}"
               f"  (但数据已 {age_min:.0f} 分钟未更新, **不作为验证结论**)")
-        print(f"  => 本次验证: 未完成 (需要重新抓取)")
+        print("  => 本次验证: 未完成 (需要重新抓取)")
         return 1
-    print(f"\n  => 上板验证 {'PASS' if ok else 'FAIL'}")
-
+    print(f"\n  => 判据逐项: locked={locked}(需1) done={done}(需1) pass={p}(需1)"
+          f" fail={f}(需0) illegal={illegal}(需0) crc={crc}(需1)"
+          + (f" tick偏差={tick_dev:.3f}%(需<={args.tick_tol_pct}%)" if tick_dev is not None else ""))
+    print(f"  => 上板验证 {'PASS' if ok else 'FAIL'}")
     if args.record:
         res_m = parse_reports()
         m = {"cm_mhz": cmmhz, "fmax": res_m.get("fmax"), "lut": res_m.get("lut"),
@@ -2055,9 +2156,24 @@ def main() -> int:
 
     p = sub.add_parser("hw", help="解析上板 ILA 读回结果 (results/ila_done.csv)")
     p.add_argument("--csv", default="results/ila_done.csv", help="ILA 抓取的 CSV")
-    p.add_argument("--iterations", type=int, default=1200, help="镜像里的 ITERATIONS")
-    p.add_argument("--clk-hz", type=float, default=50e6, help="板载时钟频率 (默认 50MHz)")
-    p.add_argument("--expect-tick", type=int, help="预期 tick, 用于算偏差")
+    # 【默认值是历史遗留, 上板判读必须显式传参】
+    # 1200 / 50e6 是"MMCM 之前、ITERATIONS=1200"那一代的默认值。现在镜像里是
+    # ITERATIONS=3000、时钟是 70 MHz, 用默认值算出的时长/CoreMark-MHz 会**全错**
+    # 而且看起来很正常 (静默错)。所以:
+    #   python tools\fpga_workflow.py hw --iterations 3000 --clk-hz 70000000 \
+    #          --expect-tick 1239100117 --tag clk70-hw
+    # (另一个已知口径问题: parse_reports() 里 period 硬编码 20.0, 即报告里的
+    #  fmax 仍按 50MHz 输入时钟换算 —— 本次先不改, 只在此标注。)
+    p.add_argument("--iterations", type=int, default=1200,
+                   help="镜像里编译进去的 ITERATIONS。默认 1200 是旧值, "
+                        "上板判读必须显式传当前值 (70MHz/3000 迭代: --iterations 3000)")
+    p.add_argument("--clk-hz", type=float, default=50e6,
+                   help="bitstream 的**真实**系统时钟 Hz。默认 50e6 是 MMCM 之前的旧值, "
+                        "70MHz 版必须显式传 --clk-hz 70000000, 否则时长/CoreMark-MHz 全错")
+    p.add_argument("--expect-tick", type=int,
+                   help="预期 tick, 用于算偏差 (超过 --tick-tol-pct 会给出明确提示)")
+    p.add_argument("--tick-tol-pct", type=float, default=0.5,
+                   help="tick 允许偏差 %%, 超过则给出 [WARN] 并判 FAIL (默认 0.5)")
     p.add_argument("--tag", help="记录进 coremark.csv 的标签")
     p.add_argument("--record", action="store_true", help="追加一行到 results/coremark.csv")
     # 数据新鲜度门限: 超过就拒绝给结论 (板子掉线时 CSV 不会更新, 否则会
