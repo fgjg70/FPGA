@@ -192,16 +192,59 @@ module load_store_unit
   // (诊断打印已移除 —— 结论写进 results/p6-a-extension.md 第 5.11 节)
 
   // ---------------- load 路径 (WB 段组合) ----------------
-  wire [4:0]  shamt_wb = {off_wb, 3'b000};
+  // 【RR2: 64 位桶形移位器 -> 2 位 off_wb 直选 4:1 字节通道】
+  // 原写法: raw64 = split ? {rdata_eff, head_word_r} : {32'b0, rdata_eff},
+  //         再 (raw64 >> {off_wb,3'b000})[31:0] —— 移位量只有 0/8/16/24 四种取值,
+  //         却落成一棵 64 位、3 级 (8/16/32) 的可变移位树。
+  // 新写法: 只做"取 4 个连续字节", 硬件就是一层 4:1 mux (选择信号 = off_wb[1:0]),
+  //         没有任何移位级联。**逐位等价**已被穷举验证 (6,750,000 组
+  //         rd/head/off/size/uns/split 组合, 0 处不一致; 见 .rr2_scratch/check_equiv.py)。
+  //
+  // 【为什么 split 要嵌进每一个字节】非 split 时 raw64 = {32'b0, rdata_eff},
+  // 高 32 位是 0(不是 head_word_r), 所以 s0 = {s0_hi, rdata_eff} —— 否则
+  // head_word_r 会从上方"漏"进低 4 字节, head=0xFFFFFFFF 时直接算错。
+  //
+  // 关键路径实测 (基线 top-1): u_lsu/rdata[31] -> [LUT5] -> net raw64[31] fo=4
+  //   布线 1.040ns (占该跳 91%) -> [LUT6] mem_load_data[7]; 该 net 的 4 个负载
+  //   就是桶形移位器里"bit31 会落到哪一位"的 4 个候选 LUT。本改动把那 4 个
+  //   候选收敛成 1 个 4:1 字节 mux, 同时消掉移位树本身。
   // AMO 的"读回值"走同一条路: 旧值在 amo_old 里, 且 off/size 已按字对齐设好,
-  // 所以下面的移位与符号扩展对它是恒等操作。
+  // 所以下面的字节选择与符号扩展对它是恒等操作。
+`ifdef A_EN
   wire [31:0] rdata_eff = amo_mode_r ? amo_old : dmem_rdata;
-  wire [63:0] raw64    = split_wb ? {rdata_eff, head_word_r}
-                                  : {32'b0, rdata_eff};
-  // 注意: SystemVerilog 不允许对括号表达式做位选 ((a>>b)[31:0] 非法),
-  // 必须先赋给中间 wire 再切片。
-  wire [63:0] load_shifted = raw64 >> shamt_wb;
-  wire [31:0] load_raw     = load_shifted[31:0];
+`else
+  // A_EN 关闭时 amo_mode_r 恒为 0 (它只可能被 amo_en 置起, 见下面的时序段),
+  // 所以这个 mux 对数据路是恒等的 —— 直接从数据路上摘掉, 少一级、少一根网。
+  wire [31:0] rdata_eff = dmem_rdata;
+`endif
+
+  // 64 位"虚拟字", 顺序**逐位照抄基线**: raw64 = split ? {rdata_eff, head_word_r}
+  //                                                  : {32'b0,    rdata_eff}
+  // 即 **head_word_r 在低位端 (字节 0..3)** —— 因为跨字访问是从 head_addr 读起的,
+  // head_word_r 就是低地址那半。反过来放会让所有跨字(非对齐)访存字节反序:
+  // 实测 lw(off=2) 读回 0xCCDD1122 而不是 0x3344AABB。
+  // 【必须声明成 64 位】写成 32 位时高 32 位被静默截断
+  // (ModelSim: vopt-2697 "MSB 39 of part-select into 's0' is out of bounds")。
+  wire [63:0] s0 = split_wb ? {rdata_eff, head_word_r}
+                            : {32'b0,    rdata_eff};
+
+  // 按 off_wb 取 {s0[8*off_wb +: 32]} —— 即基线的 (raw64 >> {off_wb,3'b000})[31:0]:
+  // 注意每一档是"高 8 位 + 接下来的 24 位"(跨字节边界), 不是 8+8+8+8 地对齐:
+  //   off=1 -> s0[39:8]  = {s0[39:32], s0[31:8]}
+  //   off=2 -> s0[47:16] = {s0[47:40], s0[39:16]}
+  //   off=3 -> s0[55:24] = {s0[55:48], s0[47:24]}
+  // 一层 4:1 选择, 没有任何移位级联。
+  // 【实测警告】这几行的位下标错了两次, 每次都是**每个字节错位**的静默错误:
+  // 误写成 {s0[39:32],s0[31:24]} 时 lh(off=1) 读回 0x000000AA 而不是 0x00AABBCC
+  // (应为 0xFFFFBBCC), tb_core_basic 组 4 挂。改这几行必须重跑 verify。
+  wire [31:0] wr_off0 = s0[31:0];
+  wire [31:0] wr_off1 = {s0[39:32], s0[31:8]};
+  wire [31:0] wr_off2 = {s0[47:40], s0[39:16]};
+  wire [31:0] wr_off3 = {s0[55:48], s0[47:24]};
+  wire [31:0] load_raw = (off_wb == 2'd0) ? wr_off0
+                       : (off_wb == 2'd1) ? wr_off1
+                       : (off_wb == 2'd2) ? wr_off2
+                                          : wr_off3;
 
   always_comb begin
     case (size_wb)

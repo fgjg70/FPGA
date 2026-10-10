@@ -148,17 +148,45 @@ puts "BUILD_PROG=$PROG"
 # Measured motivation: the datapath gets placed in CLOCKREGION_X1Y0 while the
 # memory BRAMs land in CLOCKREGION_X0Y0 -- crossing that boundary made the last
 # hop into u_imem/ADDRARDADDR cost 1.93ns by itself.
-# Measured (xc7a100tfgg484-2, same RTL, same WLDrivenBlockPlacement):
-#   no Pblock                          -> 62.8 MHz, path 15.276ns (route 10.898)
-#   CLOCKREGION_X1Y0:CLOCKREGION_X1Y3  -> 69.2 MHz, path 13.971ns (route  8.926) BEST
-#   CLOCKREGION_X1Y0:CLOCKREGION_X1Y2  -> 66.9 MHz
-#   CLOCKREGION_X1Y0:CLOCKREGION_X1Y1  -> 64.2 MHz
-#   (X1Y0:X1Y3) + ExtraTimingOpt       -> 63.3 MHz
-#   (X1Y0:X1Y3) + AltSpreadLogic_high  -> 63.3 MHz
+#
+# [2026-10-11 RR2 round] The critical path is a dmem->LSU->forward->branch->PC->
+# imem WALL: all 50 worst setup paths share one source (u_dmem/mem_reg_*/CLKBWRCLK)
+# and one destination family (u_imem/rdata_reg_*/ADDRARDADDR), and it is 60-70%
+# ROUTE. A read-only placement probe (reproduced by .rr2_scratch/rr2_probe.tcl)
+# showed WHY: dmem's 4 BRAMs sit at column X1, while ALL the logic (lsu X52..64,
+# mem_wb X52..67, id_ex X52..81) parks ~50 columns to the right -- the placer
+# minimises total HPWL and does not care about the one net that matters. The two
+# worst hops (dmem->LSU 0.81ns, and a shifter-intermediate hop 1.04ns) are PURE
+# WIRE at fo 3~4, i.e. pure physical length.
+#
+# Measured at the 70MHz constraint (compile fmax = 1000/(14.285714 - WNS)):
+#   CLOCKREGION_X1Y0:CLOCKREGION_X1Y3  WLDrivenBlockPlacement -> WNS +0.694  (73.57) [old default]
+#   CLOCKREGION_X0Y1:CLOCKREGION_X2Y4  WLDrivenBlockPlacement -> WNS +0.669  (73.44)
+#   CLOCKREGION_X0Y1:CLOCKREGION_X3Y6  WLDrivenBlockPlacement -> WNS +0.669  (73.44)
+#   CLOCKREGION_X0Y2:CLOCKREGION_X2Y5  WLDrivenBlockPlacement -> WNS +0.797  (74.14)
+#   CLOCKREGION_X0Y3:CLOCKREGION_X2Y6  WLDrivenBlockPlacement -> WNS +0.774  (74.01)
+#   CLOCKREGION_X0Y2:CLOCKREGION_X2Y4  ExtraTimingOpt          -> WNS +0.797  (74.14)
+#   CLOCKREGION_X0Y1:CLOCKREGION_X3Y4  ExtraTimingOpt          -> WNS +0.819  (74.26)
+#   CLOCKREGION_X0Y2:CLOCKREGION_X4Y4  ExtraTimingOpt          -> WNS +0.819  (74.26)
+#   CLOCKREGION_X0Y1:CLOCKREGION_X2Y4  ExtraTimingOpt          -> WNS +0.888  (74.64) BEST, 3/3 bit-identical
+#   (stacking the byte-lane load mux of load_store_unit.sv on top: with the OLD
+#    barrel shifter the same best cell only reaches +0.852 -- the two changes are
+#    super-additive: -0.311ns logic from the byte-lane mux, -0.209ns route from
+#    the region, net +0.194ns / +1.07MHz.)
+#
+# [IMPORTANT INTERACTION] ExtraTimingOpt is only good TOGETHER WITH this region.
+# Without a Pblock it is measurably worse (58.4 vs 58.9 MHz) and with the OLD
+# region it was much worse (63.3 vs 69.2). Both knobs moved together here; the
+# isolation runs are recorded in results/coremark.csv (tags rr2-*).
+# Also note: ExtraTimingOpt COSTS logic depth (15 -> 18 levels, CARRY4=7) and buys
+# route (9.013 -> 7.596ns). It also creates a 1-level near-critical path
+# (u_id_ex/pc_reg[7] -> u_csr/mepc_reg[7], slack +0.084) -- still MET, but that is
+# the endpoint to watch if the design grows.
+#
 # Tighter is NOT better: lost placement freedom outweighs the shorter spans.
-# NOTE: the range is part-specific. For another device (or the 紫光同创 migration
-# target) pass PBLOCK_RANGE=off, or a valid range for that device.
-set PB_RANGE "CLOCKREGION_X1Y0:CLOCKREGION_X1Y3"
+# NOTE: the range is part-specific. For another device (or the migration target)
+# pass PBLOCK_RANGE=off, or a valid range for that device.
+set PB_RANGE "CLOCKREGION_X0Y1:CLOCKREGION_X2Y4"
 set PB_CELLS "u_core"
 set PB_ON    1
 if {[info exists ::env(PBLOCK_RANGE)] && $::env(PBLOCK_RANGE) ne ""} {
@@ -188,11 +216,15 @@ if {$PB_ON} {
 opt_design
 # Place directive is overridable so physical-optimization experiments are
 # reproducible from the workflow instead of hand-run Vivado.
-# DEFAULT = WLDrivenBlockPlacement: measured better for the SHIPPED config
-# (imem/dmem both block RAM) -- 58.9 MHz vs 58.4 for ExtraTimingOpt, same LUTs.
-# ExtraTimingOpt is better for the combinational-ROM fallback, so pass
-# PLACE_DIRECTIVE=ExtraTimingOpt when building that variant.
-set PLACE_DIR "WLDrivenBlockPlacement"
+# DEFAULT = ExtraTimingOpt, CHOSEN TOGETHER WITH the Pblock above.
+#   History: with the old Pblock X1Y0:X1Y3, WLDrivenBlockPlacement was better
+#   (69.2 vs 63.3 for ExtraTimingOpt). With the RR2 region X0Y1:X2Y4 the verdict
+#   FLIPS: ExtraTimingOpt buys a much shorter route on the dmem->imem wall
+#   (9.013 -> 7.596ns) at the cost of logic depth (15 -> 18 levels), net
+#   WNS +0.852 -> +0.888 (74.44 -> 74.64 MHz), 3/3 bit-identical.
+#   => place directive and Pblock MUST be selected as a pair, never independently.
+#   Pass PLACE_DIRECTIVE=WLDrivenBlockPlacement to get the earlier point back.
+set PLACE_DIR "ExtraTimingOpt"
 if {[info exists ::env(PLACE_DIRECTIVE)] && $::env(PLACE_DIRECTIVE) ne ""} {
   set PLACE_DIR $::env(PLACE_DIRECTIVE)
 }
