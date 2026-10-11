@@ -15,12 +15,17 @@
 //   led[2] = FAIL                led[3] = 非法指令
 //
 // 结构: core (纯 CPU) + mmio_subsys (GPIO/周期计数器/UART), 二者用 ext_* 总线相连。
-// 不例化任何厂商 IP; 时钟用 MMCME2_BASE **原语**(非 IP)把板载 50 MHz 倍频到
-// 70 MHz (VCO = 50*21 = 1050 MHz, CLKOUT0 = 1050/15 = 70.000 MHz), 见下方
-// u_mmcm 的核算注释。写原语而不是 IP 有两个原因: ① CPU core 侧保持"零厂商 IP";
+// 不例化任何厂商 IP; 时钟用 MMCME2_BASE **原语**(非 IP)把板载 50 MHz 倍频到核心频率,
+// 见下方 u_mmcm 的核算注释。写原语而不是 IP 有两个原因: ① CPU core 侧保持"零厂商 IP";
 // ② 本机 Vivado 2018.3 的 IP 生成流程会撞上 IP_Flow 19-3505 (PITFALLS R33),
 // 原语不需要工程模式、不产生 IP 目录。迁移紫光同创时只需重写本文件与约束,
 // 下层 RTL 可原样搬。
+//
+// ⚠ 本文件里"70 MHz / 1050 MHz / 14.286 ns"这类数字是**当时的推导记录(历史)**,
+//   不是当前配置。当前档位的唯一真相是下面这三处, 它们必须同源:
+//     `.CLKFBOUT_MULT_F` / `.CLKOUT0_DIVIDE_F`(本文件) + `create_generated_clock`(xdc)
+//   2026-10-11 的档位序列(全部实测): 70 -> 75 -> 95.45 -> 105(已上板)
+//     -> 131.25(差0.077) -> 128.125(交付) MHz
 // ============================================================================
 
 module top_a100t
@@ -77,7 +82,7 @@ module top_a100t
 
   MMCME2_BASE #(
     .BANDWIDTH          ("OPTIMIZED"),
-    .CLKFBOUT_MULT_F    (20.5),     // VCO = 50 * 20.5 / 1 = 1025 MHz  (600~1200 OK)
+    .CLKFBOUT_MULT_F    (18.75),     // VCO = 50 * 20.5 / 1 = 1025 MHz  (600~1200 OK)
     .CLKFBOUT_PHASE     (0.0),
     .CLKIN1_PERIOD      (20.000),   // 板载 50 MHz
     .CLKOUT0_DIVIDE_F   (8.0),      // 1025 / 8 = 128.125 MHz (精确; 阶梯 105 -> 128.125)
@@ -170,7 +175,7 @@ module top_a100t
   logic        score_mark, score_done;
 
   mmio_subsys #(
-    .CLK_HZ  (128_125_000),        // 必须跟着 MMCM 改: 周期计数器/定时器按它分频
+    .CLK_HZ  (117_187_500),        // 必须跟着 MMCM 改: 周期计数器/定时器按它分频
     .BAUD_HZ (115_200)
   ) u_mmio (
     .clk           (sys_clk_core),
