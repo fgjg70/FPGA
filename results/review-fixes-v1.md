@@ -1,5 +1,12 @@
 # review-fixes-v1 — 2026-10-11 审查修复轮结论
 
+> **后续（同日）**：本文记录的是 **70 MHz** 那一轮的交付状态。当天下午把系统时钟提到
+> **75 MHz**（只换 MMCM 抽头，VCO 不变）并再次上板 PASS ⇒ 当前权威数字请以
+> **`CODE-REVIEW-PLAN.md` §8** 与 `README.md` 为准：
+> fmax **76.2 MHz**、LUT **2734**、CoreMark/LUTs **8.855e-4**、绝对吞吐 **184.4**、
+> 上板 tick **1,239,079,510** / **16.52 s** / 12:19:02。
+> 本文的 §1 指标表保留为**那一轮的历史快照**（口径与证据链方法不变）。
+
 > 本轮由 **Agent Team**（Lead + 4 泳道：`rtl-fix` / `sw-verify` / `docs-sync` / `build-repo`）执行，
 > 依据是 `CODE-REVIEW-PLAN.md`（同轮产出的 75 项审查计划）。**12 个 commit**，
 > 起于 `d6b48fe`，工作区最终干净。
