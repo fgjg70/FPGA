@@ -1,27 +1,281 @@
 # ============================================================================
-# fpga/build_ila.tcl — 带 ILA 的"上板自主读回"构建 (工程模式)
+# fpga/build_ila.tcl -- build the ILA ("read the result back yourself") image
+# in PROJECT mode.
 # ----------------------------------------------------------------------------
-# 为什么用工程模式: ila IP 需要 Vivado 的 IP 生成流程, 工程模式最稳。
-# 为什么需要 ILA: 本板串口收不到数据 (FT2232H 只有 D2XX, 无 COM 口), 只能靠
-#   ILA over JTAG 把"是否跑完 + 跑了多少周期"读回来, 实现无人值守验证。
-# 触发: 软件在 CoreMark 测量区间起点写 MMIO_MARK -> probe2[5] 上升沿。
-# 跑分镜像: ITERATIONS=3000 -> 约 1.239e9 拍 -> 70 MHz 下 17.70 s。
-#   抓取脚本 fpga/ila_cap_done.tcl 的等待时间必须 > 17.70 s (现为 after 22000)。
-# 注意: 正式评分构建 (build.tcl) 不带 ILA, CPU core 本身不含任何厂商 IP。
+# Why project mode: the ILA IP needs Vivado's IP generation flow, which is most
+# reliable as a project.
+# Why an ILA at all: this board's UART is unreachable (the FT2232H only exposes
+# D2XX, no COM port), so the only way to read "did it finish + how many cycles"
+# back is ILA over JTAG. That is what makes unattended verification possible.
+# Trigger: the software writes MMIO_MARK at the start of the CoreMark measured
+# region -> rising edge on probe2[5].
+# Benchmark image: see sim/prog/cm_hw.build.json (X-09). ITERATIONS=3000 ->
+# about 1.239e9 cycles -> 17.70 s at 70 MHz. The capture script
+# fpga/ila_cap_done.tcl READS wait_seconds FROM THAT SAME FILE, so the wait time
+# is no longer a magic constant manually kept in sync in three places.
+# Note: the scoring build (build.tcl) carries no ILA; the CPU core itself
+# contains no vendor IP.
+# This file MUST stay PURE ASCII (PITFALLS R21).
 # ============================================================================
 set part xc7a100tfgg484-2
-set root "D:/USER/Desktop/FPGA/FPGA/"
+# ---- E-02: no hardcoded absolute paths -------------------------------------
+# Derive the repo root from this script's own location; every path below is
+# built from $root, so the flow survives a move to another machine/directory
+# (the old file repeated "D:/USER/Desktop/FPGA/FPGA" in five places).
+set root [file normalize [file join [file dirname [info script]] ..]]
+puts "ILA_BUILD_ROOT=$root"
+
+# ===========================================================================
+# Shared helpers (pure Tcl 8.5 -- Vivado 2018.3 ships Tcl 8.5.14).
+# ===========================================================================
+proc br_tmpdir {} {
+  if {[info exists ::env(TEMP)] && $::env(TEMP) ne ""} { return $::env(TEMP) }
+  return [pwd]
+}
+
+# Flat-JSON reader: {"key": scalar, ...}, no nesting and no escapes.
+# A missing/unreadable file returns an empty dict so callers fall back to their
+# constants AND warn -- never a silently wrong number.
+proc br_read_flat_json {path} {
+  set d [dict create]
+  if {![file exists $path]} { return $d }
+  if {[catch {set fh [open $path r]} e]} {
+    puts "BR_JSON_WARN: cannot open $path : $e"
+    return $d
+  }
+  set txt [read $fh]
+  close $fh
+  foreach {_full k v} [regexp -all -inline {"([A-Za-z_][A-Za-z0-9_]*)"\s*:\s*("[^"]*"|-?[0-9]+(?:\.[0-9]+)?)} $txt] {
+    dict set d $k [string trim $v "\""]
+  }
+  return $d
+}
+
+# SHA256 of one file via certutil (Tcl 8.5 has no built-in digest command).
+# Returns lowercase hex, or "" when it cannot be computed -- callers must
+# record the failure instead of pretending the hash exists.
+proc br_sha256_file {path} {
+  if {![file exists $path]} { return "" }
+  if {[catch {set out [exec certutil -hashfile $path SHA256]} e]} { return "" }
+  foreach l [split $out "\n"] {
+    set l [string trim $l]
+    set c [string map {" " ""} $l]
+    if {[string length $c] == 64 && [regexp {^[0-9a-fA-F]{64}$} $c]} {
+      return [string tolower $c]
+    }
+  }
+  return ""
+}
+
+# The files whose content defines "which RTL version this is": every .sv that
+# gets synthesised, i.e. repo-root *.sv + fpga/*.sv. Sorted, absolute.
+proc br_rtl_sv_files {root} {
+  set out {}
+  foreach d [list $root $root/fpga] {
+    foreach f [lsort [glob -nocomplain -directory $d *.sv]] {
+      lappend out [file normalize $f]
+    }
+  }
+  return [lsort $out]
+}
+
+# ---- X-10 / R41: combined RTL hash -----------------------------------------
+# SHA256 over "V1 header + (relpath + bytes) for every file", so ONE digest
+# covers both the contents and the file set. Returned as {hex n rels}; hex is
+# "" when no digest tool is available (recorded, not hidden). The SAME
+# algorithm is used by ila_cap_done.tcl when it writes the capture manifest, so
+# the harness can prove which RTL produced a given board result.
+proc br_rtl_sha {root files} {
+  set body "FPGA-RTL-SHA-V1\n"
+  set rels {}
+  set n 0
+  set rootn [string map {\\ /} [file normalize $root]]
+  foreach f $files {
+    if {![file exists $f]} {
+      puts "BR_RTL_SHA_WARN=missing:$f"
+      continue
+    }
+    set fn [string map {\\ /} [file normalize $f]]
+    set rel $fn
+    if {[string first "$rootn/" $fn] == 0} {
+      set rel [string range $fn [expr {[string length $rootn] + 1}] end]
+    }
+    if {[catch {
+      set fh [open $f rb]
+      fconfigure $fh -translation binary
+      append body "$rel\n"
+      append body [read $fh]
+      close $fh
+    } e]} {
+      puts "BR_RTL_SHA_WARN=read_failed:$rel:$e"
+      continue
+    }
+    lappend rels $rel
+    incr n
+  }
+  set tmp [file join [br_tmpdir] "fpga_rtl_sha_[pid].bin"]
+  set hex ""
+  if {[catch {
+    set fh [open $tmp wb]
+    fconfigure $fh -translation binary
+    puts -nonewline $fh $body
+    close $fh
+    set out [exec certutil -hashfile $tmp SHA256]
+    foreach l [split $out "\n"] {
+      set l [string trim $l]
+      set c [string map {" " ""} $l]
+      if {[string length $c] == 64 && [regexp {^[0-9a-fA-F]{64}$} $c]} {
+        set hex [string tolower $c]
+        break
+      }
+    }
+  } e]} {
+    puts "BR_RTL_SHA_WARN=hash_failed:$e"
+  }
+  catch {file delete -force $tmp}
+  return [list $hex $n $rels]
+}
+
+# ---- X-06 / X-09: hard timing-closure gate (see build.tcl for the rationale)
+proc br_timing_gate {rpt tag} {
+  set met "NA"
+  if {[file exists $rpt]} {
+    if {[catch {set fh [open $rpt r]} e]} {
+      puts "${tag}_TIMING_WARN=open_failed:$e"
+    } else {
+      set txt [read $fh]
+      close $fh
+      if {[string first "All user specified timing constraints are met." $txt] >= 0} {
+        set met 1
+      } elseif {[string first "Timing constraints are not met." $txt] >= 0} {
+        set met 0
+      }
+    }
+  } else {
+    puts "${tag}_TIMING_WARN=report_missing:$rpt"
+  }
+  set wns "NA"
+  set whs "NA"
+  if {[catch {
+    set p [get_timing_paths -setup -max_paths 1 -nworst 1 -quiet]
+    if {[llength $p] > 0} { set wns [get_property SLACK [lindex $p 0]] }
+  } e]} { puts "${tag}_TIMING_WARN=wns_query_failed:$e" }
+  if {[catch {
+    set p [get_timing_paths -hold -max_paths 1 -nworst 1 -quiet]
+    if {[llength $p] > 0} { set whs [get_property SLACK [lindex $p 0]] }
+  } e]} { puts "${tag}_TIMING_WARN=whs_query_failed:$e" }
+  puts "${tag}_TIMING_CONSTRAINTS_MET=$met"
+  puts "${tag}_TIMING_WNS=$wns"
+  puts "${tag}_TIMING_WHS=$whs"
+  set ok 1
+  if {$met ne "1"} { set ok 0 }
+  if {$wns ne "NA"} {
+    if {[catch {set wv [expr {double($wns)}]} e]} {
+      puts "${tag}_TIMING_WARN=wns_unparsed:$wns"
+    } elseif {$wv < 0.0} { set ok 0 }
+  }
+  if {$whs ne "NA"} {
+    if {[catch {set hv [expr {double($whs)}]} e]} {
+      puts "${tag}_TIMING_WARN=whs_unparsed:$whs"
+    } elseif {$hv < 0.0} { set ok 0 }
+  }
+  return $ok
+}
+
+# ===========================================================================
+# X-09: run parameters from sim/prog/cm_hw.build.json (written by
+# tools/mk_cm_hw.py). Fallback = the constants this file used to hardcode, with
+# an explicit warning so nobody mistakes a stale fallback for a measured value.
+# ===========================================================================
+set ILA_PROG       cm_hw
+set ITERATIONS     3000
+set EXPECT_TICK    1239100117
+set WAIT_SECONDS   22
+set CLK_HZ         70000000
+set BUILD_JSON     "$root/sim/prog/$ILA_PROG.build.json"
+set JINFO [br_read_flat_json $BUILD_JSON]
+if {[dict size $JINFO] == 0} {
+  puts "ILA_JSON=absent ($BUILD_JSON)"
+  puts "ILA_JSON_FALLBACK=1 iterations=$ITERATIONS expect_tick=$EXPECT_TICK wait_seconds=$WAIT_SECONDS clk_hz=$CLK_HZ"
+} else {
+  if {[dict exists $JINFO prog]} { set ILA_PROG [dict get $JINFO prog] }
+  foreach k {iterations expect_tick wait_seconds clk_hz} {
+    if {[dict exists $JINFO $k]} { set [string toupper $k] [dict get $JINFO $k] }
+  }
+  puts "ILA_JSON=present prog=$ILA_PROG iterations=$ITERATIONS expect_tick=$EXPECT_TICK wait_seconds=$WAIT_SECONDS clk_hz=$CLK_HZ"
+}
+set ILA_IMEM "$root/sim/prog/$ILA_PROG.hex"
+set ILA_DMEM "$root/sim/prog/$ILA_PROG.dmem.hex"
+if {![file exists $ILA_IMEM]} {
+  puts "ILA_BUILD_ERROR: missing imem image $ILA_IMEM"
+  error "missing imem image $ILA_IMEM (run tools/mk_cm_hw.py)"
+}
+if {![file exists $ILA_DMEM]} {
+  puts "ILA_BUILD_ERROR: missing dmem image $ILA_DMEM (the image would bake in all-zero .data)"
+  error "missing dmem image $ILA_DMEM (run tools/mk_cm_hw.py)"
+}
+
+# ===========================================================================
+# X-10 / R33: PURGE A DAMAGED PROJECT TREE BEFORE create_project.
+# ---------------------------------------------------------------------------
+# `create_project -force` only overwrites the .xpr. After a failed IP
+# generation the tree stays broken (ip/ila_0 half-generated, stale .runs/.cache/
+# .hw/.ip_user_files) and EVERY later build then fails in the same place with a
+# misleading "couldn't read file .../msgcat-1.5.1.tm: no such file or
+# directory" -- which looks like a broken Vivado install but is not. This has
+# already cost two full build cycles (PITFALLS R33), so it is no longer a manual
+# step. The .bit/.ltx of the previous build are removed with the run directory:
+# a stale ILA image must never be left around as "the" artifact (R28).
+# ===========================================================================
+foreach d {ila_proj.srcs ila_proj.runs ila_proj.cache ila_proj.hw ila_proj.ip_user_files} {
+  set p "$root/fpga/$d"
+  if {[file exists $p]} {
+    puts "ILA_PURGE=$d"
+    file delete -force $p
+  }
+}
 
 create_project -force -part $part $root/fpga/ila_proj
 
-# 文件列表必须写在一行: Tcl 的 backslash 续行在这里会被拆成多条命令
-add_files -norecurse [list "D:/USER/Desktop/FPGA/FPGA/rv32_pkg.sv" "D:/USER/Desktop/FPGA/FPGA/alu.sv" "D:/USER/Desktop/FPGA/FPGA/branch_unit.sv" "D:/USER/Desktop/FPGA/FPGA/control_unit.sv" "D:/USER/Desktop/FPGA/FPGA/imm_gen.sv" "D:/USER/Desktop/FPGA/FPGA/pc.sv" "D:/USER/Desktop/FPGA/FPGA/regfile.sv" "D:/USER/Desktop/FPGA/FPGA/id_ex_reg.sv" "D:/USER/Desktop/FPGA/FPGA/ex_mem_reg.sv" "D:/USER/Desktop/FPGA/FPGA/mem_wb_reg.sv" "D:/USER/Desktop/FPGA/FPGA/hazard_unit.sv" "D:/USER/Desktop/FPGA/FPGA/load_store_unit.sv" "D:/USER/Desktop/FPGA/FPGA/imem.sv" "D:/USER/Desktop/FPGA/FPGA/dmem.sv" "D:/USER/Desktop/FPGA/FPGA/btb.sv" "D:/USER/Desktop/FPGA/FPGA/ras.sv" "D:/USER/Desktop/FPGA/FPGA/muldiv.sv" "D:/USER/Desktop/FPGA/FPGA/csr_file.sv" "D:/USER/Desktop/FPGA/FPGA/core.sv" "D:/USER/Desktop/FPGA/FPGA/gemm_accel.sv" "D:/USER/Desktop/FPGA/FPGA/fpga/mmio_subsys.sv" "D:/USER/Desktop/FPGA/FPGA/fpga/top_a100t.sv"]
+# File list must be on one line: Tcl backslash continuation gets split into
+# separate commands here.
+add_files -norecurse [list "$root/rv32_pkg.sv" "$root/alu.sv" "$root/branch_unit.sv" "$root/control_unit.sv" "$root/imm_gen.sv" "$root/pc.sv" "$root/regfile.sv" "$root/id_ex_reg.sv" "$root/ex_mem_reg.sv" "$root/mem_wb_reg.sv" "$root/hazard_unit.sv" "$root/load_store_unit.sv" "$root/imem.sv" "$root/dmem.sv" "$root/btb.sv" "$root/ras.sv" "$root/muldiv.sv" "$root/csr_file.sv" "$root/core.sv" "$root/gemm_accel.sv" "$root/fpga/mmio_subsys.sv" "$root/fpga/top_a100t.sv"]
 add_files -fileset constrs_1 -norecurse [list "$root/fpga/daVinciPro.xdc"]
 
-# dmem 必须带初值镜像: 本核是哈佛结构, .data/.rodata 无法靠 crt0 从 imem 搬
-# 【必须给路径加引号】verilog_define 的值会原样展开成宏。不加引号的话
-# `IMEM_INIT_FILE 会展开成裸路径, Vivado 在路径里的 '/' 上报
-# "syntax error near /", 而且报的行号指向 $readmemh 那行, 极难联想去。
+# ---- X-10 / R41: record WHICH RTL went into this bitstream ------------------
+# A combined SHA256 over (relative path + bytes) of the synthesised .sv set,
+# printed into the build log. The harness compares the value recorded before the
+# build with the one after it and refuses to program a bitstream produced from a
+# tree that was edited mid-build (R41: parallel writers already caused one
+# "which version was that?" near-miss). The same algorithm is used by
+# ila_cap_done.tcl, which stamps the digest into results/ila_done.capture.json.
+set HASHED [br_rtl_sv_files $root]
+set HS [br_rtl_sha $root $HASHED]
+set ILA_RTL_SHA [lindex $HS 0]
+if {$ILA_RTL_SHA eq ""} { set ILA_RTL_SHA "UNAVAILABLE" }
+puts "ILA_RTL_SHA=$ILA_RTL_SHA"
+puts "ILA_RTL_SHA_FILES=[lindex $HS 1]"
+puts "ILA_RTL_SHA_LIST=[lindex $HS 2]"
+# Drift check: the hashed set must be the set that was actually added.
+set n_added 0
+if {![catch {
+  foreach f [get_files -quiet -of_objects [get_filesets sources_1]] {
+    if {[string match "*.sv" $f]} { incr n_added }
+  }
+} e]} {
+  puts "ILA_RTL_ADDED_SV=$n_added"
+  if {$n_added != [lindex $HS 1]} {
+    puts "ILA_RTL_SHA_WARN=add_files_vs_hashed_set_drift added=$n_added hashed=[lindex $HS 1]"
+  }
+} else {
+  puts "ILA_RTL_SHA_WARN=add_files_query_failed:$e"
+}
+
+# dmem must carry the initial-value image: this core is Harvard, so .data/rodata
+# cannot be copied out of imem by crt0.
+# [The path MUST be quoted] verilog_define expands the value verbatim into a
+# macro; without quotes `IMEM_INIT_FILE expands to a bare path and Vivado reports
+# "syntax error near /" at the $readmemh line, which is very hard to trace back.
 # Architecture macro pass-through. imem/dmem both use block RAM in the shipped
 # configuration, so the DEFAULT here (no macro) is already the BRAM build.
 # `IMEM_COMB_READ=1` is the fallback (combinational LUT ROM) for A-B compares.
@@ -34,7 +288,7 @@ if {[info exists ::env(IMEM_COMB_READ)] && $::env(IMEM_COMB_READ) ne ""} {
 } else {
   puts "ILA_BUILD_IMEM_BRAM=1"
 }
-set_property verilog_define "USE_ILA=1 IMEM_INIT_FILE=\"$root/sim/prog/cm_hw.hex\" DMEM_INIT_FILE=\"$root/sim/prog/cm_hw.dmem.hex\"$ARCH_DEFS" [current_fileset]
+set_property verilog_define "USE_ILA=1 IMEM_INIT_FILE=\"$ILA_IMEM\" DMEM_INIT_FILE=\"$ILA_DMEM\"$ARCH_DEFS" [current_fileset]
 
 create_ip -name ila -vendor xilinx.com -library ip -module_name ila_0
 set_property -dict [list CONFIG.C_NUM_OF_PROBES {4} CONFIG.C_PROBE0_WIDTH {32} CONFIG.C_PROBE1_WIDTH {32} CONFIG.C_PROBE2_WIDTH {8} CONFIG.C_PROBE3_WIDTH {32} CONFIG.C_DATA_DEPTH {2048} CONFIG.C_INPUT_PIPE_STAGES {2}] [get_ips ila_0]
@@ -50,4 +304,28 @@ if {[get_property PROGRESS [get_runs impl_1]] != "100%"} { error "IMPL FAILED" }
 open_run impl_1
 report_timing_summary -file $root/fpga/timing_ila.rpt
 report_utilization   -file $root/fpga/util_ila.rpt
+
+# ===========================================================================
+# X-09: TIMING GATE for the ILA image.
+# ---------------------------------------------------------------------------
+# The run above already wrote the bitstream (this is the proven 10-minute flow,
+# and R33 shows how expensive it is to deviate from it), so the gate runs right
+# after it and, when timing is NOT closed, DELETES the .bit/.ltx that
+# ila_cap_done.tcl programs. A violating image can therefore never produce a
+# "board-verified" result -- which was exactly the hole: the old script only
+# asserted PROGRESS == 100%.
+# ===========================================================================
+set TIMING_OK [br_timing_gate $root/fpga/timing_ila.rpt ILA]
+if {!$TIMING_OK} {
+  puts "ILA_TIMING=FAIL"
+  foreach f {top_a100t.bit top_a100t.ltx} {
+    set p "$root/fpga/ila_proj.runs/impl_1/$f"
+    if {[file exists $p]} {
+      file delete -force $p
+      puts "ILA_TIMING_PURGED=$f"
+    }
+  }
+  error "ILA_TIMING=FAIL: timing constraints are NOT met -> ILA bitstream removed, do not program"
+}
+puts "ILA_TIMING=PASS"
 puts "ILA_BUILD_OK"

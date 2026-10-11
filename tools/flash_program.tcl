@@ -24,7 +24,7 @@
 #    writes nothing at all -- while still printing
 #       INFO: [Labtoolstcl 44-377] Flash programming completed successfully
 #    when VERIFY is also 0. With ERASE=1 BLANK_CHECK=1 CFG_PROGRAM=1 VERIFY=1
-#    (the property set from the Vivado help example, and what the 正点原子 guide
+#    (the property set from the Vivado help example, and what the ALIENTEK guide
 #    does in the GUI) it emits a long burst of programVerify calls and the image
 #    really lands: full 16 MB readback == the .bin, byte for byte.
 #
@@ -48,7 +48,8 @@
 #   blankcheck : ERASE=0 PROGRAM=0 VERIFY=0 BLANK_CHECK=1  -> READ ONLY
 #   program    : full erase/blank-check/program/verify
 # ===========================================================================
-set root "D:/USER/Desktop/FPGA/FPGA"
+# E-02: derive the repo root from this script's own location (tools/ -> ..).
+set root [file normalize [file join [file dirname [info script]] ..]]
 
 set FLASH_PART   "mt25ql128-spi-x1_x2_x4"
 set FLASH_MCS    "$root/fpga/cpu_a100t.mcs"
@@ -157,9 +158,10 @@ if {[llength $sel] == 0} {
 
   set_property PROGRAM.FILE  $FLASH_MCS $cfg
   # PROGRAM.FILES is PLURAL because the GUI's "Program Configuration Memory
-  # Device" dialog takes BOTH an .mcs and a .prm file -- the 正点原子 guide
-  # (达芬奇Pro FPGA开发指南 V2.2, p.245) says exactly that: "添加对应的 mcs 文件
-  # 和 .prm 文件后点击 OK". The .prm carries the interface/address-range/start
+  # Device" dialog takes BOTH an .mcs and a .prm file -- the ALIENTEK guide
+  # (Da Vinci Pro FPGA development guide V2.2, p.245) says exactly that: "add the
+  # matching mcs file and .prm file, then click OK". The .prm carries the
+  # interface/address-range/start
   # address that write_cfgmem used; without it the tool falls back to defaults
   # and the program step silently writes nothing (observed).
   set files [list $FLASH_MCS]

@@ -1,67 +1,158 @@
-# 达芬奇Pro 上板构建 (非工程模式)
-# 时序要点: 关键路径 = rs/rd -> hazard/前递 -> ALU -> 目标选择 -> pc
-#   必须用 ExtraTimingOpt + AggressiveExplore (单靠 phys_opt 无效, 实测)。
+# Da Vinci Pro board build (non-project mode).
+# Timing notes: the critical path is rs/rd -> hazard/forward -> ALU -> target
+#   select -> pc. ExtraTimingOpt + AggressiveExplore is required (phys_opt
+#   alone was measured to be ineffective).
+# This file MUST stay PURE ASCII (PITFALLS R21: a non-ASCII byte in a Vivado
+# .tcl can split a comment line into code and raise "invalid command name").
 set part xc7a100tfgg484-2
-# PROG = 要综合进 imem/dmem 的程序镜像基名 (不含 .hex)。
-# 默认 cm_hw = 跑分版 (评分要的就是它)。工具通过改写 "set PROG <name>" 换程序。
-# 本核是哈佛结构, .data/.rodata 的初值靠 dmem 自己的镜像装入 (见 sw/link.ld),
-# 所以**必须成对存在** <PROG>.hex 与 <PROG>.dmem.hex。
-# 注意: 换 ITERATIONS 只改 dmem 镜像, imem 会逐字节相同 (见 PITFALLS R14) ——
-# 所以要确认镜像对不对, **比对 .dmem.hex**。
+# PROG = basename of the program image to bake into imem/dmem (no .hex).
+# Default cm_hw = the benchmark build (what the score is measured on). The tool
+# switches programs by rewriting this "set PROG <name>" line.
+# This core is Harvard: .data/.rodata initial values are loaded by dmem's own
+# image (see sw/link.ld), so <PROG>.hex and <PROG>.dmem.hex MUST exist as a pair.
+# Note: changing ITERATIONS only changes the dmem image; imem stays byte-identical
+# (PITFALLS R14) -- so to confirm the image is right, compare the .dmem.hex.
 set PROG cm_hw
-set root "D:/USER/Desktop/FPGA/FPGA"
+# ---- E-02: no hardcoded absolute paths -------------------------------------
+# The repo root is derived from this script's own location, so the build works
+# on another machine / directory / user name, and "$root" is the SINGLE source
+# for every source and report path below (the old file repeated the literal
+# path in both `set root` and `read_verilog`).
+set root [file normalize [file join [file dirname [info script]] ..]]
+puts "BUILD_ROOT=$root"
 set imem "$root/sim/prog/$PROG.hex"
 set dmem "$root/sim/prog/$PROG.dmem.hex"
-# 兜底: 指定的程序没有 dmem 镜像时退回跑分程序, 而不是让一个裸 `build.bat` 直接失败。
+# Fallback: if the requested program has no dmem image, fall back to the
+# benchmark program instead of letting a bare `build.bat` fail.
 if {![file exists $dmem] && [file exists "$root/sim/prog/cm_hw.dmem.hex"]} {
   puts "BUILD_WARN: $PROG.dmem.hex not found -> falling back to cm_hw"
   set PROG cm_hw
   set imem "$root/sim/prog/$PROG.hex"
   set dmem "$root/sim/prog/$PROG.dmem.hex"
 }
-# 两个镜像都存在才继续。缺 dmem 时**必须报错退出**, 不能静默继续:
-# 那样 .data/.rodata 会全是 0, 程序跑挂但 bitstream 照样生成 —— 正是本项目
-# 反复踩的"静默失败"形态 (PITFALLS R1)。
+# Continue only if BOTH images exist. A missing dmem MUST be a hard error, not a
+# silent continue: .data/.rodata would then be all zero, the program would hang,
+# but the bitstream would still be produced -- exactly the "silent failure"
+# shape this project keeps hitting (PITFALLS R1).
 if {![file exists $imem]} {
   puts "BUILD_ERROR: missing imem image $imem"
   exit 1
 }
 if {![file exists $dmem]} {
   puts "BUILD_ERROR: missing dmem image $dmem"
-  puts "BUILD_HINT: 该程序没有 .data/.rodata 初值 (纯汇编?) 或还没构建。"
-  puts "BUILD_HINT: 跑分版请先 python tools/build_sw.py ... 生成 $PROG.dmem.hex"
+  puts "BUILD_HINT: this program has no .data/.rodata initial values (pure asm?) or was never built."
+  puts "BUILD_HINT: for the benchmark image run: python tools/mk_cm_hw.py 3000  (writes $PROG.hex + $PROG.dmem.hex)"
   exit 1
 }
 puts "BUILD_IMEM=$imem"
 puts "BUILD_DMEM=$dmem"
 
-read_verilog -sv [list "D:/USER/Desktop/FPGA/FPGA/rv32_pkg.sv" "D:/USER/Desktop/FPGA/FPGA/alu.sv" "D:/USER/Desktop/FPGA/FPGA/branch_unit.sv" "D:/USER/Desktop/FPGA/FPGA/control_unit.sv" "D:/USER/Desktop/FPGA/FPGA/imm_gen.sv" "D:/USER/Desktop/FPGA/FPGA/pc.sv" "D:/USER/Desktop/FPGA/FPGA/regfile.sv" "D:/USER/Desktop/FPGA/FPGA/id_ex_reg.sv" "D:/USER/Desktop/FPGA/FPGA/ex_mem_reg.sv" "D:/USER/Desktop/FPGA/FPGA/mem_wb_reg.sv" "D:/USER/Desktop/FPGA/FPGA/hazard_unit.sv" "D:/USER/Desktop/FPGA/FPGA/load_store_unit.sv" "D:/USER/Desktop/FPGA/FPGA/imem.sv" "D:/USER/Desktop/FPGA/FPGA/dmem.sv" "D:/USER/Desktop/FPGA/FPGA/btb.sv" "D:/USER/Desktop/FPGA/FPGA/ras.sv" "D:/USER/Desktop/FPGA/FPGA/muldiv.sv" "D:/USER/Desktop/FPGA/FPGA/csr_file.sv" "D:/USER/Desktop/FPGA/FPGA/core.sv" "D:/USER/Desktop/FPGA/FPGA/gemm_accel.sv" "D:/USER/Desktop/FPGA/FPGA/fpga/mmio_subsys.sv" "D:/USER/Desktop/FPGA/FPGA/fpga/top_a100t.sv"]
-read_xdc "D:/USER/Desktop/FPGA/FPGA/fpga/daVinciPro.xdc"
+# ===========================================================================
+# Shared helpers (pure Tcl 8.5 -- Vivado 2018.3 ships Tcl 8.5.14).
+# ===========================================================================
+# Flat-JSON reader: {"key": scalar, ...} with no nesting and no escapes.
+# Returns a dict; a missing/unreadable file returns an empty dict so callers
+# can fall back to their constants and warn (never a silent wrong number).
+proc br_read_flat_json {path} {
+  set d [dict create]
+  if {![file exists $path]} { return $d }
+  if {[catch {set fh [open $path r]} e]} {
+    puts "BR_JSON_WARN: cannot open $path : $e"
+    return $d
+  }
+  set txt [read $fh]
+  close $fh
+  foreach {_full k v} [regexp -all -inline {"([A-Za-z_][A-Za-z0-9_]*)"\s*:\s*("[^"]*"|-?[0-9]+(?:\.[0-9]+)?)} $txt] {
+    dict set d $k [string trim $v "\""]
+  }
+  return $d
+}
+
+# ---- X-06 / X-09: hard timing-closure gate --------------------------------
+# Returns 1 when the implementation is closed, 0 otherwise. NEVER silent: it
+# always prints <TAG>_TIMING_* lines. The verdict is Vivado's own summary line
+# ("All user specified timing constraints are met." / "... are not met.")
+# cross-checked against the numeric worst setup/hold slack reported by
+# get_timing_paths. An unparseable report FAILS CLOSED (PITFALLS R1: a
+# "looks normal" number is worse than a failed build).
+proc br_timing_gate {rpt tag} {
+  set met "NA"
+  if {[file exists $rpt]} {
+    if {[catch {set fh [open $rpt r]} e]} {
+      puts "${tag}_TIMING_WARN=open_failed:$e"
+    } else {
+      set txt [read $fh]
+      close $fh
+      if {[string first "All user specified timing constraints are met." $txt] >= 0} {
+        set met 1
+      } elseif {[string first "Timing constraints are not met." $txt] >= 0} {
+        set met 0
+      }
+    }
+  } else {
+    puts "${tag}_TIMING_WARN=report_missing:$rpt"
+  }
+  set wns "NA"
+  set whs "NA"
+  if {[catch {
+    set p [get_timing_paths -setup -max_paths 1 -nworst 1 -quiet]
+    if {[llength $p] > 0} { set wns [get_property SLACK [lindex $p 0]] }
+  } e]} { puts "${tag}_TIMING_WARN=wns_query_failed:$e" }
+  if {[catch {
+    set p [get_timing_paths -hold -max_paths 1 -nworst 1 -quiet]
+    if {[llength $p] > 0} { set whs [get_property SLACK [lindex $p 0]] }
+  } e]} { puts "${tag}_TIMING_WARN=whs_query_failed:$e" }
+  puts "${tag}_TIMING_CONSTRAINTS_MET=$met"
+  puts "${tag}_TIMING_WNS=$wns"
+  puts "${tag}_TIMING_WHS=$whs"
+  set ok 1
+  if {$met ne "1"} { set ok 0 }
+  if {$wns ne "NA"} {
+    if {[catch {set wv [expr {double($wns)}]} e]} {
+      puts "${tag}_TIMING_WARN=wns_unparsed:$wns"
+    } elseif {$wv < 0.0} { set ok 0 }
+  }
+  if {$whs ne "NA"} {
+    if {[catch {set hv [expr {double($whs)}]} e]} {
+      puts "${tag}_TIMING_WARN=whs_unparsed:$whs"
+    } elseif {$hv < 0.0} { set ok 0 }
+  }
+  return $ok
+}
+
+read_verilog -sv [list "$root/rv32_pkg.sv" "$root/alu.sv" "$root/branch_unit.sv" "$root/control_unit.sv" "$root/imm_gen.sv" "$root/pc.sv" "$root/regfile.sv" "$root/id_ex_reg.sv" "$root/ex_mem_reg.sv" "$root/mem_wb_reg.sv" "$root/hazard_unit.sv" "$root/load_store_unit.sv" "$root/imem.sv" "$root/dmem.sv" "$root/btb.sv" "$root/ras.sv" "$root/muldiv.sv" "$root/csr_file.sv" "$root/core.sv" "$root/gemm_accel.sv" "$root/fpga/mmio_subsys.sv" "$root/fpga/top_a100t.sv"]
+read_xdc "$root/fpga/daVinciPro.xdc"
 
 # ===========================================================================
-# 架构宏
+# Architecture macros
 # ---------------------------------------------------------------------------
-# 【imem/dmem 都用 BRAM —— 这是默认配置, 不是可选项】
-#   imem: 默认寄存读 -> RAMB36 x4 (组合读会摊成 1228 LUT = 全核 31%, 见下)
+# [imem/dmem both use BRAM -- this is the default configuration, not an option]
+#   imem: registered read by default -> RAMB36 x4 (a combinational read spreads
+#         into 1228 LUTs = 31% of the whole core, see below)
 #   dmem: `always @(posedge clk) rdata <= mem[...]` -> RAMB36 x4
-#   即上述 RAMB36 x4 + x4 = **8 块**, 这是当前交付配置。
+#   i.e. RAMB36 x4 + x4 = **8 blocks**: this is the shipped configuration.
 #
-# 【历史: 三个宏曾默认打开是基于无效实验, 已推翻 (PITFALLS R17)】
-#   ModelSim 侧的宏传递写错了 (`vlog +FOO` 而非 `+define+FOO`), 所以
-#   **那些宏在仿真里从来没生效过**; 而 Tcl 侧 (-verilog_define) 是生效的。
-#   于是"综合开了宏、仿真没开宏", 两边跑的不是同一份设计。
+# [History: three macros used to default ON based on an invalid experiment,
+#  since disproved (PITFALLS R17)]
+#   The ModelSim-side macro passing was wrong (`vlog +FOO` instead of
+#   `+define+FOO`), so **those macros never took effect in simulation**; the Tcl
+#   side (-verilog_define) did take effect. So "macros on in synth, off in sim"
+#   meant the two flows were not building the same design.
 #
-# 修好宏传递后实测:
-#   IMEM_REG_READ   2026-10-06 **已打通并转为默认**: 全量回归 PASS 11,
-#                   CoreMark ticks 与组合读**逐位一致** (423527), 已上板验证
-#   LOAD_RESULT_REG 单独开 -> 仿真 timeout (已否决, 见 results/p4-macro-failure.md 5.2)
-#   BTB_GSHARE      单独开 -> 能跑, 但 ticks 449317, 比基线 423527 **慢 6%**
+# Measured after fixing macro passing:
+#   IMEM_REG_READ   2026-10-06 **proven and made the default**: full regression
+#                   PASS 11, CoreMark ticks **bit-identical** to the
+#                   combinational read (423527), board-verified
+#   LOAD_RESULT_REG alone -> simulation timeout (rejected, see
+#                   results/p4-macro-failure.md 5.2)
+#   BTB_GSHARE      alone -> runs, but ticks 449317, i.e. **6% slower** than the
+#                   423527 baseline
 #
-# 上板验证过的默认配置 (2026-10-06 18:05):
-#   PASS, CRC 判定=1, tick=508,155,404, 10.16 s。
+# Board-verified default configuration (2026-10-06 18:05):
+#   PASS, CRC verdict=1, tick=508,155,404, 10.16 s.
 #
-# 想再试验时: set LOAD_REG=1 / set BTB_GSHARE=1 / set A_EN=1 / set GEMM_EN=1
-# **但必须先跑 `python tools/fpga_workflow.py verify` 确认仿真通过** 再综合。
+# To experiment again: set LOAD_REG=1 / set BTB_GSHARE=1 / set A_EN=1 /
+# set GEMM_EN=1 -- **but first run `python tools/fpga_workflow.py verify`**.
 # ===========================================================================
 set IMEM_DEFS ""
 # IMEM read style. **DEFAULT = REGISTERED READ (inferable as RAMB36)**.
@@ -92,19 +183,19 @@ if {[info exists ::env(BTB_GSHARE)] && $::env(BTB_GSHARE) ne ""} {
 } else {
   puts "BUILD_BTB_SMITH=1"
 }
-# RAS_EN: 返回地址栈。【默认关闭】实测有效但不划算:
-#   CoreMark/MHz +0.38% (JALR 误判 4378->3558), 但 fmax -2.8%
-#   (栈顶 mux 落在已经最紧的 pc_target 路径上), 绝对吞吐 -2.3%。
-#   见 results/p4-ras.md
+# RAS_EN: return-address stack. [OFF by default] Measured to work but not worth
+#   it: CoreMark/MHz +0.38% (JALR mispredicts 4378->3558), but fmax -2.8% (the
+#   stack-top mux lands on the already tightest pc_target path), absolute
+#   throughput -2.3%. See results/p4-ras.md
 if {[info exists ::env(RAS_EN)] && $::env(RAS_EN) ne ""} {
   append IMEM_DEFS " RAS_EN=1"
   puts "BUILD_RAS_EN=1"
 } else {
   puts "BUILD_RAS_OFF=1"
 }
-# A_EN: RV32A 原子指令译码。【默认关闭】实测它是**纯代价**:
-#   fmax 61.7 -> 58.8 MHz (-4.7%), LUT +26, 绝对吞吐 145.6 -> 138.9 (-4.6%);
-#   而 CoreMark 不含原子指令 -> 收益为零。
+# A_EN: RV32A atomic-instruction decode. [OFF by default] Measured to be pure
+#   cost: fmax 61.7 -> 58.8 MHz (-4.7%), LUT +26, absolute throughput
+#   145.6 -> 138.9 (-4.6%); CoreMark contains no atomics -> zero gain.
 #   [2026-10-06] The multi-cycle read-modify-write is now WORKING (tb_core_amo
 #   flipped from XFAIL to PASS), so A instructions really execute when enabled.
 #   The three scoring metrics still gain nothing, so it stays OFF by default.
@@ -123,6 +214,30 @@ if {[info exists ::env(GEMM_EN)] && $::env(GEMM_EN) ne ""} {
   puts "BUILD_GEMM_EN=1"
 } else {
   puts "BUILD_GEMM_OFF=1"
+}
+
+# ---- X-09: single source of truth for the run parameters ------------------
+# tools/mk_cm_hw.py writes sim/prog/<PROG>.build.json with the ITERATIONS baked
+# into the image, the expected hardware tick count, the capture wait time and
+# the real clock frequency. Synthesis itself does not need those numbers, but
+# printing them puts "which image / how many iterations is in this bitstream"
+# into the build log (the evidence R41 asks for). Missing manifest -> warn and
+# continue with the values unknown (NEVER guess).
+set BUILD_JSON "$root/sim/prog/$PROG.build.json"
+set JINFO [br_read_flat_json $BUILD_JSON]
+if {[dict size $JINFO] == 0} {
+  puts "BUILD_WARN: no build manifest $BUILD_JSON (regenerate with tools/mk_cm_hw.py) -> iterations/expect_tick unknown"
+  puts "BUILD_JSON=absent"
+} else {
+  foreach k {prog iterations expect_tick wait_seconds clk_hz} {
+    if {[dict exists $JINFO $k]} {
+      puts "BUILD_JSON_[string toupper $k]=[dict get $JINFO $k]"
+    }
+  }
+  if {[dict exists $JINFO prog] && [dict get $JINFO prog] ne $PROG} {
+    puts "BUILD_JSON_WARN=manifest prog=[dict get $JINFO prog] but PROG=$PROG"
+  }
+  puts "BUILD_JSON=present"
 }
 
 # ---------------------------------------------------------------- retiming --
@@ -241,7 +356,10 @@ place_design -directive $PLACE_DIR
 phys_opt_design -directive AggressiveExplore
 route_design -directive $ROUTE_DIR
 phys_opt_design -directive AggressiveExplore
-report_timing_summary -file timing.rpt
+# Reports go to $root/fpga explicitly (NOT the current directory): the workflow
+# reads fpga/timing.rpt and fpga/util.rpt, so the script must land there no
+# matter where it was started from.
+report_timing_summary -file $root/fpga/timing.rpt
 # ---- EVIDENCE: fully expanded critical paths (per-hop net fanout) -----------
 # report_timing_summary gives no per-hop `net (fo=NN)` detail, but this core is
 # ROUTE-bound (PITFALLS R36) -> optimization targets must be picked by FANOUT,
@@ -255,9 +373,26 @@ report_timing_summary -file timing.rpt
 # blocks) instead of 50 distinct paths. Dropping -nworst yields 50 distinct
 # worst-slack paths, each fully expanded with per-hop `net (fo=NN)`.
 report_timing -max_paths 50 -input_pins -file $root/fpga/timing_paths.rpt
-report_utilization -file util.rpt
+report_utilization -file $root/fpga/util.rpt
+
 # ===========================================================================
-# QSPI BOOT IMAGE SUPPORT  (2026-10-09, flash 固化)
+# X-06: TIMING-CLOSURE GATE -- must run BEFORE write_bitstream.
+# ---------------------------------------------------------------------------
+# Before this gate existed the flow only *reported* timing and then wrote a
+# bitstream anyway: a build with WNS < 0 produced a "normal looking" fmax, got
+# recorded as `keep`, and could even be programmed onto the board. A violating
+# build is now a FAILED build: no bitstream is written, Vivado exits non-zero,
+# and the harness sees BUILD_TIMING=FAIL.
+# ===========================================================================
+set TIMING_OK [br_timing_gate $root/fpga/timing.rpt BUILD]
+if {!$TIMING_OK} {
+  puts "BUILD_TIMING=FAIL"
+  error "BUILD_TIMING=FAIL: timing constraints are NOT met -> refusing to write a bitstream"
+}
+puts "BUILD_TIMING=PASS"
+
+# ===========================================================================
+# QSPI BOOT IMAGE SUPPORT  (2026-10-09, flash programming)
 # ---------------------------------------------------------------------------
 # Everything up to here builds a JTAG-loadable bitstream. A bitstream that the
 # FPGA can also read back OUT OF THE QSPI FLASH AT POWER-UP additionally needs
@@ -266,16 +401,16 @@ report_utilization -file util.rpt
 #
 # DEFAULT = NOTHING CHANGES (empty list -> no set_property, same output file).
 # Set SPI_BOOT_X4=1 for the vendor-recommended x4 image. These are the exact
-# primitives 正点原子 documents for this board in 《达芬奇Pro之FPGA开发指南 V2.2》
-# §5.3.13 程序固化 (book p.239), quoted verbatim:
+# primitives the board vendor documents in the Da Vinci Pro FPGA development
+# guide V2.2 section 5.3.13 "programming the flash" (book p.239), quoted
+# verbatim:
 #     set_property BITSTREAM.CONFIG.SPI_BUSWIDTH 4 [current_design]
 #     set_property CONFIG_MODE SPIx4 [current_design]
 #     set_property BITSTREAM.CONFIG.CONFIGRATE 50 [current_design]
 #     set_property CFGBVS VCCO [current_design]
 #     set_property CONFIG_VOLTAGE 3.3 [current_design]
 #     set_property BITSTREAM.CONFIG.UNUSEDPIN PULLUP [current_design]
-# Their stated reason: "为了生成的bit流文件转换成固化文件后能够适用于4bit位宽
-# SPI通信的Flash器件" (so the converted image suits a 4-bit-wide SPI flash).
+# Their stated reason: the converted image must suit a 4-bit-wide SPI flash.
 #
 # SPIBUSWIDTH is mandatory for the x4 image: write_cfgmem refuses to build an
 # SPIx4 image from a bitstream whose header says 1 --
@@ -313,6 +448,14 @@ foreach p {BITSTREAM.CONFIG.SPI_BUSWIDTH BITSTREAM.CONFIG.CONFIGRATE \
 }
 set BIT_NAME "cpu_a100t.bit"
 if {[info exists ::env(BIT_NAME)] && $::env(BIT_NAME) ne ""} { set BIT_NAME $::env(BIT_NAME) }
+# Keep BIT_NAME's meaning as a *name* (the harness records fpga/cpu_a100t.bit):
+# only an explicitly absolute BIT_NAME is used verbatim.
+if {[file pathtype $BIT_NAME] eq "absolute"} {
+  set BIT_PATH $BIT_NAME
+} else {
+  set BIT_PATH "$root/fpga/$BIT_NAME"
+}
 puts "BUILD_BIT_NAME=$BIT_NAME"
-write_bitstream -force $BIT_NAME
+puts "BUILD_BIT_PATH=$BIT_PATH"
+write_bitstream -force $BIT_PATH
 puts "BUILD_OK"

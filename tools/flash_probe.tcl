@@ -4,7 +4,8 @@
 # and prints the help text of the relevant commands.
 # Usage: vivado -mode batch -nojournal -nolog -source tools/flash_probe.tcl
 # ===========================================================================
-set root "D:/USER/Desktop/FPGA/FPGA"
+# E-02: derive the repo root from this script's own location (tools/ -> ..).
+set root [file normalize [file join [file dirname [info script]] ..]]
 set out  "$root/tools/flash_logs"
 file mkdir $out
 set fp [open "$out/parts_all.txt" w]

@@ -1,6 +1,7 @@
 # tools/flash_mkimage.tcl -- build bootable QSPI images from a bitstream.
 #
-# The vendor guide (正点原子 达芬奇Pro FPGA开发指南 V2.2, ch.5.3.13 程序固化) says
+# The vendor guide (ALIENTEK Da Vinci Pro FPGA development guide V2.2,
+# ch.5.3.13 "programming the flash") says
 # the bitstream must first carry the SPI boot primitives, and that EITHER an
 # .mcs OR a .bin image may be programmed. This script produces both.
 #
@@ -9,7 +10,9 @@
 #   IMG_IFACE SPIx1 | SPIx4        (default SPIx1)
 #   IMG_SIZE  flash size in MB     (default 16)
 #   IMG_TAG   output basename tag  (default derived from iface)
-set root "D:/USER/Desktop/FPGA/FPGA"
+# E-02: derive the repo root from this script's own location (tools/ -> ..),
+# so the flash tooling works from any machine/directory.
+set root [file normalize [file join [file dirname [info script]] ..]]
 set IMG_BIT   "$root/fpga/cpu_a100t.bit"
 set IMG_IFACE "SPIx1"
 set IMG_SIZE  "16"

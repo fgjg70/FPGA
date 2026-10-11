@@ -1,7 +1,8 @@
 # tools/flash_readback.tcl -- READ-ONLY dump of the QSPI flash content.
 # Uses readback_hw_cfgmem. Prints the help text so the exact option names are
 # captured as evidence, then reads the first FLASH_RB_LEN bytes.
-set root "D:/USER/Desktop/FPGA/FPGA"
+# E-02: derive the repo root from this script's own location (tools/ -> ..).
+set root [file normalize [file join [file dirname [info script]] ..]]
 set FLASH_PART   "mt25ql128-spi-x1_x2_x4"
 set FLASH_RB_LEN "4096"
 set FLASH_RB_ADDR "0"
