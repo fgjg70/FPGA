@@ -128,6 +128,8 @@ module core
 
   // ID/EX
   ctrl_s       id_ex_ctrl;
+  logic        id_ex_valid;      // EX 段这条指令是否真实有效 (气泡/flush = 0)
+  logic [31:0] id_ex_instr;      // EX 段这条指令的原始编码 (只给 mtval 用, 见 R-02)
   logic [31:0] id_ex_pc, id_ex_pc_plus4, id_ex_rs1_data, id_ex_rs2_data, id_ex_imm;
   logic [4:0]  id_ex_rs1, id_ex_rs2, id_ex_rd;
   logic        id_ex_pred_taken;
@@ -158,7 +160,7 @@ module core
   (* max_fanout = 16 *) logic  any_redir;
   logic [4:0]  trap_cause, irq_cause;
   logic [3:0]  exc_cause;
-  logic [31:0] trap_vector, mret_pc;
+  logic [31:0] trap_vector, mret_pc, trap_tval;
   logic        irq_pending, mret_taken, is_mret;
 
   // EX/MEM
@@ -512,6 +514,8 @@ module core
     .flush       (any_redir),
     .stall       (pipe_stall),
     .bubble      (id_ex_bubble),
+    .valid_in    (id_en),
+    .instr_in    (if_instr),
     .ctrl_in     (id_ctrl),
     .pc_in       (if_pc),
     .pc_plus4_in (if_pc_plus4),
@@ -524,6 +528,8 @@ module core
     .pred_taken_in  (if_pred_taken),
     .pred_target_in (if_pred_target),
     .ctrl        (id_ex_ctrl),
+    .valid       (id_ex_valid),
+    .instr       (id_ex_instr),
     .pc          (id_ex_pc),
     .pc_plus4    (id_ex_pc_plus4),
     .rs1_data    (id_ex_rs1_data),
@@ -693,7 +699,7 @@ module core
     .trap_req    (trap_req),
     .trap_cause  (trap_cause),
     .trap_pc     (id_ex_pc),
-    .trap_tval   (32'd0),
+    .trap_tval   (trap_tval),
     .trap_enter  (trap_enter),
     .trap_vector (trap_vector),
     .mret_req    (is_mret && !pipe_stall),
@@ -727,9 +733,29 @@ module core
                    : id_ex_ctrl.sys_op == SYS_ECALL ? CAUSE_ECALL_M
                    :                                  CAUSE_BREAKPOINT;
   // 中断优先级低于异常 (规范要求), 且不在 MRET 那一拍取中断。
-  assign irq_take  = irq_pending && !pipe_stall && !exc_req && !is_mret;
+  //
+  // 【R-01 修复 2026-10-11】必须再与 `id_ex_valid` 相与 —— "EX 段有真指令"。
+  //   原判据只看了 pipe_stall: 而 load-use 停顿的**下一拍** pipe_stall 已落下、
+  //   EX 里换成了 id_ex_reg 刚注入的气泡 (pc=0) —— 中断就在气泡上被接受,
+  //   `trap_pc = id_ex_pc = 0` -> mepc=0, 且 ID 里那条真消费者被 any_redir
+  //   一起冲掉、永不重执行 (MRET 后 PC=0, imem 只用 addr[13:2] -> 从头跑)。
+  //   为什么用 valid 位而不是"irq_take & !id_ex_bubble": 气泡可以由三种原因
+  //   产生 (load-use 注气泡、分支误判 flush、trap/mret flush), 只有显式 valid
+  //   位同时覆盖三者; 而 pipe_stall 只覆盖第一种。
+  //   为什么不会丢掉中断: irq_pending 是电平, 气泡期 veto 之后下一拍 (EX 是真
+  //   指令) 就会被取走, 只是晚一拍 —— 对电平中断没有正确性影响。
+  assign irq_take  = irq_pending && !pipe_stall && !exc_req && !is_mret && id_ex_valid;
   assign trap_req  = exc_req || irq_take;
   assign trap_cause = exc_req ? {1'b0, exc_cause} : irq_cause;
+  // ---- mtval (R-02 修复 2026-10-11) ----
+  // 规范: 非法指令异常时 mtval = **触发指令的编码**; ecall/ebreak 与中断为 0。
+  // csr_file.sv:14 的头注释早就这么承诺了, 但这里原来硬接 32'd0 ⇒ mtval 恒 0。
+  // 【为什么必须把指令带过 ID/EX】trap 在 EX 段裁决, 而那一刻 IF/ID(=ID 段)里
+  //   已经是**下一条**指令 —— `if_instr` 不是触发指令, 直接用它等于记错编码
+  //   (本工程最忌讳的"看起来对、实际错位")。代价: ID/EX 多 32 位寄存器。
+  // 【实测证据】修前 sim/prog 里一条 `0x0000007F` 的定向程序: mcause=2 ✓、
+  //   mepc=0x80000024 ✓、mtval=0 ✗ ⇒ tohost=103 失败; 修后 mtval=0x0000007F ✓。
+  assign trap_tval = id_ex_ctrl.illegal ? id_ex_instr : 32'd0;
   // 访存地址错异常 (CAUSE_LOAD/STORE_MISALIGN) 本核按"支持非对齐访存"处理,
   // 故不产生 —— tb_core 的 basic.hex 专门测了非对齐访存, 必须继续通过。
 
@@ -773,10 +799,19 @@ module core
   // ==========================================================================
   // EX/MEM
   // ==========================================================================
+  // 【.flush(trap_enter) —— 陷阱的精确性要求"触发指令被冲成气泡"】
+  // 这里只冲 trap_enter (不含分支预测错误的 redirect, 也不含 mret):
+  //   · redirect: EX 里是**分支自己**, 是真实指令, 必须提交;
+  //   · mret: 只改 CSR, 无数据副作用。
+  // 注意 **不要** 给下面的 u_mem_wb 也加 flush: 陷阱那一拍 MEM/WB 里是更老的
+  // 指令, 必须提交 —— 两边都冲就变成丢指令 (这是刻意的**不对称**)。
+  // 不变量: trap_enter=1 ⇒ hold_mem=0 (exc_req/irq_take 都被 !pipe_stall 门控,
+  // 而 hold_mem ⊆ pipe_stall), 所以 flush 与 stall 不会同拍冲突。
   ex_mem_reg u_ex_mem (
     .clk           (clk),
     .rst           (rst),
     .stall         (hold_mem),
+    .flush         (trap_enter),
     .ctrl_in       (id_ex_ctrl),
     .alu_out_in    (ex_result),
     .store_data_in (ex_rs2),         // store 数据 (前递后)
@@ -962,6 +997,9 @@ module core
   // ==========================================================================
   // MEM/WB 与 WB 段
   // ==========================================================================
+  // 【刻意不对称: 这里**没有** flush】陷阱只冲 EX/MEM (ex_mem_reg.flush) ——
+  // 陷阱那一拍 MEM/WB 里是"更老的指令", 它必须提交; 给 mem_wb_reg 加 flush
+  // 会把已经进入 WB 的正确指令丢掉 (丢指令比双执行更难查)。
   mem_wb_reg u_mem_wb (
     .clk          (clk),
     .rst          (rst),
@@ -1059,6 +1097,23 @@ module core
   always_ff @(posedge clk) begin
     if (!rst && any_redir && (pc_target[1:0] != 2'b00)) begin
       $error("instruction address misaligned: target=%h", pc_target);
+    end
+  end
+  `endif
+
+  // 【R-01 的机器化判据】trap 被接受那一拍, EX 段必须是一条**真指令**。
+  //   这条不变量正是 R-01 的根因: 中断曾在 load-use 停顿注入的气泡上被接受
+  //   (气泡的 id_ex_pc=0) -> mepc=0 + ID 里那条真指令被 any_redir 永久丢弃。
+  //   为什么必须有它: sim/prog/timer_irq.S 的测试 7 要靠 DELTA 标定值才能撞上
+  //   那个相位; 以后任何人改流水线相位, DELTA 会失配而"测试仍然绿"(静默失效)。
+  //   这条断言与相位无关 —— 只要 trap_enter 时 EX 不是真指令就直接报错。
+  //   (exc_req 的三个来源都带 id_ex_ctrl 判据、irq_take 已与 id_ex_valid 相与,
+  //    所以正常情况下它恒真。)
+  `ifndef SYNTHESIS
+  always_ff @(posedge clk) begin
+    if (!rst && trap_enter && !id_ex_valid) begin
+      $error("trap_enter on an invalid EX instruction (R-01 regression): pc=0x%08x cause=0x%02x",
+             id_ex_pc, trap_cause);
     end
   end
   `endif

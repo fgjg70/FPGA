@@ -5,6 +5,17 @@
 // ----------------------------------------------------------------------------
 // 气泡 = ctrl = '0, 所有枚举 0 值构成安全 NOP (见 rv32_pkg ctrl_s 注释)。
 //
+// 【valid —— "EX 段这条指令是否真实有效"】2026-10-11 新增 (R-01 修复的一部分)
+//   气泡/flush 时 pc 被清 0, 于是 `id_ex_pc` 本身**无法区分**"真指令在 0x0"
+//   与"这里是气泡" —— 而 trap 单元用 `trap_pc = id_ex_pc` 写 mepc。
+//   后果 (实测复现): 中断在 load-use 停顿注入的气泡上被接受 -> mepc = 0,
+//   同时 ID 里那条真指令被 any_redir 冲掉、永不重执行。
+//   所以必须有一个**显式**的有效位:
+//     valid_in = id_en (boot_done): 只有真正译码出来的指令才算有效
+//     气泡/flush/rst -> 0;  停顿 (!stall=0) 保持原值。
+//   core 侧用它否决中断 (irq_take &= id_ex_valid): 电平中断晚一拍取不影响正确性。
+// ============================================================================
+//
 // 【重要】stall 与 bubble 并 *不* 互斥: load_use=1 且 lsu_stall=0 时,
 // pipe_stall 与 id_ex_bubble 会同时为 1 (见 hazard_unit)。下面的优先级
 // (flush > bubble > stall) 是 *必需* 的, 不是防御性写法:
@@ -23,6 +34,8 @@ module id_ex_reg
   input  logic        flush,
   input  logic        stall,
   input  logic        bubble,
+  input  logic        valid_in,
+  input  logic [31:0] instr_in,
 
   input  ctrl_s       ctrl_in,
   input  logic [31:0] pc_in,
@@ -37,6 +50,8 @@ module id_ex_reg
   input  logic [31:0] pred_target_in,
 
   output ctrl_s       ctrl,
+  output logic        valid,          // EX 段这条指令是否**真实有效** (气泡/flush 为 0)
+  output logic [31:0] instr,          // 本条指令的**原始编码** (只为 mtval 携带, 见头注释)
   output logic [31:0] pc,
   output logic [31:0] pc_plus4,
   output logic [31:0] rs1_data,
@@ -52,6 +67,8 @@ module id_ex_reg
   always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
       ctrl      <= '0;
+      valid     <= 1'b0;
+      instr     <= '0;
       pc        <= '0;
       pc_plus4  <= '0;
       rs1_data  <= '0;
@@ -65,6 +82,8 @@ module id_ex_reg
     end
     else if (flush || bubble) begin
       ctrl      <= '0;
+      valid     <= 1'b0;
+      instr     <= '0;
       pc        <= '0;
       pc_plus4  <= '0;
       rs1_data  <= '0;
@@ -78,6 +97,8 @@ module id_ex_reg
     end
     else if (!stall) begin
       ctrl      <= ctrl_in;
+      valid     <= valid_in;
+      instr     <= instr_in;
       pc        <= pc_in;
       pc_plus4  <= pc_plus4_in;
       rs1_data  <= rs1_data_in;
