@@ -148,12 +148,13 @@ module core
   // 【C-10】前递选择: ID 段预选 (fwd_a_pre/fwd_b_pre) -> 随 ID/EX 打一拍
   // (id_ex_fwd_a/id_ex_fwd_b) -> EX 段前递 mux。`id_ex_fwd_*` 表示
   // "当前在 EX 的这条指令该选哪一路" (与 id_ex_* 同生命周期)。
-  fwd_sel_e    fwd_a_pre, fwd_b_pre;
-  // 【C-12b'】id_ex_fwd_a/b 是 C-10 的"前递预选"寄存器, 唯一负载是前递 mux 的
-  //   2×32 位选择锥 (实测 **fo=128**, 单跳布线 1.685ns)。加 max_fanout 让综合器
-  //   **就近复制**这些寄存器。判据 (寄存器网): **FF 数必须上升** (1290 -> ?, C-11
-  //   基线), FF 不动 = 属性被接受但没复制 = 空转, 回退 (PITFALLS R37-4 / R40-3)。
-  (* max_fanout = 16 *) fwd_sel_e id_ex_fwd_a, id_ex_fwd_b;
+  fwd_sel_e    fwd_a_pre, fwd_b_pre, id_ex_fwd_a, id_ex_fwd_b;
+  // 【C-12b' 已回退（实测负结果，2026-10-11）】曾给 id_ex_fwd_a/b 加
+  //   `(* max_fanout = 16 *)`：Q 侧扇出确实降了，但**每份副本多一条 CE 引脚**，
+  //   而 top-1 恰是 fo=252 的 ID/EX CE 网络 ⇒ 131.25 档 WNS −0.173 → **−0.543**
+  //   （差 0.37ns）；随后综合里真出现 `id_ex_fwd_a_reg[1]_rep__1` 副本，其 D 路径
+  //   成为新的 top-1（−0.517）。⇒ 寄存器网的 max_fanout 在这里是"以 CE 换 Q"，
+  //   净亏，已回退。教训并入 PITFALLS R37-4/R40-3 那一族。
   logic [31:0] ex_rs1, ex_rs2, ex_a, ex_b, ex_alu_out, ex_pc_target;
   logic [31:0] ex_amo_addr;      // RV32A: AMO 的访存地址 (rs1 + imm), 与算子解耦
   // RV32M
@@ -202,12 +203,9 @@ module core
   ctrl_s       mem_wb_ctrl;
   logic [31:0] mem_wb_alu_out, mem_wb_load_data, mem_wb_pc_plus4;
   logic [4:0]  mem_wb_rd;
-  // 【C-12b'】`mem_wb_ctrl.wb_src` 实测 **fo=93 / 单跳布线 1.171ns**, 且同时挂在
-  //   `fwd_wb_data` 与 `wb_data` 两个 mux 的选择端 —— 是 106 档 head 里 2.58ns
-  //   布线的一段 (逐跳证据见 .fpga-cache/reports/20261011-151158-cm_hw line 51-58)。
-  //   拉一个带 max_fanout 的**中间网**, 让综合器就近复制/分载驱动。
-  (* max_fanout = 16 *) wire [1:0] mem_wb_wb_src;
-  assign mem_wb_wb_src = mem_wb_ctrl.wb_src;
+  // 【C-12b' 已回退】曾为 `mem_wb_ctrl.wb_src` 拉一个 `(* max_fanout = 16 *)`
+  //   中间网 (`mem_wb_wb_src`) 以减少 fo=93 的 1.171ns 布线；与 `id_ex_fwd_a/b`
+  //   的属性**同一格测量**，整体净亏 0.37ns（见 EX 段声明处的记录），一并回退。
 
   // WB
   logic [31:0] wb_data;
@@ -672,12 +670,11 @@ module core
 `else
   wire [31:0] amo_wb_value = 32'd0;
 `endif
-  // 【C-12b'】选择端改用带 max_fanout 的中间网 mem_wb_wb_src (见声明处注释)
   wire [31:0] fwd_wb_data =
-        (mem_wb_wb_src != WB_MEM) ? ((mem_wb_wb_src == WB_PC4) ? mem_wb_pc_plus4
-                                                              : mem_wb_alu_out)
-      : mem_wb_ctrl.mem_read      ? mem_wb_load_data
-      :                             amo_wb_value;
+        (mem_wb_ctrl.wb_src != WB_MEM) ? ((mem_wb_ctrl.wb_src == WB_PC4) ? mem_wb_pc_plus4
+                                                                        : mem_wb_alu_out)
+      : mem_wb_ctrl.mem_read           ? mem_wb_load_data
+      :                                  amo_wb_value;
 
   always_comb begin
     // 前递 mux (C-10: 选择来自寄存器 id_ex_fwd_*, 不在本拍现算比较)
@@ -1307,8 +1304,7 @@ module core
   );
 
   always_comb begin
-    // 【C-12b'】选择端改用带 max_fanout 的中间网 (见声明处注释)
-    case (mem_wb_wb_src)
+    case (mem_wb_ctrl.wb_src)
 `ifdef LOAD_RESULT_REG
       // 【P3 实验C】从前递寄存器取, 而不是从"刚组合读出的数据"取 —— 这是砍掉
       // 关键路径的关键一步 (见 u_mem_wb 处注释)。
