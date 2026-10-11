@@ -14,6 +14,29 @@
 //   +imem=<file>        程序 hex
 //   +max_cycles=<N>     超时周期数 (默认 2_000_000; CoreMark 需要调大)
 //   +dump=<file>        VCD 波形 (可选)
+//   ---- 语义断言 (都不给 = 只观测, 不断言) ----
+//   +lu_bubbles=B       微基准里"距离1 (消费者紧接 load)"每险恰好 B 拍
+//                       (旧语义 1; C-2 起 2)。见 dump_log 断言块。
+//   +expect_hazards=N   微基准每阶段的冒险数 (lu_bench.S = 8*128 = 1024)
+//   +expect_d2_cost=N   微基准"距离2 (中间隔一条)"的总代价 (旧语义 0; C-2 = 1024)
+//   +expect_lu_stall=N  断言全局 load-use 停顿拍数 == N
+//   +expect_lu_events=N 断言 load-use 冒险事件数 == N
+//   +expect_flush=N     断言 if_id_flush 拍数 == N
+//   +expect_retire=N    断言真退休指令数 == N
+//   +dump_words=N       把日志区前 N 个 32 位字按 hex+十进制打出来 (微基准自量的数)
+//
+// 【统计口径 (2026-10-11 修正, 两处)】
+//   1) retire 分母: 旧版数 `mem_wb_ctrl != '0` 的**每一拍**, 而 hold_mem
+//      (= lsu_stall | ex_busy) 会冻结 MEM/WB、同一条指令被重复计数 ->
+//      CoreMark 基线自印 CPI=1.10 虚低。现排除冻结拍: 真退休 402720
+//      (hold_mem 14415 拍里有 71 拍 WB 段是气泡), 与 fetch 402723 差 3 拍,
+//      真 CPI = 1.1409 / IPC = 0.8765。
+//   2) 重定向代价: 旧版打印 `n_redirect * 2` (假设)。现直接数 if_id_flush 拍数:
+//      实测 11530 拍 / 11530 次 = 1.00 拍/次 (旧式虚报 23060 拍 = 5%)。
+//   另加 MMIO_MARK->MMIO_RESULT 测量窗口计数 (窗口内 cycles/fetch/stalls/事件)。
+//   【别把"窗口 load-use 停顿"当"改 2 拍的增量"】C-2 的 load_use_mem 还会把
+//   距离 2 的消费者纳入停顿 (旧语义免费): 基线窗口现值 28578, 真增量 36784
+//   (= 28578 + 8213 个新增距离2事件)。增量只能靠改前/改后两条日志相减。
 // ============================================================================
 
 module tb_sw;
@@ -72,6 +95,50 @@ module tb_sw;
 
   wire [31:0] tohost_word = u_dut.u_dmem.mem[TOHOST_IDX];
 
+  // ---------------------------------------------------------------------------
+  // 【测量窗口计数】MMIO_MARK(0xA0000020) -> MMIO_RESULT(0xA0000024)
+  // 软件侧 start_time()/stop_time() 的 ticks 就是这个区间 (core_portme.c)。
+  // 为什么必须有: CoreMark 的 "Total ticks = 413070" **只是测量区间**内的周期,
+  // 而 TB 的全局 n_stall_lu 含启动/初始化。要精确预言 C-2 把 load-use 从
+  // 1 拍改成 2 拍后 ticks 涨多少, 必须数"窗口内的 load-use 停顿拍数"。
+  // (声明必须在这里: 下面 MMIO 监视器与启动 initial 都要用。)
+  // ---------------------------------------------------------------------------
+  logic        in_window = 1'b0;
+  int unsigned n_win_cycles = 0;
+  int unsigned n_win_fetch = 0;
+  int unsigned n_win_stall = 0;
+  int unsigned n_win_stall_lu = 0;
+  int unsigned n_win_lu_events = 0;
+  // load_use 与 lsu_stall/ex_busy **同拍**的拍数。这类拍已经被别的理由冻住了,
+  // 多插的气泡**不增加周期** —— 所以"停顿拍数"与"多花的周期数"不是一回事。
+  // 基线 (1 拍语义) 实测全局 n_stall == load-use+muldiv+split (差 0, overlap=0);
+  // C-2 起 overlap = 990 (CoreMark), 所以窗口周期差 ≠ 窗口停顿差。要看真代价
+  // 只能用"窗口 cycles 前后对比", 不能用停顿数直接推。
+  int unsigned n_win_lu_overlap = 0;
+
+  // ---------------------------------------------------------------------------
+  // 【语义断言】默认全部关闭 (值为 0 = 不断言), 只由 plusarg 显式打开。
+  // 这样 tb_sw 对 CoreMark / hello / nn_demo 仍是"只观测", 而微基准 lu_bench.S
+  // 用 +lu_bubbles / +expect_hazards / +expect_d2_cost 把语义钉死。
+  // ---------------------------------------------------------------------------
+  int exp_lu_stall = 0;    // +expect_lu_stall=N : 断言 load-use 停顿拍数恰好 N
+  int exp_lu_events = 0;   // +expect_lu_events=N: 断言 load-use 冒险事件数恰好 N
+  int exp_flush = 0;       // +expect_flush=N    : 断言冲刷拍数恰好 N
+  int exp_retire = 0;      // +expect_retire=N   : 断言真退休指令数恰好 N
+  // +lu_bubbles=B : 微基准"距离1 (消费者紧接 load)"每险恰好 B 拍。**不是**
+  // n_stall_lu == B*n_lu_events —— C-2 起 n_stall_lu 还含"距离2"那一类, 两者
+  // 不再是同一个数 (实测 C-2: 3072 拍 vs 2048 事件)。见 dump_log 的断言块。
+  int lu_bubbles = 0;
+  // 微基准把"程序自己量的数"以原始 32 位字写在日志区开头 (0x90003000), 字符串
+  // dump 会在第一个 0 字节停住; 这个开关让 TB 把前 N 个字按 hex+十进制打出来。
+  int dump_words = 0;      // +dump_words=N      : 打印日志区前 N 个 32 位字
+  // 微基准 lu_bench.S 的代价断言参数 (见 dump_log 里的断言块):
+  //   +lu_bubbles=B      距离1 (消费者紧接 load) 每险恰好 B 拍
+  //   +expect_hazards=N  每阶段冒险数 (lu_bench.S = K*I = 8*128 = 1024)
+  //   +expect_d2_cost=N  距离2 (中间隔一条) 的总代价 (旧语义 0; C-2 起 = 冒险数)
+  int expect_hazards = 1024;
+  int expect_d2_cost = 0;
+
   // ---- 上板跑分上报路径监视 ----
   // 软件在测量区间起点写 MMIO_MARK, 结束时把最终 tick 数写进 MMIO_RESULT。
   // 上板时这两个信号喂给 ILA (串口不通, 只能走 JTAG 读回), 这里先在仿真里
@@ -85,12 +152,17 @@ module tb_sw;
       saw_mark   <= 1'b0;
       saw_result <= 1'b0;
       hw_result  <= 32'd0;
+      in_window  <= 1'b0;
     end
     else begin
-      if (ext_we && (ext_addr == MMIO_MARK_A))   saw_mark   <= 1'b1;
+      if (ext_we && (ext_addr == MMIO_MARK_A)) begin
+        saw_mark  <= 1'b1;
+        in_window <= 1'b1;      // 测量区间起点 (软件 start_time)
+      end
       if (ext_we && (ext_addr == MMIO_RESULT_A)) begin
         saw_result <= 1'b1;
         hw_result  <= ext_wdata;
+        in_window  <= 1'b0;     // 测量区间终点 (软件 stop_time)
       end
     end
   end
@@ -102,6 +174,18 @@ module tb_sw;
       if ($value$plusargs("dump=%s", f)) begin $dumpfile(f); $dumpvars(0, tb_sw); end
     end
     if (!$value$plusargs("max_cycles=%d", max_cycles)) max_cycles = 2000000;
+    // 语义断言开关 (不给 plusarg 就全部为 0 = 不断言, 保持 tb_sw 的"只观测"属性)
+    void'($value$plusargs("expect_lu_stall=%d",  exp_lu_stall));
+    void'($value$plusargs("expect_lu_events=%d", exp_lu_events));
+    void'($value$plusargs("expect_flush=%d",     exp_flush));
+    void'($value$plusargs("expect_retire=%d",    exp_retire));
+    void'($value$plusargs("lu_bubbles=%d",       lu_bubbles));
+    void'($value$plusargs("dump_words=%d",       dump_words));
+    void'($value$plusargs("expect_hazards=%d",   expect_hazards));
+    void'($value$plusargs("expect_d2_cost=%d",   expect_d2_cost));
+    if (exp_lu_stall || exp_lu_events || exp_flush || exp_retire || lu_bubbles)
+      $display("[tb_sw] 语义断言已开启: lu_stall=%0d lu_events=%0d flush=%0d retire=%0d bubbles=%0d",
+               exp_lu_stall, exp_lu_events, exp_flush, exp_retire, lu_bubbles);
     repeat (4) @(posedge clk);
     rst = 1'b0;
     $display("[tb_sw] reset released, max_cycles=%0d", max_cycles);
@@ -141,11 +225,32 @@ module tb_sw;
 
   // ---- 性能剖析 (层次化引用 core 内部信号; 纯仿真手段, 不改 RTL) ----
   // 目的: 在优化之前先量清楚周期花在哪 —— 分支惩罚、load-use 停顿、拆分访存。
-  int unsigned n_fetch = 0;      // IF/ID 前进的周期数 ≈ 取回指令数
-  int unsigned n_redirect = 0;   // 重定向次数 (taken 分支 / JAL / JALR)
+  int unsigned n_fetch = 0;      // IF/ID 前进的周期数 ≈ 取回(发射)指令数
+  int unsigned n_redirect = 0;   // 重定向次数 = 预测错误数 (redirect 是"预测错", 不是"分支 taken")
+  int unsigned n_flush = 0;      // if_id_flush 拍数 = **实测**的重定向代价 (不再是假设的 2 拍)
   int unsigned n_stall = 0;      // pipe_stall 周期数
   int unsigned n_stall_lsu = 0;  // 其中拆分访存造成的
-  int unsigned n_wb = 0;         // MEM/WB 非气泡周期数 ≈ 退休指令数(不含 NOP)
+  // ---------------------------------------------------------------------------
+  // 【真退休计数 — 2026-10-11 口径修正】
+  // 旧口径 `if (mem_wb_ctrl != '0) n_wb++` 是**每拍都数**: 而 hazard_unit 的
+  //   hold_mem = lsu_stall || ex_busy
+  // 会让 EX/MEM 与 MEM/WB 一起冻结, 同一条指令在 WB 段被**重复观测**。
+  // 实测 (CoreMark 基线): n_wb=417064, 而 hold_mem 拍数 = muldiv busy 14415
+  //   (split-mem=0) => 真退休 = 402649, 与独立计数的 fetch=402723 只差 74 拍
+  //   (0.018%)。旧口径让自印 CPI = 459460/417064 = 1.102 (虚低 3.5%)。
+  //
+  // 修正: 只在"WB 段真的前进"的拍上计一次 (排除 hold_mem 冻结拍)。
+  // n_wb_raw 保留旧口径, 只用于对账 (两者之差必须 == hold_mem 拍数)。
+  // ---------------------------------------------------------------------------
+  int unsigned n_wb = 0;         // **真退休指令数** (排除 hold_mem 冻结拍)
+  int unsigned n_wb_raw = 0;     // 旧口径: mem_wb_ctrl != '0 的拍数 (含重复计数)
+  int unsigned n_both = 0;       // pipe_stall 与 if_id_flush 同拍的拍数 (对账用)
+  int unsigned n_hold_mem = 0;   // hold_mem 拍数 (对账: n_wb_raw - n_wb 必须等于它)
+  // load-use **冒险事件数** (load_use 上升沿)。1 拍气泡语义下它 == n_stall_lu;
+  // 2 拍气泡语义下 n_stall_lu == bubbles * n_lu_events。用这两个数的关系来自证
+  // "每条 load-use 恰好插了 N 拍气泡", 而不是只看总数拍脑袋。
+  int unsigned n_lu_events = 0;
+  logic        lu_d = 1'b0;
   // 重定向分类: 决定分支预测该怎么做
   int unsigned n_bcond = 0;      // 条件分支 *总数* (不论跳不跳)
   int unsigned n_br_taken = 0;   // 条件分支 taken (BEQ/BNE/BLT/...)
@@ -222,12 +327,33 @@ module tb_sw;
 
       if (!u_dut.if_id_flush && !u_dut.pipe_stall) n_fetch++;
       if (u_dut.redirect)    n_redirect++;
+      if (u_dut.if_id_flush) n_flush++;            // 实测的重定向代价 (拍)
       if (u_dut.pipe_stall)  n_stall++;
+      if (u_dut.pipe_stall && u_dut.if_id_flush) n_both++;
       if (u_dut.lsu_stall)   n_stall_lsu++;
-      if (u_dut.mem_wb_ctrl != '0) n_wb++;
+      // 【真退休】只数 WB 段真正前进的拍 (排除 hold_mem 冻结拍, 见声明处注释)
+      if (u_dut.mem_wb_ctrl != '0) begin
+        n_wb_raw++;
+        if (!u_dut.u_hazard.hold_mem) n_wb++;
+      end
+      if (u_dut.u_hazard.hold_mem) n_hold_mem++;
+
+      // ---- 测量窗口 (MMIO_MARK -> MMIO_RESULT) ----
+      if (in_window) begin
+        n_win_cycles++;
+        if (!u_dut.if_id_flush && !u_dut.pipe_stall) n_win_fetch++;
+        if (u_dut.pipe_stall) n_win_stall++;
+        if (u_dut.u_hazard.load_use) n_win_stall_lu++;
+        if (u_dut.u_hazard.load_use && !lu_d) n_win_lu_events++;
+        if (u_dut.u_hazard.load_use && (u_dut.lsu_stall || u_dut.md_busy)) n_win_lu_overlap++;
+      end
 
       // 停顿构成 (pipe_stall = load_use || lsu_stall || ex_busy)
       if (u_dut.u_hazard.load_use) n_stall_lu++;   // load_use 在 hazard_unit 内部
+      // load-use **事件** (上升沿): 2 拍气泡语义下 load_use 会连续两拍为 1,
+      // n_stall_lu = 2 * n_lu_events; 1 拍语义下两者相等。断言就建立在二者关系上。
+      if (u_dut.u_hazard.load_use && !lu_d) n_lu_events++;
+      lu_d <= u_dut.u_hazard.load_use;
       if (u_dut.lsu_stall) n_stall_ls++;
       if (u_dut.md_busy)   n_stall_ex++;
       // load 在 MEM 段且本拍流水线前进 -> 一次 load "消耗" 一个 MEM 周期
@@ -323,19 +449,76 @@ module tb_sw;
       $write("%c", b);
     end
     $display("  --- end of output ---");
+    if (dump_words != 0) begin
+      $display("  --- log words (微基准自量的原始数) ---");
+      for (int i = 0; i < dump_words; i++)
+        $display("  log[%0d] = 0x%08x  (%0d)", i,
+                 u_dut.u_dmem.mem[LOG_IDX + i], u_dut.u_dmem.mem[LOG_IDX + i]);
+    end
     $display("  --- profile ---");
     $display("  cycles     = %0d", cycles);
-    $display("  fetch      = %0d", n_fetch);
-    $display("  retire(wb) = %0d", n_wb);
-    $display("  redirects  = %0d   (每刺损失 2 拍 -> 约 %0d 周期 = %0d%%)",
-             n_redirect, n_redirect * 2, (n_redirect * 200) / (cycles == 0 ? 1 : cycles));
-    $display("  stalls     = %0d   (拆分访存 %0d) = %0d%%",
+    $display("  fetch      = %0d   (IF/ID 前进的拍数 = 发射指令数)", n_fetch);
+    // 【口径修正】旧行是 `retire(wb) = mem_wb_ctrl != '0 的拍数`, 被 hold_mem 冻结拍
+    // 重复计数(实测虚高 14415)。现在两行都打, 差额必须 == hold_mem 拍数。
+    $display("  retire(wb) = %0d   <- 真退休 (已排除 hold_mem 冻结拍)", n_wb);
+    $display("  retire(raw)= %0d   <- 旧口径 (含冻结重复计数; 差 %0d = hold_mem 拍数 %0d)",
+             n_wb_raw, n_wb_raw - n_wb, n_hold_mem);
+    // 【口径修正】旧行把"每次重定向 2 拍"当常数乘上去 (假设不是实测)。
+    // 现在直接数 if_id_flush 拍数, 代价 = n_flush / n_redirect。
+    $display("  redirects  = %0d   实测冲刷拍数 = %0d  -> 每次 %0d.%02d 拍  (旧行假设 2 拍 -> 虚报 %0d 周期)",
+             n_redirect, n_flush,
+             n_redirect == 0 ? 0 : n_flush / n_redirect,
+             n_redirect == 0 ? 0 : ((n_flush * 100) / n_redirect) % 100,
+             n_redirect * 2);
+    $display("  stalls     = %0d   (其中拆分访存 %0d) = %0d%%",
              n_stall, n_stall_lsu, (n_stall * 100) / (cycles == 0 ? 1 : cycles));
+    // ---- 周期对账: cycles 应当 = fetch + flush + stall - 同拍重叠 + 残差 ----
+    begin : acct
+      int signed accounted, residual;
+      accounted = int'(n_fetch) + int'(n_flush) + int'(n_stall) - int'(n_both);
+      residual  = int'(cycles) - accounted;
+      $display("  --- cycle accounting (自证口径无遗漏) ---");
+      $display("  cycles(%0d) = fetch(%0d) + flush(%0d) + stall(%0d) - both(%0d) + 残差(%0d)",
+               cycles, n_fetch, n_flush, n_stall, n_both, residual);
+      $display("  残差应为 0 (只允许收尾竞态的 ±2); 非 0 说明还有一类周期没被数到");
+      $display("  stall 构成和 = load-use(%0d) + split-mem(%0d) + muldiv(%0d) = %0d  (与 pipe_stall 拍数差 %0d)",
+               n_stall_lu, n_stall_ls, n_stall_ex, n_stall_lu + n_stall_ls + n_stall_ex,
+               (n_stall >= n_stall_lu + n_stall_ls + n_stall_ex)
+                 ? n_stall - (n_stall_lu + n_stall_ls + n_stall_ex)
+                 : (n_stall_lu + n_stall_ls + n_stall_ex) - n_stall);
+      // retire 与 fetch 的独立互证: 两条独立计数路径 (WB 段 vs IF/ID 段) 之差
+      // 只允许是收尾竞态。差 > 几十拍就说明 retire 口径还有问题。
+      $display("  互证: fetch - retire = %0d  (应为 0±3; 大偏差 = 口径还有洞)",
+               (n_fetch >= n_wb) ? int'(n_fetch - n_wb) : -int'(n_wb - n_fetch));
+    end
     $display("  --- hardware score reporting ---");
     $display("  MMIO_MARK written   = %0d", saw_mark);
-    $display("  MMIO_RESULT written = %0d   value (ticks) = %0d", saw_result, hw_result);
+    // 【口径修正】旧行把打包值当 ticks 直接打印 (显示 2147896718, 无法判读)。
+    // core_portme.c: MMIO_RESULT = {bit31 = CRC 全对, [30:0] = ticks}。
+    $display("  MMIO_RESULT written = %0d   raw=0x%08x   CRC-valid=%0d   ticks=%0d",
+             saw_result, hw_result, hw_result[31], hw_result[30:0]);
+    $display("  --- measurement window (MMIO_MARK -> MMIO_RESULT = CoreMark ticks 区间) ---");
+    $display("  window cycles   = %0d   (软件自报 ticks = %0d, 差 %0d)",
+             n_win_cycles, hw_result[30:0],
+             (n_win_cycles > hw_result[30:0]) ? n_win_cycles - hw_result[30:0]
+                                              : hw_result[30:0] - n_win_cycles);
+    $display("  window fetch    = %0d", n_win_fetch);
+    $display("  window stalls   = %0d", n_win_stall);
+    // 【口径】这一行是**当前实现在本窗口内的实测值**, 不是"改成 2 拍后的增量"。
+    // 曾经把它当增量报过一次, 结果低估 22%: C-2 的 load_use_mem 还会把"距离 2
+    // 的消费者"纳入停顿 (旧语义完全免费), 所以增量 = 新覆盖的冒险数 x 1 拍,
+    // **必须用改前/改后两条日志的 window cycles 相减**, 不能拿现值当增量。
+    $display("  window load-use = %0d 拍 / %0d 冒险事件  (当前实现实测; 平均 %0d.%02d 拍/事件)",
+             n_win_stall_lu, n_win_lu_events,
+             (n_win_lu_events == 0) ? 0 : n_win_stall_lu / n_win_lu_events,
+             (n_win_lu_events == 0) ? 0 : ((n_win_stall_lu * 100) / n_win_lu_events) % 100);
+    $display("  window lu overlap (与 lsu/ex 同拍) = %0d   <- 这类拍不额外增加周期, 故代价要看 window cycles 差值",
+             n_win_lu_overlap);
     $display("  --- stall breakdown ---");
-    $display("  load-use   = %0d  (%0d%%)", n_stall_lu, (n_stall_lu * 100) / (cycles == 0 ? 1 : cycles));
+    $display("  load-use   = %0d  (%0d%%)   冒险事件 = %0d  -> 平均 %0d.%02d 拍/事件",
+             n_stall_lu, (n_stall_lu * 100) / (cycles == 0 ? 1 : cycles), n_lu_events,
+             n_lu_events == 0 ? 0 : n_stall_lu / n_lu_events,
+             n_lu_events == 0 ? 0 : ((n_stall_lu * 100) / n_lu_events) % 100);
     $display("  split-mem  = %0d", n_stall_ls);
     $display("  muldiv busy= %0d", n_stall_ex);
     // 【代价估算用】每让一次 load 多占 1 个 MEM 周期, 时间就多 n_load/cycles
@@ -388,9 +571,63 @@ module tb_sw;
              n_bcond, n_br_taken, n_bcond == 0 ? 0 : (n_br_taken * 100) / n_bcond);
     $display("  JAL  = %0d", n_jal);
     $display("  JALR = %0d   <- 函数返回, 简单 BTB 难以预测, 需要 RAS", n_jalr);
-    if (n_wb != 0)
-      $display("  CPI        = %0d.%02d  (cycles/wb)",
-               cycles / n_wb, ((cycles * 100) / n_wb) % 100);
+    // 【口径修正】旧行 CPI = cycles / (mem_wb_ctrl!=0 的拍数) 分母虚高 -> CPI 虚低
+    // (CoreMark 基线自印 1.10, 真值 1.141)。现在分母是真退休数, 并同时给 IPC。
+    if (n_wb != 0) begin
+      $display("  CPI        = %0d.%03d   (cycles/retire, 真退休分母)",
+               cycles / n_wb, ((cycles * 1000) / n_wb) % 1000);
+      $display("  IPC        = %0d.%03d   (retire/cycles)",
+               (n_wb * 1000) / (cycles == 0 ? 1 : cycles) / 1000,
+               ((n_wb * 1000) / (cycles == 0 ? 1 : cycles)) % 1000);
+    end
+
+    // ========================================================================
+    // 【语义断言】只在显式给 plusarg 时生效 (+lu_bubbles / +expect_*)。
+    // 微基准 lu_bench.S 有三个**指令数逐字相同**的阶段, 只差消费者相对 load 的
+    // 位置: 距离 3 (无冒险) / 距离 2 / 距离 1。它把三个阶段自量的周期数写在
+    // log[0]=cycA / log[1]=cycB / log[2]=cycC。于是:
+    //     距离1 代价 = cycC - cycA = lu_bubbles * expect_hazards
+    //     距离2 代价 = cycB - cycA = expect_d2_cost
+    // 【为什么要分距离量 (2026-10-11 C-2 实测教训)】C-2 把"load 在 MEM 且 ID
+    //   依赖它"也算停顿, 于是距离 2 的消费者**从免费变成停 1 拍**。只看"距离 1
+    //   事件 × 1 拍"会漏掉这一整块 (CoreMark 上漏了 8213 次), 把代价低估 22%。
+    // 同时用 TB 侧的 n_stall_lu 独立复核 (两条证据来源不同, 都对才算数)。
+    // 数据正确性由程序自己的 checksum 保证: 被扣住的消费者读完 load 后累加,
+    // 与 3*128*36 不符就写 tohost!=1 -> tb_sw 的 tohost 判据直接 FAIL。
+    // ========================================================================
+    if (lu_bubbles != 0) begin
+      int signed cycA, cycB, cycC, d1, d2;
+      cycA = int'(u_dut.u_dmem.mem[LOG_IDX + 0]);
+      cycB = int'(u_dut.u_dmem.mem[LOG_IDX + 1]);
+      cycC = int'(u_dut.u_dmem.mem[LOG_IDX + 2]);
+      d1 = cycC - cycA;
+      d2 = cycB - cycA;
+      $display("  [断言] 微基准自量: cycA=%0d cycB=%0d cycC=%0d  |  距离1 代价=%0d (期望 %0d)  距离2 代价=%0d (期望 %0d)",
+               cycA, cycB, cycC, d1, lu_bubbles * expect_hazards, d2, expect_d2_cost);
+      if (d1 != lu_bubbles * expect_hazards)
+        $fatal(1, "[tb_sw] FAIL: 距离1 load-use 代价 %0d != 期望 %0d (= %0d 冒险 x %0d 拍)",
+               d1, lu_bubbles * expect_hazards, expect_hazards, lu_bubbles);
+      if (d2 != expect_d2_cost)
+        $fatal(1, "[tb_sw] FAIL: 距离2 load-use 代价 %0d != 期望 %0d",
+               d2, expect_d2_cost);
+      if (n_stall_lu != lu_bubbles * expect_hazards + expect_d2_cost)
+        $fatal(1, "[tb_sw] FAIL: TB 侧 load-use 停顿 %0d != 期望 %0d (= 距离1 %0d + 距离2 %0d)",
+               n_stall_lu, lu_bubbles * expect_hazards + expect_d2_cost,
+               lu_bubbles * expect_hazards, expect_d2_cost);
+      $display("  [断言] 距离1 = %0d 拍/冒险, 距离2 = %0d 拍/冒险; TB 侧 n_stall_lu = %0d 全部符合  OK",
+               lu_bubbles, (expect_hazards == 0) ? 0 : expect_d2_cost / expect_hazards, n_stall_lu);
+    end
+    if (exp_lu_events != 0 && n_lu_events != exp_lu_events)
+      $fatal(1, "[tb_sw] FAIL: load-use 事件数 期望 %0d 实测 %0d", exp_lu_events, n_lu_events);
+    if (exp_lu_stall != 0 && n_stall_lu != exp_lu_stall)
+      $fatal(1, "[tb_sw] FAIL: load-use 停顿拍数 期望 %0d 实测 %0d", exp_lu_stall, n_stall_lu);
+    if (exp_flush != 0 && n_flush != exp_flush)
+      $fatal(1, "[tb_sw] FAIL: if_id_flush 拍数 期望 %0d 实测 %0d", exp_flush, n_flush);
+    if (exp_retire != 0 && n_wb != exp_retire)
+      $fatal(1, "[tb_sw] FAIL: 真退休指令数 期望 %0d 实测 %0d", exp_retire, n_wb);
+    if (exp_lu_stall || exp_lu_events || exp_flush || exp_retire)
+      $display("  [断言] expect_* 全部满足 (lu_stall=%0d lu_events=%0d flush=%0d retire=%0d)",
+               n_stall_lu, n_lu_events, n_flush, n_wb);
     // 【W-03】取指对齐自检必须**判失败**, 不能只打印红字然后照旧 PASS。
     // 这条检查是 "IMEM 寄存读" 那次改动 (R30) 的唯一安全网: 静默错位的症状是
     // 程序行为莫名错乱, 而本 tb 之前无论 n_align_err 是多少都打印 RESULT : PASS。
