@@ -82,7 +82,7 @@ module top_a100t
 
   MMCME2_BASE #(
     .BANDWIDTH          ("OPTIMIZED"),
-    .CLKFBOUT_MULT_F    (18.75),     // VCO = 50 * 20.5 / 1 = 1025 MHz  (600~1200 OK)
+    .CLKFBOUT_MULT_F    (19.0),     // VCO = 50 * 20.5 / 1 = 1025 MHz  (600~1200 OK)
     .CLKFBOUT_PHASE     (0.0),
     .CLKIN1_PERIOD      (20.000),   // 板载 50 MHz
     .CLKOUT0_DIVIDE_F   (8.0),      // 1025 / 8 = 128.125 MHz (精确; 阶梯 105 -> 128.125)
@@ -175,7 +175,7 @@ module top_a100t
   logic        score_mark, score_done;
 
   mmio_subsys #(
-    .CLK_HZ  (117_187_500),        // 必须跟着 MMCM 改: 周期计数器/定时器按它分频
+    .CLK_HZ  (118_750_000),        // 必须跟着 MMCM 改: 周期计数器/定时器按它分频
     .BAUD_HZ (115_200)
   ) u_mmio (
     .clk           (sys_clk_core),
