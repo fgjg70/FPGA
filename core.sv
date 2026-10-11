@@ -746,8 +746,17 @@ module core
     // 【C-15】错路 X0 不许启动 muldiv —— 否则一个错路 DIV 会把流水线冻结 ~32 拍
     //   (功能仍安全: 不进 MEM、不写回, 但白等)。op 钉成 ALU_ADD 即整台惰性。
     .op     (redir_kill ? ALU_ADD : id_ex_ctrl.alu_op),
-    .a      (ex_a),
-    .b      (ex_b),
+    // 【C-12a】操作数**直取 ex_rs1/ex_rs2**, 不再经 ALU_A/ALU_B 操作数 mux。
+    //   等价性依据 (control_unit.sv:57-98): M 扩展走 OPC_REG R 型路径 ⇒
+    //     alu_a_src 保持默认 ALU_A_RS1、alu_b_src 显式 ALU_B_RS2
+    //   ⇒ 对 MUL/MULH/MULHSU/MULHU/DIV/DIVU/REM/REMU 恒有 `ex_a ≡ ex_rs1`、
+    //     `ex_b ≡ ex_rs2` —— **逐位等价**的改写, 不是近似。
+    //   (AMO 的 alu_b_src=ALU_B_IMM 不影响: `is_muldiv` 只认上面那 8 个 alu_op,
+    //    AMO 走 ALU_AMO_*, 本来就不进 muldiv。)
+    // 动机: C-15 之后 top-1 就是这条 DSP 输入路径 (6.795ns / 4 级), 其中第二个
+    //   LUT6 正是 ALU 操作数 mux ⇒ 这一改把它从 DSP 的输入锥里去掉。
+    .a      (ex_rs1),
+    .b      (ex_rs2),
     .result (md_result),
     .busy   (md_busy)
   );
