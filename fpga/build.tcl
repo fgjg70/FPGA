@@ -275,13 +275,22 @@ if {[info exists ::env(RETIMING)] && $::env(RETIMING) ne ""} {
 # Also newly exposed here: -resource_sharing. ref5's V4 used
 # `-resource_sharing off` as part of a +9.16 MHz batch, but this core never had
 # the knob at all (it was not in any build script).
-set SYNTH_OPT [list]
+# ---- DEFAULT = AlternateRoutability (measured 2026-10-11, post-C11 netlist) ----
+# Why this is the default rather than Vivado's "default":
+#   post-C11 netlist (fmax 92.6, route-dominated F->F wall):
+#     Vivado default          92.6
+#     AlternateRoutability    97.2   <-- +5.0%, chosen
+#     FewerCarryChains        89.8   <-- worse
+#     phys_opt Explore        92.6   <-- no change on this netlist (was +1.7 on the old one)
+#   NOTE: a directive that wins on one netlist can invert on another (C-12a measured
+#   +0.76% under the default directive but -5.3% under AlternateRoutability), so this
+#   default must be re-measured after every structural RTL change.
+set SYNTH_DIR "AlternateRoutability"
 if {[info exists ::env(SYNTH_DIRECTIVE)] && $::env(SYNTH_DIRECTIVE) ne ""} {
-  lappend SYNTH_OPT -directive $::env(SYNTH_DIRECTIVE)
-  puts "BUILD_SYNTH_DIRECTIVE=$::env(SYNTH_DIRECTIVE)"
-} else {
-  puts "BUILD_SYNTH_DIRECTIVE_OFF=1"
+  set SYNTH_DIR $::env(SYNTH_DIRECTIVE)
 }
+lappend SYNTH_OPT -directive $SYNTH_DIR
+puts "BUILD_SYNTH_DIRECTIVE=$SYNTH_DIR"
 if {[info exists ::env(RESOURCE_SHARING)] && $::env(RESOURCE_SHARING) ne ""} {
   lappend SYNTH_OPT -resource_sharing $::env(RESOURCE_SHARING)
   puts "BUILD_RESOURCE_SHARING=$::env(RESOURCE_SHARING)"
@@ -356,7 +365,7 @@ puts "BUILD_PROG=$PROG"
 # Tighter is NOT better: lost placement freedom outweighs the shorter spans.
 # NOTE: the range is part-specific. For another device (or the migration target)
 # pass PBLOCK_RANGE=off, or a valid range for that device.
-set PB_RANGE "CLOCKREGION_X0Y1:CLOCKREGION_X2Y4"
+set PB_RANGE "CLOCKREGION_X0Y1:CLOCKREGION_X2Y2"
 set PB_CELLS "u_core"
 set PB_ON    1
 if {[info exists ::env(PBLOCK_RANGE)] && $::env(PBLOCK_RANGE) ne ""} {

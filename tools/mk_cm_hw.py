@@ -62,6 +62,30 @@ def read_clk_hz() -> int:
     return 70_000_000
 
 
+def read_ticks_per_iter():
+    """从最近一次 CoreMark 仿真日志读"每迭代周期数" —— expect_tick 的唯一来源。
+
+    CoreMark 的 `Total ticks` 是**周期数**, 与主频无关, 所以它随流水线语义变化:
+      C-2 之前 413,033 拍/迭代; C-2+C-11 之后 460,311 拍/迭代 (+11.4%)。
+    硬编码任何一个值都会让上板的 tick 偏差判据失真(低则假失败, 高则放过回归)。
+    返回 None 表示读不到 —— 调用方必须 BLOCK, 不许退回常数。
+    """
+    log = os.path.join(REPO, ".fpga-cache", "logs", "tb_sw_coremark.log")
+    try:
+        with open(log, encoding="utf-8", errors="replace") as f:
+            txt = f.read()
+    except OSError:
+        return None
+    m = re.search(r"Total ticks\s*:\s*(\d+)", txt)
+    it = re.search(r"Iterations\s*:\s*(\d+)", txt)
+    if not m or not it:
+        return None
+    n = int(it.group(1))
+    if n <= 0:
+        return None
+    return int(m.group(1)) // n
+
+
 def main():
     if len(sys.argv) > 1:
         iters = int(sys.argv[1])
@@ -116,9 +140,26 @@ def main():
     # 该文件被 .gitignore 忽略 (sim/prog/*.build.json), 是**构建产物**不是源码。
     # ------------------------------------------------------------------
     clk_hz = clk_hz                     # 与编译期 -D HW_CLK_HZ 同源 (见 read_clk_hz)
-    # 预期拍数按实测基准外推 (1300 迭代 = 536,943,384 拍); 以实测为准, 这里只做等待窗口
-    expect_tick = int(round(536_943_384 / 1300 * iters))
-    # 必须 > 实际运行时间: int(17.70) + 5 = 22 s, 与 build-repo 的契约一致
+    # ------------------------------------------------------------------
+    # 【expect_tick 必须从**当前**仿真日志推导, 不许硬编码】
+    # 原来这里写的是 `536_943_384 / 1300`(= 413,033 拍/迭代 的旧基线)。
+    # C-2(load-use 1→2 拍) + C-11(寄存 redirect) 把每迭代周期数抬到 **460,311**,
+    # 于是那个硬编码值比真值低 11% ⇒ `hw` 的 tick 偏差判据(≤0.5%)会**报假失败**;
+    # 反过来若它偏高, 就会**放过**一次真实的语义回归。两者都不可接受。
+    # 这与 R35("提速后要重算 ITERATIONS")是同一族的另一半:
+    #   **改流水线语义之后, 必须重算 expect_tick**(它是周期数, 不是时间)。
+    # 唯一的来源是 CoreMark 自己的 `Total ticks` 与 `Iterations`。
+    # ------------------------------------------------------------------
+    tpi = read_ticks_per_iter()
+    if not tpi:
+        print("  [BLOCK] 读不到 CoreMark 的每迭代周期数 (需要 .fpga-cache/logs/tb_sw_coremark.log)")
+        print("          先跑一次: python tools\\fpga_workflow.py verify --only tb_sw_coremark")
+        print("          **不许回退成硬编码常数** —— 那会让上板判据失真。")
+        return 1
+    expect_tick = tpi * iters
+    print("  [tick] 每迭代 %d 拍 (取自 tb_sw_coremark.log 的 Total ticks/Iterations) x %d 迭代"
+          % (tpi, iters))
+    # 必须 > 实际运行时间: int(运行秒数) + 5, 与 build-repo 的契约一致
     wait_seconds = int(expect_tick / clk_hz) + 5
 
     # ------------------------------------------------------------------
@@ -131,7 +172,7 @@ def main():
     # ------------------------------------------------------------------
     TICK_MAX = 2 ** 31 - 1
     if expect_tick > TICK_MAX:
-        iters_max = int(1300 * TICK_MAX / 536_943_384)
+        iters_max = TICK_MAX // tpi
         print("  [BLOCK] ITERATIONS=%d 的预期 tick %d 超过 31 位上限 %d"
               % (iters, expect_tick, TICK_MAX))
         print("          按实测基准外推, ITERATIONS 最大只能到 **%d**。" % iters_max)

@@ -191,3 +191,7 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-11,postrevert-ctl,,,,2655,1257,8,8,87.8,measure,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-11,c11-rebuilt-ctl,1,460311,2.1724,2658,1290,8,8,92.6,measure,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-11,c11r-best,1,460311,2.1724,2711,1290,8,8,97.5,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-11,c12c-ctl,1,469735,2.1289,2643,1360,8,8,88.6,rejected,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-11,c12c-alt-y2,1,469735,2.1289,2689,1360,8,8,92.5,rejected,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-11,c13-95mhz,,,,2708,1290,8,8,106.4,measure,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-11,c14-105mhz,,,,2706,1290,8,8,106.3,keep,fpga_workflow.py synth (PROG=cm_hw)

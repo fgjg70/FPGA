@@ -2010,11 +2010,11 @@ def cmd_synth(args) -> int:
             expect.append("BUILD_PBLOCK_OFF=1" if args.pblock_range == "off"
                           else "BUILD_PBLOCK=")
             if args.route_directive: expect.append("BUILD_ROUTE_DIRECTIVE=")
-            # synth / phys_opt directive: 请求了就必须在日志里看到(自证宏/开关生效)。
-            if getattr(args, "synth_directive", None):
-                expect.append("BUILD_SYNTH_DIRECTIVE=" + args.synth_directive)
-            else:
-                expect.append("BUILD_SYNTH_DIRECTIVE_OFF=1")
+            # synth / phys_opt directive: 请求了就必须在日志里看到(自证开关生效)。
+            # [2026-10-11] build.tcl 的 SYNTH_DIRECTIVE **默认值现在是 AlternateRoutability**
+            # (实测在 post-C11 网表上 92.6 -> 97.2 MHz), 所以不再有 "_OFF=1" 这种形态。
+            expect.append("BUILD_SYNTH_DIRECTIVE=" +
+                          (getattr(args, "synth_directive", None) or "AlternateRoutability"))
             if getattr(args, "phys_opt_directive", None):
                 expect.append("BUILD_PHYS_OPT_DIRECTIVE=" + args.phys_opt_directive)
             else:
