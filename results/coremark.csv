@@ -1,6 +1,12 @@
-﻿# CoreMark 鎸囨爣鍘嗗彶 鈥?姣忚涓€娆℃祴閲?# coremark_per_mhz = iterations * 1e6 / ticks   (涓婚鑷姩绾︽帀)
-# fmax_mhz = 1000 / (20 - wns_ns), 鐢?Vivado 鏃跺簭鎶ュ憡鎺ㄧ畻
-# 鐘舵€? keep = 褰撳墠淇濈暀鐨勯厤缃? rejected = 璇曡繃浣嗗洜缁煎悎鎸囨爣鍑€浜忚€屽洖閫€
+# CoreMark 指标历史 -- 每行一次测量
+# coremark_per_mhz = iterations * 1e6 / ticks   (主频自动约掉)
+# fmax_mhz = 1000 / (Requirement - Slack) -- 从**最差 setup 路径块**里带标签地取。
+#   旧注释写的 1000/(20-wns_ns) 是**已失效的错公式**: 它按时钟名+列对齐取 WNS, 而 MMCM 之后
+#   sys_clk 行只剩脉宽端点(WNS 列是空的), 于是算出恒定假值 76.92, 实测坑了 30+ 次构建。
+#   见 tools/fpga_workflow.py 的 parse_worst_setup_path docstring。
+#   本文件没有 fmax_src 列 -- 该列尚待 CODE-REVIEW-PLAN 的 M-04 落地; 在此之前以 notes 为准
+#   (人工修正过的行会在 notes 里写明: the fmax cell is hand-corrected)。
+# status: keep = 当前保留的配置; rejected = 试过但因综合指标净亏而回退
 date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-05,baseline-v1,1,1210148,0.8263,3499,732,0,0,78.4,keep,"RV32I 5-stage, 鍒嗘敮鍦?EX 鍒ゅ畾(2鎷?, 鏃犻娴?
 2026-10-05,branch-pred-v1,1,973352,1.0274,3877,862,0,0,70.1,keep,BTB64 + 2浣峉mith; redirect 184890->59466
@@ -198,3 +204,5 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-11,clk128,,,,2690,1368,9,8,129.1,measure,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-11,clk125,,,,2690,1355,9,8,125.3,measure,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-11,clk128b,,,,2690,1368,9,8,129.1,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-11,deliv117,,,,2659,1349,9,8,119.1,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-11,deliv117,1,453942,2.2029,2659,1349,9,8,119.1,keep,fpga_workflow.py synth (PROG=cm_hw)
