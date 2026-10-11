@@ -1,7 +1,7 @@
 # tools — 工作流工具集
 
 本目录里的工具解决的是**工程纪律问题**，不是功能问题。
-`skills/fpga-riscv-a100t/PITFALLS.md` 记录了 **47 条**（**R1~R47**）踩过的坑，其中最高频的一条是
+`skills/fpga-riscv-a100t/PITFALLS.md` 记录了 **49 条**（**R1~R49**）踩过的坑，其中最高频的一条是
 **R1「改了 A 忘了同步 B」——全部静默失败**（不报错、结果不变或结果错）。
 `fpga_workflow.py` 存在的唯一目的，就是把这些"靠人记"的纪律变成"机器每次都查"。
 
@@ -48,9 +48,11 @@ python tools\fpga_workflow.py report
 
 另有 `[HIL] 硬件在环健康度`（非编号）：报告最后一次上板数据的年龄与 bitstream 新鲜度，
 超 1 小时未上板 → `[warn]`。
-> ⚠️ 它目前仍用 `results/ila_done.csv` 的 mtime 判断"上板数据有多旧"，而该文件被 git 跟踪 ——
-> 2026-10-11 10:51 实测到"内容未变、mtime 变现在"导致的**假新鲜度**（`check` 报"5 分钟前"）。
-> 这是 X-02 的残余点，`hw` 侧已改用采集清单见证。
+> ✅ 它**已改用采集清单见证**（与 `hw` 同源），输出形如
+> `最后一次上板数据: 2026-10-11 11:19:07  (9 分钟前)   [来源: 采集清单]`；
+> 清单缺失时告警而不是拿 CSV 的 mtime 冒充新鲜度。
+> 背景（X-02）：`results/ila_done.csv` 被 git 跟踪，**2026-10-11 10:51 实测到"内容未变、
+> mtime 变现在"导致的假新鲜度**（`check` 曾因此报"5 分钟前"）—— 所以**mtime 永远不能当见证**。
 > `[FAIL]` = 必须修，退出码 1；`[warn]` = 建议修，不阻塞；`[info]` = 已知在研项，**预期如此**。
 
 `csr_file.sv` **曾经**被 `KNOWN_UNWIRED` 白名单放过（P1 之前 `core.sv` 还没例化它），
@@ -93,8 +95,18 @@ python tools\fpga_workflow.py report
 python tools\fpga_workflow.py check --update-baseline
 ```
 
-当前基线（实测 2026-10-11）：`fpga/build.log` **48 类 / 274 条**，基线 48 类 ⇒ 无新增；
-`Timing 38-1` 反馈环警告**已消失**（R43 修复生效，且现在被门盯住）。
+**首个基线**（实测 2026-10-11）：`fpga/build.log` **48 类 / 274 条**，基线 48 类 ⇒ 无新增；
+其中**已被证实有真东西**的是 `[Synth 8-3331] design mmio_subsys has unconnected port wstrb[3..0]`
+（= **X-08**，MMIO 写忽略 wstrb，Vivado 报了 4 次没人看）；
+`Timing 38-1` 反馈环警告**已消失**（R43 修复生效，且现在被门盯住 —— 出现即 `[FAIL]`）。
+
+### 其他常用一行命令（干净克隆 / 交付前）
+
+```bat
+python tools\build_sw.py --all              REM 建全部 11 个回归镜像 (干净克隆第一步)
+python tools\build_sw.py --all --with-hw    REM 再多一个上板镜像 cm_hw.hex (含 HW_CLK_HZ)
+python tools\check_equiv.py                 REM LSU 字节通道等价性: 675 万组穷举, ~5 s
+```
 
 ### `verify` — ModelSim 增量回归
 

@@ -544,6 +544,13 @@ ITER_new = ceil(ITER_old × 10.0 / 实测秒数 × 1.05)      # 留 5~7% 余量
 ```
 本次: `1200 × 10.0 / 9.91 × 1.05 ≈ 1271` → 取整 **1300** → 实测 **10.74 s** ✓(CRC 仍匹配)。
 
+> **后续（2026-10-09，MMCM 把主频提到 70 MHz 之后）**: 又重算过一次 ⇒ **ITERATIONS = 3000**,
+> 预期 **17.70 s** @70 MHz、`expect_tick = 1,239,100,117`; 2026-10-11 上板实测 tick
+> **1,239,079,510**（偏差 0.002%）。**迭代数不是常量** —— 现在它由
+> `sim/prog/cm_hw.build.json`（`tools/mk_cm_hw.py` 写出）与
+> `results/ila_done.capture.json`（`ila_cap_done.tcl` 写出）承载，`hw`/脚本都从那里读，
+> 不要再在别处硬编码（M-03 的教训）。
+
 **工具**: `tools/mk_cm_hw.py` (用 subprocess **列表**传参重建 `cm_hw.hex`,
 顺带解决两件事: ①工作流印的配方缺 `FLAGS_STR`, 照抄会编译失败;
 ②PowerShell 会吃掉 `FLAGS_STR` 的引号 —— 见 R15)。
@@ -798,6 +805,36 @@ ITER_new = ceil(ITER_old × 10.0 / 实测秒数 × 1.05)      # 留 5~7% 余量
   (`A?a:B?b:C?c:d` → `(A||B)?(A?a:b):...`) **必须保持每一对信号的相对先后**,
   且**必须过 verify**。本轮同一图景下一次等价、一次 **FAIL 5/11**
   (`mret` 那拍 PC 装错 ⇒ 程序跑飞) ✗ —— 与剧本 §2.8 “trap/mret 让路实测失败” 同一历史规律。
+
+### R48. 陷阱只冲了 ID/EX, EX 里被抢占的指令照样提交 ⇒ 中断"双执行" ✅(2026-10-11 发现)
+
+症状: 中断被接受后, 被抢占的指令**执行两次** —— add 变成 2 倍值, sw 写两次(MMIO 上 UART 发两次);
+  旧 timer_irq.S 的等待循环是 `li+bne`(幂等)所以一直没暴露。实测 trace:
+  c=2506 trap_enter=1(EX=add s5,s5,t3, mepc=80000100) → c=2509 s5=12345678(提交了, WB 写回)
+  → c=2546 mret 回到 80000100(同一条 add 重执行) → c=2550 s5=2468acf0(=2×)。
+
+真因: `any_redir` 只冲 `id_ex_reg`(ID/EX)与 IF/ID; `ex_mem_reg.sv` **没有 flush 口**,
+  而陷阱是在 EX 段裁决的 —— 触发指令当拍已在 EX, 下一拍照常进 EX/MEM→MEM/WB 并提交;
+  同时 csr_file 又把 mepc 记成它的 PC ⇒ MRET 后重执行 = 双重执行。
+  (ecall/ebreak/非法指令看不出来: control_unit 早把它们中性化成无副作用。)
+
+修法: `ex_mem_reg.sv` 加 `flush` 口(flush > stall), `core.sv` 接 `.flush(trap_enter)`;
+  **只冲 trap_enter**(redirect 的 EX 指令是分支自己、mret 无数据副作用); `mem_wb_reg` **不要**加 flush
+  (那一拍是更老的指令, 必须提交)。不变量: trap_enter ⇒ hold_mem=0。
+  (本轮的 R-01"中断落在气泡上"是**另一个**独立缺陷: 那个是 mepc=0, 这个是双执行。)
+
+### R49. 多周期状态机的"写相"派生信号**与算子无关** ⇒ LR.W 把目标字清零 ✅(2026-10-11)
+
+症状: LR.W 读对了(rd=旧值)却把**目标字写成 0**; SC.W 写 0 且 rd 拿旧内存值而不是成功标志。
+  定向探针位集合 = 0x3E(bit1=LR 改了内存; bit2-5=SC 的 rd/写全错); 旧回归零覆盖, 所以潜伏至今。
+
+真因: load_store_unit 的 `amo_wr = amo_active & amo_phase` 只由**相位**决定, `dmem_we/dmem_wstrb`
+  在 S_AMO 相直接取 `amo_wr`, 而控制束里 LR/SC 与 AMO 共用同一条多周期序列 —— 写相一到必写。
+
+修法: 把算子接进 LSU(`amo_lr/amo_sc`, 由 core 里**已锁存**的 amo_op_r 译出): `dmem_we/wstrb` 在
+  S_AMO 再与 `!(amo_lr|amo_sc)`; SC 的 rd 在 `rdata_eff` 上恒回 1。门控必须放 LSU 内
+  (放 core 的 dmem_we_g 堵不住 `ext_we`, 打到 MMIO 的 LR/SC 仍会产生一次写脉冲)。
+  测试: amo.S 第 12/13/14 组(修前跑新用例 → tohost=13 必红)。
 
 ## 六、优化决策纪律
 

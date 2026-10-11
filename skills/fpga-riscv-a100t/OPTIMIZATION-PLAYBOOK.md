@@ -547,6 +547,10 @@ ref5 = 137.25 MHz（852 LUT，无前递/无预测/无 M·A·CSR·trap），主�
 当前实际是 **69.6 / LUT 2653**（`fpga/timing.rpt` WNS 5.624 ⇒ 69.56）。
 ⇒ **`results/coremark.csv` 是唯一权威**；任何"当前值"都要带 `tag` 一起引用。
 
+> **2026-10-11 状态更新**：本条是**当时（2026-10-08/09）的历史观察**。
+> 现在 `results/gap-analysis.md` 已按冻结版重算为 **74.4 MHz / LUT 2736**（`review-fixes-v1`），
+> 且 fmax 口径已修（不再是 `1000/(20−WNS)`）—— 引用时请配 `results/coremark.csv` 的 **`fmax_src`** 列。
+
 ---
 
 **盲区 12 — 报告口径会假装"设计没问题"。**
@@ -573,7 +577,7 @@ ref5 在**一次实验里转移了三次**（BRAM 地址脚 → ALU FF → ID �
 | 类型 | 实例 |
 |---|---|
 | **同一段内自相矛盾** | `results/p3-fmax.md` 实验 F 与 PITFALLS R36 正文写"净省只有 **0.81 ns**"，但同两段给出的路径数字 `13.971 → 12.617` 算出来是 **1.354 ns**。两者都指向"砍逻辑不划算"的同一结论，但**系数差 1.7 倍**（0.33 vs 0.55） |
-| **"当前值"过期** | `results/gap-analysis.md` 写"当前 **69.8 MHz / LUT 2649**"，而 `results/coremark.csv` 里 `review-fix` 之后还有 `bugfix-csr-gemm` / `main-restore` 两行把 LUT 改成 **2653**、fmax 改成 **69.6**；`fpga/timing.rpt` 的 WNS 5.624 ⇒ **69.56**。差 0.2 MHz / 4 LUT |
+| **"当前值"过期** | `results/gap-analysis.md` 写"当前 **69.8 MHz / LUT 2649**"，而 `results/coremark.csv` 里 `review-fix` 之后还有 `bugfix-csr-gemm` / `main-restore` 两行把 LUT 改成 **2653**、fmax 改成 **69.6**；`fpga/timing.rpt` 的 WNS 5.624 ⇒ **69.56**。差 0.2 MHz / 4 LUT ——（**2026-10-11 已修**：gap-analysis 现为 74.4 / 2736 / `review-fixes-v1`；本条保留为历史观察）|
 | **口径缺失导致数字不可比** | `69.2 / 69.5 / 69.8 / 69.6` 四个"当前 fmax"分别对应 `fmax-best-v1` / `lv4-final` / `issues-1234` / `base-fo` 四个不同 tag，来自**同一天**的不同配置。脱离 tag 的 fmax 数字没有意义 |
 | **归因错误（丢掉单变量性）** | PITFALLS R37-3 括号里写"（**P8 就是 −30.9% LUT 但 fmax 也降**）"。但 P8 实测是 LUT 2820 → 2769（**−1.8%**）且 fmax 69.2 → **69.5（升）**；`−30.9%` 对应的是 CSV 里 `p6-a-*`(LUT 4079) → `bram-*`/`regread-*`(LUT 2820) 那一族**同时改了多件事**的跳变。⇒ "某个改动导致某个结果"这句话，**只有在单变量 A/B 下才成立**；跨 tag 的两行 CSV 相减不是 A/B |
 

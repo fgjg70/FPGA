@@ -84,15 +84,14 @@ cmd /c D:\USER\Desktop\FPGA\FPGA\fpga\build.bat
 ```
 然后**必须从报告里读**，不能凭上次的数字：
 ```python
-# ⚠️⚠️ 下面这段 fmax 公式【已失效, 不要照抄】⚠️⚠️
-#   引入 MMCM 之后设计主时钟变成 sys_clk_70, 报告里 `sys_clk` 那一行不再有 setup 端点,
-#   这个正则会静默抓到该行的【脉宽余量 WPWS=7.000】, 再按硬编码 20ns 换算 -> 报出
-#   虚高的 76.92 MHz (真值 74.64)。见 CODE-REVIEW-PLAN.md M-01 / X-01, PITFALLS R42.1。
-#   【正确做法】从 Clock Summary 取各时钟周期, 在 Intra Clock Table 里按【设计主时钟】
-#   取 setup WNS, fmax = 1000/(T - WNS), 且时钟名/周期必须可配置(不要硬编码)。
-#   或者直接用修正后的 `python tools\fpga_workflow.py metrics`(它内部就是这套解析)。
-sys_clk_line = re.search(r'^\s*sys_clk\s+(-?[\d.]+)', timing_txt, re.M)   # <-- 错的, 保留仅作反面教材
-fmax_wrong   = 1000.0 / (20.0 - float(sys_clk_line.group(1)))              # <-- 错的
+# ✅ 现在直接用工具: python tools\fpga_workflow.py metrics
+#    M-01 已修: 解析器从 Clock Summary 取各时钟周期, 在 Intra Clock Table 里按【设计主时钟】
+#    (sys_clk_70) 取 setup WNS, fmax = 1000/(T - WNS), 并把推导整行打印出来, 例如:
+#      fmax 74.4 MHz   sys_clk_70 @14.286ns, 运行 70.00 MHz; WNS +0.854ns -> fmax=1000/(14.286 - 0.854)
+#    ⇒ 只写 "fmax=xx" 的文档一律不合格: 必须带时钟名与周期。
+# ⚠️ 反面教材(已失效, 别再照抄): 从 `sys_clk` 行取第一个数再按硬编码 20ns 换算 ——
+#    引入 MMCM 后 `sys_clk` 行不再有 setup 端点, 该正则会静默抓到【脉宽余量 WPWS=7.000】,
+#    报出虚高的 76.92 MHz。见 CODE-REVIEW-PLAN.md M-01 / X-01, PITFALLS R42.1。
 # 资源: 从 util.rpt 按行匹配, 不要用 'lastIndexOf' 之类会串行的写法
 def val(report, key):
     for line in report.splitlines():
@@ -223,15 +222,18 @@ stale = [f for f in RTL_AND_TOP_FILES if mtime(f) > mtime(ILA_BIT)]
 # 非空 -> 必须先 hw --rebuild, 否则本次上板结论无效
 ```
 
-**`--capture` 的输出**应该是解析好的结论，不是原始 CSV：
+**`--capture` 的输出**应该是解析好的结论，不是原始 CSV（**下面是 2026-10-11 冻结版的真实形态**）：
 ```json
 {
-  "program": "cm_hw", "iterations": 1300,
+  "program": "cm_hw", "iterations": 3000,
   "done": 1, "pass": 1, "fail": 0, "illegal": 0,
-  "crc_ok": 1, "ticks": 536943384, "seconds": 10.74,
-  "cm_per_mhz": 2.4211, "csv": "results/ila_done.csv"
+  "crc_ok": 1, "ticks": 1239079510, "seconds": 17.70,
+  "cm_per_mhz": 2.4212, "csv": "results/ila_done.csv",
+  "source": "results/ila_done.capture.json (采集清单)"
 }
 ```
+> `iterations` / `clk_hz` **不再需要手传**：按 `命令行 > 采集清单 > sim/prog/cm_hw.build.json`
+> 推断，并把来源打印出来；三处都没有才拒绝给结论（M-03 已修）。
 
 ---
 

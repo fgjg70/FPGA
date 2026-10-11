@@ -59,7 +59,7 @@ gemm_accel.sv         ← 自选题 GEMM 加速器
 
 ---
 
-## 2. 核心 RTL 清单（20 个文件，**3972** 行 @2026-10-11 快照）
+## 2. 核心 RTL 清单（20 个文件，**4108** 行 @2026-10-11 RTL 冻结后实测）
 
 | 文件 | 行 | 角色 | 阅读要点 |
 |---|---:|---|---|
@@ -69,73 +69,70 @@ gemm_accel.sv         ← 自选题 GEMM 加速器
 | `control_unit.sv` | 372 | **主译码器** | 输出三段控制束；覆盖 RV32IM_Zicsr + RV32A |
 | `imm_gen.sv` | 49 | 立即数生成 | I/S/B/U/J 五种 |
 | `regfile.sv` | 67 | 32×32 寄存器堆 | 同拍写读的**写优先旁路** |
-| `id_ex_reg.sv` | 110 | ID/EX 流水寄存器 | （R-01 正在给它加显式 `valid` 位，行数会再变） |
+| `id_ex_reg.sv` | 124 | ID/EX 流水寄存器 | **R-01 新增显式 `valid` 位**（中断不再落在气泡上） |
 | `alu.sv` | 105 | ALU | |
 | `branch_unit.sv` | 43 | 分支条件判定 | `taken` 由 BR_EQ/NE/LT/GE 决定 |
-| `load_store_unit.sv` | **357** | **访存单元（最复杂）** | ① 非对齐访存硬件拆分（HEAD/TAIL FSM）② AMO 三相位 ③ 字节提取+符号扩展 ④ WB 影子寄存器 |
+| `load_store_unit.sv` | **382** | **访存单元（最复杂）** | ① 非对齐访存硬件拆分（HEAD/TAIL FSM）② AMO 三相位 ③ 字节提取+符号扩展 ④ WB 影子寄存器 ⑤ **R49：LR/SC 写相门控** |
 | `muldiv.sv` | 215 | RV32M 乘除 | 多周期，`busy` 期间冻结流水线 |
 | `csr_file.sv` | 211 | **CSR + 陷阱** | `mtvec`→`trap_vector`、`mepc`→`mret_pc`、mcause / mtval / mstatus、trap 入口与 mret |
 | `btb.sv` | 191 | BTB + 方向预测 | **命中要求 `vld && tag`**（这条不变量在 fmax 实验里被用作论证依据）；Smith 2 位默认，`BTB_GSHARE` 可选；`is_ret` 给 RAS |
 | `ras.sv` | 87 | 返回地址栈 | |
 | `gemm_accel.sv` | 249 | GEMM 加速器 | 自选题部分 |
 | `hazard_unit.sv` | 115 | **冒险/前递** | `fwd_a/fwd_b` 选择；`pipe_stall` / `id_ex_bubble` / `hold_mem` / `redirect` |
-| `ex_mem_reg.sv` | 48 | EX/MEM 流水寄存器 | |
-| `mem_wb_reg.sv` | 49 | MEM/WB 流水寄存器 | |
+| `ex_mem_reg.sv` | 88 | EX/MEM 流水寄存器 | **R48 新增 `flush` 口**（`trap_enter` 时把被抢占的指令冲成气泡，否则会双执行） |
+| `mem_wb_reg.sv` | 49 | MEM/WB 流水寄存器 | **刻意没有 flush**（这一拍是更老的指令，必须提交） |
 | `dmem.sv` | 76 | 数据存储器 | 字节使能写 + 寄存读（→ RAMB36） |
-| **`core.sv`** | **1087** | **顶层 CPU** | 例化全部 + 下一拍 PC + 预测校验 + 重定向 + 陷阱整合 + MMIO |
+| **`core.sv`** | **1144** | **顶层 CPU** | 例化全部 + 下一拍 PC + 预测校验 + 重定向 + 陷阱整合（R48）+ MMIO |
 
-> 行数是 **2026-10-11 快照**（`[System.IO.File]::ReadAllLines(...).Length`，20 个文件求和 = **3972**），
-> 含大量注释 —— 本工程把口径、取舍与踩过的坑都写在代码注释里，所以行数偏高。
+> 行数为 **2026-10-11 RTL 冻结后**实测（`[System.IO.File]::ReadAllLines(...).Length`，
+> 20 个文件求和 = **4108**），含大量注释 —— 本工程把口径、取舍与踩过的坑都写在代码注释里。
 >
-> ⚠️ **这是进行中的工作区**：本次审查（`CODE-REVIEW-PLAN.md` R-01/R-02/W-04）正在改
-> `core.sv`（1073→**1087**）/ `id_ex_reg.sv`（94→**110**）/ `csr_file.sv` / `load_store_unit.sv` /
-> `rv32_pkg.sv`，**行数与本表都会继续漂移**。`core.sv` 章节行号已同步重算（见下一节），
-> 其余文件请在 **RTL 冻结后**用同一条命令重算：
+> 相对冻结前的 +136 行主要来自本轮正确性修复：`core.sv` +57、`ex_mem_reg.sv` +40（**R48** flush）、
+> `id_ex_reg.sv` +30（**R-01** valid）、`load_store_unit.sv` +25（**R49** LR/SC 门控）。
+> 改过 RTL 后请用同一条命令重算：
 > ```powershell
 > 'rv32_pkg.sv','pc.sv','imem.sv','control_unit.sv','imm_gen.sv','regfile.sv','id_ex_reg.sv','alu.sv','branch_unit.sv','load_store_unit.sv','muldiv.sv','csr_file.sv','btb.sv','ras.sv','gemm_accel.sv','hazard_unit.sv','ex_mem_reg.sv','mem_wb_reg.sv','dmem.sv','core.sv' | %{ "{0,-20} {1,5}" -f $_,[System.IO.File]::ReadAllLines($_).Count }
 > ```
 
-### `core.sv` 章节地图（**快照：2026-10-11，core.sv = 1087 行**，按行号跳读）
+### `core.sv` 章节地图（**2026-10-11 RTL 冻结版，core.sv = 1144 行**，按行号跳读）
 
-> ⚠️ **这张表是"会过期"的**：`core.sv` 正在被本次审查修复改动（`CODE-REVIEW-PLAN.md` R-01/R-02/W-04，
-> 仅 2026-10-11 一天内就从 1073 → **1087** 行，全部锚点再次下移）。**改过 RTL 后请先重算**
-> 再按表跳读：
+> **冻结后已按当前文件全部重算。** RTL 再改动后请先重跑下面两条命令再按表跳读：
 > ```powershell
 > # ① 章节边界（每个 // ==== 分节头的行号）
 > Select-String core.sv -Pattern '^\s*//\s*=+\s*$' | ForEach-Object { $_.LineNumber }
 > # ② 关键锚点
-> Select-String core.sv -Pattern 'u_pc |u_imem |u_btb |u_ras |u_ctrl |u_imm |u_regfile |u_alu |u_muldiv |u_csr |u_hazard |u_ex_mem |u_lsu |u_dmem |u_mem_wb |assign sel_dmem|wb_data ='
+> Select-String core.sv -Pattern 'u_pc |u_imem |u_btb |u_ras |u_ctrl |u_imm |u_regfile |u_alu |u_muldiv |u_csr |u_hazard |u_ex_mem |u_lsu |u_dmem |mem_wb_reg u_mem_wb|assign sel_dmem|wb_data ='
 > ```
 
-| 行（快照） | 章节 | 里面有什么 |
+| 行（冻结版） | 章节 | 里面有什么 |
 |---|---|---|
-| 86-195 | 互连信号声明 | 集中声明，避免隐式线网；**146 起**是「Zicsr / 陷阱」声明子节 |
-| **196-300** | **IF 段** | `u_pc`(226)、`pc_next`(269)、`imem_addr = pc_next`(272/275)、`u_imem`(278)、历史记录(286-299) |
-| 301-329 | 分支预测（IF 预测） | `u_btb` 例化(311)、`pred_taken` / `pred_target` |
-| 330-398 | 返回地址栈（`RAS_EN`，默认关） | `u_ras` 例化(362) |
-| 399-451 | **去掉冗余 `if_id_reg` 的说明**（issue #5） | IF/ID 落在 IMEM 输出寄存器上；两个坑（组合环 / `if_id_flush` 串进 ID 路径）；`id_en = boot_done`(450) |
-| **452-541** | **ID 段** | `u_ctrl`(480) / `u_imm`(489) / `u_regfile`(495)、ID 门控(`id_en`) |
-| **542-679** | **EX 段** | **前递 mux(554-557)**、`ex_amo_addr`(580)、`u_alu`(583)、`u_muldiv`(599)、`ex_result`(612)、跳转目标独立加法器(624-645)、**`actual_taken`(646)**、`pred_ok`(673) |
-| 680-760 | Zicsr / 陷阱 / 重定向 | `u_csr`(688)、`exc_req`(726)、`irq_take`(744)、**`pc_src`(754)/`pc_target`(756)** |
-| **761-786** | **冒险单元** | `u_hazard` 例化(764) |
-| 787-805 | EX/MEM | `u_ex_mem`(790) |
-| **806-975** | **MEM 段** | `amo_newdata` 声明(813)、`u_lsu`(818)、AMO 新值(834-932)、**MMIO 地址译码(935-941)**、`u_dmem`(952) |
-| **976-1027** | **MEM/WB 与 WB 段** | `u_mem_wb`(979)、**`wb_data` mux(1010-1023)** |
-| 1028-1079 | 调试与仿真专用 | `dbg_pc`(1035)/`dbg_instr`(1044) 同级口径、`dbg_illegal`(1065)、对齐断言 |
-| 1080-1087 | 流水线效率观测 | 纯观测信号，不参与逻辑 |
+| 86-200 | 互连信号声明 | 集中声明，避免隐式线网；**151 起**是「Zicsr / 陷阱」声明子节 |
+| **201-305** | **IF 段** | `u_pc`(231)、`pc_next`(274)、`imem_addr`(277/280)、`u_imem`(283) |
+| 306-334 | 分支预测（IF 预测） | `u_btb` 例化(316)、`pred_taken` / `pred_target` |
+| 335-403 | 返回地址栈（`RAS_EN`，默认关） | `u_ras` 例化(367) |
+| 404-456 | **去掉冗余 `if_id_reg` 的说明**（issue #5） | IF/ID 落在 IMEM 输出寄存器上；组合环 / `if_id_flush` 串进 ID 路径 |
+| **457-548** | **ID 段** | `u_ctrl`(485) / `u_imm`(494) / `u_regfile`(500)、ID 门控 `id_en` |
+| **549-686** | **EX 段** | **前递 mux(561-564)**、`ex_amo_addr`(587)、`u_alu`(590)、`u_muldiv`(606)、跳转目标独立加法器、**`actual_taken`(653)**、`pred_ok`(680) |
+| 687-776 | Zicsr / 陷阱 / 重定向 | `u_csr`(695)、`exc_req`(733)、`irq_take`(751)、**`pc_src`(770)** |
+| **777-802** | **冒险单元** | `u_hazard` 例化(780) |
+| 803-830 | EX/MEM | `u_ex_mem`(814)；**R48：`.flush(trap_enter)`**（805 起有整段"为什么只冲 trap_enter、mem_wb 不能冲"的注释） |
+| **831-1012** | **MEM 段** | `amo_newdata`(834)、`u_lsu`(843)、AMO 新值、**MMIO 地址译码(972-978)**、`u_dmem`(989) |
+| **1013-1067** | **MEM/WB 与 WB 段** | `u_mem_wb`(1019)、**`wb_data` mux(1050-1063)**；1015 起是"刻意不对称：这里没有 flush"的说明 |
+| 1068-1136 | 调试与仿真专用 | `dbg_pc`(1075)/`dbg_instr`(1084)、`dbg_illegal`(1105)、对齐断言 |
+| 1137-1144 | 流水线效率观测 | 纯观测信号，不参与逻辑 |
 
-> 锚点复核口径（`[复算]`，2026-10-11 用 `Select-String` 逐条取首次命中）：
-> `u_pc` 226 / `u_imem` 278 / `u_btb` 311 / `u_ras` 362 / `id_en` 450 / `u_ctrl` 480 / `u_imm` 489 /
-> `u_regfile` 495 / `fwd_a` 554 / `ex_amo_addr` 580 / `u_alu` 583 / `u_muldiv` 599 / `actual_taken` 646 /
-> `pred_ok` 673 / `u_csr` 688 / `exc_req` 726 / `irq_take` 744 / `pc_src` 754 / `u_hazard` 764 /
-> `u_ex_mem` 790 / `u_lsu` 818 / `sel_dmem` 941 / `u_dmem` 952 / `u_mem_wb` 979 / `wb_data` 1015-1021。
+> 锚点复核口径（`[复算]`，2026-10-11 冻结版逐条 `Select-String` 取首次命中）：
+> `u_pc` 231 / `pc_next` 274 / `u_imem` 283 / `u_btb` 316 / `u_ras` 367 / `u_ctrl` 485 / `u_imm` 494 /
+> `u_regfile` 500 / `fwd_a` 561 / `ex_amo_addr` 587 / `u_alu` 590 / `u_muldiv` 606 / `actual_taken` 653 /
+> `pred_ok` 680 / `u_csr` 695 / `exc_req` 733 / `irq_take` 751 / `pc_src` 770 / `u_hazard` 780 /
+> `u_ex_mem` 814 / `u_lsu` 843 / `sel_dmem` 978 / `u_dmem` 989 / `u_mem_wb` 1019 / `wb_data` 1055-1061。
 > **RTL 冻结后应重跑上面的两条命令再更新本表**（这是 R1「改了 A 忘了同步 B」的文档形态）。
 
 ---
 
 ## 3. 工具链（`tools/` + `fpga/`）
 
-### 一站式入口：`tools/fpga_workflow.py`（2649 行 @2026-10-11 实测；**正被本次 M-01/M-02/M-03 修复改动，引用前现查**）
+### 一站式入口：`tools/fpga_workflow.py`（2926 行 @2026-10-11 RTL/工具冻结后实测）
 
 ```powershell
 python tools/fpga_workflow.py doctor      # 环境自检
@@ -143,17 +140,18 @@ python tools/fpga_workflow.py verify      # 仿真回归 (11 项, 带缓存)
 python tools/fpga_workflow.py synth       # Vivado 综合 -> 四项指标 (带缓存+串行化)
 python tools/fpga_workflow.py metrics     # keep/reject 判定 (绝对吞吐裁判)
 python tools/fpga_workflow.py profile     # 停顿构成剖析 (优化前先测量)
-python tools/fpga_workflow.py hw          # 解析上板 ILA 读回结果
-python tools/fpga_workflow.py check       # 漂移检测 (文件清单/编码/新鲜度)
+python tools/fpga_workflow.py hw          # 解析上板 ILA 读回结果 (迭代数/主频从采集清单推断)
+python tools/fpga_workflow.py check       # 7 项漂移检测 + 综合警告门
 ```
 
 ### 硬件流程
 
 | 文件 | 作用 |
 |---|---|
-| `fpga/build.tcl` (461 @2026-10-11；**正被本次 X-06/X-09/E-02 修复改动，引用前现查**) | **非工程模式**综合流程：`synth → opt → Pblock → place → phys_opt → route → bitstream`；宏开关集中在文件头 |
-| `fpga/daVinciPro.xdc` (49) | 引脚 + **`create_clock -period 20.000`**（"20 ns 周期"的来源） |
-| `fpga/build_ila.tcl` + `ila_cap_*.tcl` | 上板 ILA 调试闭环（`jtag_probe` / `build_ila` / `ila_cap_done`） |
+| `fpga/build.tcl` (461) | **非工程模式**综合流程：`synth → opt → Pblock → place → phys_opt → route → bitstream`；宏开关集中在文件头；路径用 `$root` 相对化 |
+| `fpga/daVinciPro.xdc` (49) | 引脚 + **`create_clock -period 20.000`** + MMCM 的 70 MHz 时钟约束 |
+| `fpga/build_ila.tcl` + `ila_cap_*.tcl` | 上板 ILA 调试闭环（`jtag_probe` / `build_ila` / `ila_cap_done`）；抓取后写 **采集清单 `results/ila_done.capture.json`** |
+| `tools/check_equiv.py` (175) | LSU 字节通道等价性穷举（**675 万组，~5 s**）—— 交付版访存 mux 的正确性论证 |
 
 > ⚠️ **踩坑 R33**：ILA 构建失败后**必须删掉 `fpga/ila_proj*`** 才能重建成功（出现过两次）。
 
@@ -208,7 +206,7 @@ rem 回退到 SPIx1（同样验证过）: powershell -File tools\flash_boot.ps1 
 `tools/run_coremark.py`(131) · `tools/amo_vectors.py`(131) ·
 `tools/mk_cm_hw.py` **重建跑分镜像并重算 `ITERATIONS`（见 PITFALLS R35）** ·
 `tools/trace_diff.py`(152) **逐拍轨迹比对（找 RTL 改动的第一处分歧）** ·
-`tools/path_hotspot.py`(785) **从 `fpga/timing.rpt` 出 top-N 关键路径 + 扇出榜**（物理优化前的首选测量工具，见 PITFALLS R47；其 fmax 口径正在修正，见 `CODE-REVIEW-PLAN.md` X-05）·
+`tools/path_hotspot.py`(821) **从 `fpga/timing.rpt` 出 top-N 关键路径 + 扇出榜**（物理优化前的首选测量工具，见 PITFALLS R47；fmax 口径已按最差路径自带的 `Requirement` 修正）·
 `tools/pdf_text.py` / `tools/pdf_mine.py` **厂商 PDF 取文**（2405 页指南，`flash_logs/guide_text/`）
 
 ---
@@ -220,32 +218,31 @@ rem 回退到 SPIx1（同样验证过）: powershell -File tools\flash_boot.ps1 
 
 | 文件 | 内容 |
 |---|---|
-| `HANDOFF.md` (1167 @2026-10-11) | **总入口**：当前交付配置、四项指标、存储策略、上板结论、口径纪律、`check` 7 项检查门 |
-| `HANDOFF-HW-LOOP.md` (308 @2026-10-11) | 上板闭环操作的逐步说明 |
-| `HANDOFF-WORKFLOW.md` (306 @2026-10-11) | 工作流用法 |
-| `tools/README.md` (231 @2026-10-11) | 统一工作流的逐子命令说明（含 `check` 7 项与综合警告门详解） |
+| `HANDOFF.md` (1179 @2026-10-11) | **总入口**：当前交付配置、四项指标、存储策略、上板结论、口径纪律、`check` 7 项检查门 |
+| `HANDOFF-HW-LOOP.md` (311 @2026-10-11) | 上板闭环操作的逐步说明 |
+| `HANDOFF-WORKFLOW.md` (308 @2026-10-11) | 工作流用法 |
+| `tools/README.md` (243 @2026-10-11) | 统一工作流的逐子命令说明（含 `check` 7 项与综合警告门详解） |
 | `results/*.md` (22 篇) | 每项工作的**完整实测记录**（含所有失败尝试与原因） |
 | `results/coremark.csv` | 所有配置 × 四项指标的总表 |
 | `tools/flash_logs/REPORT.md` (212) | **QSPI Flash 固化**的完整报告（根因 / part 对照表 / 端到端命令 / 上电自举步骤）|
-| `skills/fpga-riscv-a100t/PITFALLS.md` (**R1~R47**) | **47 条踩坑记录**（改代码前扫一眼能省很多时间）；最值钱的新条目：**R43**（MMCM 漏接 `.CLKFBIN` 会把整颗 CPU 永久按在复位里）、**R47**（top-N 是"一堵墙"时 RTL 逻辑重排期望 ≈ 0）|
+| `skills/fpga-riscv-a100t/PITFALLS.md` (**R1~R49**) | **49 条踩坑记录**（改代码前扫一眼能省很多时间）；最值钱的新条目：**R43**（MMCM 漏接 `.CLKFBIN` 会把整颗 CPU 永久按在复位里）、**R47**（top-N 是"一堵墙"时 RTL 逻辑重排期望 ≈ 0）、**R48**（陷阱只冲 ID/EX ⇒ 被抢占指令双执行）、**R49**（多周期状态机写相与算子无关 ⇒ LR.W 把目标字清零）|
 
 ---
 
-## 5. 当前交付指标（一句话基线）
-
-> ⚠️ **本表是旧口径，引用前必须现查**：fmax 一行的算法（从 `sys_clk` 行取 WNS 再按 20 ns 换算）
-> 在引入 MMCM 之后**已经失效** —— `sys_clk` 行不再有 setup 端点，会把**脉宽余量**当成 WNS
-> （详见 `CODE-REVIEW-PLAN.md` **M-01 / X-01 / D-01~D-03**）。
-> 请以**修正后的** `python tools\fpga_workflow.py metrics` 或现读 `fpga/timing.rpt` + `results/coremark.csv` 末行为准。
+## 5. 当前交付指标（一句话基线，**2026-10-11 冻结版**）
 
 | 指标 | 值 |
 |---|---|
 | CoreMark/MHz | **2.4209**（仿真 ticks 413,070） |
-| fmax | **69.8 MHz**（WNS 5.673 @20ns，由 `1000/(20−WNS)` 推得） |
-| LUT / FF / BRAM / DSP | **2649 / 1234 / 8 / 8** |
-| CoreMark/LUTs | **9.139e-4** |
-| 绝对吞吐 | **169.0**（= CM/MHz × fmax） |
-| 上板 | `ila_ctrl=0x42`、CRC bit31=1、tick **536,943,384**、**10.74 s** @50 MHz（1300 迭代）、硬件 CM/MHz **2.4211** |
+| fmax | **74.4 MHz** —— `sys_clk_70` @14.286 ns，WNS **+0.854** ⇒ `1000/(14.286−0.854)` |
+| LUT / FF / BRAM / DSP | **2736 / 1251 / 8 / 8** |
+| CoreMark/LUTs | **8.848e-4** |
+| 绝对吞吐 | **180.2**（= CM/MHz × fmax） |
+| 上板（2026-10-11 11:19:07） | `ila_ctrl=0xC2`、CRC bit31=1、tick **1,239,079,510**、**17.70 s** @70 MHz（3000 迭代）、硬件 CM/MHz **2.4212** |
 
-> 上板一行的参数同样是**历史口径**（2026-10-08）；**最后一次 ILA 采集是 2026-10-09 21:29**
-> （凭据 `results/ila_done.csv` + `fpga/cap_done.log`），两者不同 —— 以 CSV 现查为准。
+> 数字来源：`.fpga-cache/reports/20261011-111332-cm_hw/`（timing/util/metrics）+ `results/coremark.csv`
+> 行 `review-fixes-v1` + `results/ila_done.capture.json`（采集清单）。**fmax 必须带时钟名与周期**
+> （纪律见 `HANDOFF.md` §8「口径纪律」）；引用 `coremark.csv` 的 `fmax` 列要配 `fmax_src` 列。
+
+> 上板一行的凭据是 **`results/ila_done.capture.json`（采集清单，2026-10-11 11:19:07）**，
+> 不是 CSV 的 mtime（CSV 被 git 跟踪，mtime 可被 checkout 刷新 —— X-02）。
