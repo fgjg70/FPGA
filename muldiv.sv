@@ -55,6 +55,27 @@ module muldiv
   logic signed [63:0] prod_ss;
   logic        [63:0] prod_uu;
 
+  // --------------------------------------------------------------------------
+  // 【C-18a —— 负结果, 已回退 (2026-10-11) · "让常见乘法离开 DSP 级联" 在本器件+工具下不成立】
+  // --------------------------------------------------------------------------
+  // 背景 (tools/path_families.py, C-12a 之后 @7.619ns 约束):
+  //   **46/50 条最差路径同族**, 整族只差 0.007ns, 族名 `u_core/u_muldiv/prod_uu_reg/PCIN`
+  //   —— 64 位积被综合成**级联 DSP** (A→PCOUT→PCIN), 那条内部链 ≈3.2ns。
+  //   而 CoreMark 里 9,711 条乘法绝大多数是 `ALU_MUL` (只要低 32 位)。
+  // 试过的做法: 新增 `logic [31:0] prod_lo;  prod_lo <= a*b;` (32×32→32, 期望单片/旁挂
+  //   DSP 的 P 输出、**不穿 PCOUT→PCIN 级联**), 结果选择改 `ALU_MUL: result = prod_lo;`,
+  //   并加一条等价性自证断言 (`prod_lo !== prod_uu[31:0] ⇒ $error`, `$isunknown` 门控)。
+  // 【为什么它是等价改写却仍然失败】乘积低 32 位与符号无关 ⇒ `(a*b)[31:0] ≡
+  //   prod_ss[31:0] ≡ prod_uu[31:0]` **逐位成立** (自证断言在整个回归 0 次触发, 含
+  //   CoreMark 9,711 条乘法 + m_ext 全部边界)。**失败在综合映射, 不在语义**:
+  //   实测 **DSP48E1 用量 8 → 8 (没有新增)** ⇒ 工具把 `prod_lo` 也并回同一条级联,
+  //   支配族只是从 `prod_uu_reg/PCIN` 换成 `prod_ss_reg/PCIN` (**39 条仍指向 PCIN**),
+  //   而 WNS 反而 **−0.077 → −0.235** (达成 129.9 → 127.3, 绝对吞吐 −2.0%)。
+  //   ⇒ 判据在改动前就写死了 ("若 DSP 数不增而族仍指向 PCIN ⇒ 如实报负结果"), 所以这是
+  //     干净的负结果。**结论: 不要再试"为低半部单独造 DSP"这条路线**(C-18b 同样不做);
+  //     要绕开级联只能从"换器件/换工具版本/换乘法组织"层面考虑。
+  // --------------------------------------------------------------------------
+
   always @(posedge clk) begin
     prod_ss <= $signed(a) * $signed(b);
     prod_uu <= a * b;
@@ -202,7 +223,7 @@ module muldiv
   always_comb begin
     if (!is_div_op) begin
       case (op)
-        ALU_MUL:    result = prod_ss[31:0];
+        ALU_MUL:    result = prod_ss[31:0];   // C-18a 回退: 专用 prod_lo 被工具并回同一条级联
         ALU_MULH:   result = prod_ss[63:32];
         ALU_MULHSU: result = mulhsu_hi;
         ALU_MULHU:  result = prod_uu[63:32];

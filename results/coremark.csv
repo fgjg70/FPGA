@@ -195,3 +195,5 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-11,c12c-alt-y2,1,469735,2.1289,2689,1360,8,8,92.5,rejected,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-11,c13-95mhz,,,,2708,1290,8,8,106.4,measure,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-11,c14-105mhz,,,,2706,1290,8,8,106.3,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-11,clk128,,,,2690,1368,9,8,129.1,measure,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-11,clk125,,,,2690,1355,9,8,125.3,measure,fpga_workflow.py synth (PROG=cm_hw)

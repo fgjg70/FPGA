@@ -12,15 +12,22 @@ set part xc7a100tfgg484-2
 # image (see sw/link.ld), so <PROG>.hex and <PROG>.dmem.hex MUST exist as a pair.
 # Note: changing ITERATIONS only changes the dmem image; imem stays byte-identical
 # (PITFALLS R14) -- so to confirm the image is right, compare the .dmem.hex.
-# PROG 默认 cm_hw; 工作流用**环境变量**覆盖它(不再改写本文件)。
-# 【为什么不再打补丁 —— 一次真实事故的根治】
-# 旧实现: fpga_workflow.py 用正则改这一行, 构建结束后把**整个原文件**写回。
-# 2026-10-11 实测后果: build-repo 在构建期间给 read_verilog 加了 `bht.sv`,
-# 那次编辑被"整文件写回"**静默抹掉** ⇒ 下一次综合报
-#     ERROR: [Synth 8-439] module 'bht' not found
-# 而日志里只有一行 ERROR, 极易被当成偶发。改成读 env 后, 本文件在构建期间
-# **只读** ⇒ 这一类覆盖事故在结构上不可能再发生。
-# 自证: build.tcl 会打印 BUILD_PROG=$PROG, 工作流把它列入 expect, 没生效就报错。
+# PROG defaults to cm_hw; the workflow overrides it via an ENVIRONMENT VARIABLE
+# (this file is never rewritten any more).
+# Why the old patch/restore scheme was removed -- it caused a real incident:
+#   the old code rewrote this one line with a regex and then wrote the WHOLE
+#   original file back when the build finished. On 2026-10-11 build-repo added
+#   `bht.sv` to the read_verilog list *during* a build, and that edit was
+#   silently overwritten => the next synthesis failed with
+#       ERROR: [Synth 8-439] module 'bht' not found
+#   One ERROR line in a long log is easy to dismiss as a flake. Reading PROG
+#   from the env keeps this file READ-ONLY during a build, so that whole class
+#   of overwrite is structurally impossible.
+# Self-check: build.tcl prints BUILD_PROG=$PROG and the workflow lists it in
+# `expect`, so a missing env (or a build.tcl that ignores it) fails LOUDLY
+# instead of silently building the wrong program.
+# NOTE: this file must stay PURE ASCII (see the header rule above) -- keep new
+#       comments ASCII. The 2026-10-11 style audit caught 8 non-ASCII lines here.
 set PROG cm_hw
 if {[info exists ::env(PROG)] && $::env(PROG) ne ""} { set PROG $::env(PROG) }
 # ---- E-02: no hardcoded absolute paths -------------------------------------
