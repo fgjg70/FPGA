@@ -161,3 +161,14 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-11,rr2-pb-c12,1,413070,2.4209,2667,1234,8,8,74.6,rejected,"[MEASUREMENT ONLY - not the shipped config; reverted] [RR2 2026-10-11 70MHz] config: byte-lane + pblock X0Y1:X2Y3 + ExtraTimingOpt. WNS=+0.888 ns -> fmax(hand)=1000/(14.285714-WNS)=74.64 MHz (the fmax cell is hand-corrected: tools/fpga_workflow.py parse_reports() hardcodes period 20.0 and reads the 50MHz sys_clk row, so its number is wrong for this design). critical path: u_dmem/mem_reg_1/CLKBWRCLK -> u_imem/rdata_reg_1/ADDRARDADDR[5]; data 12.727 = logic 5.131 (40.3%) + route 7.596 (59.7%); logic levels 18 (CARRY4=7 LUT2=1 LUT3=4 LUT5=1 LUT6=5). LUT/FF/BRAM/DSP from the same run; ticks 413070/1 iter unchanged (CoreMark/MHz 2.4209) => zero IPC cost. Archive: .fpga-cache/reports/20261011-004554-cm_hw"
 2026-10-11,rr2-final,1,413070,2.4209,2667,1234,8,8,74.6,keep,"[RR2 2026-10-11 70MHz] config: SHIPPED DEFAULTS: byte-lane load mux + build.tcl pblock X0Y1:X2Y4 + PLACE_DIR=ExtraTimingOpt. WNS=+0.888 ns -> fmax(hand)=1000/(14.285714-WNS)=74.64 MHz (the fmax cell is hand-corrected: tools/fpga_workflow.py parse_reports() hardcodes period 20.0 and reads the 50MHz sys_clk row, so its number is wrong for this design). critical path: u_dmem/mem_reg_1/CLKBWRCLK -> u_imem/rdata_reg_1/ADDRARDADDR[5]; data 12.727 = logic 5.131 (40.3%) + route 7.596 (59.7%); logic levels 18 (CARRY4=7 LUT2=1 LUT3=4 LUT5=1 LUT6=5). LUT/FF/BRAM/DSP from the same run; ticks 413070/1 iter unchanged (CoreMark/MHz 2.4209) => zero IPC cost. Archive: .fpga-cache/reports/20261011-004830-cm_hw"
 2026-10-11,review-fixes-v1,1,413070,2.4209,2736,1251,8,8,74.4,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-11,pb3-ctl,1,413070,2.4209,2736,1251,8,8,74.4,measure,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-11,pb3-b,1,413070,2.4209,2736,1251,8,8,74.4,measure,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-11,pb3-c,1,413070,2.4209,2736,1251,8,8,73.2,measure,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-11,pb3-d,1,413070,2.4209,2736,1251,8,8,74.4,measure,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-11,pb3-e,1,413070,2.4209,2736,1251,8,8,73.2,measure,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-11,pb3-f,1,413070,2.4209,2736,1251,8,8,74.4,measure,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-11,pb3-g,1,413070,2.4209,2736,1251,8,8,71.6,measure,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-11,pb3-h,1,413070,2.4209,2736,1251,8,8,73.6,measure,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-11,pb3-i,1,413070,2.4209,2733,1251,8,8,73.7,measure,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-11,pb3-j,1,413070,2.4209,2736,1251,8,8,73.6,measure,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-11,pb3-off,1,413070,2.4209,2734,1251,8,8,72.5,measure,fpga_workflow.py synth (PROG=cm_hw)

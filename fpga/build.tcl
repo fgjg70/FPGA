@@ -289,6 +289,26 @@ puts "BUILD_PROG=$PROG"
 #    super-additive: -0.311ns logic from the byte-lane mux, -0.209ns route from
 #    the region, net +0.194ns / +1.07MHz.)
 #
+# [2026-10-11 RE-SWEEP ON THE NEW NETLIST] The table above was measured BEFORE the
+# R-01 / R48 / R-02 / W-04 fixes (+69 LUT / +17 FF), so it was re-measured: same flow,
+# 11 points (results/coremark.csv rows pb3-*, status=measure). Verdict: THE OPTIMUM
+# DID NOT MOVE -- this pairing is still co-optimal.
+#   ExtraTimingOpt + X0Y1:X2Y4 / X2Y5 / X3Y4 / X3Y5 -> WNS +0.854 (74.45)  4-WAY TIE
+#   ExtraTimingOpt + X0Y2:X4Y4 or X0Y2:X3Y5         -> WNS +0.616 (73.2)
+#   ExtraTimingOpt + X0Y3:X3Y6                      -> WNS +0.326 (71.6)
+#   WLDrivenBlockPlacement (3 ranges)               -> WNS +0.698..+0.716 (73.6..73.7)
+#   off (no Pblock) + ExtraTimingOpt                -> WNS +0.484 (72.5)
+#     ^ control: Pblock+ExtraTimingOpt is worth +1.9 MHz over no Pblock, so the knob
+#       matters -- it is simply already at its optimum.
+#   WHY (measured, not assumed): the four tying ranges give IDENTICAL WNS, and ALL 50
+#   worst setup paths share ONE source (u_core/u_dmem/mem_reg_3/CLKBWRCLK), are ~67%
+#   route, with delta(top1, top2) = 0.024 ns => the wall is intrinsic to the netlist
+#   topology (dmem BRAM -> LSU -> forward -> branch -> PC -> imem address), NOT to the
+#   placed region. THIS AXIS IS EXHAUSTED; do not re-sweep it (PITFALLS R47).
+#   Rank bottlenecks with `python tools/path_hotspot.py fpga/timing_paths.rpt --top N`
+#   -- note fpga/timing.rpt holds only the single worst path (50 paths live in
+#   fpga/timing_paths.rpt, which is now archived per build too).
+#
 # [IMPORTANT INTERACTION] ExtraTimingOpt is only good TOGETHER WITH this region.
 # Without a Pblock it is measurably worse (58.4 vs 58.9 MHz) and with the OLD
 # region it was much worse (63.3 vs 69.2). Both knobs moved together here; the
@@ -297,6 +317,9 @@ puts "BUILD_PROG=$PROG"
 # route (9.013 -> 7.596ns). It also creates a 1-level near-critical path
 # (u_id_ex/pc_reg[7] -> u_csr/mepc_reg[7], slack +0.084) -- still MET, but that is
 # the endpoint to watch if the design grows.
+#   UPDATE 2026-10-11 (design DID grow, +69 LUT): re-checked -- "mepc" and "u_csr"
+#   now appear ZERO times in the top-50 setup paths (all >= +0.854 slack, so that path
+#   is now > +1.08 ns). This endpoint is RESOLVED; do not spend effort on it.
 #
 # Tighter is NOT better: lost placement freedom outweighs the shorter spans.
 # NOTE: the range is part-specific. For another device (or the migration target)
