@@ -986,6 +986,18 @@ def test_matrix() -> list[dict]:
         {"name": "tb_soc", "top": "tb_soc", "rtl": "rtl", "tb": "sim/tb_soc.sv",
          "imem": "sim/prog/mmio.hex", "plus": [], "max_cycles": 400000, "timeout": 600,
          "desc": "外设 + UART 环回"},
+        # ---- load-use 代价标定 (验证泳道 2026-10-11 新增, 第 12 项) ----------
+        # 为什么必须有这一项: C-2 把 load-use 从 1 拍改成 2 拍, 并且**新扣住了距离 2
+        # 的消费者**。后者是"停顿次数变了"而不是"每次多 1 拍", 任何靠推理算代价的做法
+        # 都会算错(实测 +8.9% vs 推理 +6.9%)。这个微基准用三个阶段(距离 3/2/1)把
+        # "每类事件各花几拍"直接量出来, 并检查被停顿的消费者读到正确结果。
+        # ⚠ 加入这一项后全量回归是 **PASS 12**(文档里的"PASS 11"需要同步更新)。
+        {"name": "tb_sw_lu_bench", "top": "tb_sw", "rtl": "rtl", "tb": "sim/tb_sw.sv",
+         "imem": "sim/prog/lu_bench.hex",
+         "plus": ["+lu_bubbles=2", "+expect_hazards=1024", "+expect_d2_cost=1024",
+                  "+dump_words=3"],
+         "max_cycles": 200000, "timeout": 600,
+         "desc": "load-use 代价标定 (距离1/2 分别量 + 数据正确性 checksum)"},
         {"name": "tb_sw_hello", "top": "tb_sw", "rtl": "rtl", "tb": "sim/tb_sw.sv",
          "imem": "sim/prog/hello.hex", "dmem": "sim/prog/hello.dmem.hex",
          "plus": [], "max_cycles": 400000, "timeout": 600, "desc": "裸机 hello"},
@@ -1886,6 +1898,12 @@ def cmd_synth(args) -> int:
     h.update(("pblockcells=" + (args.pblock_cells or "u_core")).encode())
     h.update(b"containrt" if args.contain_routing else b"nortcontain")
     h.update(("route=" + (args.route_directive or "default")).encode())
+    # 【新增两个 directive 也必须进指纹】2026-10-11: RVCoreP-32IM 的工程文件用
+    # "Flow_PerfOptimized_high"(synth) + "Performance_ExplorePostRoutePhysOpt"(impl),
+    # 而我们从来没扫过 synth/phys_opt 这两个旋钮。不进指纹 = 改策略却命中旧缓存。
+    h.update(("synth=" + (getattr(args, "synth_directive", None) or "default")).encode())
+    h.update(("rs=" + (getattr(args, "resource_sharing", None) or "default")).encode())
+    h.update(("physopt=" + (getattr(args, "phys_opt_directive", None) or "default")).encode())
     h.update(b"retiming" if args.retiming else b"noretiming")
     fp = h.hexdigest()[:32]
 
@@ -1950,6 +1968,12 @@ def cmd_synth(args) -> int:
                 benv["CONTAIN_ROUTING"] = "1"
             if args.route_directive:
                 benv["ROUTE_DIRECTIVE"] = args.route_directive
+            if getattr(args, "synth_directive", None):
+                benv["SYNTH_DIRECTIVE"] = args.synth_directive
+            if getattr(args, "resource_sharing", None):
+                benv["RESOURCE_SHARING"] = args.resource_sharing
+            if getattr(args, "phys_opt_directive", None):
+                benv["PHYS_OPT_DIRECTIVE"] = args.phys_opt_directive
             if args.retiming:
                 benv["RETIMING"] = "1"
             if args.load_reg:
@@ -1985,6 +2009,20 @@ def cmd_synth(args) -> int:
             # Pblock: build.tcl 默认已开启(该 part 专用), 只有传 off 才关。
             expect.append("BUILD_PBLOCK_OFF=1" if args.pblock_range == "off"
                           else "BUILD_PBLOCK=")
+            if args.route_directive: expect.append("BUILD_ROUTE_DIRECTIVE=")
+            # synth / phys_opt directive: 请求了就必须在日志里看到(自证宏/开关生效)。
+            if getattr(args, "synth_directive", None):
+                expect.append("BUILD_SYNTH_DIRECTIVE=" + args.synth_directive)
+            else:
+                expect.append("BUILD_SYNTH_DIRECTIVE_OFF=1")
+            if getattr(args, "phys_opt_directive", None):
+                expect.append("BUILD_PHYS_OPT_DIRECTIVE=" + args.phys_opt_directive)
+            else:
+                expect.append("BUILD_PHYS_OPT_DIRECTIVE=AggressiveExplore")
+            if getattr(args, "resource_sharing", None):
+                expect.append("BUILD_RESOURCE_SHARING=" + args.resource_sharing)
+            else:
+                expect.append("BUILD_RESOURCE_SHARING_OFF=1")
             if args.load_reg:      expect.append("BUILD_LOAD_RESULT_REG=1")
             if args.gshare:        expect.append("BUILD_BTB_GSHARE=1")
             if args.ras:           expect.append("BUILD_RAS_EN=1")
@@ -2017,11 +2055,19 @@ def cmd_synth(args) -> int:
                 print("         -> build.tcl 不认这些 env, 或 synth 没把它们写进环境。")
                 print("         这些数字对应的是**默认配置**, 不能当作该宏的结果。")
                 return 1
-            if not ok:
+            if not ok or rc != 0:
+                # [2026-10-11 加固] 原来只判 `not ok`(即日志里没有 BUILD_OK)。
+                # 但 "日志里有 BUILD_OK 且 rc != 0" 是可能的(Vivado 在 BUILD_OK 之后
+                # 才报错/超时), 那种情况会**继续往下走** parse_reports() —— 把上一次
+                # 构建留在磁盘上的 timing.rpt 当成这一次的结果, 再写进 CSV。
+                # 这正是本工程反复抓的"静默沿用旧值"族(实测: 一次 4 秒的失败构建
+                # 被上层脚本报成了上一次的 76.2 MHz)。失败就是失败, 不留后门。
                 why = [l for l in out.splitlines()
                        if "BUILD_ERROR" in l or "ERROR:" in l or "BUILD_HINT" in l]
                 for l in why[:12]:
                     print("        " + l.strip())
+                if ok and rc != 0:
+                    print(f"  [FAIL] 日志里有 BUILD_OK 但 vivado rc={rc} —— 不给结论。")
                 print(f"       完整日志: {log}")
                 return 1
         finally:
@@ -2277,6 +2323,10 @@ def parse_profile(out: str) -> dict:
     num(r"^\s*fetch\s*=\s*(\d+)", "fetch")
     num(r"^\s*retire\(wb\)\s*=\s*(\d+)", "retire")
     num(r"^\s*redirects\s*=\s*(\d+)", "redirect_total")
+    # 实测冲刷拍数(验证泳道新增的 n_flush): tb_sw 打印
+    #   "redirects  = N   实测冲刷拍数 = M  -> 每次 x.xx 拍"
+    # 有了 M 就不再需要"每次 2 拍"的假设(实测是 1.00 拍/次)。
+    num(r"^\s*redirects\s*=\s*\d+\s+实测冲刷拍数\s*=\s*(\d+)", "redirect_flush_cycles")
     num(r"^\s*stalls\s*=\s*(\d+)", "stall_total")
     num(r"^\s*load-use\s*=\s*(\d+)", "stall_load_use")
     num(r"^\s*split-mem\s*=\s*(\d+)", "stall_split_mem")
@@ -2301,23 +2351,39 @@ def parse_profile(out: str) -> dict:
         p["predict_accuracy"] = round(1 - p["mispredict"] / p["ctrl_flow"], 4)
     cyc = p.get("ticks") or 0
     if cyc:
-        # 每项占周期总数的百分比 —— "取占比最大的那一项"是选靶子的规则。
-        # redirect 每次损失 2 拍, 所以乘 2。
+        # redirect 每次的冲刷拍数**不再按假设的 2 拍算** —— 验证泳道加了 n_flush
+        # 计数器实测 it: 实测 = 1.00 拍/次(11530 次 / 11530 拍)。旧代码一律乘 2,
+        # 把 2.3% 虚报成 4.6%(实测于 2026-10-11)。优先用实测值, 没有才退回旧假设并告警。
+        if p.get("redirect_flush_cycles") is not None:
+            redir_cyc = p["redirect_flush_cycles"]
+        else:
+            redir_cyc = p.get("redirect_total", 0) * 2
+            if p.get("redirect_total"):
+                print("  [warn] 日志里没有实测冲刷拍数(n_flush) -> redirect 占比按**假设 2 拍**计算, "
+                      "可能虚报 2 倍。请在 tb_sw 里补 `实测冲刷拍数` 一行。")
         p["share_pct"] = {
             "load_use":  round(100 * p.get("stall_load_use", 0) / cyc, 1),
             "muldiv":    round(100 * p.get("stall_muldiv", 0) / cyc, 1),
             "split_mem": round(100 * p.get("stall_split_mem", 0) / cyc, 1),
-            "redirect":  round(100 * p.get("redirect_total", 0) * 2 / cyc, 1),
+            "redirect":  round(100 * redir_cyc / cyc, 1),
         }
         # ---- 把 load-use 停顿从 1 拍加到 2 拍的**时间代价** ----
-        # 停顿次数不变, 每次多 1 拍 -> 周期数从 cyc 变成 cyc + lu。
-        # 时间涨幅 = (cyc + lu)/cyc - 1 = lu/cyc ... 但这里报的是
-        # lu/(cyc+lu), 即"新总时间里有百分之多少是新加的" —— 与 share_pct
-        # 同一口径 (占**新**总数的比例), 便于和 fmax 涨幅直接对比:
-        #   需要 fmax 涨幅 > 这个数, 这笔交易才不亏。
-        lu = p.get("stall_load_use", 0)
-        if lu:
-            p["cost_if_load_use_2cyc_pct"] = round(100 * lu / (cyc + lu), 2)
+        # [2026-10-11 更正] 旧模型 `lu/(cyc+lu)` 已被 C-2 的实测证伪: 它隐含
+        #   ①"每次 load-use 只多 1 拍且**事件数不变**" —— 实测 C-2 还新扣住了
+        #     **距离 2 的消费者**(窗口内新增 8213 个事件), 所以 Δticks = +36784 (+8.9%)
+        #     而不是模型给的 +6.9%;
+        #   ②分母用 TB cycles, 而判据要用 CoreMark 自报 ticks。
+        # 现在优先用 tb_sw 打印的**窗口实测预测值**(它已经把两类事件都算进去了),
+        # 拿不到就明确说"需要窗口计数行", 不再给一个会误导人的模型数字。
+        m_cost = re.search(r"C-2\s*的\s*ticks\s*增量预测值\s*=\s*(\d+)\s*拍", out)
+        if m_cost:
+            d = int(m_cost.group(1))
+            p["cost_if_load_use_2cyc_pct"] = round(100 * d / (cyc + d), 2)
+        else:
+            p["cost_if_load_use_2cyc_pct"] = None
+            p["cost_if_load_use_2cyc_note"] = (
+                "需要 tb_sw 的窗口计数行 `window load-use = ... (N events) -> C-2 的 ticks 增量预测值 = M 拍`;"
+                " 旧模型 lu/(cyc+lu) 已被实测证伪(漏算距离2事件), 不再使用")
     return p
 
 
@@ -2961,6 +3027,21 @@ def main() -> int:
                    help="给 Pblock 加 CONTAIN_ROUTING (纯物理, 不改功能)")
     p.add_argument("--route-directive", default=None,
                    help="覆盖 route_design 策略 (默认 AggressiveExplore)")
+    p.add_argument("--synth-directive", default=None,
+                   help="覆盖 synth_design 策略。**Vivado 2018.3 只接受这 8 个**"
+                        "(已用 synth_design -help 核实): default / RuntimeOptimized / "
+                        "AreaOptimized_high / AreaOptimized_medium / AlternateRoutability / "
+                        "AreaMapLargeShiftRegToBRAM / AreaMultThresholdDSP / FewerCarryChains。"
+                        "注意 PerformanceOptimized **不存在**于 2018.3(会立刻 "
+                        "[Common 17-161] 报错)。RVCoreP 的 main.xpr 用 Directive=7, "
+                        "按该枚举 = FewerCarryChains")
+    p.add_argument("--resource-sharing", default=None,
+                   help="-resource_sharing 取值 (off/on/auto)。ref5 的 V4 用过 off "
+                        "作为 +9.16 MHz 批次的一部分, 而本核此前完全没有这个旋钮")
+    p.add_argument("--phys-opt-directive", default=None,
+                   help="覆盖两处 phys_opt_design 的策略 (默认 AggressiveExplore)。"
+                        "RVCoreP-32IM 的 impl 用 Performance_ExplorePostRoutePhysOpt。"
+                        "常用: Explore / ExploreWithRemap / AggressiveExplore")
     p.add_argument("--retiming", action="store_true",
                    help="开启综合器寄存器重定时 (形式等价变换, ticks 必须不变)")
     p.set_defaults(func=cmd_synth)

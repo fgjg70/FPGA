@@ -40,7 +40,11 @@ CM_SRC = ['core_main.c', 'core_list_join.c', 'core_matrix.c', 'core_state.c',
 
 # 回归矩阵 (tools/fpga_workflow.py: test_matrix()) 里用到的**汇编**镜像。
 # amo_diag2 不在 11 项里, 但它是 amo_diag 的备用诊断支, 一起建齐免得下次找不到。
-ASM_IMAGES = ['basic', 'trap', 'timer_irq', 'm_ext', 'amo', 'amo_diag', 'amo_diag2', 'mmio']
+# lu_bench: load-use 代价标定微基准 (验证泳道 2026-10-11 新增)。必须登记在这里,
+#   否则 `build_sw.py --all` 不会"删了重建"它 —— 改了 .S 忘了汇编就会**静默跑旧镜像**
+#   (这就是 PITFALLS R1 的经典形态: 一处改了, 另一处没跟上)。
+ASM_IMAGES = ['basic', 'trap', 'timer_irq', 'm_ext', 'amo', 'amo_diag', 'amo_diag2', 'mmio',
+              'lu_bench']
 
 
 def find_tool(name, gcc_dir):

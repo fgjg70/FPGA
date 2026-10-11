@@ -256,7 +256,39 @@ if {[info exists ::env(RETIMING)] && $::env(RETIMING) ne ""} {
   puts "BUILD_RETIMING_OFF=1"
 }
 
-synth_design -top top_a100t -part $part {*}$RETIM_OPT -verilog_define "IMEM_INIT_FILE=\"$imem\" DMEM_INIT_FILE=\"$dmem\" $IMEM_DEFS"
+# ---- synthesis directive + resource_sharing (first swept 2026-10-11) ---------
+# RVCoreP-32IM (arXiv 2010.16171 sec. IV.A) ships the synthesis strategy
+# "Flow_PerfOptimized_high". I first assumed that meant -directive
+# PerformanceOptimized -- **WRONG for Vivado 2018.3**. `synth_design -help`
+# lists exactly these values (verified 2026-10-11 by running it):
+#     default, RuntimeOptimized, AreaOptimized_high, AreaOptimized_medium,
+#     AlternateRoutability, AreaMapLargeShiftRegToBRAM, AreaMultThresholdDSP,
+#     FewerCarryChains
+# `PerformanceOptimized` is NOT among them -> Vivado aborts immediately with
+#   ERROR: [Common 17-161] Invalid option value 'performanceoptimized'
+# (and the workflow then reported the PREVIOUS build's numbers for 4 s -- see
+#  the build-failure hole that was also fixed that day).
+# Their main.xpr stores `<Option Id="Directive">7</Option>` for synth_1; by the
+# enumeration above index 7 is **FewerCarryChains** -- physically plausible for a
+# ROUTE-bound design (67% route) whose critical path contains CARRY4s, because
+# FPGA carry chains force long horizontal routing.
+# Also newly exposed here: -resource_sharing. ref5's V4 used
+# `-resource_sharing off` as part of a +9.16 MHz batch, but this core never had
+# the knob at all (it was not in any build script).
+set SYNTH_OPT [list]
+if {[info exists ::env(SYNTH_DIRECTIVE)] && $::env(SYNTH_DIRECTIVE) ne ""} {
+  lappend SYNTH_OPT -directive $::env(SYNTH_DIRECTIVE)
+  puts "BUILD_SYNTH_DIRECTIVE=$::env(SYNTH_DIRECTIVE)"
+} else {
+  puts "BUILD_SYNTH_DIRECTIVE_OFF=1"
+}
+if {[info exists ::env(RESOURCE_SHARING)] && $::env(RESOURCE_SHARING) ne ""} {
+  lappend SYNTH_OPT -resource_sharing $::env(RESOURCE_SHARING)
+  puts "BUILD_RESOURCE_SHARING=$::env(RESOURCE_SHARING)"
+} else {
+  puts "BUILD_RESOURCE_SHARING_OFF=1"
+}
+synth_design -top top_a100t -part $part {*}$RETIM_OPT {*}$SYNTH_OPT -verilog_define "IMEM_INIT_FILE=\"$imem\" DMEM_INIT_FILE=\"$dmem\" $IMEM_DEFS"
 puts "BUILD_PROG=$PROG"
 
 # ---- Pblock (physical optimization) -- ON BY DEFAULT for this part ---------
@@ -375,10 +407,20 @@ if {[info exists ::env(ROUTE_DIRECTIVE)] && $::env(ROUTE_DIRECTIVE) ne ""} {
   set ROUTE_DIR $::env(ROUTE_DIRECTIVE)
 }
 puts "BUILD_ROUTE_DIRECTIVE=$ROUTE_DIR"
+# ---- phys_opt directive: was hardcoded AggressiveExplore twice. --------------
+# Made overridable 2026-10-11 because RVCoreP-32IM's shipped project (arXiv
+# 2010.16171 sec. IV.A) uses "Performance_ExplorePostRoutePhysOpt" for impl and
+# "Flow_PerfOptimized_high" for synthesis, and we had never swept either knob.
+# Both calls use the SAME directive on purpose (pre-place and post-route).
+set PHYS_OPT_DIR "AggressiveExplore"
+if {[info exists ::env(PHYS_OPT_DIRECTIVE)] && $::env(PHYS_OPT_DIRECTIVE) ne ""} {
+  set PHYS_OPT_DIR $::env(PHYS_OPT_DIRECTIVE)
+}
+puts "BUILD_PHYS_OPT_DIRECTIVE=$PHYS_OPT_DIR"
 place_design -directive $PLACE_DIR
-phys_opt_design -directive AggressiveExplore
+phys_opt_design -directive $PHYS_OPT_DIR
 route_design -directive $ROUTE_DIR
-phys_opt_design -directive AggressiveExplore
+phys_opt_design -directive $PHYS_OPT_DIR
 # Reports go to $root/fpga explicitly (NOT the current directory): the workflow
 # reads fpga/timing.rpt and fpga/util.rpt, so the script must land there no
 # matter where it was started from.
