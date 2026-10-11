@@ -1957,7 +1957,6 @@ def cmd_synth(args) -> int:
             # 别人的编辑会被静默覆盖。2026-10-11 实测: build-repo 给 read_verilog
             # 加了 bht.sv, 被写回抹掉 ⇒ 下一次综合 "module 'bht' not found"。
             # 现在 build.tcl 在构建期间是**只读**的, 这一类事故结构上不可能再发生。
-            benv["PROG"] = prog
             # 自证: build.tcl 打印 BUILD_PROG=$PROG, 下面把它列入 expect ⇒
             # 环境变量没传进去(或 build.tcl 又不认它)会**报错而不是静默跑错程序**。
             expect_prog = f"BUILD_PROG={prog}"
@@ -1969,6 +1968,7 @@ def cmd_synth(args) -> int:
             # 架构宏通过环境变量传给 build.tcl (Tcl 读 $::env)。
             # 默认**一个都不设** = 三宏全关 = 上板验证过的配置。
             benv = clean_env()
+            benv["PROG"] = prog          # 见上: PROG 走 env, 不改写 build.tcl
             if args.imem_comb_read:
                 # [回退] imem 组合读 -> LUT ROM。默认走寄存读 -> RAMB36 (无需设 env)。
                 benv["IMEM_COMB_READ"] = "1"
@@ -2088,6 +2088,9 @@ def cmd_synth(args) -> int:
                 return 1
         # 【已删除 finally: restore_build_prog】build.tcl 不再被改写(PROG 走 env),
         # 所以没有"写回原文件"这一步 —— 也就没有覆盖别人编辑的可能。
+        # 保留 try 结构但不再需要任何清理动作(异常照常向上抛)。
+        except Exception:
+            raise
 
     res = parse_reports()
     res["prog"] = prog

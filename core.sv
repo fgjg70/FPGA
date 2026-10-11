@@ -114,6 +114,10 @@ module core
   // 【E2 扇出约束】见上方 pc_src/redirect 处的说明。
   (* max_fanout = 16 *) logic  actual_taken, pred_ok;
   wire  [31:0] btb_pred_target;
+  // 【C-1 自证】btb/bht 的对齐自证计数 (bht.sv:93-94 判"2 拍前查表的 PC 是否等于
+  //   此刻 EX 的 PC")。以前这个口悬空 —— 自证只 $display 不判失败; 现在接进来并由
+  //   文件末尾的断言把它变成**回归的硬失败判据** (PITFALLS R17: 宏/结构生效必须有自证)。
+  logic [15:0] btb_align_err;
 
   // IF/ID
   logic [31:0] if_pc, if_pc_plus4, if_instr;
@@ -215,9 +219,15 @@ module core
   // 【C-11】分支误判 redirect **寄存一拍** (切环): br_redir = 本拍检出;
   // br_redir_r = 上一拍检出 (这一拍才装 PC 与取指地址); br_redir_r2 = 再下一拍
   // (只用于"错路指令永不提交"的断言窗口)。trap/mret 仍走**组合**通路。
-  logic        br_redir, br_redir_eff, br_redir_r, br_redir_r2;
+  logic        br_redir, br_redir_eff, br_redir_r;
   logic        redir_flush, pc_flush;
   logic [31:0] br_tgt_r, pc_flush_pc;
+`ifndef SYNTHESIS
+  // br_redir_r2 只被下面的仿真断言使用 ⇒ 综合里是"未使用时序元件"
+  // (Synth 8-6014 会把它删掉并告警)。这里显式包进 `ifndef SYNTHESIS`,
+  // 综合时连声明都不存在: 告警消失 + 少 1 位 FF, 仿真行为一字不变。
+  logic        br_redir_r2;
+`endif
 
   // ==========================================================================
   // IF 段
@@ -398,7 +408,8 @@ module core
     .upd_target  (ex_pc_target),
     .upd_is_ret  (ex_is_ret),
     .upd_is_cond (ex_is_cond),
-    .align_err_cnt ()
+    // 【C-1 自证接入】以前悬空; 现在由文件末尾的仿真断言判它必须恒 0
+    .align_err_cnt (btb_align_err)
   );
 
   // 条件分支 (pc_sel==PC_BR) —— gshare 的全局历史只记这类, 不记 JAL/JALR
@@ -493,9 +504,11 @@ module core
   // 原来 IF 段有**两个寄存器装同一条指令**: imem 的输出寄存器 + if_id_reg。
   // 实测不变量 (见 imem.sv:11-14 与上面 pc_next 注释):
   //      imem_rdata(N) == mem[pc(N)]
-  // 且 **BTB 用当前 pc 查询** (u_btb 的 .pred_pc(pc)) —— 所以第 N 拍的
-  //      指令 (imem_rdata) / PC (pc) / 预测 (pred_taken,pred_target)
-  // 三者**天然对应同一条指令**。if_id_reg 只是把同一份信息再打一拍,
+  // 且 **BTB 用 p2_pc = pc_next 提前一拍查询** (C-1 两级流水相位契约; 旧的
+  //   `.pred_pc(pc)` 兼容口已接 32'd0 —— 见下面 u_btb 例化处的说明) —— q_* 在
+  //   下一拍与 pc 对齐, 所以第 N 拍的
+  //      指令 (imem_rdata) / PC (pc) / 预测 (q_taken,q_target)
+  // 三者**仍然对应同一条指令**。if_id_reg 只是把同一份信息再打一拍,
   // 白多一级流水 —— 去掉它后 pc 之后只剩 4 个寄存器, 仍是 5 级 (教科书口径):
   //      [IF] pc -> IMEM -> IMEM 输出寄存器(=IF/ID) -> [ID] ID/EX -> [EX] EX/MEM -> [MEM] MEM/WB -> [WB]
   //
@@ -950,12 +963,16 @@ module core
   always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
       br_redir_r  <= 1'b0;
+`ifndef SYNTHESIS
       br_redir_r2 <= 1'b0;
+`endif
       br_tgt_r    <= 32'd0;
     end
     else begin
       br_redir_r  <= br_redir_eff;
+`ifndef SYNTHESIS
       br_redir_r2 <= br_redir_r;      // 只给断言用 (恢复窗口第 2 拍)
+`endif
       if (br_redir_eff) br_tgt_r <= actual_target;
     end
   end
@@ -979,8 +996,8 @@ module core
   // 冒险单元
   // ==========================================================================
   hazard_unit u_hazard (
-    .id_ex_rs1        (id_ex_rs1),
-    .id_ex_rs2        (id_ex_rs2),
+    // 【C-10 清理】id_ex_rs1/id_ex_rs2 两个端口已从 hazard_unit 删除 (前递预选
+    // 之后模块内无使用者, 综合报 Synth 8-3331 unconnected port)。
     .id_ex_mem_read   (id_ex_ctrl.mem_read),
     .id_ex_reg_write  (id_ex_ctrl.reg_write),   // C-10: 前递预选
     .id_ex_rd         (id_ex_rd),
@@ -1402,6 +1419,22 @@ module core
     if (!rst && id_ex_valid && (br_redir_r || br_redir_r2)) begin
       $error("C-11: wrong-path instruction entered EX during redirect recovery (pc=0x%08x instr=0x%08x)",
              id_ex_pc, id_ex_instr);
+    end
+  end
+  `endif
+
+  // 【C-1 的机器化判据 —— 预测器自证必须恒 0】
+  //   bht.sv:93-94 的 `align_bad = (pcw_d2 != upd_pc[PC_TOP-1:2])` 检查"2 拍前
+  //   查表的 PC 与此刻 EX 的 PC 是否一致"(即 p2_pc → q_* → upd_pc 这条链没有错位),
+  //   它把失配次数打到 align_err_cnt。以前这个口悬空、只在失配时 $display 前 4 次
+  //   ⇒ **静默失效**(预测器错位了回归也照样绿)。现在接进来, 翻成硬失败。
+  //   为什么它重要: 预测错位不会让程序算错(EX 重定向兜底), 只会让预测精度悄悄崩掉
+  //   —— 正是 PITFALLS R17/R42 那一类"看起来在跑、其实没生效"。
+  `ifndef SYNTHESIS
+  always_ff @(posedge clk) begin
+    if (!rst && (btb_align_err != 16'd0)) begin
+      $error("C-1: BTB/BHT alignment self-check failed (count=%0d) — predictor phase broken",
+             btb_align_err);
     end
   end
   `endif

@@ -41,8 +41,10 @@ module hazard_unit
   import rv32_pkg::*;
 (
   // ID/EX: 当前在 EX 的指令
-  input  logic [4:0] id_ex_rs1,
-  input  logic [4:0] id_ex_rs2,
+  // 【C-10 清理】原先这里还有 id_ex_rs1/id_ex_rs2 两个端口 —— 它们是"EX 段现算
+  // 前递"用的消费者 rs。C-10 把前递选择挪到 ID 段预选之后, 它们在模块内**再无
+  // 使用者**, 综合会报 `Synth 8-3331 unconnected port` (各 5 条)。已删除 (端口 +
+  // core 侧连接), 语义不变: 消费者 rs 由下面的 if_id_rs1/if_id_rs2 承担。
   input  logic       id_ex_mem_read,
   input  logic       id_ex_reg_write,  // C-10: 前递预选的"产生者侧"判据
   input  logic [4:0] id_ex_rd,
@@ -117,8 +119,8 @@ module hazard_unit
   //   整条离开关键路径。
   //
   //   【逐位等价性】下一拍 EX 段的 ex_mem_rd/mem_wb_rd/reg_write/mem_read 恰好
-  //   就是本拍的 id_ex_*/ex_mem_*; 下一拍消费者的 id_ex_rs1/rs2 就是本拍的
-  //   if_id_rs*。预选只在"消费者确实前进"时锁存 (与 id_ex_reg 同一组使能
+  //   就是本拍的 id_ex_*/ex_mem_*; 下一拍消费者的 rs 就是本拍的 if_id_rs*。
+  //   预选只在"消费者确实前进"时锁存 (与 id_ex_reg 同一组使能
   //   flush / bubble / stall, 见 core.sv 的 id_ex_fwd_* 时序块) ——
   //   三种情形下消费者都没进 EX, 用不到这个值。
   //
