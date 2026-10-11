@@ -33,6 +33,11 @@ tools/riscv-tools/
 # ---- 剖析结果 (由 fpga_workflow.py profile 生成, 可完全再生) ----
 results/profile.json
 
+# ---- X-02: 上板采集清单 (由 fpga/ila_cap_done.tcl 与 CSV 同一次写出) ----
+# 它是"这一次真的采过板"的见证, 也是 iterations/clk_hz/expect_tick 的单一来源。
+# 属于本机每次采集的证据, 不入库 (否则又会被 git checkout 刷新 mtime, 见 X-02)。
+results/*.capture.json
+
 # ---- DSH 技能发现根 (本机配置, 不入库) ----
 # DSH 的技能目录按"最近的含 .git 的祖先"定位, 即 <projectRoot>/.dsh/skills。
 # 本仓库的 projectRoot = D:\USER\Desktop\FPGA\FPGA, 但技能源文件在 skills/ 下,
@@ -54,6 +59,27 @@ fpga/*.log
 fpga/*.jou
 fpga/.Xil/
 fpga/xsim.dir/
+
+# ---- E-01: QSPI 固化镜像与烧录日志 (可再生的二进制, 曾 62.7MB 入库) --------
+# 2026-10-11: 这些文件曾以 62.66MB 被打进 git (全部源码只有 3.2MB), 现改为
+# 只保留在本地。可再生成路径: .mcs/.bin/.prm <- tools/flash_mkimage.tcl + .bit;
+# readback.bin 是 16MB 烧录读回日志; guide_text/ 与 accessor/ 是 PDF 文本抽取
+# 与配置 accessor 位流。出库清单与字节数见 CODE-REVIEW-PLAN E-01。
+fpga/*.mcs
+fpga/*.bin
+fpga/*.prm
+tools/flash_logs/readback.bin
+tools/flash_logs/guide_text/
+tools/flash_logs/parts_all.txt
+tools/flash_logs/accessor/
+# The hardware-capture log of ila_cap_done.bat. Already covered by fpga/*.log,
+# listed explicitly because it is the witness of the last real board capture.
+fpga/cap_done.log
+
+# ---- X-09: 构建/抓取参数契约 (由 tools/mk_cm_hw.py 生成, 可完全再生) -------
+# 字段: prog / iterations / expect_tick / wait_seconds / clk_hz。
+# 由 build.tcl / build_ila.tcl / ila_cap_done.tcl 读取 (读不到则回退到常量并告警)。
+sim/prog/*.build.json
 
 # ---- 编辑器与操作系统产生的杂物 ----
 .vscode/
@@ -80,5 +106,5 @@ fpga/*.runs/
 fpga/*.html
 fpga/*_webtalk.*
 
-# ---- �ֶ����� (�����ֿ�) ----
+# ---- 手动备份 (不进仓库) ----
 sim/prog/*.bak
