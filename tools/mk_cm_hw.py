@@ -163,6 +163,30 @@ def main():
     wait_seconds = int(expect_tick / clk_hz) + 5
 
     # ------------------------------------------------------------------
+    # 【赛题硬要求: 基准必须跑 >= 10 秒】——提频会**缩短**运行时间
+    # 2026-10-11 提频到 128.125 MHz 时实测 10.61 s, 只剩 0.61 s 余量: 再往上
+    # (约 >135 MHz) 就会违反赛题规则, 而"跑得更快"看起来完全像个好成绩 ——
+    # 这类"指标变好但规则被违反"的形态正是本工程最需要拦的。
+    # 需要的迭代数 = ceil(10 * clk_hz / 每迭代拍数)。
+    # 这是 R35("提速后要重算 ITERATIONS")的**成品闸门**: 以前只靠人记得重算。
+    # ------------------------------------------------------------------
+    run_secs = expect_tick / clk_hz
+    need_iters = -(-10 * clk_hz // tpi)          # ceil, 整数运算避免浮点边界
+    if run_secs < 10.0:
+        print("  [BLOCK] 这个镜像在 %.4f MHz 下只跑 **%.2f s** < 赛题要求的 10 s"
+              % (clk_hz / 1e6, run_secs))
+        print("          ITERATIONS 至少要 **%d** (当前 %d)。改大后重跑本脚本。"
+              % (need_iters, iters))
+        print("          注意: 加大迭代会同步抬高 expect_tick, 也要重新核对 31 位上限。")
+        return 1
+    # 当前迭代数下, 仍满足 >=10s 的**最高频率** (Hz): f_max = iters * tpi / 10
+    max_f = iters * tpi / 10.0
+    print("  [time] %d 迭代 @ %.4f MHz = **%.2f s** (赛题要求 >= 10 s, 余量 %.2f s)"
+          % (iters, clk_hz / 1e6, run_secs, run_secs - 10.0))
+    print("         => 当前 ITERATIONS=%d 下最高可提到 **%.1f MHz**; 再高就需要更多迭代"
+          " (%.1f MHz 需要 %d)" % (iters, max_f / 1e6, clk_hz / 1e6, need_iters))
+
+    # ------------------------------------------------------------------
     # 【31 位 tick 上限】上板 tick 是 mmio_subsys 里的 31 位计数器
     # (score_result 的 bit31 被软件借去当"结果有效"标志), 上限 2^31-1 = 2,147,483,647 拍。
     # 按实测基准外推: 1300 迭代 = 536,943,384 拍 => ITERATIONS_max = 5199。
