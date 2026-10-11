@@ -620,5 +620,115 @@ R48（陷阱未冲 EX/MEM → 被抢占指令双执行）、R-02（mtval 恒 0�
 
 ---
 
+## 9. 第四轮：按 RVCoreP-32IM 论文做"大修"（2026-10-11 下午）
+
+> 触发：用户提供论文 `arXiv 2010.16171`（RVCoreP-32IM）并要求"自行完成 CPU 架构升级、
+> 把双方不足记录在案、先把主频提到 150M"。**论文全文已抽出**到
+> `D:\USER\Desktop\FPGA\.rvcorep_scratch\2010.16171.txt`（9 页）；官方源码（MIT）在
+> 同目录 `rvcorep_ver046/` `rvcorep_ver053/`，**只读、不进仓库**。
+
+### 9.1 论文给出的定位（这决定了本轮方向）
+
+| | RVCoreP-32IM(DSP) | 本核（本轮起点） |
+|---|---|---|
+| 器件 | xc7a100t-**1**（更慢） | xc7a100t-**2** |
+| fmax（64KB 存储器） | **162 MHz** | 76.2 MHz |
+| LUT / FF / DSP | 1331 / 901 / 4 | 2734 / 1251 / 8 |
+| **CoreMark/MHz** | **2.33** | **2.4209** ← 我们更高 |
+| load-use 代价 | **2 拍气泡** | 1 拍（但 dmem BRAM 在关键环里） |
+| 预测器 | 两级流水 gshare（PHT 8192 + BTB 512） | 组合查表（64 项 BTB + 2 位 Smith） |
+| 工具 | synth `Flow_PerfOptimized_high` + impl `Performance_ExplorePostRoutePhysOpt` | 两个旋钮**从未扫过** |
+
+⇒ **差距 100% 在频率**（`CoreMark/MHz` 我们赢 3.9%），判据必须是**绝对吞吐 `CM/MHz × fmax`**。
+论文的三句原文直接命中我们的关键路径（§III.A）：
+> "the data forwarding (or feedback) path becomes **the critical path**"；
+> "multiplier and divider output … **not included** in the data forwarding path from the memory stage"；
+> "**we did not include the load data into the forwarding path from the write back stage.** As a
+>  result, when there is a data-dependent instruction after load, **two cycles bubble** are inserted."
+
+### 9.2 频率阶梯（每一项都是单变量实测，`verify --force` PASS 12）
+
+| 项 | fmax | 绝对吞吐 | 代价 | 台账 |
+|---|---|---|---|---|
+| 起点（75 MHz 交付版） | 76.2 | 184.4 | — | `rv-ctl` |
+| **C-2** load 出前递路径（load-use 1→2 拍） | **83.6** | 185.8 | ticks **+8.905%**、LUT **−203** | `c2-loaduse2` |
+| **C-10** 前递选择改 ID 预选 | **87.8** | 195.1 | **ticks 不变**、LUT +123 | `c10-fwdpre` |
+| **C-11** 寄存"分支误判" redirect（切环） | **92.6** | 201.2 | ticks +2.324% | `c11-rebuilt-ctl` |
+| **+ `synth -directive AlternateRoutability`** | **97.2** | 211.2 | 免费（旋钮从未扫过） | `cb-alt-only` |
+| **+ Pblock `CLOCKREGION_X0Y1:X2Y2`** | **97.5** | **211.8** | 免费 | `c11r-best` ← **交付配置** |
+
+**累计 fmax +28.0%，绝对吞吐 +14.9%**（184.4 → 211.8）。
+
+**机理确认（不是推测）**：C-2 之后 top-1 的源端从 `u_dmem/mem_reg_0/CLKBWRCLK`（RAMB36 时钟脚）
+变成 `u_ex_mem/rd_addr_reg[4]/C`（触发器）——**dmem BRAM 彻底离开取指环**；C-10 之后源端变成
+`id_ex_fwd_a_reg`（前递选择寄存器）——**地址比较链也离开**。
+
+### 9.3 裁定：三项**不做**（都有证据，比"做完再发现是负结果"好）
+
+| 项 | 裁定 | 证据 |
+|---|---|---|
+| **C-8**（停顿出取指地址脚） | **不做** | V6 那半（`redirect` 优先于 `fetch_hold`）已在 C-2 做掉；V7 那半需给 imem 加 `rd_en`，而 **R40-2 实测在主核是 −1.5 MHz**；且现报告证明 `fetch_hold` **不在**新 top-1 上 |
+| **C-3**（MUL/DIV 出 MEM→EX 前递） | **不做** | 它只改前递 hit/预选锥、**不改数据 mux**；`ex_mem_fwd_data` 与 ALU 结果同源 ⇒ 结构上省不掉任何数据路径。论文那句的语境是他们的 muldiv 输出**组合**进前递，我们这边先落 `ex_mem_alu_out`(FF)（R40-2：结构同源 ≠ 结构等价） |
+| **C-12a**（muldiv 操作数直取 rs1/rs2） | **实测证伪并回退** | 默认配置 **+0.76%**（93.3 vs 92.6），但 `AlternateRoutability` 下 **−5.3%**（91.9 vs 97.2）⇒ **与工具策略强烈负交互**。按绝对吞吐判：C-11+alt+X2Y2 = 211.8 > C-12a+默认 = 202.6 |
+
+### 9.4 物理侧的新认识（与上午的结论不同，因为**网表变了**）
+
+- 上午 11 点那轮 11 组 Pblock 重扫得出的"最优未移动"是**针对 dmem-BRAM→imem 那条墙**的；
+  C-2/C-10/C-11 之后墙换了族（F→F，route 75.6%），**该结论不可继承**。
+- 新族 50/50 同源：`id_ex_fwd_a_reg[0]/C → u_muldiv/prod_ss_reg__2/PCIN`，逐跳
+  `Q 0.398 + 网 fo=128 **1.685** + LUT6 + 网 0.664 + LUT6 + 纯距离 **2.544**(SLICE_X78→DSP48_X1Y20) + DSP48 A→PCOUT **3.397**` = 9.027 ns，**仅 3 级**。
+  ⇒ 这不是 R47 那种"Δ=0.007 的墙"，**一处改动能同时治 50 条**。← C-12c（muldiv 操作数先寄存一拍）的依据。
+- `FewerCarryChains`（RVCoreP 的 `main.xpr` `Directive=7` 在 2018.3 枚举里的含义）实测 **89.8，更差**；
+  Pblock 收紧只值 **+0.3**（与 R37-1"收紧更差"一致）；`phys_opt Explore` 在新网表上**无变化**
+  （旧网表 +1.7）。⇒ **同一旋钮在新网表上会变号**，这条要在文档里说清。
+
+### 9.5 工具侧的两个真发现
+
+1. **`synth_design -directive PerformanceOptimized` 在 Vivado 2018.3 不存在**。
+   `-help` 只列 8 个：`default / RuntimeOptimized / AreaOptimized_high / AreaOptimized_medium /
+   AlternateRoutability / AreaMapLargeShiftRegToBRAM / AreaMultThresholdDSP / FewerCarryChains`。
+   我此前把 RVCoreP 的 `Flow_PerfOptimized_high` 当成它 ⇒ Vivado 立刻 `[Common 17-161]`。
+   按该枚举，他们 `main.xpr` 的 `Directive=7` 实为 **`FewerCarryChains`**。
+   而实测真正有效的是 **`AlternateRoutability`（+5.0%）** —— 一个与论文不同的旋钮。
+2. **日志解析不许按中文匹配**：ModelSim 把 `$display` 里的中文**写成 `?`**（"实测冲刷拍数" →
+   `???????????`），于是按中文写的正则永不匹配、并**静默退回旧假设**（虚报重定向占比 2 倍）。
+   已改为按 ASCII 结构匹配。建议 TB 给机器看的判据一律用 ASCII 标记。
+
+### 9.6 过程教训（本轮最贵的三条）
+
+1. **冻结窗口协议**：三条泳道并行改 RTL 时，任何"用 Vivado 测量"的尝试都会被污染 ——
+   本轮因此报废了 **15 个测量点**（第一次 5 点全 `RTL_MOVED`、第二次 6 点全废）。
+   现行规则：**Lead 说"窗口开放"才允许落盘 `*.sv`**；测量只对冻结的 RTL 做。
+2. **`git checkout -- <file>` 在有多泳道未提交工作时等同于破坏**。本轮我因此**销毁了 C-11 的
+   RTL**（提交抓到的是它"注释已写、逻辑未写"的半成品）。修复靠作者按规格重建 +
+   `sha256_tree()` 逐位复核（`a7248c31…` 完全相同）。规则：**要回退先 `git stash`，或只让文件
+   所有者回退**。
+3. **"全绿"必须当场提交，不许隔夜**。本 session 三次 git 事故（2 次提交卷带别人的未提交工作、
+   1 次破坏性回退）根因都是"未提交的工作在工作区停留太久"。
+
+### 9.7 150 MHz 的状态与剩余杠杆
+
+- **现状 97.5 MHz（路径 10.253 ns @13.333 ns 约束）；150 MHz 需要 ~6.0 ns ⇒ 还差 4.2 ns。**
+- 逻辑侧已无空间（新 top-1 只有 **3 级**、logic 4.132 ns），**必须让 DSP 那一族变短**。
+- **C-12c（已立项，作者实施中）**：muldiv 操作数在 EX 先寄存一拍 ⇒ 若 Vivado 把 `md_a_r/md_b_r`
+  吸收进 DSP 的 AX/BX 输入寄存器，该族可能 9.03 → **4.5~6.5 ns（150~200 MHz 档）**；
+  代价 ≤156 拍（0.034%，窗口内 ≈0）。
+- **C-1（`rtl-pred`，已备好）**：两级流水 gshare（PHT 8192 / BTB 512），与 C-11 正交互 ——
+  C-11 已把 redirect 切到 FF 后面，预测通路现在是独立项。
+- 时钟阶梯：MMCM 只用 `CLKOUT0_DIVIDE_F` 就能得到 1050/N = **75 / 87.5 / 95.45 / 105 / 116.7 /
+  131.25 / 150 MHz**（VCO 不变 ⇒ 不引入新的锁定风险）。**150 = N=7 精确**。
+
+### 9.8 交付与证据
+
+- 提交：`c0b6f18`(C-2+C-10+中断寄存) `fcdb48e`(测试+PASS 12) `881d11b`(工具) `9858c26`(双方不足)
+  `5fc202d`(C-11+事故重建) `341ebf3`(日志解析不许按中文)
+- 双方不足记录：`results/rvcorep-vs-ours.md`（并排表 16 行 + 他们不足 16 条 + 我们不足 17 条 +
+  5 条口径更正 + 可搬运清单 + 不可搬运 5 条）
+- 每项测量都在 `results/coremark.csv`（含**负结果**：C-12a、`FewerCarryChains`、Pblock 收紧、
+  `phys_opt Explore` 在新网表上失效）
+
+---
+
 *本文由代码审查产生（含一次完整强制回归 + 度量链实跑复现）。§0~§5 是审查时的原始判断，一律保留；
-§6 是第一轮执行记录；§7 是第二轮物理优化（含对外部建议的核实）；§8 是第三轮提频到 75 MHz。*
+§6 第一轮执行记录；§7 第二轮物理优化（含对外部建议的核实）；§8 第三轮提频到 75 MHz；
+§9 第四轮按 RVCoreP-32IM 论文的大修（76.2 → 97.5 MHz，150 MHz 进行中）。*
