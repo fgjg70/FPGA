@@ -4,6 +4,16 @@
 > 指标数字以 `python tools/fpga_workflow.py report` 从 `results/coremark.csv`
 > 重算的结果为准 —— 那是当前唯一可复现的口径。历史行里的 `LUT 2481` 等
 > 用当前代码复现不出来，原因见 `HANDOFF.md` 第 6 节 P1 小节末尾。
+>
+> ⚠️ **两处口径必须拆开读**（本文多处写"已验证"，容易混）：
+> - **仿真通过** = ModelSim `verify` 打印 `RESULT : PASS`（**PASS 11**）；
+> - **上板验证** = JTAG + ILA 读回，凭据 `results/ila_done.csv` + `fpga/cap_done.log`。
+>
+> **本文的"上板实测/上板已验证"全部指 2026-10-08 那次采集**；
+> **最后一次成功上板 = 2026-10-09 21:29:30**，此后 `load_store_unit.sv` + `fpga/build.tcl`
+> （`d6b48fe`，2026-10-11 00:50）**尚未上板**，本次审查对 `core.sv`/`id_ex_reg.sv`/`csr_file.sv`
+> 的改动**也未上板**（用 `python tools\fpga_workflow.py hw --stale` 现查）。上板/指标数字的换代更正见
+> `CODE-REVIEW-PLAN.md` **D-01~D-03**（本文的 fmax 一列还带着已失效的换算口径 M-01）。
 
 ## 基础任务（必须完成）
 

@@ -22,6 +22,14 @@
 | 上板 CoreMark | **1300 迭代** / **10.74 s** / CRC 逐位匹配官方值 ✅（tick 536,943,384）|
 | 回归 | **11 项全 PASS**（含定时器中断、RV32A 原子指令、神经网络 GEMM 应用）✅ |
 
+> ⚠️ **口径（本文多处写"实测/验证"，请拆开读）**：**仿真通过** = ModelSim `verify` 打印
+> `RESULT : PASS`（PASS 11）；**上板验证** = JTAG + ILA 读回，凭据 `results/ila_done.csv`
+> + `fpga/cap_done.log`。**上文"上板 CoreMark"那一行是 2026-10-08 的采集**；
+> **最后一次成功上板 = 2026-10-09 21:29:30**，此后 `load_store_unit.sv` + `fpga/build.tcl`
+> （`d6b48fe`，2026-10-11 00:50）**尚未上板**，本次审查对 `core.sv`/`id_ex_reg.sv`/`csr_file.sv`
+> 的改动**也未上板**（用 `python tools\fpga_workflow.py hw --stale` 现查）。指标/上板数字的换代更正见
+> `CODE-REVIEW-PLAN.md` **D-01~D-03**（本报告的 fmax 一列沿用了已失效的换算口径 M-01）。
+
 ### 三项评分指标（相对基线）
 
 > ⚠️ **数据口径说明（重要）**：本报告初版写的 `fmax 70.9 MHz / LUT 2526 /
@@ -170,7 +178,7 @@ CRC 全部匹配官方 2K PERFORMANCE_RUN 期望值：
 
 | 项 | 量 |
 |---|---|
-| RTL | **20 个 .sv 文件，3849 行**（纯行为级，零厂商原语）|
+| RTL | **20 个 .sv 文件，3972 行**（纯行为级，零厂商原语；**2026-10-11 快照** —— 本次审查正在改 `core.sv`/`id_ex_reg.sv` 等，行数还会变，冻结后重算）|
 | 测试台 | 1413 行（4 个 tb：563 / 175 / 269 / 406）|
 | 回归 | **11 项**（`tb_units` 检查点数以运行时打印为准 + 10 个系统级/软件级）|
 | 资源（交付配置）| **LUT 2649 / FF 1234 / BRAM 8 / DSP 8** |
@@ -481,7 +489,7 @@ GEMM 结果就不同（`-O0` 与主机一致，`-Os`/`-O2` 不一致）。已用
 | `results/hw-verified.md` | 两次上板记录与核对方法 |
 | `results/baseline-v1.md` … `p3-load-result.md` | 每轮的设计、实测与取舍 |
 | `results/gap-analysis.md` | 对照赛题逐项核对的差距清单 |
-| `skills/fpga-riscv-a100t/PITFALLS.md` | 错误台账（**R1~R35**，症状优先）|
+| `skills/fpga-riscv-a100t/PITFALLS.md` | 错误台账（**R1~R47** 共 **47** 条，症状优先；最值钱的新条目是 **R43** MMCM 漏接 `.CLKFBIN` 会把整颗 CPU 按在复位里、**R47** top-N 是墙时 RTL 重排期望≈0）|
 
 **一键复现**：
 

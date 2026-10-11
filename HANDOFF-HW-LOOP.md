@@ -1,9 +1,17 @@
 # 上板闭环测试 — 你能自己做，不需要人
 
 > 这是 `HANDOFF.md` 的**补充文档**，专讲一件事：**硬件闭环测试是全自动的**。
-> `HANDOFF.md` 的 P4 节把上板复验写成了「待用户操作」—— **那是错的**。
+> `HANDOFF.md` 旧版把上板复验写成了「待用户操作」—— **那是错的**（该表述已更正；
+> `HANDOFF.md` 里现在只剩"物理插拔 USB/JTAG 线"和"断电上电看 DONE 灯"两处真的需要人）。
 > 你可以在真实板卡上完成「改 RTL → 综合 → 烧录 → 运行 → 读回结果」的全过程，
 > **不需要用户看一眼 LED、也不需要串口**。本文给出可直接复制运行的命令。
+>
+> **口径**：本文说的"上板验证"= JTAG 烧录 + ILA 读回，凭据是 `results/ila_done.csv`
+> 与 `fpga/cap_done.log`（`CAPTURE_OK`）。**最后一次成功采集 = 2026-10-09 21:29:30**；
+> 此后 `load_store_unit.sv` + `fpga/build.tcl`（`d6b48fe`，2026-10-11 00:50）**尚未上板**，
+> 本次审查对 `core.sv`/`id_ex_reg.sv`/`csr_file.sv` 的改动**也未上板**。
+> **本文里的任何时间/tick 数字都会过时 —— 一律现查，不要照抄**（R20/R28）；
+> "哪些未上板"用 `python tools\fpga_workflow.py hw --stale` 查，不要读静态清单。
 
 ---
 
@@ -16,16 +24,23 @@
 你可以用 Tcl 脚本让 Vivado **自己烧录、自己等程序跑完、自己把内部信号抓下来、自己写成 CSV**。
 整个过程在一条 `cmd /c xxx.bat` 里完成，退出码和 CSV 文件就是判据。
 
-**已在真实板卡上跑通并留下证据**（`results/hw-verified.md`）：
+**已在真实板卡上跑通并留下证据**（`results/hw-verified.md` + `results/ila_done.csv`）。
+**下面是一份历史快照**（采集时间见括号，数字不是"当前值"—— 上板的换代与口径更正见
+`CODE-REVIEW-PLAN.md` **D-03**）：
 
 ```
-ila_ctrl     = 0x42  ->  done=1  pass=1  fail=0  illegal=0
+ila_ctrl     = 0x42  ->  done=1  pass=1  fail=0  illegal=0   (2026-10-08 采集)
 score_result = 0xA0011B18
   bit31 = 1  ->  crclist/crcmatrix/crcstate 全部匹配 CoreMark 官方参考值
   tick  =  536,943,384
   时长  =  10.74 s       (满足赛题 >=10 秒硬性要求, 1300 迭代 @50 MHz)
   CoreMark/MHz = 2.4211  (仿真 2.4209)
 ```
+
+> ⚠️ `results/ila_done.csv` **现盘上已经是 2026-10-09 21:29 那一次采集**（`ila_ctrl=0xC2`），
+> 与上面这段快照**不是同一次**。判断"本次上板是否真的跑出结果"，只看三件事：
+> **CSV 的 mtime 是刚才**（脚本自己会打印 `CSV_MTIME=... AGE_SEC=...`）、
+> **`CAPTURE_OK`**、以及 `ila_ctrl` 的 bit7=`mmcm_locked` / bit6=`done` / bit1=`pass`。
 
 ---
 
@@ -55,34 +70,29 @@ IDCODE 0x13631093, part xc7a100tfgg484-2
 cmd /c D:\USER\Desktop\FPGA\FPGA\fpga\ila_cap_done.bat
 ```
 
-它做四件事：**烧录 → 等 16 秒（让 CoreMark 跑完 10.74 秒）→ 抓 2048 拍 → 写 `results/ila_done.csv`**。
+它做四件事：**烧录 → 等待 CoreMark 跑完 → 抓 2048 拍 → 写 `results/ila_done.csv`**。
 
-脚本内容（`fpga/ila_cap_done.tcl`，已可用）：
+> **脚本内容不再抄在这里 —— 以 `fpga/ila_cap_done.tcl` 为准**。本文旧版抄过一份，
+> 已经与脚本脱节并会误导：
+> - 旧抄本写 `after 16000`，脚本**现在不是**这个值（迭代数与等待时间都变过）；
+> - 旧抄本漏了 `write_hw_ila_data -force` —— 目标 CSV 已存在时**必须**加，否则
+>   `Labtoolstcl 44-54` 报错（`HANDOFF.md` P4 节要点 2）；
+> - 旧抄本把 `puts "CAPTURE_OK"` 写成无条件打印，而脚本现在会先校验 **CSV 的 mtime**
+>   （打印 `CSV_MTIME=... AGE_SEC=...`，超过 120 s 直接 `error CAPTURE_STALE`）——
+>   这正是 R20「验证工具可能制造虚假证据」的防线，**别把它删掉**；
+> - 脚本还带 `-force` + 失败即 `error`，所以**判据是 `CAPTURE_OK` 出现且 `AGE_SEC` 很小**，
+>   不是"命令没报错"。
 
-```tcl
-open_hw
-connect_hw_server
-open_hw_target
-current_hw_device [lindex [get_hw_devices] 0]
-set_property PROGRAM.FILE {D:/USER/Desktop/FPGA/FPGA/fpga/ila_proj.runs/impl_1/top_a100t.bit} [current_hw_device]
-set_property PROBES.FILE  {D:/USER/Desktop/FPGA/FPGA/fpga/ila_proj.runs/impl_1/top_a100t.ltx} [current_hw_device]
-program_hw_devices [current_hw_device]
-puts "PROGRAMMED"
-current_hw_device [lindex [get_hw_devices] 0]
-refresh_hw_device -update_hw_probes true [current_hw_device]
-after 16000                     ;# CoreMark 1300 迭代 ≈ 10.74 s, 留约 5 s 余量
-set ila [lindex [get_hw_ilas -of_objects [current_hw_device]] 0]
-if {$ila eq ""} { error "NO_ILA_FOUND" }
-reset_hw_ila $ila
-set_property CONTROL.TRIGGER_POSITION 0 $ila
-run_hw_ila $ila                 ;# 不设触发值 = 探针默认 eq8'hXX = 无条件触发
-wait_on_hw_ila -timeout 60 $ila
-upload_hw_ila_data $ila
-write_hw_ila_data -csv_file {D:/USER/Desktop/FPGA/FPGA/results/ila_done.csv} hw_ila_data_1
-puts "CAPTURE_OK"
-```
+**关于脚本里的等待时间/迭代数**：那是与本次 bitstream 里嵌的镜像绑定的魔数，
+改性能后必须同步（R35）；三者必须一致：**镜像的 ITERATIONS ↔ 脚本的 `after` ↔
+解析时的 `--iterations`**。脚本头部注释写明了它对应的值与预期时长，**改之前先读它**。
 
 ### 2.2 用 Python 解析读回的结果
+
+> ⚠️ 下面的 `1300e6` 是**当时**的迭代数硬编码 —— 这正是 M-03 那类静默错误
+> （改性能后迭代数变了，用它算出来的 CoreMark/MHz 会"看起来很正常"但全错）。
+> **迭代数与时钟频率必须来自本次镜像/脚本的真实值**，或直接用修正后的
+> `python tools\fpga_workflow.py hw`（它从参数读，不再用默认值）。
 
 ```python
 import re
@@ -93,9 +103,10 @@ iR = next(i for i,h in enumerate(hdr) if 'score_result' in h)
 def px(s): return int(s.strip().strip('"').replace('0x',''), 16)
 c = lines[1].split(',')
 ctrl, res = px(c[iC]), px(c[iR])
-print('done=%d pass=%d fail=%d illegal=%d' % ((ctrl>>6)&1,(ctrl>>1)&1,ctrl&1,(ctrl>>2)&1))
+print('mmcm_locked=%d done=%d pass=%d fail=%d illegal=%d'
+      % ((ctrl>>7)&1,(ctrl>>6)&1,(ctrl>>1)&1,ctrl&1,(ctrl>>2)&1))
 print('CRC 判定 =', (res>>31)&1, ' tick =', res & 0x7fffffff)
-print('CoreMark/MHz =', 1300e6 / (res & 0x7fffffff))
+# CoreMark/MHz = ITERATIONS * CLK_HZ / tick   <-- 两个数都要用本次真实值, 不要写死
 ```
 
 ### 2.3 抓流水线波形（分析报告用）
@@ -137,7 +148,13 @@ for f in ['core.sv','csr_file.sv','rv32_pkg.sv','fpga/top_a100t.sv','fpga/mmio_s
 cmd /c D:\USER\Desktop\FPGA\FPGA\fpga\build_ila.bat
 ```
 约 10 分钟（工程模式，含 ILA 的 IP 生成）。完成后看 `fpga/timing_ila.rpt`：
-**`sys_clk` 的 WNS 必须 > 0**（50 MHz 约束满足），否则上板结果不可信。
+**所有时序约束必须满足（WNS ≥ 0）**，否则上板结果不可信。
+
+> ⚠️ **别再按 `sys_clk` 这个时钟名去查** —— 引入 MMCM 之后核心跑在 MMCM 输出的
+> **`sys_clk_70`** 域上，报告里 `sys_clk` 那一行**已经不再是设计主时钟**（它只剩脉宽余量），
+> 照旧口径读会得出错误结论（这正是 M-01/X-01 那个 bug 的成因）。
+> 现在 `build_ila.tcl` 也**没有**自动断言时序满足 —— 这一项归**构建泳道**
+> （`CODE-REVIEW-PLAN.md` **X-09**）；在它修好之前请手工确认报告里的 setup WNS。
 
 > 注意：`build_ila.bat` 用 `settings64.bat` + `-log cap_done.log` 的形式，
 > 日志落在 `fpga/` 下，出错时先看它。
@@ -249,24 +266,31 @@ cmd /c D:\USER\Desktop\FPGA\FPGA\fpga\ila_info.bat    REM 列出 ILA 与所有�
 > ```
 > （R20/R28：拿上一次的 CSV 当本次结论 = 虚假证据，所以新鲜度必须现查。）
 
-| 项 | 状态（2026-10-08 交付配置）|
+| 项 | 状态（**2026-10-08 快照**，不是当前值）|
 |---|---|
 | 评分版时序 | fmax **69.8 MHz**（WNS 5.673 @20 ns，50 MHz 约束满足）|
 | 评分版资源 | LUT **2649** / FF **1234** / BRAM **8** / DSP 8 |
 | `fpga/cpu_a100t.bit` 里嵌的程序 | `cm_hw`（CoreMark **1300** 迭代）|
 | **ILA 版 bitstream** | 改过 RTL 就必须按 §3 重建（约 5–6 分钟），否则抓到的是旧设计 |
 
-> ℹ️ **`fpga/ila_cap_done.tcl` 里的注释与等待时间仍是旧的**（写的是
-> `ITERATIONS=1200 -> 508M cycles -> 10.16 s`）—— `.tcl` 一律纯 ASCII 且属于
-> 构建脚本，本文档不改它。1300 迭代 ≈ **10.74 s**，`after 16000` 仍有约 5 s 余量，
-> 所以当前**可用**；但**下次改迭代数时必须同步改这里的 `after`**（见注意事项 3 与 R35）。
+> ⚠️ **上表三行数字都是 2026-10-08 的**，而 MMCM 上线后核心跑在 **70 MHz** 域、
+> 迭代数也变过 —— **不要拿这份快照去判读任何一次采集**。口径更正见
+> `CODE-REVIEW-PLAN.md` **D-01/D-02/D-03**；现查用 `fpga/timing.rpt` + `fpga/util.rpt` +
+> `results/coremark.csv` 末行。
+
+> ℹ️ **`fpga/ila_cap_done.tcl` 里的等待时间/迭代数与本文旧版抄本不一致**：请**以脚本为准**
+> （脚本头部注释写明它对应的 ITERATIONS、预期时长与 `after` 值）。
+> 改迭代数时必须同步脚本里的 `after`（原文此处引用的旧值已失效，见注意事项 3 与 R35）；
+> 这一处的"文档 ↔ 脚本"同步归**构建泳道**处理（`CODE-REVIEW-PLAN.md` **X-09**）。
 
 **关于历史 LUT 数字对不上**：`results/coremark.csv` 里 `bram-v1` / `HARDWARE-VERIFIED`
 两行写的 LUT=2481，用**后来**的代码复现不出来（当时是 3923）。原因不是测量错误，而是
 **代码在那之后变了**：CSR 接线给 `ctrl_s` 加了 5 个字段（`sys_op`/`csr_addr`/`csr_cmd`/
 `csr_src_imm`/`csr_uimm`），控制束变宽 → 流水线寄存器与布线都变多。
 CSV 里那两行是**当时那版代码**的实测值，不该改；新代码的数字应当**追加新行**。
-当前最新一行是 `review-fix`（413,070 / 2.4209 / 2649 / 69.8）。
+当前最新一行以 `results/coremark.csv` **末行为准**（本文不再抄数字：这里旧版抄的是
+`review-fix`（413,070 / 2.4209 / 2649 / 69.8），那已经是 2026-10-08 的口径，
+而 fmax 那一列的换算口径本身也坏了 —— 见 `CODE-REVIEW-PLAN.md` M-01/D-01）。
 
 ---
 
@@ -276,8 +300,9 @@ CSV 里那两行是**当时那版代码**的实测值，不该改；新代码的
    手动跑 `build_ila.bat` 前先确认没有别的 Vivado 在跑（`tasklist | findstr vivado`）。
 2. **ILA 只应该在调试版里** —— CPU 核本身零厂商原语，ILA 被 ``ifdef USE_ILA`` 隔绝在顶层。
    评分版（`build.bat`）不带 ILA，别把带 ILA 的 bitstream 拿去当交付物。
-3. **`after 16000` 是给 CoreMark 的** —— **每次性能提升后都要按 R35 重算 `ITERATIONS`
-   并同步这个等待时间**（1300 迭代 ≈ 10.74 s，16 s 仍有约 5 s 余量；再快下去就不够了），
+3. **脚本里的 `after` 是给 CoreMark 的等待时间** —— **每次性能提升后都要按 R35 重算
+   `ITERATIONS` 并同步脚本的 `after`**（脚本头部注释写了它对应当前镜像的哪个值；
+   等待时间必须 > 实际运行时长再留余量），
    否则会在 CoreMark 还没跑完时就抓，读到 `score_result = 0`。
 4. **上板结果要落盘** —— 抓完的 CSV 写进 `results/`，并在 `results/` 里留一份文字结论
    （照 `results/hw-verified.md` 的格式）。不落盘就等于没测。

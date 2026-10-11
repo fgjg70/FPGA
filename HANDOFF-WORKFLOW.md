@@ -84,9 +84,15 @@ cmd /c D:\USER\Desktop\FPGA\FPGA\fpga\build.bat
 ```
 然后**必须从报告里读**，不能凭上次的数字：
 ```python
-# fmax: 从 timing.rpt 的 sys_clk WNS 反推 (约束周期 20ns)
-wns = float(re.search(r'^sys_clk\s+([-\d.]+)', timing_txt, re.M).group(1))
-fmax = 1000.0 / (20.0 - wns)
+# ⚠️⚠️ 下面这段 fmax 公式【已失效, 不要照抄】⚠️⚠️
+#   引入 MMCM 之后设计主时钟变成 sys_clk_70, 报告里 `sys_clk` 那一行不再有 setup 端点,
+#   这个正则会静默抓到该行的【脉宽余量 WPWS=7.000】, 再按硬编码 20ns 换算 -> 报出
+#   虚高的 76.92 MHz (真值 74.64)。见 CODE-REVIEW-PLAN.md M-01 / X-01, PITFALLS R42.1。
+#   【正确做法】从 Clock Summary 取各时钟周期, 在 Intra Clock Table 里按【设计主时钟】
+#   取 setup WNS, fmax = 1000/(T - WNS), 且时钟名/周期必须可配置(不要硬编码)。
+#   或者直接用修正后的 `python tools\fpga_workflow.py metrics`(它内部就是这套解析)。
+sys_clk_line = re.search(r'^\s*sys_clk\s+(-?[\d.]+)', timing_txt, re.M)   # <-- 错的, 保留仅作反面教材
+fmax_wrong   = 1000.0 / (20.0 - float(sys_clk_line.group(1)))              # <-- 错的
 # 资源: 从 util.rpt 按行匹配, 不要用 'lastIndexOf' 之类会串行的写法
 def val(report, key):
     for line in report.splitlines():
@@ -145,6 +151,10 @@ ABS    = CM_MHZ * fmax         # 绝对吞吐 = 每秒多少次迭代
 你现有的 `doctor / check / verify / report / synth` 覆盖了纪律层。
 缺的是**测量层与硬件层**。建议加三个子命令：
 
+> ✅ **这三个子命令（`metrics` / `profile` / `hw`）现在都已经实现**（见 `tools/README.md`），
+> 本节保留的是**当时的接口设计**，可作为"为什么这样设计"的说明；
+> 实际用法以 `tools/README.md` 与 `python tools\fpga_workflow.py <cmd> -h` 为准。
+
 ### 3.1 `metrics` —— 三项指标 + 判定
 
 ```bash
@@ -154,6 +164,15 @@ python tools/fpga_workflow.py metrics --vs bram-v1       # 与历史某行对比
 
 **输入**：`fpga/timing.rpt` + `fpga/util.rpt` + 一个 ticks 值（来自仿真或上板）
 **输出**：`{cm_per_mhz, fmax, cm_per_lut, abs, delta_vs}`
+
+> **【fmax 口径纪律】`fmax` 这个数必须能回答"哪条时钟、周期多少、WNS 多少"。**
+> 引入 MMCM 后核心跑在 **`sys_clk_70` @14.286 ns**（不是 `sys_clk` @20 ns），
+> 所以旧公式 `1000/(20 − WNS)` **已失效**（`CODE-REVIEW-PLAN.md` M-01）。
+> 修好的工具会打印完整推导，形如
+> `fmax 74.6 MHz  sys_clk_70 @14.286ns, 运行 70.00 MHz; WNS +0.888ns -> fmax=1000/(14.286 - 0.888)`
+> —— **照抄这个格式，不要只写"fmax=xx"**。
+> 另外 `results/coremark.csv` 的 `fmax` 列**混着两种口径**，引用时必须配 **`fmax_src`** 列读。
+
 **建议逻辑**（把第 [5] 步的纪律编码进去）：
 ```
 win = 0; lose = 0
@@ -279,5 +298,9 @@ stale = [f for f in RTL_AND_TOP_FILES if mtime(f) > mtime(ILA_BIT)]
 ## 7. 一句话总结
 
 **你已经有了「纪律」（check/verify），我补的是「测量」与「判定」。**
-把 `metrics` / `profile` / `hw` 三个子命令加上，再把第 4 节的回合固化成 skill，
+`metrics` / `profile` / `hw` 三个子命令**已实现**，第 4 节的回合也已固化成 skill，
 这个项目就从「有人盯着才不会错」变成「机器每一步都替你查、替你算、替你判」。
+
+> ⚠️ 但"机器替你算"有个前提：**量具本身是对的**。本文 §1.2 [4] 那段 fmax 公式
+> 已经因为 MMCM 而失效（`CODE-REVIEW-PLAN.md` M-01），修好之前 `metrics` 的
+> keep/reject 判定不可信 —— **先修量具，再信结论**。

@@ -5,7 +5,7 @@ description: 在本 FPGA/RISC-V 工程里改代码、跑回归、量指标、收
 
 # 工作流：改 → 验 → 量 → 记
 
-本工程的**静默失败**历史很重：40+ 个坑里最高频的是
+本工程的**静默失败**历史很重：47 条坑（`PITFALLS.md`，R1~R47）里最高频的是
 「改了 A 忘了同步 B」，且**全部不报错**（结果不变、或结果错但看起来正常）。
 所以在本工程里，**任何改动都必须经过 `check` + `verify`，不允许靠人眼确认**。
 
@@ -51,12 +51,22 @@ Python 用 `C:\Users\19716\AppData\Local\Programs\Python\Python313\python.exe`�
 **赛题记三项指标，改一项必须同时看三项 + 绝对吞吐（CoreMark/MHz × fmax）。**
 `report` 会把四项变化率一次算出来。
 
+> ⚠️ **先分清"仿真通过"与"上板验证"**：`verify` 的 `RESULT : PASS` 只证明**仿真**过了；
+> **上板**必须另有 JTAG+ILA 读回（`results/ila_done.csv` + `fpga/cap_done.log` 的 `CAPTURE_OK`，
+> 并写明采集时间）。两者不是一回事，**综合报告的数字也不是"上板实测"**。
+> 另外 `fmax` 的自动解析曾因 MMCM 静默算错（`CODE-REVIEW-PLAN.md` M-01）——
+> 修好并用真实报告复算之前，**不要相信任何工具给的 fmax**。
+
 反例（真发生过）：RAS + BTB128 让 CoreMark/MHz **+1.0%**，但 fmax **−4.6%**、
 CoreMark/LUTs **−4.4%** → 净亏，已回退。只看一项就会误判成"改进了"。
 
 ---
 
-## 4. XFAIL：`tb_core_trap` 的语义
+## 4. XFAIL 语义（**历史章节，当前已无 XFAIL 项**）
+
+> ⚠️ 本节写于 `tb_core_trap` 还是 XFAIL 的时候。**现在 `expect_fail_ok` 已全部摘掉、
+> 11 项全 PASS、无 XFAIL**（见 `tools/README.md`）。保留本节是因为这套语义仍适用于
+> 未来任何"预期失败"的测试；**不要以为现在还有 XFAIL**。
 
 `tb_core_trap` 标了 `expect_fail_ok`（异常/中断的 core 接线 = P1 待办）：
 

@@ -832,4 +832,9 @@ ITER_new = ceil(ITER_old × 10.0 / 实测秒数 × 1.05)      # 留 5~7% 余量
 - [ ] **变快了 → 按 R35 重算 `ITERATIONS`**, 重建 imem+dmem 两个镜像并重新综合,
       同步 `ila_cap_done.tcl` 的等待时间与文档里的 tick/时长?
 - [ ] **删/改过流水寄存器 → 按 R34 检查**它是否曾是某条反馈环的切点或晚信号的屏障?
+- [ ] **结论写清是"仿真通过"还是"上板验证"**: 前者=ModelSim `verify` 的 `RESULT : PASS`,
+      后者=JTAG+ILA 读回 (`results/ila_done.csv` + `fpga/cap_done.log` 的 `CAPTURE_OK` + mtime),
+      **并且注明采集时间**。别拿上一次的 CSV 当本次结论 (R20), 也别把综合报告的数字说成"上板实测"。
+- [ ] **改过 RTL/软件 → 上板验证跟上了吗?** 在文档/报告里写出"最后一次上板的时间"与
+      "此后未上板的改动清单" (两者都要现查, 不要照抄文档)。
 - [ ] .bat 是纯 ASCII?

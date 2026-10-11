@@ -1,7 +1,7 @@
 # tools — 工作流工具集
 
 本目录里的工具解决的是**工程纪律问题**，不是功能问题。
-`skills/fpga-riscv-a100t/PITFALLS.md` 记录了 40+ 个踩过的坑，其中最高频的一条是
+`skills/fpga-riscv-a100t/PITFALLS.md` 记录了 **47 条**（**R1~R47**）踩过的坑，其中最高频的一条是
 **R1「改了 A 忘了同步 B」——全部静默失败**（不报错、结果不变或结果错）。
 `fpga_workflow.py` 存在的唯一目的，就是把这些"靠人记"的纪律变成"机器每次都查"。
 
@@ -32,23 +32,26 @@ python tools\fpga_workflow.py report
 工具内置 `clean_env()`，显式补齐 `PROCESSOR_ARCHITECTURE=AMD64` /
 `LM_LICENSE_FILE` / `PATH`，所以**即使会话环境是空的也能跑**。
 
-### `check` — R1 漂移检测（核心）
+### `check` — R1 漂移检测 + 综合警告门（核心）
 
-五项检查，全部来自 PITFALLS 里踩过的真坑：
+**7 项检查**（外加一节非编号的 `[HIL]` 硬件在环健康度），全部来自 PITFALLS 里踩过的真坑：
 
 | # | 检查项 | 对应的坑 |
 |---|---|---|
-| 1 | 三处 RTL 文件清单是否同步（`build.tcl` / `build_ila.tcl` / `run_coremark.py`） | R1：新增 RTL 忘了加进清单 → 静默用旧产物 |
-| 2 | 是否存在"没有任何地方例化"的 RTL 模块 | 在研未接线的模块（如 `csr_file.sv`） |
-| 3 | `sw/` 源文件是否比 `sim/prog/*.hex` 镜像新 | R1：改了软件忘了重建镜像 |
-| 4 | `tb_sw.sv` 的 tohost 地址 / 注释是否与 `link.ld` 一致 | R1：改 `link.ld` 地址要同步 5 类文件 |
-| 5 | `.bat` / `.tcl` 是否纯 ASCII | R2：cmd 用 OEM 代码页会吃掉行首字符 |
+| 1 | 三处 RTL 文件清单是否同步（`build.tcl` / `build_ila.tcl` / `run_coremark.py` / `CORE_SV_ORDER`） | R1：新增 RTL 忘了加进清单 → 静默用旧产物 |
+| 2 | 是否存在"没有任何地方例化"的 RTL 模块 | 在研未接线的模块（曾白名单放过 `csr_file.sv`） |
+| 3 | `sw/` 源文件是否比 `sim/prog/*.hex` 镜像新（**内容哈希**判据） | R1：改了软件忘了重建镜像 |
+| 4 | bitstream 是否比 RTL / 镜像新（改了软件必须重新综合） | R1：imem/dmem 是综合时 `$readmemh` 进去的 |
+| 5 | 内存布局同步（含 `tb_sw.sv` 的 tohost 地址与 `link.ld` 一致） | R1：改 `link.ld` 地址要同步 5 类文件 |
+| 6 | `.bat` / `.tcl` 是否纯 ASCII | R2：cmd 用 OEM 代码页会吃掉行首字符 |
+| 7 | **综合警告门**：Vivado 警告的新增必须分诊；`[Timing 38-1]` 出现即 FAIL | M-06 / R43 / X-08 |
 
-**严重度是分开的**，不是一刀切报警：
-
-- `[FAIL]` = 必须修，退出码 1
-- `[warn]` = 建议修，不阻塞
-- `[info]` = 已知在研项，**预期如此**
+另有 `[HIL] 硬件在环健康度`（非编号）：报告最后一次上板数据的年龄与 bitstream 新鲜度，
+超 1 小时未上板 → `[warn]`。
+> ⚠️ 它目前仍用 `results/ila_done.csv` 的 mtime 判断"上板数据有多旧"，而该文件被 git 跟踪 ——
+> 2026-10-11 10:51 实测到"内容未变、mtime 变现在"导致的**假新鲜度**（`check` 报"5 分钟前"）。
+> 这是 X-02 的残余点，`hw` 侧已改用采集清单见证。
+> `[FAIL]` = 必须修，退出码 1；`[warn]` = 建议修，不阻塞；`[info]` = 已知在研项，**预期如此**。
 
 `csr_file.sv` **曾经**被 `KNOWN_UNWIRED` 白名单放过（P1 之前 `core.sv` 还没例化它），
 那个白名单**现已清空** —— 它已经在三处 RTL 清单与 `CORE_SV_ORDER` 里，`check` 会强制要求。
@@ -59,6 +62,39 @@ python tools\fpga_workflow.py report
 > 这不是格式问题而是语义问题 —— 首次跑回归时按字母序排序，`rv32_pkg` 排到了后面，
 > vlog 一次性报了 60 个 `Could not find the package (rv32_pkg)`。
 > `unregistered_core_sv()` 会拦住"新加了 .sv 但忘了登记"的情况。
+
+#### 第 7 项详解：综合警告门（M-06）—— 拿 Vivado 自己的警告当真 lint
+
+**为什么必须是 Vivado**：本机没有 verilator / slang / svlint（`Get-Command` 全部 NOT FOUND），
+而 ModelSim 的 `vlog` 对全核 20+ 个文件**只报 3 条**无关警告（全是 `Defaulting port kind to var`）。
+本项目真正吃过亏的警告**只在 Vivado 日志里**，而且当时都被当成"标准提示"放过：
+
+| 警告 | 真身 |
+|---|---|
+| `[Synth 8-3331] design mmio_subsys has unconnected port wstrb[3..0]`（报了 4 次）| **X-08**：MMIO 写忽略 wstrb，端口声明了却没人读 |
+| `[Timing 38-1] DLL output pin(s) used on clock modifying cell ... without a feedback net` | **R43**：MMCM 漏接 `.CLKFBIN` ⇒ 永不锁定 ⇒ 整颗 CPU 被按在复位里（两轮才定位）|
+| 36 × `RAMB36 async control check: ... has an input control pin ...` | BRAM 异步控制引脚警告 |
+| 31 × `[Synth 8-3332] Sequential element (prod_ss_reg[*]) is unused and will be removed ... muldiv` | 死状态 |
+| 20 × `design btb has unconnected port pred_pc[*] / upd_pc[*]` | BTB 只用低位，高位天然未连 |
+
+**机制**：
+
+- 来源：`fpga/build.log`（评分版）与 `fpga/ila_build.log`（ILA 版）；
+- 警告键**归一化**（去掉行号 / 绝对路径 / 位下标 / 十六进制常量）—— 否则每次综合都"看起来是新的"，
+  门会天天响然后被人忽略，**那比没有门更糟**；
+- 基线存在 `.fpga-cache/synth-warn-baseline.json`；
+- **新增**的警告类 → `[FAIL]`（尚无基线时降级为 `[warn]`）；**变多**只列报告；**消失**也列；
+- **R43 判据机器化**：任一日志出现 `Timing 38-1 ... without a feedback net` → **FAIL**
+  （这就是 `top_a100t.sv` 里那句"修复判据：重新综合后该警告必须消失"的自动化）。
+
+分诊完一批确认无害的警告后，把当前状态固化成基线：
+
+```bat
+python tools\fpga_workflow.py check --update-baseline
+```
+
+当前基线（实测 2026-10-11）：`fpga/build.log` **48 类 / 274 条**，基线 48 类 ⇒ 无新增；
+`Timing 38-1` 反馈环警告**已消失**（R43 修复生效，且现在被门盯住）。
 
 ### `verify` — ModelSim 增量回归
 
@@ -161,6 +197,11 @@ CoreMark/MHz  |  fmax (由 WNS 推)  |  CoreMark/LUTs  |  绝对吞吐 = CoreMar
 
 ## 4. 还没做的（按价值排序的建议）
 
+> ⚠️ 本清单是**工具刚落地时**写的，其中第 1/2/4 条**已经实现**（`metrics` 的解析、
+> `hw` 的读回、`synth` 的自动指标）—— 保留原文是为了记录当时的缺口。
+> **唯一要特别当心的是第 2 条**：fmax 的自动解析**曾经**因为 MMCM 而静默算错
+> （`CODE-REVIEW-PLAN.md` **M-01/X-01**），**修好之前不要相信任何工具给出的 fmax**。
+
 1. **`verify` 接上 Vivado 时序**：把 `report` 与 `verify` 合并成"一次改动 → 三项指标全出"
 2. **fmax 自动测量**：现在 `fmax` 要从 `fpga/timing.rpt` 手工读，可以并入 `verify --synth`
 3. **`.hex` 依赖图**：第 3 项检查现在是"sw/ 下任一文件比镜像新"的粗粒度判断，
@@ -168,3 +209,23 @@ CoreMark/MHz  |  fmax (由 WNS 推)  |  CoreMark/LUTs  |  绝对吞吐 = CoreMar
 4. **上板闭环自动化**：`ila_cap_done.bat` 的读回结果可以直接解析进 `results/coremark.csv`
 5. **R3 期望值独立验算**：`tb_units.sv` 里的期望值目前靠人算对（曾把
    `0xFFFFFFEC / 3` 写成 1431655762，实际 1431655758）。可以让 Python 独立算一遍再比对
+
+---
+
+## 5. 其他工具（不是 `fpga_workflow.py` 的子命令）
+
+这些脚本**没有**统一入口，但都在用；新会话最容易漏掉它们（所以在此登记）。
+
+| 文件 | 作用 |
+|---|---|
+| `flash_boot.ps1` | **QSPI 固化一条命令**：accessor 预载 + 建像 + 烧写 + 16 MB 全片读回逐字节比对（推荐入口）|
+| `flash_run.ps1` / `flash_sweep.ps1` | 单次 cfgmem 实验 / 9+2 个 part 逐一试烧（`-Part` `-Action`）|
+| `flash_program.tcl` / `flash_mkimage.tcl` | 底层烧写流程 / `write_cfgmem` 建 `.mcs`/`.bin` |
+| `flash_probe.tcl` / `flash_readback.tcl` / `flash_partcheck.tcl` | 只读诊断：枚举 part 库 / 全片读回 / 对比器件过滤查找 |
+| `path_hotspot.py` | 从 `fpga/timing.rpt` 出 top-N 关键路径 + 扇出榜（物理优化前先测量，见 PITFALLS R47）|
+| `pdf_text.py` / `pdf_mine.py` | 厂商 PDF 取文（ToUnicode-aware；`flash_logs/guide_text/` 就是它的产物）|
+| `hier_util.tcl` | 按层次报告资源（普通 `report_utilization` 看不出问题）|
+| `amo_vectors.py` | RV32A 黄金向量生成器（108 条，独立 Python 参考实现）|
+
+> QSPI 流程的完整报告（根因 / part 对照表 / 失败日志）见 `tools/flash_logs/REPORT.md`；
+> 坑见 PITFALLS **R44/R45/R46**。顶层文档入口见 `HANDOFF.md` §7 与 `CODE-MAP.md` §3。

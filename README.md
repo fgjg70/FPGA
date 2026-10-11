@@ -13,11 +13,41 @@ graph LR
 
 ## 成绩速览（真实板卡实测）
 
+> **口径（务必先读）**：本文把"验证"分成两级，**不要混为一谈** ——
+> - **仿真通过** = ModelSim 回归 `python tools\fpga_workflow.py verify`，判据是 testbench 打印的
+>   `RESULT : PASS`（当前 **PASS 11**）；
+> - **上板验证** = 真实板卡 JTAG 烧录 + ILA 读回，判据是 **`fpga/cap_done.log` 里的
+>   `CSV_MTIME=... AGE_SEC=0` + `CAPTURE_OK`**，以及 `results/ila_done.capture.json`（采集清单）。
+>   ⚠️ **`results/ila_done.csv` 的 mtime 不是证据**（它是 git 跟踪文件，见下）。
+>
+> **最后一次成功的上板验证 = 2026-10-09 21:29:30**（判据：`cap_done.log` 内 `CSV_MTIME=2026-10-09 21:29:30
+> AGE_SEC=0` + `CAPTURE_OK`）。
+> ⚠️ **`results/ila_done.csv` 的 mtime 会被 git 操作刷新而不产生新采集**（X-02）—— **2026-10-11 10:51
+> 实测就发生了**：CSV 内容逐字节未变，mtime 却成了"5 分钟前"，`check` 的 [HIL] 因此误报"刚上过板"。
+> 唯一见证是 **`results/ila_done.capture.json`（采集清单，由 `ila_cap_done.tcl` 写出、被 .gitignore 忽略）**；
+> 该文件现在**不存在** ⇒ **`hw` 会拒绝给结论**，直到重跑 `cmd /c fpga\ila_cap_done.bat`。
+> 自那以后 RTL 又动过：`load_store_unit.sv` 与 `fpga/build.tcl`
+> （`d6b48fe`，2026-10-11 00:50，LSU 读格式化字节通道 + Pblock/放置指令重定位）—— **尚未上板**；
+> `core.sv` 截至那次上板停在 2026-10-08 23:18（`602129d`），但**当前工作区**里它正被本次审查改动
+> （`CODE-REVIEW-PLAN.md` R-01/R-02/W-04），**这些改动同样未上板**。
+> **"哪些改动未上板"必须现查**（`git status` / `git log` + `python tools\fpga_workflow.py hw --stale`），
+> 不要读文档里的静态清单。
+> 因此下文凡写"上板验证"的，**都指 2026-10-09 那次采集**；表格里的上板参数/实测数字的口径更正
+> 见 `CODE-REVIEW-PLAN.md` **D-01/D-03**。
+>
+> 另：上表的三个评分指标里，**fmax 与 LUT 来自 Vivado 综合报告**（`fpga/timing.rpt` / `fpga/util.rpt`），
+> **不是**上板测出来的；上板只提供 CoreMark 的 tick 与 CRC 佐证。**别把"综合实测"写成"上板实测"。**
+>
+> **fmax 口径**：上表那一行是**旧口径**（`1000/(20 − WNS)`，MMCM 之前）**已失效**。现在设计主时钟是
+> **`sys_clk_70` @14.286 ns**，正确口径是 `1000/(该时钟周期 − 该路径 WNS)`，且**必须写出时钟名与周期**、
+> 配 `results/coremark.csv` 的 **`fmax_src`** 列一起读。完整纪律见 `HANDOFF.md` §8「口径纪律」。
+> 数字本身的换代等 RTL 冻结、重新综合后由 Lead 统一给出（见 `CODE-REVIEW-PLAN.md` D-01/D-02）。
+
 **平台**：正点原子 达芬奇Pro（XC7A100T-FGG484-2，板载 50 MHz）
 **赛题**：2026 紫光同创杯 · 选题一「基于紫光同创 RISC-V 指令集 CPU 设计」
 **基准**：CoreMark v1.0（PERFORMANCE_RUN）
 
-| 评分指标 | 基线 | **最终（上板验证）** | 变化 |
+| 评分指标 | 基线 | **最终（交付配置实测）** | 变化 |
 |---|---|---|---|
 | **CoreMark/MHz** | 0.8263 | **2.4209** | **+193.0%** |
 | **最高时钟频率 fmax** | 78.4 MHz | **69.8 MHz** | −11.0% |
@@ -27,11 +57,14 @@ graph LR
 **资源**：LUT **2649** / FF **1234** / BRAM **8** / DSP 8（交付配置，不含 ILA）
 **上板**：1300 迭代 / **10.74 s** @50 MHz / 与官方参考值 **逐位 CRC 匹配** /
 `ila_ctrl=0x42`、CRC bit31=1、tick **536,943,384**、硬件 CoreMark/MHz **2.4211**
+> ↑ 这一行是**历史口径**（2026-10-08 采集）。**最后一次采集是 2026-10-09 21:29**，
+> 参数与上面不同 —— 以 `results/ila_done.csv` 现查为准，更正见 `CODE-REVIEW-PLAN.md` **D-03**。
 
 > **绝对吞吐是本项目的核心结论**：+160.8% 表示同一块板每秒能跑 **2.61 倍**的
 > CoreMark 迭代数。三项评分指标互相矛盾时，它是有意义的最终裁判。
 
-**回归**：**PASS 11**（`tb_units` 的检查点数以**运行时打印**为准 + **10 组**系统级/软件级测试），无 XFAIL。
+**回归**（**仿真级**，判据来源 `python tools\fpga_workflow.py verify`）：**PASS 11**
+（`tb_units` 的检查点数以**运行时打印**为准 + **10 组**系统级/软件级测试），无 XFAIL。
 
 ---
 
@@ -91,7 +124,7 @@ graph LR
 | `tools/amo_vectors.py` | **RV32A 黄金向量生成器**（独立 Python 参考实现，108 条，双向交叉验证过）|
 | `tools/fpga_workflow.py` | 统一工作流入口：`doctor`/`check`/`verify`/`synth`/`report`/`metrics`/`profile`/`hw` |
 | `results/` | 成绩、逐轮优化记录、失败记录、赛题对照（22 篇 `.md` + 3 份 CSV）|
-| `skills/fpga-riscv-a100t/PITFALLS.md` | 踩坑记录 **R1~R35**（35 条编号记录，症状优先）|
+| `skills/fpga-riscv-a100t/PITFALLS.md` | 踩坑记录 **R1~R47**（**47** 条编号记录，症状优先）|
 | `legacy/` | 最初的 Verilog 单周期代码 (历史留档) |
 
 > **可移植性**：CPU 核**零厂商原语**（BRAM 全用行为级推断，不例化 IP），
@@ -99,21 +132,38 @@ graph LR
 
 ## 跑测试
 
-```
-sim\run.bat                      :: Windows
-./sim/run.sh                     :: Linux / WSL
+**唯一可用入口是 ModelSim 统一工作流**（11 项全量回归）：
 
-:: 只跑系统测试并转波形 (GTKWave 查看)
+```bat
+python tools\fpga_workflow.py verify            :: 增量回归 (基线 PASS 11)
+python tools\fpga_workflow.py verify --force    :: 忽略缓存, 强制全量重跑
+python tools\fpga_workflow.py verify --only tb_units tb_soc   :: 只跑指定项
+```
+
+单跑一项 / 抓波形：
+
+```bat
 cd sim
-vvp tb_core.vvp +imem=prog/basic.hex +dump=wave.vcd
-
-:: 换程序: 改 basic.S 后重新汇编即可 (无需重新编译 RTL)
-python tools/asm.py sim/prog/basic.S -o sim/prog/basic.hex
+vsim -c -do "run -all; quit -f" work.tb_core +imem=prog/basic.hex +dump=wave.vcd
 ```
 
-本机已装便携版 iverilog 13.0 (`%LOCALAPPDATA%\riscv-tools\mingw64`)，
-`run.bat` 自动查找。**注意 `run.bat` 必须保持纯 ASCII**：cmd 用 OEM 代码页
-解析批处理，UTF-8 中文注释会导致解析错误。
+换程序：改 `basic.S` 后重新汇编即可（无需重编译 RTL）：
+
+```bat
+python tools\asm.py sim\prog\basic.S -o sim\prog\basic.hex
+```
+
+> ⚠️ **`sim\run.bat` / `sim\run.sh` 不是可用的测试入口**（`[已实测]` 2026-10-11）：
+> 1. 它硬依赖 **iverilog**，而本机**没有** —— `%LOCALAPPDATA%\riscv-tools\mingw64` **不存在**
+>    （`Test-Path` → False）、`Get-Command iverilog` → **NOT FOUND**；
+> 2. 即使装上 iverilog，它也**只编译并跑 2 个测试**（`tb_units` + `tb_core` + `basic.hex`），
+>    却打印 `=== ALL TESTS PASSED ===` —— 照它走只能拿到 **2/11 的覆盖 + 绿灯**；
+> 3. 它的 `if not exist prog\basic.hex` 守卫**判"存在"不判"新鲜"** —— 汇编失败时会静默拿上一次的
+>    hex 去测（PITFALLS R1 的形态）。
+>
+> 因此这两个脚本现在只作**历史留档**；修法（转调 `fpga_workflow.py verify`）已登记为
+> `CODE-REVIEW-PLAN.md` **W-05/W-06**，**尚未修复**。
+> **`run.bat` 必须保持纯 ASCII**：cmd 用 OEM 代码页解析批处理，UTF-8 中文注释会导致解析错误。
 
 ## 流水线架构
 

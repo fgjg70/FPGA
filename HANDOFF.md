@@ -3,9 +3,35 @@
 > **给接手的 AI**：这是全新会话的第一条消息，你没有上下文。请先完整读一遍，
 > 再读仓库里的两颗「记忆胶囊」：
 > - `skills/fpga-riscv-a100t/SKILL.md` — 环境事实 / 命令配方 / RTL 与工具链经验（24KB）
-> - `skills/fpga-riscv-a100t/PITFALLS.md` — **错误台账，症状优先**（9KB，务必先看）
+> - `skills/fpga-riscv-a100t/PITFALLS.md` — **错误台账，症状优先**
+>   （**56 KB / 840 行，R1~R47 共 47 条**，务必先看；最值钱的新条目是
+>   **R43** MMCM 漏接 `.CLKFBIN` 会把整颗 CPU 永久按在复位里、**R47** top-N 是"一堵墙"时
+>   RTL 逻辑重排期望 ≈ 0）
 >
 > 这两份是 10 轮迭代的全部经验沉淀，能帮你避开已经踩过的几十个坑。
+>
+> **口径（先立规矩）**：本文到处都有"验证"二字，请一律按下面两栏拆开读 ——
+> | 说法 | 含义 | 证据在哪 |
+> |---|---|---|
+> | **仿真通过** | ModelSim 回归 `python tools\fpga_workflow.py verify` 打印 `RESULT : PASS` | `verify` 输出 / `.fpga-cache/logs/` |
+> | **上板验证** | 真实板卡 JTAG 烧录 + ILA 读回 | `results/ila_done.csv` + `fpga/cap_done.log`（`CAPTURE_OK`） |
+>
+> **最后一次成功的上板验证 = 2026-10-09 21:29:30** —— 判据是 **`fpga/cap_done.log` 内部的
+> `CSV_MTIME=2026-10-09 21:29:30 AGE_SEC=0` + `CAPTURE_OK`**，**不是任何文件的 mtime**。
+> ⚠️ **`results/ila_done.csv` 的 mtime 是假见证**（X-02）：它被 git 跟踪，克隆/checkout/重写都会刷新
+> mtime 而不产生新采集 —— **2026-10-11 10:51 实测发生**（内容逐字节未变、mtime 变"现在"，`check` [HIL] 误报"刚上过板"）。
+> 唯一见证是 `results/ila_done.capture.json`（采集清单，`ila_cap_done.tcl` 写出、**.gitignore 忽略**）；
+> 它现在**不存在** ⇒ **`hw` 会拒绝给结论**，直到重跑 `cmd /c fpga\ila_cap_done.bat`。
+> 自那以后 `load_store_unit.sv` 与 `fpga/build.tcl` 又改过（`d6b48fe`，2026-10-11 00:50，
+> LSU 读格式化字节通道 + Pblock/放置指令）——**尚未上板**。`core.sv` 截至那次上板停在
+> 2026-10-08 23:18（`602129d`）；**当前工作区里它正被本次审查改（R-01/R-02/W-04），同样未上板**。
+> 下文所有"上板验证"若不注明时间，默认指这一条谱系。
+> **"哪些改动未上板"一律现查**（`git status` / `git log` + `python tools\fpga_workflow.py hw --stale`），
+> 不要照抄任何静态清单。
+>
+> **fmax 口径**：任何 fmax 都必须带**时钟名 + 周期** —— 现在设计主时钟是 **`sys_clk_70` @14.286 ns**，
+> 不是 `sys_clk` @20 ns；旧写法 `1000/(20 − WNS)` 已失效。`results/coremark.csv` 的 `fmax` 列
+> 必须配 **`fmax_src`** 列一起读。完整纪律见 §8「口径纪律」。
 
 ---
 
@@ -15,7 +41,10 @@
 CRC 逐位匹配官方参考值），三项评分指标与绝对吞吐齐备，赛题基础任务全部完成，
 动态分支预测与完整异常/中断两项高阶任务完成，RV32A 原子指令已打通，
 应用场景（神经网络 GEMM）已落地。
-当前 RTL 已上板验证（**2026-10-08**，tick 536,943,384 / 10.74 s）。**
+当前 RTL 已上板验证；**最后一次成功采集 = 2026-10-09 21:29:30**（凭据 `results/ila_done.csv` +
+`fpga/cap_done.log`），本节表格里的那组数字是 **2026-10-08 的历史口径**，两者不同 ——
+口径更正见 `CODE-REVIEW-PLAN.md` **D-01/D-03**；且自 2026-10-11 00:50（`d6b48fe`）起
+`load_store_unit.sv` + `fpga/build.tcl` 的改动**尚未上板**。
 
 仓库：`D:\USER\Desktop\FPGA\FPGA`（git，工作区干净）
 
@@ -23,7 +52,7 @@ CRC 逐位匹配官方参考值），三项评分指标与绝对吞吐齐备，�
 ```bat
 cmd /c tools\doctor.bat                          REM 环境自检 + R1 漂移检测
 python tools\fpga_workflow.py verify             REM 回归, 期望 PASS 11 (无 XFAIL)
-python tools\fpga_workflow.py check              REM 漂移/新鲜度自检
+python tools\fpga_workflow.py check              REM 7 项: 漂移/镜像/bitstream/内存布局/ASCII/综合警告门
 cmd /c fpga\jtag_probe.bat                       REM 改 RTL 前先确认板子在位!
 ```
 
@@ -33,7 +62,7 @@ cmd /c fpga\jtag_probe.bat                       REM 改 RTL 前先确认板子�
 > 规范说法是"**4 个流水寄存器 ⇒ 5 级**"。去掉 `if_id_reg` 去掉的是**一个冗余寄存器**，
 > 不是一级流水。见 `results/p8-ifid-elide.md`。
 
-| 指标 | 基线 | **当前（上板验证）** |
+| 指标 | 基线 | **当前（交付配置实测）** |
 |---|---|---|
 | CoreMark/MHz | 0.8263 | **2.4209**（+193.0%）（仿真 ticks **413,070**）|
 | fmax | 78.4 MHz | **69.8 MHz**（−11.0%）|
@@ -41,15 +70,26 @@ cmd /c fpga\jtag_probe.bat                       REM 改 RTL 前先确认板子�
 | 绝对吞吐 | 64.8 | **169.0**（+160.8%）|
 | 资源 | — | LUT **2649** / FF **1234** / **BRAM 8** / DSP 8 |
 
-上板（2026-10-08，**1300 迭代**）：`ila_ctrl=0x42`、CRC 判定 bit31=1、
+> **四个指标的来源不是同一个东西，别混**：`fmax` 与资源来自 **Vivado 综合报告**
+> （`fpga/timing.rpt` / `fpga/util.rpt`）；`CoreMark/MHz` 来自**仿真** ticks（`results/coremark.csv`）；
+> 上板只提供 tick 与 CRC 佐证。**本表的 fmax 算法受 M-01 影响已失效**（见 `CODE-REVIEW-PLAN.md`）。
+
+上板（**2026-10-08 历史口径**，**1300 迭代**）：`ila_ctrl=0x42`、CRC 判定 bit31=1、
 tick **536,943,384**、**10.74 s** @50 MHz、硬件 CoreMark/MHz **2.4211**
 （与仿真 2.4209 吻合 0.01%）。
-回归：**PASS 11，无 XFAIL**（`tb_units` 的检查点数**以运行时打印为准** —— 它会自己打印
+> ⚠️ 这一组是 **2026-10-08** 的采集，**不是最后一次**（最后一次 = 2026-10-09 21:29，见文件头口径表）；
+> 按 D-03 会更正，**在此之前不要拿它当"当前上板口径"**。
+
+回归：**PASS 11，无 XFAIL**（**仿真级**，判据 `python tools\fpga_workflow.py verify`；
+`tb_units` 的检查点数**以运行时打印为准** —— 它会自己打印
 `检查点: <N>`，文档里不要写死）。
 
-> 数字来源：`results/coremark.csv` 末行（`review-fix`）+ `results/ila_done.csv`
+> 数字来源：`results/coremark.csv` 末行（`review-fix`）+ **当时那份** `results/ila_done.csv`
 > （`score_result=0xA0011B18` → bit31=1、tick 536,943,384）。
-> 本节是**唯一权威口径**，后面第 2/6 节里的旧数字都是历史留档。
+> ⚠️ **现盘上的 `results/ila_done.csv` 已不是那一份**（最后一次采集 = 2026-10-09 21:29，
+> `score_result=0xC9DB2C66`），所以**不要再用本节的 tick 去对现盘 CSV**。
+> 原注"本节是唯一权威口径"在 D-01~D-03 落地前**不成立**：本节与第 2/6 节都停在旧版本，
+> 后面那些数字是按"当时"标的历史留档。
 
 ### 存储策略：**imem 与 dmem 全部走 BRAM**（默认，非可选）
 
@@ -173,8 +213,9 @@ AI 模型性能 ⚠ 软件基线可信、加速单元不计入成绩
 ## 2. 当前实测成果
 
 > ⚠️ **先看这条**：下面「硬件闭环」一节是**上一版 bitstream（P1 之前）**的实测结果。
-> **含 P1+P2+P3 的当前 bitstream 也已上板验证通过**（tick 逐位相同），
-> 见下方 P4 节与 `results/hw-verified.md` 第 0 节。
+> **含 P1+P2+P3 的 bitstream 也已上板验证通过**（tick 逐位相同），
+> 见下方 P4-old 节与 `results/hw-verified.md` 第 0 节 —— 那是 **2026-10-05** 的采集，
+> **不是最后一次**（最后一次 = 2026-10-09 21:29，见文件头口径表）。
 > 另外历史行的 `LUT 2481 / fmax 74.6` 用当前代码复现不出来，原因见第 6 节 P1 的说明。
 
 ### 三项评分指标
@@ -269,6 +310,10 @@ Python     C:\Users\19716\AppData\Local\Programs\Python\Python313\python.exe
 
 没有 iverilog，没有 Pango PDS。
 
+> ⚠️ 因此 **`sim\run.bat` / `sim\run.sh` 不能作为测试入口**（它们硬依赖 iverilog，且只跑 2/11）。
+> 仿真**一律**走 ModelSim 的 `python tools\fpga_workflow.py verify`。
+> 详见 `README.md`「跑测试」一节与 `CODE-REVIEW-PLAN.md` **D-04 / W-05 / W-06**。
+
 ### 【最重要】子进程环境被剥离
 
 DSH 会话的 `process.env` 是**空的**。直接 spawn 子进程会缺 `PROCESSOR_ARCHITECTURE`，
@@ -298,7 +343,14 @@ FT2232H 只有 D2XX 驱动、**没有 COM 口**；CH340 也都不在。所以**�
 现有替代方案：**MMIO 上报 + ILA over JTAG**（见第 5.3 节）。
 如果要让串口可用，需要装 FTDI 的 VCP 驱动 —— 那是驱动安装，得让用户操作。
 
-### 上板链路（已验证）
+### 上板链路（**最近核实：2026-10-11 10:45，`JTAG_PROBE_OK`**）
+
+> 凭据：`fpga/jtag_probe.log`（Start 10:44:59 → `JTAG_PROBE_OK` 10:45:06，`IDCODE=00010011011000110001000010010011`
+> = `0x13631093`，`PART=xc7a100t`，target `localhost:3121/xilinx_tcf/Digilent/210512180081`）。
+> **注意这是"JTAG 链路在位"，不等于"做过一次上板采集"** —— 最近一次成功的 ILA 采集仍是
+> **2026-10-09 21:29:30**（`results/ila_done.csv` + `fpga/cap_done.log`）。两者别混。
+> **这条链路可用性不是永久事实**：板子掉线（`No devices detected on target`）本工程遇到过两次，
+> **改 RTL 前先 `jtag_probe` 确认识别器件**。
 
 ```
 IDCODE 0x13631093, part xc7a100tfgg484-2
@@ -341,6 +393,8 @@ D:\USER\Desktop\FPGA\FPGA\
 │     amo_vectors.py    RV32A 黄金向量生成器 (108 条, 独立参考实现)
 │     hier_util.tcl     按层次报告资源 (普通 report_utilization 看不出问题)
 │     doctor.bat        零摩擦包装 (纯 ASCII, 一条命令跑完自检+漂移检测)
+│     flash_boot.ps1    ★QSPI 固化一条命令 (accessor+建像+烧写+全片读回比对)
+│     flash_run/sweep.ps1 + flash_*.tcl   QSPI 实验与只读诊断 (见 tools/flash_logs/REPORT.md)
 ├── results/       每轮优化的设计与实测数据 (见第 10 节)
 └── skills/
       fpga-riscv-a100t/  SKILL.md + PITFALLS.md   (环境事实 + 错误台账)
@@ -670,7 +724,8 @@ tick=508,155,404、10.16 s。
 
 ### P4-old · fmax 还债（历史，已被 P4 更正）
 
-**上板验证 PASS**（`cmd /c fpga\ila_cap_done.bat`）：
+**上板验证 PASS**（`cmd /c fpga\ila_cap_done.bat`，**2026-10-05 采集**，凭据 `results/hw-verified.md` §0 +
+`fpga/cap_done.log`）：
 
 ```
 ila_ctrl     = 0x42  ->  done=1 pass=1 fail=0 illegal=0
@@ -692,9 +747,11 @@ score_result = 0x9E49D60C
    ILA bit 与 RTL 脱节是**静默失败**（抓到旧设计的信号，不报错）。
    核对脚本：比 `fpga/ila_proj.runs/impl_1/top_a100t.bit` 与各 RTL 的 mtime。
 2. `write_hw_ila_data` 目标 CSV 已存在时**必须加 `-force`**（否则 `Labtoolstcl 44-54`）。
-3. 读回用 `python tools\fpga_workflow.py hw --iterations 1300 --tag <标签> --record`。
+3. 读回用 `python tools\fpga_workflow.py hw --tag <标签> --record`。
+   ⚠️ `--iterations` / `--clk-hz` **必须传本次镜像的真实值**（旧默认值 1200 / 50e6 会让
+   CoreMark/MHz 与时长**静默算错**，见 `CODE-REVIEW-PLAN.md` M-03）。
 
-### 上板闭环 —— ✅ 当前 RTL 已在真板验证（2026-10-05 22:48）
+### 上板闭环快照 —— ✅ **2026-10-05 22:48** 那次采集（**当时的** RTL，不是当前改动）
 
 ```
 ILA 版重建: 22:47 (ILA_BUILD_OK, 时序约束满足)
@@ -753,13 +810,18 @@ ERROR: [Labtools 27-2269] No devices detected on target
 → **`A_EN=0` 的网表与加译码之前一致**。因此 23:05 那次上板验证的
 就是当前的评分配置。
 
-> 结论：**当前评分配置是已验证的**；未上板验证的只有 `A_EN=1` 那条路
-> （默认关闭的 A 扩展功能）。
+> 结论：**当时（2026-10-05）评分配置是已验证的**；未上板验证的只有 `A_EN=1` 那条路。
+> ⚠️ **这句现在已经过时**：此后 RTL 又改过多轮，最后上板停在 **2026-10-09 21:29**，
+> 而 `load_store_unit.sv` + `fpga/build.tcl`（`d6b48fe`，2026-10-11 00:50）**尚未上板**。
+> 判断"哪些改动没上板"请按文件头口径表 + `python tools\fpga_workflow.py hw --stale` 现查，不要读本节。
 > ⚠️ 原文这里还写着"它本来也执行不了原子指令 —— 多周期控制未实现"——
 > **那是 2026-10-05 的实情，现已过时**：多周期"读-改-写"于 2026-10-06 打通
 > （`tb_core_amo` PASS，见 `results/p6-a-extension.md` §5.13）。
 
-#### 恢复步骤（用户操作）
+#### 恢复步骤（**2026-10-05 板子掉线事故的现场记录**，不是常态流程）
+> ⚠️ **别把它读成"上板需要用户操作"** —— 见 `HANDOFF-HW-LOOP.md`：烧录 / 运行 / ILA 读回
+> **全程自动**，不需要用户看 LED、也不需要串口。这里唯一要人的动作是**物理插拔 USB/JTAG 线**
+> （硬件故障恢复，不是验证流程的一部分）。
 重新插好 USB/JTAG 线 → `cmd /c fpga\jtag_probe.bat` 确认识别器件 →
 若要继续做 A 扩展的 `A_EN=1` 路径，再 `build_ila.bat` + 抓取。
 
@@ -800,12 +862,15 @@ ERROR: [Labtools 27-2269] No devices detected on target
 
 ### 【先跑这个】统一工作流入口
 
-`skills/fpga-riscv-a100t/PITFALLS.md` 记了 **R1~R35** 共 35 条坑，最高频的是 **R1「改了 A 忘了同步 B」——
+`skills/fpga-riscv-a100t/PITFALLS.md` 记了 **R1~R47** 共 **47** 条坑，最高频的是 **R1「改了 A 忘了同步 B」——
 全部静默失败**。这套工具把那条纪律从"靠人记"变成"机器每次都查"：
 
 ```bat
-rem 收尾必跑: 环境自检 + R1 漂移检测 (约 2 秒)
+rem 收尾必跑: 环境自检 + R1 漂移检测 (约 2 秒; check 现在 7 项, 第 7 项 = 综合警告门)
 cmd /c tools\doctor.bat
+
+rem 分诊完一批无害综合警告后, 把当前状态固化成基线 (之后**新增**的才报警)
+python tools\fpga_workflow.py check --update-baseline
 
 rem 回归: ModelSim 增量 (未受影响的测试直接跳过)
 python tools\fpga_workflow.py verify
@@ -867,6 +932,42 @@ cmd /c fpga\build.bat        REM 评分版 (非工程模式, 快)
 cmd /c fpga\build_ila.bat    REM 带 ILA 调试版 (工程模式, 慢; 产物在 fpga/ila_proj.runs/)
 ```
 
+### QSPI Flash 固化（断电自举）—— **已打通，别重复造轮子**
+
+板载 QSPI（Micron **MT25QL128 / N25Q128**，128 Mbit）已写入我们的 bitstream，
+并**逐字节读回校验通过**（`5bd8e37`，2026-10-09）。完整故事（两个根因、part 对照表、
+失败日志）见 **`tools/flash_logs/REPORT.md`**，坑见 PITFALLS **R44/R45/R46**。
+
+**一条命令端到端**（自动预载 flash accessor → `write_cfgmem` 建镜像 → 烧写 → **16 MB 全片读回逐字节比对**）：
+
+```powershell
+powershell -File tools\flash_boot.ps1 -Bit fpga\cpu_a100t_spix4.bit -Iface SPIx4
+rem 回退 SPIx1（同样验证过）: powershell -File tools\flash_boot.ps1 -Iface SPIx1
+```
+
+判据是最后一行 `VERIFY=PASS`（**不是** Labtools 那句 `Flash programming completed successfully` ——
+`CFG_PROGRAM=0` 时它照样打印"成功"却什么都没写，见 R45）。
+
+> 命令形式取自 `tools/flash_boot.ps1` 自己的 Usage 头（第 4-5 行）。两点提醒：
+> ① 脚本里 Vivado / Python 路径是**硬编码绝对路径**（与 `CODE-REVIEW-PLAN.md` E-02 同类，
+> 换机器会失败）；② `-Bit` 用相对路径时按当前工作目录解析，若取不到会在
+> `MKIMAGE: bit exists = 0` 处**显式失败**（不会静默烧错镜像）；`REPORT.md` 里实测用的是绝对路径。
+
+| 脚本 | 干什么 |
+|---|---|
+| `tools/flash_boot.ps1` | **推荐入口**：accessor 预载 + 建像 + 烧写 + 全片读回比对 |
+| `tools/flash_run.ps1` | 单次实验 runner（`-Part` / `-Action`），完整 stdout/stderr 落 `tools/flash_logs/` |
+| `tools/flash_sweep.ps1` | 9+2 个 128Mb cfgmem part 逐一试烧 → `sweep_results.csv` |
+| `tools/flash_program.tcl` | 底层 Tcl 流程（accessor 预载 + 器件过滤绑定 + 8 种 action） |
+| `tools/flash_mkimage.tcl` | `write_cfgmem` 生成 `.mcs`/`.bin`（env: `IMG_BIT`/`IMG_IFACE`/`IMG_SIZE`/`IMG_TAG`）|
+| `tools/flash_readback.tcl` / `flash_probe.tcl` / `flash_partcheck.tcl` | 只读诊断：全片读回 / 枚举 part 库 / 对比器件过滤查找 |
+
+两个必须记住的坑：**① `PROGRAM.CFG_PROGRAM` 必须为 1**；**② 必须先 `program_hw_devices`
+预载 accessor**，否则报 `[Labtools 27-3347] Failure to set flash parameters`。
+
+> **上电自举验证剩下的最后一步需要人**：断电再上电，看板上 **DONE 绿灯**（约 1 s 内常亮）。
+> 步骤与回退见 `tools/flash_logs/REPORT.md` §4。**跑分/读回本身仍是全自动的**（ILA over JTAG）。
+
 ---
 
 ## 8. 必读的坑（完整版在 `skills/fpga-riscv-a100t/PITFALLS.md`）
@@ -907,6 +1008,53 @@ cmd /c fpga\build_ila.bat    REM 带 ILA 调试版 (工程模式, 慢; 产物在
 反例：RAS+BTB128 让 CoreMark/MHz +1.0%，但 fmax −4.6%、CoreMark/LUTs −4.4%，净亏，已回退。
 **优化前先测量** —— 当初就是靠剖析发现分支惩罚占 29%，才决定先做预测而不是 M 扩展。
 
+#### 【口径纪律】fmax 必须带**时钟名 + 周期**，否则不许进文档
+
+引入 MMCM 之后，核心跑在 **`sys_clk_70`（14.286 ns）** 域上，而 `sys_clk`（20 ns）那一行
+**已不是设计主时钟**。因此：
+
+1. **任何进入文档/报告的 fmax 都必须写出"哪条时钟 @ 多少 ns"**，并给出推导式。
+   只写 `fmax = 74.6` 会被误读成 20 ns 域的成绩。
+2. 正确口径：**`fmax = 1000 / (该时钟周期 − 该路径 WNS)`**。
+   修好后的 `tools/fpga_workflow.py` 会直接打印完整推导，格式如：
+   `fmax 74.6 MHz   sys_clk_70 @14.286ns, 运行 70.00 MHz; WNS +0.888ns -> fmax=1000/(14.286 - 0.888)`
+   —— 以工具当次输出为准，本文不复述数字。
+3. **旧口径 `1000/(20 − WNS)` 只在 MMCM 之前的 50 MHz 版本上成立，别再照抄**
+   （PITFALLS **R42.1**；根因分析见 `CODE-REVIEW-PLAN.md` **M-01/X-01**）。
+4. `results/coremark.csv` 的 **`fmax` 列目前混着两种口径**（约 22 行是人工修正值，其余是旧工具
+   算出的虚高值）⇒ **引用该列时必须同时看 `fmax_src` 列**（`tool` / `hand` 来源标注，
+   由 Lead 在 M-01 落地时统一补齐并重算整列）。
+
+> 一句话：**"快了 1 MHz"只有配上"哪条时钟、周期多少、WNS 多少"才是一个可复核的结论。**
+
+#### 【检查门】`check` 现在有 **7 项**，第 7 项是**综合警告门**（M-06）
+
+**Vivado 报的警告才是本工程的真 lint** —— 本机没有 verilator / slang / svlint
+（`Get-Command` 全部 NOT FOUND），ModelSim 的 `vlog` 对全核 20+ 文件只报 3 条无关警告
+（`Defaulting port kind to var`）。而本项目真吃过亏的警告**只在 Vivado 日志里**，
+且都被当成"标准提示"放过：
+
+| 警告 | 真身 |
+|---|---|
+| `[Synth 8-3331] design mmio_subsys has unconnected port wstrb[3..0]`（4 次）| **X-08**：MMIO 写忽略 wstrb |
+| `[Timing 38-1] ... without a feedback net` | **R43**：MMCM 没接反馈环 ⇒ CPU 被永久按在复位里 |
+| 36 × `RAMB36 async control check ...`；31 × `[Synth 8-3332] prod_ss_reg unused`；20 × `btb unconnected port pred_pc/upd_pc` | BRAM 异步控制引脚 / 死状态 / BTB 高位天然未连 |
+
+机制（细节见 `tools/README.md` §`check`）：
+
+- 来源 `fpga/build.log` + `fpga/ila_build.log`；警告键**归一化**（去行号/绝对路径/位下标/常量），
+  否则每次综合都"看起来是新的"、门天天响然后被忽略；
+- 基线 `.fpga-cache/synth-warn-baseline.json`；**新增**的警告类判 `[FAIL]`；
+- **R43 判据已机器化**：任一日志出现 `Timing 38-1` 反馈环警告 → **FAIL**
+  （`top_a100t.sv` 里那句"重新综合后该警告必须消失"不再靠人记）；
+- 分诊完无害警告后用 `python tools\fpga_workflow.py check --update-baseline` 固化基线，
+  **之后新增的才会报警**（当前基线：`fpga/build.log` 48 类 / 274 条 @2026-10-11）。
+
+另外 `check` 有一节非编号的 `[HIL] 硬件在环健康度`：上板数据超过 1 小时未更新 → `[warn]`。
+> ⚠️ 该判据目前仍读 `results/ila_done.csv` 的 mtime —— 而它会被 git 操作刷新（**X-02**：
+> 2026-10-11 10:51 实测"内容未变、mtime 变现在"导致假新鲜度）。**别把那行输出当"刚上过板"的证据**，
+> 唯一见证是 `results/ila_done.capture.json`（采集清单）。
+
 ---
 
 ## 9. 关键设计决策与理由
@@ -942,6 +1090,8 @@ cmd /c fpga\build_ila.bat    REM 带 ILA 调试版 (工程模式, 慢; 产物在
 | `results/ila_done.csv` | 上板跑分读回的原始数据（含 tick 与 CRC 判定）|
 | `results/p2-timer-irq.md` | 定时器中断实现 + 两个真 bug（mcause 位布局 / csrsi 5 位立即数）|
 | `results/p3-fmax.md` `p3-imem.md` `p3-load-result.md` | fmax 还债三个实验的设计与实测 |
+| `tools/flash_logs/REPORT.md` | **QSPI Flash 固化的完整报告**（两个根因 / part 对照表 / 端到端命令 / 上电自举步骤）|
+| `tools/README.md` | 统一工作流的逐子命令说明（含非 `fpga_workflow` 的辅助脚本登记）|
 | `HANDOFF-HW-LOOP.md` | **上板闭环是全自动的** —— 烧录/运行/读回的完整配方 |
 
 ---
@@ -949,18 +1099,22 @@ cmd /c fpga\build_ila.bat    REM 带 ILA 调试版 (工程模式, 慢; 产物在
 ## 11. 需要用户确认/操作的事
 
 1. ~~上板复跑~~ ✅ **已完成**（2026-10-05 16:43，含 P1+P2+P3，tick 逐位一致、CRC 判定=1）
+   —— ⚠️ 但那是**当时**的 RTL；**最后一次上板 = 2026-10-09 21:29**，
+   此后的改动（`load_store_unit.sv` + `fpga/build.tcl`，`d6b48fe`）**未上板**。
+   **上板复跑不需要用户参与**（`HANDOFF-HW-LOOP.md`：全自动），所以它不该留在"需要用户操作"清单里。
 2. **串口不可用** —— 若需要（如现场演示），得装 FTDI 的 VCP 驱动
 3. **紫光同创 PDS 尚未安装** —— 迁移工作要等装好（CPU 核零厂商原语，可移植性已保证）
 4. 仓库 `fpga/` 目录里有较多 Vivado 日志与备份文件（已被 gitignore），可清理
 5. **剩余未做的赛题项**：只剩 **GEMM 加速单元的 C 读回**（Cache 已判定无收益、
    应用场景已完成、分析报告已成文）
+6. **QSPI Flash 固化**：已打通（见第 7 节），**只剩"断电再上电看 DONE 灯"这一步要人做**
 
 ---
 
 ## 12. 建议的接手顺序
 
 ```
-1. 读 skills/fpga-riscv-a100t/PITFALLS.md   (10 分钟, 能省你几小时)
+1. 读 skills/fpga-riscv-a100t/PITFALLS.md   (10 分钟, 能省你几小时; 现已 R1~R47)
 2. 读 skills/fpga-riscv-a100t/SKILL.md      (环境与命令配方)
 3. 读 HANDOFF-WORKFLOW.md                   (10 轮优化循环 + 判定阈值 + 建议的子命令)
 4. 读 tools/README.md                       (统一工作流: doctor/check/verify/profile/synth/metrics/report)
@@ -969,6 +1123,8 @@ cmd /c fpga\build_ila.bat    REM 带 ILA 调试版 (工程模式, 慢; 产物在
 7. 按剩余时间取舍: fmax 物理优化 / GEMM 的 C 读回 / ILA 波形与分析报告（P2 定时器中断、
    Cache、RV32A 都已闭环或已判定）
 8. 上板复跑 (RTL 定稿后一次做; 凡是变快了的改动都要按 R35 重算 ITERATIONS)
+9. 断电自举镜像 (可选交付项): powershell -File tools\flash_boot.ps1 -Iface SPIx4
+   (已打通并逐字节校验过, 见第 7 节 + tools/flash_logs/REPORT.md)
 ```
 
 > ✅ P0（重建评分版）、P1（异常/中断接线）、P2（定时器中断）、P3 实验 A、P4（RAS/gshare 判定）、
@@ -999,8 +1155,13 @@ cmd /c fpga\build_ila.bat    REM 带 ILA 调试版 (工程模式, 慢; 产物在
 `PITFALLS` 本轮新增：R4（handler 破坏自己要用的寄存器）、R5（调试标志与事件不同流水级）、
 一·五（逐拍诊断: 粘滞标志 + `$fatal` 会让"猜"变成唯一手段）。
 
-git 提交：`e49f801`（原始）→ `97be06f` → `2ca639c` → `9083059` → …（本项目累计 40+ 次提交）
+git 提交：`e49f801`（原始）→ `97be06f` → `2ca639c` → `9083059` → …（本项目累计 **120** 次提交，
+`git rev-list --count HEAD` @2026-10-11）
 
 > ⚠️ **上面这张表与本节都是早期轮次的记录**（当时回归 6~7 项）。**当前状态以第 0 节为准**：
-> 回归 **PASS 11**、四项指标 CoreMark/MHz **2.4209** / fmax **69.8 MHz** / CoreMark-LUTs **9.139e-4** /
-> 绝对吞吐 **169.0**，RTL 已上板验证（tick 536,943,384 / 10.74 s）。本节保留是为了记录当时的演进过程。
+> 回归 **PASS 11**（**仿真级**，判据 `fpga_workflow.py verify`）、四项指标 CoreMark/MHz **2.4209** /
+> fmax **69.8 MHz** / CoreMark-LUTs **9.139e-4** / 绝对吞吐 **169.0**。
+> ⚠️ "RTL 已上板验证"这句在这里**必须带时间**：最后一次采集 = **2026-10-09 21:29:30**
+> （`results/ila_done.csv` + `fpga/cap_done.log`），本节括号里的 tick 536,943,384 / 10.74 s
+> 是 **2026-10-08** 的历史值，且 2026-10-11 的 `load_store_unit.sv` 改动未上板。
+> 本节保留是为了记录当时的演进过程。
