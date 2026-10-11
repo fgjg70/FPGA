@@ -8,15 +8,15 @@ create_clock -period 20.000 -name sys_clk [get_ports sys_clk]
 
 # ---- 时序: MMCM 输出的核心时钟 (top_a100t.sv 的 u_bufg_sys/O) ----
 # 约束写法与 RTL 里的 MMCME2_BASE 逐项对齐, 不做人脑换算:
-#   RTL   : CLKFBOUT_MULT_F = 21.0, DIVCLK_DIVIDE = 1, CLKOUT0_DIVIDE_F = 10.0
-#   XDC   : -multiply_by 21 -divide_by 10   ->  50 MHz * 21 / 10 = 105.000 MHz
-#   注意 VCO 没变 (50 * 21 / 1 = 1050 MHz), 只把 CLKOUT0 的分频 15 -> 14 -> 11 -> 10,
-#   所以提频这一步是"同一 VCO 换抽头", 不引入新的 PLL 参数风险。
-#   历史上的档位: 15 -> 70 MHz, 14 -> 75 MHz, 11 -> 95.45 MHz, 10 -> 105 MHz
-#   (1050/N: N=14/13/12/11/10/9/8/7 => 75/80.8/87.5/95.45/105/116.7/131.25/150 MHz)
+#   RTL   : CLKFBOUT_MULT_F = 21.0, DIVCLK_DIVIDE = 1, CLKOUT0_DIVIDE_F = 8.0
+#   XDC   : -multiply_by 21 -divide_by 8   ->  50 MHz * 21 / 8 = 131.25 MHz
+#   阶梯记录(全部实测): VCO 1050 + N=14/11/10/8 -> 75 / 95.45 / 105 / 131.25 MHz
+#   131.25 档实测 WNS -0.173(差 0.173ns ⇒ 时序门已拒绝写 bitstream), 达成 fmax 128.34;
+#   对照组 125MHz(VCO1000+N=8) 只达成 119.6 ⇒ **约束与工具结果是非单调的**,
+#   所以选档要看"达成 fmax"而不是"目标更低就更保险"。
 # 时钟名从 sys_clk_75 改成**频率无关**的 sys_clk_core: 本轮在阶梯上迭代,
 #   名字里带频率会每改一次档就过期一次(本工程最忌讳的"标签与事实不一致")。
-# 周期 = 1/105 MHz = 9.52381 ns. 下面这行是**声明性**的:
+# 周期 = 1/131.25 MHz = 7.619 ns. 下面这行是**声明性**的:
 #   它告诉 STA "这个 net 是 sys_clk 的 21/14 倍频", 相位与 sys_clk 对齐,
 #   跨时钟域路径 (keyin 50 MHz 域 -> 75 MHz 域, 目前没有功能通路) 因此可分析。
 # 用 create_generated_clock 而不是 create_clock -period 13.333: 前者带
@@ -32,7 +32,7 @@ create_clock -period 20.000 -name sys_clk [get_ports sys_clk]
 # 该行不得含非 ASCII 字符, 否则 Vivado 2018.3 可能解析失败。
 create_generated_clock -name sys_clk_core \
   -source [get_ports sys_clk] \
-  -multiply_by 21 -divide_by 10 \
+  -multiply_by 21 -divide_by 8 \
   [get_pins u_bufg_sys/O]
 
 # ---- 引脚 ----

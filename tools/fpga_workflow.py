@@ -135,7 +135,14 @@ CORE_SV_ORDER = [
     "alu.sv", "branch_unit.sv", "control_unit.sv", "imm_gen.sv", "pc.sv", "regfile.sv",
      "id_ex_reg.sv", "ex_mem_reg.sv", "mem_wb_reg.sv",
     "hazard_unit.sv", "load_store_unit.sv",
-    "imem.sv", "dmem.sv", "btb.sv", "ras.sv", "gemm_accel.sv", "muldiv.sv", "csr_file.sv",
+    "imem.sv", "dmem.sv", "btb.sv",
+    # bht.sv: C-1 的两级流水 gshare 的 PHT (8192 项, 1 块 RAMB18)。
+    # 【必须登记】仿真是 glob 有兜底, 但:
+    #   ① 综合走 build.tcl:123 的**显式列表**, 漏了就是 "module bht not found";
+    #   ② `check` 的 drift-check 用这张表, 漏了会报"未登记核文件"。
+    # 两处必须同步 (R1: 一处改了另一处没跟上 = 静默失效)。
+    "bht.sv",
+    "ras.sv", "gemm_accel.sv", "muldiv.sv", "csr_file.sv",
     "core.sv",
 ]
 
@@ -1943,11 +1950,18 @@ def cmd_synth(args) -> int:
         print(f"  [BLOCK] 找不到 {VIVADO_BAT}")
         return 1
 
-    orig = None
     with BuildLock(timeout=args.lock_timeout):
         try:
-            orig = patch_build_prog(prog)
-            print(f"  [1/2] patched {BUILD_TCL}: PROG={prog}")
+            # 【不再改写 build.tcl】PROG 走环境变量(见 fpga/build.tcl 顶部的注释)。
+            # 旧实现用正则改 `set PROG` 行、结束再把**整个文件**写回 —— 构建期间
+            # 别人的编辑会被静默覆盖。2026-10-11 实测: build-repo 给 read_verilog
+            # 加了 bht.sv, 被写回抹掉 ⇒ 下一次综合 "module 'bht' not found"。
+            # 现在 build.tcl 在构建期间是**只读**的, 这一类事故结构上不可能再发生。
+            benv["PROG"] = prog
+            # 自证: build.tcl 打印 BUILD_PROG=$PROG, 下面把它列入 expect ⇒
+            # 环境变量没传进去(或 build.tcl 又不认它)会**报错而不是静默跑错程序**。
+            expect_prog = f"BUILD_PROG={prog}"
+            print(f"  [1/2] PROG={prog} 经环境变量传入 (build.tcl 不再被改写)")
             log = os.path.join(CACHE_DIR, "synth.log")
             os.makedirs(CACHE_DIR, exist_ok=True)
             t0 = time.time()
@@ -2003,6 +2017,8 @@ def cmd_synth(args) -> int:
             #        "A 扩展零代价" —— 我第一眼就差点这么认为)。
             # 所以这里把"宏是否生效"变成**构建后的硬判据**, 不靠人看。
             expect = []
+            # PROG 必须真的传进去了(它现在走 env, 不再靠改写 build.tcl)。
+            expect.append(expect_prog)
             # imem: 默认必须是 BRAM 版(不定义宏的路径); 只有显式回退才是组合读。
             expect.append("BUILD_IMEM_COMB_READ=1" if args.imem_comb_read
                           else "BUILD_IMEM_BRAM=1")
@@ -2070,9 +2086,8 @@ def cmd_synth(args) -> int:
                     print(f"  [FAIL] 日志里有 BUILD_OK 但 vivado rc={rc} —— 不给结论。")
                 print(f"       完整日志: {log}")
                 return 1
-        finally:
-            if orig is not None:
-                restore_build_prog(orig)
+        # 【已删除 finally: restore_build_prog】build.tcl 不再被改写(PROG 走 env),
+        # 所以没有"写回原文件"这一步 —— 也就没有覆盖别人编辑的可能。
 
     res = parse_reports()
     res["prog"] = prog

@@ -138,12 +138,18 @@ module core
   logic [4:0]  id_ex_rs1, id_ex_rs2, id_ex_rd;
   logic        id_ex_pred_taken;
   logic [31:0] id_ex_pred_target;
+  logic [31:0] id_ex_jr_p;        // 【C-14】ID 段预算的 (pred_target − imm), 随 ID/EX 打一拍
 
   // EX
   // 【C-10】前递选择: ID 段预选 (fwd_a_pre/fwd_b_pre) -> 随 ID/EX 打一拍
   // (id_ex_fwd_a/id_ex_fwd_b) -> EX 段前递 mux。`id_ex_fwd_*` 表示
   // "当前在 EX 的这条指令该选哪一路" (与 id_ex_* 同生命周期)。
-  fwd_sel_e    fwd_a_pre, fwd_b_pre, id_ex_fwd_a, id_ex_fwd_b;
+  fwd_sel_e    fwd_a_pre, fwd_b_pre;
+  // 【C-12b'】id_ex_fwd_a/b 是 C-10 的"前递预选"寄存器, 唯一负载是前递 mux 的
+  //   2×32 位选择锥 (实测 **fo=128**, 单跳布线 1.685ns)。加 max_fanout 让综合器
+  //   **就近复制**这些寄存器。判据 (寄存器网): **FF 数必须上升** (1290 -> ?, C-11
+  //   基线), FF 不动 = 属性被接受但没复制 = 空转, 回退 (PITFALLS R37-4 / R40-3)。
+  (* max_fanout = 16 *) fwd_sel_e id_ex_fwd_a, id_ex_fwd_b;
   logic [31:0] ex_rs1, ex_rs2, ex_a, ex_b, ex_alu_out, ex_pc_target;
   logic [31:0] ex_amo_addr;      // RV32A: AMO 的访存地址 (rs1 + imm), 与算子解耦
   // RV32M
@@ -192,6 +198,12 @@ module core
   ctrl_s       mem_wb_ctrl;
   logic [31:0] mem_wb_alu_out, mem_wb_load_data, mem_wb_pc_plus4;
   logic [4:0]  mem_wb_rd;
+  // 【C-12b'】`mem_wb_ctrl.wb_src` 实测 **fo=93 / 单跳布线 1.171ns**, 且同时挂在
+  //   `fwd_wb_data` 与 `wb_data` 两个 mux 的选择端 —— 是 106 档 head 里 2.58ns
+  //   布线的一段 (逐跳证据见 .fpga-cache/reports/20261011-151158-cm_hw line 51-58)。
+  //   拉一个带 max_fanout 的**中间网**, 让综合器就近复制/分载驱动。
+  (* max_fanout = 16 *) wire [1:0] mem_wb_wb_src;
+  assign mem_wb_wb_src = mem_wb_ctrl.wb_src;
 
   // WB
   logic [31:0] wb_data;
@@ -344,20 +356,49 @@ module core
   // IDX_BITS=6 -> 64 项。曾试 128 项: 条件分支误判只从 6041 降到 5694 (省 347 次),
   // 但 LUT +258、pc 路径多一级 LUTRAM 输出 mux 使 fmax 掉 4.6%, 净亏。
   // 配合目标位宽压缩(14 位), 64 项每项只有 24 位, 比原来未压缩的 41 位还小。
-  btb #(.IDX_BITS(6), .PC_TOP(14), .PC_BASE(IMEM_BASE)) u_btb (
+  // ==========================================================================
+  // 【C-1 接线】两级流水预测 (btb.sv 重写 + bht.sv 新增) —— 2026-10-11
+  // --------------------------------------------------------------------------
+  // 论文 §IV.A: "RVCoreP-32IM used **two-stage pipeline gshare** branch prediction
+  // with a **PHT of 8,192 entries** and a **BTB of 512 entries**."
+  // 目的: 把"预测查表 (PHT/BTB LUTRAM 读 + 目标 mux)"从**取指地址路径**上摘掉
+  //   —— 原实现是"当拍用 pc 组合查表、结果直接进 pc_target", 于是 LUTRAM 读
+  //   与预测目标 mux 都在 pc→imem 的关键路径上; 现在查表结果**寄存一拍**。
+  // 【相位契约 (必须与 imem 的配对不变式一致)】
+  //   本核不变式: imem_rdata(N) == mem[pc(N)]  (取指地址 = pc_next, 见 IF 段注释)。
+  //   所以"下一拍进 ID 的地址"就是**本拍的 pc_next**: 让它去查表 (p2_pc),
+  //   下一拍 q_* 输出的预测恰好对应**当拍 pc** 处的那条指令 ⇒ 与 if_pred_* 别名
+  //   (if_pred_taken/if_pred_target) 逐位对齐, 不需要任何补偿。
+  //   C-11 之后 pc_next 里已经含 `pc_flush ? pc_flush_pc : ...`, 语义仍然成立。
+  // 【兼容口】旧 `pred_pc/pred_*` 口保留但恒不预测 (两级流水后"当拍查表"不存在);
+  //   输出留空连接 (悬空合法)。
+  // 【RAS】pred_target 仍是 `(pred_is_ret && !ras_empty) ? ras_top : btb_pred_target`
+  //   (RAS_EN 默认关), q_is_ret 供给它 —— 与旧版同形。
+  // ==========================================================================
+  btb #(.IDX_BITS(9), .PC_TOP(14), .PC_BASE(IMEM_BASE)) u_btb (
     .clk         (clk),
     .rst         (rst),
-    .pred_pc     (pc),
-    .pred_hit    (pred_hit),
-    .pred_taken  (pred_taken),
-    .pred_target (btb_pred_target),
+    // [A] 兼容口: 恒不预测 (只为编译不破)
+    .pred_pc     (32'd0),
+    .pred_hit    (),
+    .pred_taken  (),
+    .pred_target (),
+    .pred_is_ret (),
+    // [B] 两级流水口: T 拍 p2_pc = pc_next (下一拍进 ID 的地址),
+    //     T+1 拍 q_* 对应当拍 pc (见上面的相位契约)
+    .p2_pc       (pc_next),
+    .q_hit       (pred_hit),
+    .q_taken     (pred_taken),
+    .q_target    (btb_pred_target),
+    .q_is_ret    (pred_is_ret),
+    // [C] 更新口逐位不变
     .upd_en      (btb_upd_en),
     .upd_pc      (id_ex_pc),
     .upd_taken   (actual_taken),
     .upd_target  (ex_pc_target),
     .upd_is_ret  (ex_is_ret),
     .upd_is_cond (ex_is_cond),
-    .pred_is_ret (pred_is_ret)
+    .align_err_cnt ()
   );
 
   // 条件分支 (pc_sel==PC_BR) —— gshare 的全局历史只记这类, 不记 JAL/JALR
@@ -618,11 +659,12 @@ module core
 `else
   wire [31:0] amo_wb_value = 32'd0;
 `endif
+  // 【C-12b'】选择端改用带 max_fanout 的中间网 mem_wb_wb_src (见声明处注释)
   wire [31:0] fwd_wb_data =
-        (mem_wb_ctrl.wb_src != WB_MEM) ? ((mem_wb_ctrl.wb_src == WB_PC4) ? mem_wb_pc_plus4
-                                                                        : mem_wb_alu_out)
-      : mem_wb_ctrl.mem_read           ? mem_wb_load_data
-      :                                  amo_wb_value;
+        (mem_wb_wb_src != WB_MEM) ? ((mem_wb_wb_src == WB_PC4) ? mem_wb_pc_plus4
+                                                              : mem_wb_alu_out)
+      : mem_wb_ctrl.mem_read      ? mem_wb_load_data
+      :                             amo_wb_value;
 
   always_comb begin
     // 前递 mux (C-10: 选择来自寄存器 id_ex_fwd_*, 不在本拍现算比较)
@@ -712,6 +754,15 @@ module core
   wire [31:0] ex_ctrl_operand_a = id_ex_ctrl.pc_sel == PC_JR ? ex_rs1 : id_ex_pc;
   wire [31:0] ex_ctrl_sum       = ex_ctrl_operand_a + id_ex_imm;
 
+  // 【C-14】JALR 的"目标命中预测"改写: 只算一条链 ——
+  //   D = ex_rs1 − id_ex_jr_p = ex_rs1 − (id_ex_pred_target − id_ex_imm)
+  //     = ex_ctrl_sum − id_ex_pred_target
+  //   jr_match = (D[31:1] == 0)     <- 31 位 OR 归约 (LUT 树, 无进位比较链)
+  // 原写法要"加法器出 ex_ctrl_sum → 32 位比较器"两条 32 位链**串联**; 现在比较
+  // 这一侧的链没有了, 且加法器不再喂 pred_ok (它只喂 ex_pc_target → br_tgt_r FF)。
+  wire [31:0] ex_jr_diff  = ex_rs1 - id_ex_jr_p;
+  wire        ex_jr_match = (ex_jr_diff[31:1] == 31'd0);
+
   // 跳转目标: JALR 清最低位 (规范要求), 其余直接取专用加法器输出。
   assign ex_pc_target = (id_ex_ctrl.pc_sel == PC_JR)
                         ? {ex_ctrl_sum[31:1], 1'b0}
@@ -745,8 +796,20 @@ module core
   //   比较器的输入不再需要等 mux 选完, 少一级逻辑。
   //   实测证据: 该 mux 与后面的目标比较(CARRY4 x3)原本是串联的, 见
   //   results/p3-fmax.md 实验 C 的关键路径逐级清单。
+  // 【C-14】目标比较按算子分流:
+  //   · PC_JR  : 走预算出来的单链 ex_jr_match (见上), 省掉"加法器→比较器"串联;
+  //   · PC_BR / PC_J: 它们的 ex_ctrl_operand_a 是**寄存器 id_ex_pc**(不是前递来的
+  //     rs1) ⇒ 加法器输入很早就到位, 本来不在关键路径上, 保持原比较器不变。
+  //   等价性 (pred_target[1:0]==0 由文件末尾的断言钉住, 不靠"本来就"):
+  //     ex_pc_target == id_ex_pred_target
+  //       ⟺ {ex_ctrl_sum[31:1],1'b0} == id_ex_pred_target      (PC_JR 的定义)
+  //       ⟺ ex_ctrl_sum[31:1] == id_ex_pred_target[31:1]        (pred_target 低 2 位=0)
+  //       ⟺ (ex_ctrl_sum − id_ex_pred_target)[31:1] == 0        (模 2^32)
+  //     而 ex_ctrl_sum − id_ex_pred_target ≡ ex_rs1 − id_ex_jr_p = ex_jr_diff ✓
+  wire ex_tgt_match = (id_ex_ctrl.pc_sel == PC_JR) ? ex_jr_match
+                                                   : (ex_pc_target == id_ex_pred_target);
   assign pred_ok = (actual_taken == id_ex_pred_taken) &&
-                   (!actual_taken || (ex_pc_target == id_ex_pred_target));
+                   (!actual_taken || ex_tgt_match);
 
   // 【关键】redirect 不再是"分支 taken", 而是"预测错误"。
   // 预测正确时绝不能冲刷, 否则两条正确路径被白白丢掉, 预测收益归零。
@@ -953,18 +1016,27 @@ module core
   //   EX/MEM。只有在两者与本拍 ID 里的消费者**同拍前进**时才成立 —— 而
   //   "消费者前进" ⟺ (flush|bubble|stall 全 0) ⟹ hold_mem=0 ⟹ 两个产生者也
   //   同拍前进 (hold_mem=1 时 pipe_stall 也=1, 消费者不前进)。
+  // 【C-14】ID 段预算: pred_target − imm (两个操作数在 ID 都是寄存器/表输出)。
+  //   它让 EX 段只需"一条减法链 + 31 位 OR 归约"就能判 JALR 目标是否命中预测,
+  //   把原来"32 位加法器 → 32 位比较器"两条链**串联**的那一段砍成一条。
+  //   等价性推导见 pred_ok 处 (依赖 pred_target[1:0]==0, 由断言钉住)。
+  wire [31:0] id_jr_p = if_pred_target - id_imm;
+
   always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
       id_ex_fwd_a <= FWD_REG;
       id_ex_fwd_b <= FWD_REG;
+      id_ex_jr_p  <= 32'd0;
     end
     else if (any_redir || id_ex_bubble) begin
       id_ex_fwd_a <= FWD_REG;
       id_ex_fwd_b <= FWD_REG;
+      id_ex_jr_p  <= 32'd0;
     end
     else if (!pipe_stall) begin
       id_ex_fwd_a <= fwd_a_pre;
       id_ex_fwd_b <= fwd_b_pre;
+      id_ex_jr_p  <= id_jr_p;          // 【C-14】随同一条指令进 EX
     end
   end
 
@@ -1218,7 +1290,8 @@ module core
   );
 
   always_comb begin
-    case (mem_wb_ctrl.wb_src)
+    // 【C-12b'】选择端改用带 max_fanout 的中间网 (见声明处注释)
+    case (mem_wb_wb_src)
 `ifdef LOAD_RESULT_REG
       // 【P3 实验C】从前递寄存器取, 而不是从"刚组合读出的数据"取 —— 这是砍掉
       // 关键路径的关键一步 (见 u_mem_wb 处注释)。
@@ -1284,10 +1357,18 @@ module core
   // 否则是 pc+4) —— 本来就恒定对齐, 保留断言等于免费多一道保险。
   // 【C-11 口径】判据从 `any_redir && pc_target` 改为 `pc_flush && pc_flush_pc`:
   //   pc_target 现在是"预测目标"(不装 PC), 真正装进 PC 的是 pc_flush_pc。
+  // 【C-14 追加判据】预测目标也必须字对齐 —— C-14 的等价性
+  //   (`D[31:1]==0 ⟺ {sum[31:1],1'b0} == pred_target`) 就建立在 pred_target[1:0]=0 上。
+  //   来源: btb.sv:88 `pred_target = {PC_BASE[31:PC_TOP], tgt[pidx]}`, 而 tgt 只从
+  //   `upd_target[PC_TOP-1:0]` 写入 (upd_target 恒 4 字节对齐) + 复位为 0;
+  //   RAS 分支的 ras_top 来自 id_ex_pc_plus4。**不靠"本来就", 用断言钉住。**
   `ifndef SYNTHESIS
   always_ff @(posedge clk) begin
     if (!rst && pc_flush && (pc_flush_pc[1:0] != 2'b00)) begin
       $error("instruction address misaligned: target=%h", pc_flush_pc);
+    end
+    if (!rst && id_ex_valid && (id_ex_pred_target[1:0] != 2'b00)) begin
+      $error("C-14: predicted target is not word-aligned: %h", id_ex_pred_target);
     end
   end
   `endif

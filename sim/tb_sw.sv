@@ -31,8 +31,17 @@
 //      CoreMark 基线自印 CPI=1.10 虚低。现排除冻结拍: 真退休 402720
 //      (hold_mem 14415 拍里有 71 拍 WB 段是气泡), 与 fetch 402723 差 3 拍,
 //      真 CPI = 1.1409 / IPC = 0.8765。
-//   2) 重定向代价: 旧版打印 `n_redirect * 2` (假设)。现直接数 if_id_flush 拍数:
-//      实测 11530 拍 / 11530 次 = 1.00 拍/次 (旧式虚报 23060 拍 = 5%)。
+//   2) 重定向代价: 旧版打印 `n_redirect * 2` (把假设当实测)。现直接数 if_id_flush
+//      拍数 n_flush。这次测量**推翻过一次假设、又验证过一次假设**, 两个数都要留:
+//        · 修正当时 (C-11 之前, redirect 是单拍组合信号): 11530 拍/11530 次 = **1.00 拍/次**
+//          -> 旧式按 2 拍打印, 虚报 23060 拍 = 全程 5.0%。这就是当初必须改成实测的原因。
+//        · 现在 (C-11 的 2 拍冲刷窗口 `redir_flush = br_redir_eff || br_redir_r`,
+//          core.sv:913): 8020 次 -> 16040 拍 = **2.00 拍/次**。
+//      【归属别挂错 (rtl-pred 2026-10-11 实测澄清)】2.00 拍/次 是 **C-11** 带来的,
+//      与 C-1 预测器无关: 同一份 core 只把预测器换回旧 64 项组合查表, 仍是
+//      11530 次 x 2.00 拍 = 23060; 换成 C-1 后是 8020 次 x 2.00 拍 = 16040。
+//      C-1 只改**次数**(11530->8020); C-11 才改**每次几拍**(1->2)。所以这条计数
+//      在两次改动之间的含义会变 —— 引用它时必须写清是哪一版 RTL、以及 n_redirect。
 //   另加 MMIO_MARK->MMIO_RESULT 测量窗口计数 (窗口内 cycles/fetch/stalls/事件)。
 //   【别把"窗口 load-use 停顿"当"改 2 拍的增量"】C-2 的 load_use_mem 还会把
 //   距离 2 的消费者纳入停顿 (旧语义免费): 基线窗口现值 28578, 真增量 36784
@@ -227,7 +236,8 @@ module tb_sw;
   // 目的: 在优化之前先量清楚周期花在哪 —— 分支惩罚、load-use 停顿、拆分访存。
   int unsigned n_fetch = 0;      // IF/ID 前进的周期数 ≈ 取回(发射)指令数
   int unsigned n_redirect = 0;   // 重定向次数 = 预测错误数 (redirect 是"预测错", 不是"分支 taken")
-  int unsigned n_flush = 0;      // if_id_flush 拍数 = **实测**的重定向代价 (不再是假设的 2 拍)
+  int unsigned n_flush = 0;      // if_id_flush 拍数 = **实测**的重定向代价
+                                 // (C-11 前 1.00 拍/次, C-11 起 2.00 拍/次; 见文件头口径注释)
   int unsigned n_stall = 0;      // pipe_stall 周期数
   int unsigned n_stall_lsu = 0;  // 其中拆分访存造成的
   // ---------------------------------------------------------------------------
@@ -281,18 +291,50 @@ module tb_sw;
   int unsigned n_br_hit = 0, n_br_nohit = 0;      // 条件分支的 BTB 命中情况
 
   // 复现 btb.sv 的"有没有表项"判据 (纯观测用)。
-  // btb 实例化参数: IDX_BITS=6, PC_TOP=14 -> 6 位索引 + 6 位 tag。
-  // btb.sv 原文: pidx = pc[IDX_BITS+1:2], ptag = pc[PC_TOP-1:IDX_BITS+2]
-  //              pred_hit = vld[pidx] && (tag[pidx] == ptag)
+  // ---------------------------------------------------------------------------
+  // 【为什么改成从实例参数推导】旧版把几何**硬编码**成 IDX_BITS=6/PC_TOP=14
+  //   (idx=pc[7:2], tag=pc[13:8])。C-1 把 BTB 从 64 项改成 512 项 (IDX_BITS=9,
+  //   tag=pc[13:11]) 之后这段切片整片失真, 日志里打出
+  //       "条件分支总数 70449 | BTB 有表项 1036 (1%) | 无表项 69413 (98%)"
+  //   —— 真实命中率是 96%+, 于是"无表项占条件分支误判 %"这条分析结论**整个反过来**
+  //   (把方向预测器的问题误判成容量/冲突问题, 下一步就会去扩表)。
+  //   这是 PITFALLS R1 的经典形态: 改了 A (BTB 几何) 忘了同步 B (TB 复现判据),
+  //   而且**不报错、只是数变荒谬**。
+  //
+  // 修法有两层:
+  //   1) 索引/tag 的位宽与切片**全部从 u_btb 实例的参数推导** (几何再改也不会错);
+  //   2) 加运行时自证 n_btb_rep_bad: 把本判据与 BTB 自己的 q_hit 逐拍比对
+  //      —— 推导错了会**大声失败**, 而不是静默给出荒谬统计。
+  //   btb.sv 原文: pidx = p2_pc[IDX_BITS+1:2], ptag = p2_pc[PC_TOP-1:IDX_BITS+2],
+  //                q_hit = q_vld && (q_tag == q_tagexp)  (打一拍后输出)
+  // ---------------------------------------------------------------------------
+  localparam int unsigned BTB_IDX_BITS = u_dut.u_btb.IDX_BITS;
+  localparam int unsigned BTB_PC_TOP   = u_dut.u_btb.PC_TOP;
+  localparam int unsigned BTB_TAG_LSB  = BTB_IDX_BITS + 2;
+  localparam int unsigned BTB_TAG_W    = BTB_PC_TOP - BTB_TAG_LSB;
+  localparam int unsigned BTB_N        = 1 << BTB_IDX_BITS;
   function automatic logic btb_has_entry(input logic [31:0] pc);
-    logic [5:0] idx;
-    logic [5:0] tg;
+    logic [BTB_IDX_BITS-1:0] idx;
+    logic [BTB_TAG_W-1:0]    tg;
     begin
-      idx = pc[7:2];
-      tg  = pc[13:8];
+      idx = pc[BTB_IDX_BITS+1:2];
+      tg  = pc[BTB_PC_TOP-1:BTB_TAG_LSB];
       btb_has_entry = u_dut.u_btb.vld[idx] && (u_dut.u_btb.tag[idx] == tg);
     end
   endfunction
+
+  // ---- 自证: 本判据必须与 BTB 自己的 q_hit 逐拍一致 ----
+  // 时序: BTB 在 T 拍用 p2_pc = pc_next(T) 组合查表、在 T+1 拍输出 q_hit。
+  //      所以这里也在 T 拍用 pc_next 算一份、打一拍, T+1 拍与 pred_hit(=q_hit)
+  //      比对 —— 两边读的是同一个 posedge 前的同一个组合值, 必须逐位相等。
+  logic        rep_hit_d = 1'b0;
+  int unsigned n_btb_rep_bad = 0;   // 必须 0; 非 0 说明复现判据与 btb.sv 不同源
+  always @(posedge clk) begin
+    if (!rst) begin
+      if (rep_hit_d !== u_dut.pred_hit) n_btb_rep_bad++;
+      rep_hit_d <= btb_has_entry(u_dut.pc_next);
+    end
+  end
 
   always @(posedge clk) begin
     if (!rst) begin
@@ -465,7 +507,10 @@ module tb_sw;
              n_wb_raw, n_wb_raw - n_wb, n_hold_mem);
     // 【口径修正】旧行把"每次重定向 2 拍"当常数乘上去 (假设不是实测)。
     // 现在直接数 if_id_flush 拍数, 代价 = n_flush / n_redirect。
-    $display("  redirects  = %0d   实测冲刷拍数 = %0d  -> 每次 %0d.%02d 拍  (旧行假设 2 拍 -> 虚报 %0d 周期)",
+    // 【归属别挂错】这个 2 来自 **C-11** 的两拍冲刷窗口 (core.sv:913), 不是 C-1
+    // 预测器; C-1 只改**次数** (11530 -> 8020)。实测坐实: 同一份 core 换回旧
+    // 64 项组合查表仍是 2.00 拍/次 (rtl-pred 2026-10-11)。
+    $display("  redirects  = %0d   实测冲刷拍数 = %0d  -> 每次 %0d.%02d 拍  (旧行按固定 2 拍算 = %0d 周期)",
              n_redirect, n_flush,
              n_redirect == 0 ? 0 : n_flush / n_redirect,
              n_redirect == 0 ? 0 : ((n_flush * 100) / n_redirect) % 100,
@@ -541,12 +586,19 @@ module tb_sw;
     begin : btb_ret_count
       int unsigned n_ret_entries;
       n_ret_entries = 0;
-      for (int bi = 0; bi < 64; bi++)
+      for (int bi = 0; bi < int'(BTB_N); bi++)
         if (u_dut.u_btb.vld[bi] && u_dut.u_btb.is_ret[bi]) n_ret_entries++;
       $display("  BTB 中 is_ret=1 的表项 = %0d (为 0 则标记没写进表)", n_ret_entries);
     end
 `endif
     $display("  --- predictor accuracy ---");
+    // BTB 复现判据自证: 几何/切片与 btb 实例不同源时, 下面的"BTB 有表项/无表项"
+    // 统计会整片失真 (实测 C-1 改 512 项时打出 1% 命中率, 真实 96%+)。
+    if (n_btb_rep_bad != 0)
+      $display("  *** 失败 %0d 次: btb_has_entry 与 btb 自身 q_hit 不一致 -> 本 TB 复现的索引/tag 切片已过期, 下面的 BTB 命中统计不可信 ***", n_btb_rep_bad);
+    else
+      $display("  BTB 复现判据自证: OK (0 次不一致; 几何由 u_btb 实例参数推导, IDX=%0d TAG=%0d N=%0d)",
+               BTB_IDX_BITS, BTB_TAG_W, BTB_N);
     $display("  ctrl-flow  = %0d   mispredict = %0d   accuracy = %0d%%",
              n_ctrl, n_mis, n_ctrl == 0 ? 0 : 100 - (n_mis * 100) / n_ctrl);
     $display("  --- mispredict by type (决定下一个优化方向) ---");
@@ -633,6 +685,10 @@ module tb_sw;
     // 程序行为莫名错乱, 而本 tb 之前无论 n_align_err 是多少都打印 RESULT : PASS。
     if (n_align_err != 0)
       $fatal(1, "[tb_sw] FAIL: 取指错位 %0d 次 (if_pc 与 if_instr 不同源)", n_align_err);
+    // 【同族防线 (R1)】BTB 几何改了但 TB 复现判据没同步 -> 统计整片失真却不报错。
+    // 与取指对齐自检同一纪律: 必须判失败, 不能只打印红字。
+    if (n_btb_rep_bad != 0)
+      $fatal(1, "[tb_sw] FAIL: btb_has_entry 与 btb 的 q_hit 不一致 %0d 次 (TB 复现的 BTB 索引/tag 切片与 btb.sv 实例不同源)", n_btb_rep_bad);
     $display("  RESULT : PASS");
     $finish;
   end

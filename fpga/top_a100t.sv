@@ -80,7 +80,7 @@ module top_a100t
     .CLKFBOUT_MULT_F    (21.0),     // VCO = 50 * 21 / 1 = 1050 MHz  (600~1200 OK)
     .CLKFBOUT_PHASE     (0.0),
     .CLKIN1_PERIOD      (20.000),   // 板载 50 MHz
-    .CLKOUT0_DIVIDE_F   (10.0),     // 1050 / 10 = 105.000 MHz (阶梯: 14=75, 11=95.45, 10=105)
+    .CLKOUT0_DIVIDE_F   (8.0),      // 1050 / 8 = 131.25 MHz (阶梯: 10=105, 8=131.25)
     .CLKOUT0_DUTY_CYCLE (0.5),
     .CLKOUT0_PHASE      (0.0),
     .DIVCLK_DIVIDE      (1),
@@ -167,7 +167,7 @@ module top_a100t
   logic        score_mark, score_done;
 
   mmio_subsys #(
-    .CLK_HZ  (105_000_000),        // 必须跟着 MMCM 改: 周期计数器/定时器按它分频
+    .CLK_HZ  (131_250_000),        // 必须跟着 MMCM 改: 周期计数器/定时器按它分频
     .BAUD_HZ (115_200)
   ) u_mmio (
     .clk           (sys_clk_75),

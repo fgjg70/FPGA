@@ -12,7 +12,17 @@ set part xc7a100tfgg484-2
 # image (see sw/link.ld), so <PROG>.hex and <PROG>.dmem.hex MUST exist as a pair.
 # Note: changing ITERATIONS only changes the dmem image; imem stays byte-identical
 # (PITFALLS R14) -- so to confirm the image is right, compare the .dmem.hex.
+# PROG 默认 cm_hw; 工作流用**环境变量**覆盖它(不再改写本文件)。
+# 【为什么不再打补丁 —— 一次真实事故的根治】
+# 旧实现: fpga_workflow.py 用正则改这一行, 构建结束后把**整个原文件**写回。
+# 2026-10-11 实测后果: build-repo 在构建期间给 read_verilog 加了 `bht.sv`,
+# 那次编辑被"整文件写回"**静默抹掉** ⇒ 下一次综合报
+#     ERROR: [Synth 8-439] module 'bht' not found
+# 而日志里只有一行 ERROR, 极易被当成偶发。改成读 env 后, 本文件在构建期间
+# **只读** ⇒ 这一类覆盖事故在结构上不可能再发生。
+# 自证: build.tcl 会打印 BUILD_PROG=$PROG, 工作流把它列入 expect, 没生效就报错。
 set PROG cm_hw
+if {[info exists ::env(PROG)] && $::env(PROG) ne ""} { set PROG $::env(PROG) }
 # ---- E-02: no hardcoded absolute paths -------------------------------------
 # The repo root is derived from this script's own location, so the build works
 # on another machine / directory / user name, and "$root" is the SINGLE source
@@ -120,7 +130,7 @@ proc br_timing_gate {rpt tag} {
   return $ok
 }
 
-read_verilog -sv [list "$root/rv32_pkg.sv" "$root/alu.sv" "$root/branch_unit.sv" "$root/control_unit.sv" "$root/imm_gen.sv" "$root/pc.sv" "$root/regfile.sv" "$root/id_ex_reg.sv" "$root/ex_mem_reg.sv" "$root/mem_wb_reg.sv" "$root/hazard_unit.sv" "$root/load_store_unit.sv" "$root/imem.sv" "$root/dmem.sv" "$root/btb.sv" "$root/ras.sv" "$root/muldiv.sv" "$root/csr_file.sv" "$root/core.sv" "$root/gemm_accel.sv" "$root/fpga/mmio_subsys.sv" "$root/fpga/top_a100t.sv"]
+read_verilog -sv [list "$root/rv32_pkg.sv" "$root/alu.sv" "$root/branch_unit.sv" "$root/control_unit.sv" "$root/imm_gen.sv" "$root/pc.sv" "$root/regfile.sv" "$root/id_ex_reg.sv" "$root/ex_mem_reg.sv" "$root/mem_wb_reg.sv" "$root/hazard_unit.sv" "$root/load_store_unit.sv" "$root/imem.sv" "$root/dmem.sv" "$root/btb.sv" "$root/bht.sv" "$root/ras.sv" "$root/muldiv.sv" "$root/csr_file.sv" "$root/core.sv" "$root/gemm_accel.sv" "$root/fpga/mmio_subsys.sv" "$root/fpga/top_a100t.sv"]
 read_xdc "$root/fpga/daVinciPro.xdc"
 
 # ===========================================================================
