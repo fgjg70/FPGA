@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import argparse
+import glob
 import hashlib
 import json
 import os
@@ -473,10 +474,22 @@ def check_bitstream_freshness() -> list[dict]:
         inputs = canonical_rtl() + [
             "fpga/top_a100t.sv", "fpga/mmio_subsys.sv", "fpga/daVinciPro.xdc",
         ]
+    recorded_hashes = rec.get("input_sha256") or {}
     for f in inputs:
         fp = abspath(f)
-        if os.path.exists(fp) and os.path.getmtime(fp) > bit_t:
-            newer.append(f)
+        if not os.path.exists(fp):
+            continue
+        want = recorded_hashes.get(f)
+        if want:
+            # 【X-07 修复】按**内容**判, 不按 mtime。
+            # mtime 判据可以被一次 `git checkout <file>` / `git stash` / 从归档拷贝
+            # **伪造**: 内容已经变了, 但 mtime 看起来"比 bitstream 旧" -> 误判为新鲜。
+            # 结果就是 check 在"工作区 RTL ≠ .bit 里的网表"时给出"一致"结论 ——
+            # 而这正是上板前最后一道门。哈希本来就已经记在 synth-cache.json 里了。
+            if sha256_file(fp) != want:
+                newer.append(f"{f}  (内容已变)")
+        elif os.path.getmtime(fp) > bit_t:
+            newer.append(f"{f}  (仅按 mtime 判: 该次构建未记录内容哈希)")
 
     for label, rel in (("imem", imem_img), ("dmem", dmem_img)):
         if not rel or not os.path.exists(abspath(rel)):
@@ -513,6 +526,128 @@ def check_bitstream_freshness() -> list[dict]:
 # ==========================================================================
 # check: R1 漂移检测
 # ==========================================================================
+# ==========================================================================
+# [7] 综合警告门 (M-06) —— 用 Vivado 自己报的警告当 lint
+# --------------------------------------------------------------------------
+# 【为什么必须是 Vivado, 不是 ModelSim / verilator】
+#   · 本机没有 verilator / slang / svlint (实测 Get-Command 全部 NOT FOUND);
+#   · ModelSim 的 vlog 对全核 22 个文件**只报 3 条**警告, 且全是
+#     "Defaulting port kind to var"(与设计无关);
+#   · 而本项目真正吃过亏的警告**只在 Vivado 里**, 且都因为"看起来像标准提示"被放过:
+#       [Synth 8-3331] design mmio_subsys has unconnected port wstrb[3..0]
+#            -> 端口声明了却没人读。与 X-08(MMIO 写忽略 wstrb) 是同一处;
+#               Vivado 报了 4 次, 从来没人看。
+#       [Synth 8-6014] Unused sequential element amo_addr_r_reg was removed
+#            -> A_EN 关闭时的死状态 (load_store_unit.sv:269)。
+#       [Timing 38-1] DLL output pin(s) used on clock modifying cell ... without a
+#                     feedback net
+#            -> R43: 当时当成"标准提示"放过 => MMCM 不锁定 => 整颗 CPU 被按在
+#               复位里, 两轮才定位。top_a100t.sv:63 自己写了判据:
+#               "修复判据: 重新综合后该警告必须消失" —— 本节把它机器化。
+#   所以把"综合警告"变成一道门: **新增的警告必须被分诊**(写进基线), 不能默认放过。
+#
+# 【键必须归一化】若键里带行号/绝对路径/位下标, 每次综合都会"看起来是新的",
+#   门就会天天报警、然后被人忽略 —— 那比没有门更糟。
+# ==========================================================================
+SYNTH_WARN_BASELINE = os.path.join(CACHE_DIR, "synth-warn-baseline.json")
+SYNTH_LOG = "fpga/build.log"
+ILA_SYNTH_LOG = "fpga/ila_build.log"
+# R43 的判据: 这条警告一旦出现, 说明 MMCM 反馈环断了, 必须立刻失败
+R43_WARN_CODE = "Timing 38-1"
+
+
+def _norm_warn_key(s: str) -> str:
+    """把警告正文归一化成**跨次运行稳定**的键 (去行号/绝对路径/位下标/常量)。"""
+    s = s.replace(REPO.replace("/", "\\"), "").replace(REPO, "")
+    s = s.replace("\\", "/")
+    s = re.sub(r"\[([\w./+-]+\.(?:sv|v|svh|tcl|xdc)):\d+(?::\d+)?\]", r"[\1]", s)
+    s = re.sub(r"\[\d+(?::\d+)?\]", "[*]", s)          # wstrb[3] / addr[31:2] -> [*]
+    s = re.sub(r"\b0x[0-9A-Fa-f]+\b", "0x*", s)
+    return " ".join(s.split())
+
+
+def parse_synth_warnings(text: str) -> dict:
+    """从 Vivado 日志抽 WARNING / CRITICAL WARNING, 归一化成 {key: {count, sample}}。"""
+    out: dict[str, dict] = {}
+    for ln in text.splitlines():
+        s = ln.strip()
+        if "WARNING:" not in s:
+            continue
+        sev = "CRITICAL" if "CRITICAL WARNING:" in s else "WARN"
+        m = re.search(r"\[([A-Za-z]\w* \d+-\d+)\]", s)      # [Synth 8-3331] / [Timing 38-1]
+        code = m.group(1) if m else "(no-code)"
+        body = s.split("]", 1)[1] if "]" in s else s
+        key = f"{sev} {code} | {_norm_warn_key(body)}"
+        e = out.setdefault(key, {"count": 0, "sample": s})
+        e["count"] += 1
+    return out
+
+
+def synth_warn_report(log_rel: str = SYNTH_LOG, update_baseline: bool = False,
+                      quiet: bool = False, top: int = 10) -> dict | None:
+    """比对综合警告与基线。返回 {cur,new,gone,increased,baseline_exists} 或 None(无日志)。"""
+    path = abspath(log_rel)
+    if not os.path.exists(path):
+        if not quiet:
+            print(f"  (没有 {log_rel} —— 先跑一次 synth 才有警告可查)")
+        return None
+    cur = parse_synth_warnings(read_text(path))
+    base: dict[str, int] = {}
+    if os.path.exists(SYNTH_WARN_BASELINE):
+        try:
+            j = json.loads(read_text(SYNTH_WARN_BASELINE))
+            base = j.get("warnings", {}) if isinstance(j, dict) else {}
+        except Exception:                            # noqa: BLE001
+            base = {}
+    new = {k: v for k, v in cur.items() if k not in base}
+    gone = {k: v for k, v in base.items() if k not in cur}
+    increased = {k: (base[k], cur[k]["count"]) for k in cur
+                 if k in base and cur[k]["count"] > base[k]}
+    if update_baseline:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        with open(SYNTH_WARN_BASELINE, "w", encoding="utf-8") as f:
+            json.dump({"log": log_rel, "when": time.time(),
+                       "warnings": {k: v["count"] for k, v in sorted(cur.items())}},
+                      f, indent=1, ensure_ascii=False)
+    if not quiet:
+        total = sum(v["count"] for v in cur.values())
+        print(f"  来源 {log_rel}: {len(cur)} 类 / {total} 条; 基线 {len(base)} 类"
+              + ("   [基线已更新]" if update_baseline else ""))
+        if new:
+            print(f"    [新增] {len(new)} 类 —— 必须分诊 (确认无害后 --update-baseline)")
+            for k in sorted(new)[:top]:
+                print(f"      {k}  x{new[k]['count']}")
+                print(f"        e.g. {new[k]['sample'][:150]}")
+        if increased:
+            print(f"    [变多] {len(increased)} 类")
+            for k in sorted(increased)[:top]:
+                a, b = increased[k]
+                print(f"      {k}  {a} -> {b}")
+        if gone:
+            print(f"    [消失] {len(gone)} 类")
+            for k in sorted(gone)[:top]:
+                print(f"      {k}  (原 x{base[k]})")
+        if not base:
+            print("    [提示] 还没有基线 —— 用 `check --update-baseline` 固化当前警告,"
+                  " 之后**新增**的才会报警")
+    return {"cur": cur, "new": new, "gone": gone, "increased": increased,
+            "baseline_exists": bool(base)}
+
+
+def r43_clock_warning(log_rel: str) -> dict:
+    """R43 判据: 日志里不得出现 'Timing 38-1 ... without a feedback net'。
+
+    top_a100t.sv:55-65 记录了那次故障: MMCME2_BASE 漏接 .CLKFBIN 时, 综合期唯一
+    的证据就是这条警告, 而它被当成"标准提示"放过了 => MMCM 永不锁定 => rst 恒有效
+    => 整颗 CPU 被按在复位里 (ILA 抓到 2048 拍全是 ila_ctrl=0x00)。
+    """
+    path = abspath(log_rel)
+    if not os.path.exists(path):
+        return {}
+    return {k: v for k, v in parse_synth_warnings(read_text(path)).items()
+            if R43_WARN_CODE in k and "feedback net" in k}
+
+
 def cmd_check(args) -> int:
     print("=" * 74)
     print("  R1 漂移检测  (PITFALLS: 改了 A 忘了同步 B —— 全部静默失败)")
@@ -684,6 +819,26 @@ def cmd_check(args) -> int:
         warnings.append(".tcl 非 ASCII: " + b)
     if not bat_bad and not tcl_bad:
         print("  OK    所有 .bat/.tcl 都是纯 ASCII")
+
+    # ---- [7] 综合警告门 (M-06) ---------------------------------------------
+    # Vivado 才是本工程的真 lint: 它报的警告里同时藏着 X-08(wstrb 未连) 与
+    # R43(MMCM 反馈环断) 这两类真问题。见上面 synth_warn_report 的注释。
+    print("\n[7] 综合警告门  (Vivado 的警告 = 本工程的真 lint; 见 PITFALLS R43)")
+    rep = synth_warn_report(SYNTH_LOG, update_baseline=getattr(args, "update_baseline", False))
+    if rep:
+        if rep["new"] and rep["baseline_exists"]:
+            problems.append(f"综合出现 {len(rep['new'])} 类**新增**警告, 必须分诊")
+        elif rep["new"]:
+            warnings.append(f"综合有 {len(rep['new'])} 类警告, 但尚无基线可对比")
+    # R43 判据: 评分版与 ILA 版两份日志都不能再出现 feedback net 警告
+    for lg in (SYNTH_LOG, ILA_SYNTH_LOG):
+        bad = r43_clock_warning(lg)
+        if bad:
+            for k in sorted(bad):
+                print(f"  [FAIL] {lg}: {k}  x{bad[k]['count']}")
+            problems.append(f"{lg}: 出现 {R43_WARN_CODE} (MMCM 反馈环断 -> CPU 会被按在复位里)")
+    if os.path.exists(abspath(SYNTH_LOG)):
+        print(f"  OK     {SYNTH_LOG} / {ILA_SYNTH_LOG} 均无 {R43_WARN_CODE} 反馈环警告 (R43 判据)")
 
     # ---- [HIL] 硬件在环健康度 ------------------------------------------------
     # 【为什么单独列一节】用户明确要求: 硬件在环是本项目的核心验证手段, 板子
@@ -901,6 +1056,23 @@ def compile_sim(rtl_files: list[str], tb: str, defines: tuple[str, ...] = ()) ->
 
 
 def cmd_verify(args) -> int:
+    """verify 的入口: 先抢**仿真锁**, 再干活。
+
+    为什么需要锁 (2026-10-11 加): `verify-state.json` 与 `.fpga-cache/sim/<hash>` 的
+    ModelSim work 库是**全局共享**的。Agent Team / 多终端并行跑 verify 会:
+      · 互相覆盖状态文件 (后写者赢) -> 缓存判据漂移;
+      · 在同一个 work 库里并发 `vlog` -> 编译失败, 且报错看起来像 RTL 有问题。
+    这把锁只串行化"仿真", 与 Vivado 构建锁是两把独立的锁 (两者可并行)。
+    """
+    try:
+        with BuildLock(timeout=1800, path=SIM_LOCK_FILE, label="仿真回归"):
+            return _cmd_verify(args)
+    except TimeoutError as e:
+        print(f"  [BLOCK] {e}")
+        return 1
+
+
+def _cmd_verify(args) -> int:
     only = set(args.only) if args.only else None
     matrix = [t for t in test_matrix() if not only or t["name"] in only]
 
@@ -915,6 +1087,17 @@ def cmd_verify(args) -> int:
 
     state = load_state()
     results = []
+
+    # 【M-02】孤儿条目清理: state 里可能有已被删掉/改名的测试残留 (实测:
+    # "tb_core_timer_irq": FAIL 一直躺在 verify-state.json 里, 而矩阵里早没这个测试了)。
+    # 它们不参与汇总, 却会让读状态文件的人以为"有个测试在失败"。这里报出来并丢掉。
+    known = {t["name"] for t in test_matrix()}
+    orphans = [k for k in state if k not in known]
+    if orphans:
+        print(f"  (清理 {len(orphans)} 个已不在矩阵里的缓存条目: {', '.join(sorted(orphans))})")
+        for k in orphans:
+            state.pop(k, None)
+        save_state(state)
 
     for t in matrix:
         name = t["name"]
@@ -931,12 +1114,23 @@ def cmd_verify(args) -> int:
         prev = state.get(name, {})
         # XFAIL 类的测试永远重跑: 它记录的是"还没做"的状态, 一旦 RTL 接线完成就该
         # 从 XFAIL 翻成 XPASS, 缓存命中会把那个翻转发掩盖掉。
+        #
+        # 【M-02 关键修复】**缓存命中必须同时要求上次是 PASS**。
+        # 原实现只比 fingerprint, 于是:
+        #   第一次跑 -> FAIL (exit 1);  第二次无改动重跑 -> 命中缓存 -> 报 SKIP;
+        #   而汇总里 bad 只数 FAIL/BLOCK/XPASS, **SKIP 不计** -> **exit 0**。
+        # 结果就是"失败"被缓存洗成"通过" —— 本工程最核心的教训 (R1/R17/R31) 正是静默失效。
         if (not args.force and prev.get("fingerprint") == fp
+                and prev.get("status") == "PASS"
                 and not t.get("expect_fail_ok")):
             print(f"\n--- {name}: [SKIP] 未受影响 (上次 {prev.get('status')}, "
                   f"{prev.get('seconds', 0):.1f}s)")
-            results.append((name, "SKIP", 0, f"缓存命中 (上次 {prev.get('status')})"))
+            results.append((name, "SKIP", 0, f"缓存命中 (上次 PASS)"))
             continue
+        if (not args.force and prev.get("fingerprint") == fp
+                and prev.get("status") not in (None, "PASS")):
+            print(f"\n--- {name}: (上次状态是 {prev.get('status')!r} —— "
+                  f"缓存**不作为通过依据**, 强制重跑)")
 
         print(f"\n--- {name}: {t['desc']}")
         t0 = time.time()
@@ -1024,6 +1218,16 @@ def cmd_verify(args) -> int:
         os.makedirs(LOG_DIR, exist_ok=True)
         with open(os.path.join(LOG_DIR, name + ".log"), "w", encoding="utf-8") as f:
             f.write(out2)
+        # 【X-03】给日志配一份**来源元数据**。
+        # 下游 (compute_metrics -> latest_ticks) 会从 tb_sw_coremark.log 里读 CoreMark
+        # ticks 去算 CoreMark/MHz, 但日志本身不携带"这是哪版 RTL 跑出来的"。
+        # 实测出过事故 (PITFALLS R42.1): CSV 里某行的 ticks/cm 来自 RAS 配置、
+        # 而 lut/ff/fmax 来自 JAL 配置, 只能靠人工修。这里把指纹写下来,
+        # latest_ticks 会**重算指纹核对**, 对不上就拒绝使用该日志。
+        with open(os.path.join(LOG_DIR, name + ".meta.json"), "w", encoding="utf-8") as f:
+            json.dump({"name": name, "fingerprint": fp, "status": status,
+                       "when": time.time(), "seconds": dt,
+                       "defines": list(defines)}, f, indent=1, ensure_ascii=False)
 
     # ---- 汇总 ----
     print("\n" + "=" * 74)
@@ -1036,9 +1240,18 @@ def cmd_verify(args) -> int:
     print("\n  " + " | ".join(f"{k} {v}" for k, v in sorted(counts.items())))
     if counts.get("XFAIL"):
         print("  XFAIL = 预期失败 (P1 接线尚未做); XPASS = 该更新 expect_fail_ok 了")
+    executed = len(results) - counts.get("SKIP", 0)
+    if executed == 0:
+        # 【M-02 配套】全量 SKIP 时 exit 0, CI / 自动循环会把"没跑"当"通过"。
+        # 实测今天 `verify` 就输出过 "SKIP 11" 且 exit 0。必须显式喊出来。
+        print(f"\n  [WARN] 本次**没有执行任何测试** (全部 {counts.get('SKIP', 0)} 项缓存命中)。")
+        print("         这只能证明'源文件没变', **不能**证明当前 RTL 通过。")
+        print("         要真跑: python tools\\fpga_workflow.py verify --force")
     print("=" * 74)
     # XPASS 也要算异常: 说明预期已经过时
     bad = counts.get("FAIL", 0) + counts.get("BLOCK", 0) + counts.get("XPASS", 0)
+    if getattr(args, "require_run", False) and executed == 0:
+        return 1
     return 1 if bad else 0
 
 
@@ -1144,6 +1357,14 @@ def cmd_report(args) -> int:
               f"{(f'{thr:.1f}' if thr else '-'):>9s}")
 
     kept = [d for d in rows if d.get("status") == "keep" and fnum(d, "coremark_per_mhz")]
+    # 【X-04】锚点必须显式。原实现把 status 写死成 keep, 于是被否决的实验也会成为锚点;
+    # 现在 status 由 --status 传入, 所以这里要把"锚点是谁"讲清楚, 不能默认。
+    if not kept:
+        print("\n  [WARN] CSV 里没有任何 status=keep 的行 —— 无法给出'最新保留配置 vs 基线'。")
+        print("         一次实验要进入这个对比, 必须显式记成 --status keep。")
+    elif rows[-1].get("tag") != kept[-1].get("tag"):
+        print(f"\n  [WARN] 最后一行 {rows[-1].get('tag')!r} 的 status="
+              f"{rows[-1].get('status')!r} 不是 keep —— 下方对比**不拿它当锚点**。")
     if len(kept) >= 2:
         base, cur = kept[0], kept[-1]
         print("\n  最新保留配置 vs 基线 (表内数据 = CSV 记录值):")
@@ -1171,21 +1392,31 @@ def cmd_report(args) -> int:
 # synth: 自动化"测量"半环 (Vivado 综合 -> 四项指标)
 # ==========================================================================
 LOCK_FILE = os.path.join(CACHE_DIR, "vivado.lock")
+# 仿真回归的锁: `verify-state.json` 与 ModelSim work 库是全局共享的, 多写入者并行会
+# 互相覆盖 / 并发 vlog 同一 work 库。Agent Team 并行时必须有这把锁。
+SIM_LOCK_FILE = os.path.join(CACHE_DIR, "sim.lock")
 BUILD_TCL = "fpga/build.tcl"
 
 
 class BuildLock:
-    """全局构建锁: 保证同一时刻只有一个 Vivado 在跑。
+    """全局构建锁: 保证同一时刻只有一个重活 (Vivado / ModelSim 回归) 在跑。
 
     为什么必须串行化 (PITFALLS 四·构建工具链):
       两个 Vivado 实例重叠会让 IP 生成器初始化失败, 而且**谎报**
       `pkgIndex.tcl` 缺失 / `::ipgen_iptclns` 初始化失败 —— 报错指向完全无关的地方,
       极难定位。A(评分版) 与 C(测量) 并行推进时这条尤其致命。
     用 O_EXCL 原子创建 + 陈旧锁回收 (记 pid, 进程没了就抢)。
+
+    【2026-10-11 扩展】同一个理由适用于**仿真回归**: `verify-state.json` 与
+    `.fpga-cache/sim/<hash>` 的 ModelSim work 库都是**全局共享**的, 多写入者并行
+    会互相覆盖状态文件、或在同一个 work 库里并发 vlog。Agent Team 并行时这条是硬要求,
+    所以锁改成可指定路径 + 标签, verify 用一把独立的锁。
     """
 
-    def __init__(self, timeout=1800):
+    def __init__(self, timeout=1800, path=None, label="Vivado 构建"):
         self.timeout = timeout
+        self.path = path or LOCK_FILE
+        self.label = label
 
     def __enter__(self):
         os.makedirs(CACHE_DIR, exist_ok=True)
@@ -1193,35 +1424,35 @@ class BuildLock:
         announced = False
         while True:
             try:
-                fd = os.open(LOCK_FILE, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
                 os.write(fd, str(os.getpid()).encode())
                 os.close(fd)
                 return self
             except FileExistsError:
                 # 陈旧锁回收
                 try:
-                    with open(LOCK_FILE) as f:
+                    with open(self.path) as f:
                         pid = int(f.read().strip() or 0)
                 except (OSError, ValueError):
                     pid = 0
                 if pid and not _pid_alive(pid):
-                    print(f"    (回收陈旧构建锁: pid {pid} 已不存在)")
+                    print(f"    (回收陈旧{self.label}锁: pid {pid} 已不存在)")
                     try:
-                        os.remove(LOCK_FILE)
+                        os.remove(self.path)
                     except OSError:
                         pass
                     continue
                 if time.time() - t0 > self.timeout:
                     raise TimeoutError(
-                        f"等待 Vivado 构建锁超过 {self.timeout}s (持有者 pid={pid})")
+                        f"等待{self.label}锁超过 {self.timeout}s (持有者 pid={pid})")
                 if not announced:
-                    print(f"    (等待构建锁, 持有者 pid={pid} —— Vivado 必须串行)")
+                    print(f"    (等待{self.label}锁, 持有者 pid={pid} —— 必须串行)")
                     announced = True
                 time.sleep(2)
 
     def __exit__(self, *exc):
         try:
-            os.remove(LOCK_FILE)
+            os.remove(self.path)
         except OSError:
             pass
         return False
@@ -1255,9 +1486,71 @@ def restore_build_prog(orig: str) -> None:
         f.write(orig)
 
 
+def parse_worst_setup_path(t: str) -> dict | None:
+    """从 `report_timing_summary` 的 "Max Delay Paths" 段里取**第一条 Setup 路径**。
+
+    【为什么不能用 Clock/Intra Clock 表格】
+    那两张表是**按空白列对齐**的, 某个时钟没有 setup 端点时它的 WNS/TNS 列是
+    **空的**; 用 `^\\s*<时钟名>\\s+([\\d.]+)` 这种正则会**跨过空列**、抓到后面的
+    WPWS(脉宽余量)。这不是假想 —— 2026-10-09 引入 MMCM 之后, 核心从 `sys_clk`
+    搬到 `sys_clk_70`, `sys_clk` 行就只剩脉宽端点, 于是 fmax 被算成
+    1000/(20-7.000)=76.92 MHz, 而真值是 1000/(14.285714-0.888)=74.64 MHz。
+    更糟的是那之后 30+ 次综合的 fmax 全部恒等于 76.92,**对 RTL 时序变化完全不敏感**。
+    (本次修复见 CODE-REVIEW-PLAN M-01/ X-01。)
+
+    路径块里的字段是**带标签**的, 与列对齐无关, 因此对 MMCM 之前/之后的报告都成立:
+        Slack (MET) :             0.888ns  (required time - arrival time)
+        Path Group:               sys_clk_70
+        Path Type:                Setup (Max at Slow Process Corner)
+        Requirement:              14.286ns  (... rise@14.286ns - ... rise@0.000ns)
+    ⇒ fmax = 1000 / (Requirement - Slack), 时钟名与周期都从同一块里取, 不硬编码。
+    """
+    blocks = re.split(r"(?m)^Slack \((?:MET|VIOLATED)\)", t)[1:]
+    for b in blocks:
+        head = b[:2000]                              # 块头足够覆盖这几个字段
+        mt = re.search(r"(?m)^\s*Path Type:\s*(\S+)", head)
+        if not mt or not mt.group(1).lower().startswith("setup"):
+            continue                                 # 跳过 hold / 脉宽 路径块
+        m_req = re.search(r"(?m)^\s*Requirement:\s*(-?[\d.]+)\s*ns", head)
+        if not m_req:
+            continue
+        m_slk = re.search(r"^\s*:\s*(-?[\d.]+)\s*ns", b)
+        if not m_slk:
+            continue
+        m_grp = re.search(r"(?m)^\s*Path Group:\s*(\S+)", head)
+        m_dp = re.search(r"(?m)^\s*Data Path Delay:\s*(-?[\d.]+)\s*ns"
+                         r"\s*\(logic\s*([\d.]+)\s*ns\s*\(([\d.]+)%\)\s*"
+                         r"route\s*([\d.]+)\s*ns\s*\(([\d.]+)%\)\)", head)
+        m_ll = re.search(r"(?m)^\s*Logic Levels:\s*(\d+)", head)
+        m_src = re.search(r"(?m)^\s*Source:\s*(\S+)", head)
+        m_dst = re.search(r"(?m)^\s*Destination:\s*(\S+)", head)
+        return {
+            "slack_ns": float(m_slk.group(1)),
+            "requirement_ns": float(m_req.group(1)),
+            "clock": m_grp.group(1) if m_grp else None,
+            "data_path_ns": float(m_dp.group(1)) if m_dp else None,
+            "logic_ns": float(m_dp.group(2)) if m_dp else None,
+            "logic_pct": float(m_dp.group(3)) if m_dp else None,
+            "route_ns": float(m_dp.group(4)) if m_dp else None,
+            "route_pct": float(m_dp.group(5)) if m_dp else None,
+            "logic_levels": int(m_ll.group(1)) if m_ll else None,
+            "source": m_src.group(1) if m_src else None,
+            "destination": m_dst.group(1) if m_dst else None,
+        }
+    return None
+
+
 def parse_reports() -> dict:
-    """从 Vivado 报告里抽 fmax 与资源。"""
-    out = {"lut": None, "ff": None, "bram": None, "dsp": None, "wns": None, "fmax": None}
+    """从 Vivado 报告里抽 fmax 与资源。
+
+    fmax 的口径 (2026-10-11 修正): **从最差 setup 路径取**, 不读表格、不硬编码周期。
+        fmax = 1000 / (该路径的 Requirement - 该路径的 Slack)
+            = 1000 / (运行时钟周期 - 建立余量)
+    同时输出该路径所属时钟名与周期, 便于核对"核心实际跑在哪个时钟上"。
+    """
+    out = {"lut": None, "ff": None, "bram": None, "dsp": None,
+           "wns": None, "fmax": None,
+           "clk": None, "period_ns": None, "clk_mhz": None, "path": None}
 
     util = abspath("fpga/util.rpt")
     if os.path.exists(util):
@@ -1274,16 +1567,49 @@ def parse_reports() -> dict:
 
     tim = abspath("fpga/timing.rpt")
     if os.path.exists(tim):
-        t = read_text(tim)
-        # 只要 sys_clk 那一行的 WNS; 用表格里第一处出现
-        m = re.search(r"^\s*sys_clk\s+(-?[\d.]+)", t, re.M)
-        if m:
-            wns = float(m.group(1))
-            out["wns"] = wns
-            # 约束周期 20ns (50 MHz) -> fmax = 1000/(20-wns)
-            if wns < 20.0:
-                out["fmax"] = 1000.0 / (20.0 - wns)
+        wp = parse_worst_setup_path(read_text(tim))
+        if wp:
+            out["wns"] = wp["slack_ns"]
+            out["period_ns"] = wp["requirement_ns"]
+            out["clk"] = wp["clock"]
+            out["clk_mhz"] = (1000.0 / wp["requirement_ns"]) if wp["requirement_ns"] > 0 else None
+            denom = wp["requirement_ns"] - wp["slack_ns"]
+            # denom <= 0 => 时序已违约到"约束周期都被吃掉", fmax 无意义, 明确置空
+            out["fmax"] = (1000.0 / denom) if denom > 0 else None
+            out["path"] = wp
+        else:
+            # 【绝不回退到旧的按行抓数字写法】那正是本 bug 的来源。
+            # 取不到就明确置空并告警, 让上层显示 '-' 而不是给一个看起来正常的错数。
+            print("  [WARN] timing.rpt 里找不到 Setup 路径块 -> fmax 置空 (不再猜)")
     return out
+
+
+def log_provenance_ok(meta_path: str) -> bool:
+    """核对一份仿真日志的"来源元数据": 它是不是**当前文件内容**跑出来的。
+
+    做法: 用 meta 里记录的 defines 对同名测试**重算** `test_fingerprint`。
+    指纹覆盖参与编译/运行的全部文件内容 (见 test_fingerprint) —— 只要 RTL / TB /
+    镜像里有一个字节变了, 重算值就不同 => 判定"这份日志不是当前代码跑出来的"。
+
+    为什么要它 (CODE-REVIEW-PLAN X-03): `compute_metrics` 会从
+    `.fpga-cache/logs/tb_sw_coremark.log` 读 CoreMark ticks 去算 CoreMark/MHz,
+    而日志本身不携带来源。实测出过事故 (PITFALLS R42.1): CSV 某行的 ticks/cm 来自
+    RAS 配置、lut/ff/fmax 来自 JAL 配置, 当时只能人工修。
+    meta 缺失 => 返回 False (宁可退回 CSV 并告警, 也不要静默用来源不明的 ticks)。
+    """
+    if not os.path.exists(meta_path):
+        return False
+    try:
+        meta = json.loads(read_text(meta_path))
+    except Exception:                            # noqa: BLE001
+        return False
+    entry = next((t for t in test_matrix() if t["name"] == meta.get("name")), None)
+    if entry is None:
+        return False
+    try:
+        return test_fingerprint(entry, tuple(meta.get("defines") or [])) == meta.get("fingerprint")
+    except Exception:                            # noqa: BLE001
+        return False
 
 
 def latest_ticks(iters: int | None = None) -> tuple[int, int] | None:
@@ -1296,12 +1622,18 @@ def latest_ticks(iters: int | None = None) -> tuple[int, int] | None:
 
     所以: 有 tb_sw_coremark 日志就用日志里的 CoreMark ticks (它还同时给出 CRC,
     可顺带校验正确性); 没有才回退到 CSV。
+    【X-03 加固】用日志之前先核对它的来源指纹 (见 log_provenance_ok)。
     """
-    p = parse_profile(read_text(os.path.join(LOG_DIR, "tb_sw_coremark.log"))) \
-        if os.path.exists(os.path.join(LOG_DIR, "tb_sw_coremark.log")) else {}
+    log = os.path.join(LOG_DIR, "tb_sw_coremark.log")
+    meta_path = os.path.join(LOG_DIR, "tb_sw_coremark.meta.json")
+    p = parse_profile(read_text(log)) if os.path.exists(log) else {}
     cm_ticks, it = p.get("cm_ticks"), p.get("iterations")
     if cm_ticks and it and (iters is None or it == iters):
-        return cm_ticks, it
+        if log_provenance_ok(meta_path):
+            return cm_ticks, it
+        print(f"  [WARN] {posix(os.path.relpath(log, REPO))} 的来源指纹与当前代码不一致 "
+              f"(或缺少 .meta.json) -> **不采用它的 ticks** (R42.1), 改用 coremark.csv")
+        print("         真值请重跑: python tools\\fpga_workflow.py verify --only tb_sw_coremark")
 
     try:
         lines = [l for l in read_text(abspath("results/coremark.csv")).splitlines()
@@ -1343,6 +1675,25 @@ def compute_metrics(res: dict, iters: int | None = None) -> dict:
     return m
 
 
+def wns_note(m: dict) -> str:
+    """把 fmax 的**推导过程**写在数字旁边。
+
+    本工程反复吃亏在"数字来源没写在旁边" —— 只看 76.92 谁也发现不了它取自
+    另一条时钟的脉宽余量。所以这里强制显示: 时钟名 / 周期 / WNS / 公式。
+    """
+    if m.get("wns") is None:
+        return "无 timing 数据 (fmax 置空, 不再猜)"
+    clk = m.get("clk") or "?"
+    per = m.get("period_ns")
+    if per:
+        op = f", 运行 {m['clk_mhz']:.2f} MHz" if m.get("clk_mhz") else ""
+        # 符号要念得出来: WNS=+0.888 应显示 "14.286 - 0.888", WNS=-0.5 显示 "14.286 + 0.500"
+        sign = "-" if m["wns"] >= 0 else "+"
+        return (f"{clk} @{per:.3f}ns{op}; WNS {m['wns']:+.3f}ns "
+                f"-> fmax=1000/({per:.3f} {sign} {abs(m['wns']):.3f})")
+    return f"WNS {m['wns']:+.3f} ns"
+
+
 def print_metrics(m: dict) -> None:
     print("\n  " + "-" * 66)
     print("  四项指标  (赛题记三项, 但必须同时看绝对吞吐)")
@@ -1350,8 +1701,7 @@ def print_metrics(m: dict) -> None:
     rows = [
         ("CoreMark/MHz", m.get("cm_mhz"), "{:.4f}", m.get("ticks"),
          f"{m['iters']} iters, {m['ticks']:,} ticks" if m.get("ticks") else "无 CoreMark 数据"),
-        ("fmax", m.get("fmax"), "{:.1f} MHz", m.get("wns"),
-         f"WNS {m['wns']:.3f} ns @20ns 约束" if m.get("wns") is not None else ""),
+        ("fmax", m.get("fmax"), "{:.1f} MHz", m.get("wns"), wns_note(m)),
         ("CoreMark/LUTs", m.get("cm_lut"), "{:.3e}", m.get("lut"),
          f"LUT {m.get('lut')} FF {m.get('ff')} BRAM {m.get('bram')} DSP {m.get('dsp')}"),
         ("绝对吞吐", m.get("throughput"), "{:.1f}", None, "CoreMark/MHz x fmax"),
@@ -1362,8 +1712,29 @@ def print_metrics(m: dict) -> None:
     print("  " + "-" * 66)
 
 
-def append_csv(tag: str, m: dict) -> None:
-    """把一行追加进 results/coremark.csv, 并保持列顺序与表头一致。"""
+# 实验日志里 status 列的合法取值。
+#   keep     = 决策为"保留"
+#   rejected = 决策为"否决"(必须能由工具写入 —— 原实现硬编码 keep, 见 CODE-REVIEW-PLAN X-04)
+#   measure  = 只测了、还没做决策 (默认值就是它, 不再冒充 keep)
+CSV_STATUSES = ("keep", "rejected", "measure")
+
+
+def append_csv(tag: str, m: dict, status: str | None = None) -> None:
+    """把一行追加进 results/coremark.csv, 并保持列顺序与表头一致。
+
+    【X-04 修复】原实现把 `"status": "keep"` 写死, 于是**工具永远无法记录一个
+    被否决的实验** —— 22 行 rejected 全是人工编辑出来的。实验日志的核心不变量
+    (keep vs rejected) 因此没有机器约束, 而 cmd_report 又拿它当"最新保留配置"的
+    锚点 ⇒ 可能锚到一个已被否决的构建上。
+
+    现在: status 由调用方给 (CLI 的 --status), 默认 "measure" (诚实: 只测了)。
+    【顺带修】CSV 单元格里的内层 `"` 没有转义成 `""`, 会让 read_csv_rows 的
+    `re.findall(r'[^,"]+|"[^"]*"')` 解析错位 —— 本工程 notes 里大量出现引号。
+    """
+    st = status or m.get("status") or "measure"
+    if st not in CSV_STATUSES:
+        print(f"  [WARN] 未知 status={st!r}, 按 measure 记录 (合法值: {', '.join(CSV_STATUSES)})")
+        st = "measure"
     path = abspath("results/coremark.csv")
     hdr_line = next(l for l in read_text(path).splitlines() if l.startswith("date,"))
     hdr = hdr_line.split(",")
@@ -1374,17 +1745,23 @@ def append_csv(tag: str, m: dict) -> None:
         "lut": m.get("lut") or "", "ff": m.get("ff") or "",
         "bram": m.get("bram") or "", "dsp": m.get("dsp") or "",
         "fmax_mhz": f"{m['fmax']:.1f}" if m.get("fmax") else "",
-        "status": "keep",
+        "status": st,
         # 调用方可以给更准确的 notes (例如 hw 是"上板实测"); 没给才用 synth 默认文案
         "notes": m.get("note") or f"fpga_workflow.py synth (PROG={m.get('prog','?')})",
     }
     cells = []
     for k in hdr:
         v = str(row.get(k, ""))
-        cells.append(f'"{v}"' if ("," in v or '"' in v) else v)
+        if "," in v or '"' in v:
+            cells.append('"' + v.replace('"', '""') + '"')
+        else:
+            cells.append(v)
     with open(path, "a", encoding="utf-8", newline="") as f:
         f.write(",".join(cells) + "\n")
-    print(f"\n  -> 追加到 results/coremark.csv: {tag}")
+    print(f"\n  -> 追加到 results/coremark.csv: {tag}  (status={st})")
+    if st == "measure":
+        print("     ℹ status=measure 表示'只测了还没决策' —— 它不会成为 report 的基线/最新保留配置。")
+        print("        要记成决策, 用 --status keep 或 --status rejected。")
 
 
 def cmd_synth(args) -> int:
@@ -1443,7 +1820,7 @@ def cmd_synth(args) -> int:
         res["prog"] = prog
         print_metrics(compute_metrics(res))
         if args.record:
-            append_csv(args.tag or f"synth-{prog}", compute_metrics(res))
+            append_csv(args.tag or f"synth-{prog}", compute_metrics(res), args.status)
         return 0
 
     if not os.path.exists(VIVADO_BAT):
@@ -1556,6 +1933,12 @@ def cmd_synth(args) -> int:
             # 用它而不是 canonical_rtl() 全清单 —— 否则被宏门控、根本没进 bitstream
             # 的模块会**误报** stale。
             "inputs": synth_inputs_for(args),
+            # 【X-07】同时记**逐文件内容哈希**: check 之后按内容比对, 不再按 mtime。
+            # mtime 会被 git checkout / 归档拷贝伪造, 从而把"内容已变"误判成"新鲜"。
+            "input_sha256": {
+                f: (sha256_file(abspath(f)) if os.path.exists(abspath(f)) else None)
+                for f in synth_inputs_for(args)
+            },
         }
         os.makedirs(CACHE_DIR, exist_ok=True)
         with open(sstate, "w", encoding="utf-8") as f:
@@ -1648,10 +2031,13 @@ def verdict(now: dict, prev: dict) -> tuple[str, list[str]]:
     0.5% 不是随手写的: 仿真噪声 + 工具重排会带来约 1% 抖动, 低于它不该算赢。
     绝对吞吐单独看: 它是"每秒跑多少次迭代", 是三项指标互相矛盾时的最终裁判。
     """
-    notes, win, lose = [], 0, 0
+    notes, win, lose, missing = [], 0, 0, []
     for k in ("coremark_per_mhz", "fmax_mhz", "coremark_per_lut"):
         a, b = prev.get(k), now.get(k)
         if not a or not b:
+            # 【不能静默 continue】原实现直接跳过, 于是解析一坏, 判定就悄悄退化成
+            # "2 项指标全赢 => KEEP", 而调用者看不出少了一项。必须留下痕迹。
+            missing.append(k)
             continue
         if b > a * 1.005:
             win += 1
@@ -1661,6 +2047,12 @@ def verdict(now: dict, prev: dict) -> tuple[str, list[str]]:
             notes.append(f"  LOSE {k:18s} {fmt_metric(k, a)} -> {fmt_metric(k, b)}  ({100*(b-a)/a:+.1f}%)")
         else:
             notes.append(f"  ---- {k:18s} {fmt_metric(k, a)} -> {fmt_metric(k, b)}  (~持平)")
+    if missing:
+        notes.append(f"  [WARN] {len(missing)} 项缺数据, **未参与判定**: {', '.join(missing)}")
+    # 只有 1 项可比时,"赢 2 输 1"的规则无从谈起 —— 给 UNKNOWN 而不是假装有结论
+    if win + lose < 2:
+        notes.append(f"  [WARN] 只有 {win + lose} 项可比 (需要 >=2) —— 本次不给 keep/reject 判定")
+        return "UNKNOWN(指标不足)", notes
     if win > lose:
         v = "KEEP"
     elif lose > win:
@@ -1855,6 +2247,100 @@ def cmd_profile(args) -> int:
 # ==========================================================================
 # hw: 解析上板 ILA 读回结果 (results/ila_done.csv)
 # ==========================================================================
+CAPTURE_MANIFEST = "results/ila_done.capture.json"
+# RTL 内容指纹的算法标识。必须与 fpga/build_ila.tcl 里打印的 ILA_RTL_SHA 一致,
+# 否则"这份上板证据是不是当前 RTL 跑出来的"就无从交叉校验 (PITFALLS R41)。
+RTL_SHA_ALG = "sv-sorted-v1"
+
+
+def sha256_tree() -> str:
+    """仓库内 RTL 源文件的**内容指纹** (算法: sv-sorted-v1)。
+
+    按相对路径排序后逐行拼 `<relpath>\\n<sha256>\\n`, 再对整串求 sha256。
+    覆盖根目录 `*.sv` 与 `fpga/*.sv` (顶层与外设也属于"被综合进去的 RTL")。
+    """
+    files = sorted(
+        glob.glob(os.path.join(REPO, "*.sv")) + glob.glob(os.path.join(REPO, "fpga", "*.sv")),
+        key=lambda p: posix(os.path.relpath(p, REPO)))
+    h = hashlib.sha256()
+    for p in files:
+        h.update((posix(os.path.relpath(p, REPO)) + "\n").encode())
+        try:
+            h.update((sha256_file(p) + "\n").encode())
+        except OSError:
+            h.update(b"MISSING\n")
+    return h.hexdigest()
+
+
+def load_capture_manifest(csv_path: str) -> tuple[dict | None, list[str]]:
+    """读"采集清单"并校验它与 CSV 同源。返回 (manifest | None, 问题列表)。
+
+    清单由 `fpga/ila_cap_done.tcl` 在**写完 CSV 之后**写出, 并被 .gitignore 忽略。
+    它是"这一次真的在板子上采集过"的**唯一见证**。
+
+    【为什么不能只靠 mtime】(CODE-REVIEW-PLAN X-02)
+    `results/ila_done.csv` **是被 git 跟踪的**, 里面含一份完整的 PASS 采集
+    (2048 行 ila_ctrl=0xC2 / score_result=0xC9DB2C66)。任何 `git clone/checkout/
+    restore` 都会把它的 mtime 刷成"现在", 于是 `hw` 会在**没有板子**的情况下
+    打印"上板验证 PASS" —— 正是 PITFALLS R20「验证工具可能制造虚假证据」要防的,
+    而触发条件从"板子掉线"变成了日常 git 操作。
+    见证文件不入库 => 全新克隆必然没有它 => 必然拒绝给结论。
+    """
+    p = abspath(CAPTURE_MANIFEST)
+    if not os.path.exists(p):
+        return None, [f"缺少采集清单 {CAPTURE_MANIFEST}"]
+    try:
+        man = json.loads(read_text(p))
+    except Exception as e:                       # noqa: BLE001 - 任何解析失败都当成"没有见证"
+        return None, [f"采集清单不是合法 JSON: {e}"]
+    if not isinstance(man, dict):
+        return None, ["采集清单不是 JSON 对象"]
+
+    problems: list[str] = []
+    want = man.get("csv_sha256")
+    if want:
+        try:
+            got = sha256_file(csv_path)
+        except OSError as e:
+            got = f"<读不到: {e}>"
+        if got != want:
+            problems.append(f"csv_sha256 不匹配 (清单 {str(want)[:12]}… vs 实际 {str(got)[:12]}…)")
+    else:
+        # Tcl 侧可能算不出 sha256 (Vivado 2018.3 的 Tcl 没有内置命令)。退一步用
+        # "同一分钟内写出" 作为弱见证 —— 仍比裸 mtime 强, 但明确记进 problems 之外的提示。
+        try:
+            d = abs(os.path.getmtime(p) - os.path.getmtime(csv_path))
+        except OSError:
+            d = 1e9
+        if d > 120:
+            problems.append(f"清单没有 csv_sha256, 且与 CSV 的写出时间相差 {d:.0f}s (>120s)")
+
+    csvp = man.get("csv")
+    if csvp:
+        try:
+            if posix(os.path.relpath(abspath(csvp), REPO)) != \
+               posix(os.path.relpath(abspath(csv_path), REPO)):
+                problems.append(f"清单记的是另一个 CSV: {csvp}")
+        except ValueError:
+            pass
+    return man, problems
+
+
+def _resolve_hw_arg(cli_val, man, key):
+    """hw 的参数取值: 命令行优先; 没给就从采集清单推断。返回 (值, 来源说明)。
+
+    M-03: 原来的默认值 (1200 / 50e6) 是 MMCM 之前的旧值, 直接跑就会静默少报
+    CoreMark/MHz 2.5 倍。现在默认 None => 必须由命令行或采集清单提供。
+    """
+    if cli_val is not None:
+        if man and man.get(key) is not None and man.get(key) != cli_val:
+            return cli_val, f"命令行 (采集清单写的是 {man.get(key)} —— 不一致, 请确认)"
+        return cli_val, "命令行"
+    if man and man.get(key) is not None:
+        return man.get(key), f"采集清单 {CAPTURE_MANIFEST}"
+    return None, "无"
+
+
 def cmd_hw(args) -> int:
     """解析 ILA over JTAG 读回的跑分结果。
 
@@ -1867,24 +2353,62 @@ def cmd_hw(args) -> int:
         print("          先跑: cmd /c fpga\\ila_cap_done.bat")
         return 1
 
-    # ---- 【必须校验数据新鲜度】--------------------------------------------
+    # ---- 【证据链: 采集清单 (capture manifest)】----------------------------
     # 本子命令只解析 results/ila_done.csv, 那是某一次抓取的**快照**。
-    # 板子掉线/没重新抓取时这个文件不会更新, 于是它会**照样打印
-    # "上板验证 PASS"** —— 把几小时前的陈旧结果当成新验证。
-    # 这是"工具制造虚假证据", 比功能 bug 更危险, 因为它静默。
-    # 实测踩过: 板子 22:13 已掉线, 这里仍在报 PASS (数据是 17:49 的)。
-    # 所以超过 max_age 分钟就**拒绝给结论**, 只作历史参考。
-    age_s   = time.time() - os.path.getmtime(path)
-    age_min = age_s / 60.0
-    stamp   = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(os.path.getmtime(path)))
-    fresh   = age_min <= args.max_age_min
+    # 板子掉线/没重新抓取时这个文件不会更新, 于是它会**照样打印"上板验证 PASS"**
+    # —— 把几小时前的陈旧结果当成新验证 (实测踩过: 板子 22:13 已掉线, 这里仍在报 PASS)。
+    #
+    # 【2026-10-11 加固】mtime 判据**可以被一次 git checkout 伪造**: 该 CSV 是被
+    # git 跟踪的, 且里面就含一份完整 PASS 采集。所以现在要求"同一次采集写出的见证":
+    # results/ila_done.capture.json (由 ila_cap_done.tcl 写出, 且被 .gitignore 忽略),
+    # 并校验它的 csv_sha256 与当前 CSV 逐字节一致。见 CODE-REVIEW-PLAN X-02。
+    man, man_problems = load_capture_manifest(path)
+    if man:
+        try:
+            epoch = float(man.get("captured_at_epoch") or 0)
+        except (TypeError, ValueError):
+            epoch = 0.0
+        age_min = (time.time() - epoch) / 60.0 if epoch else 1e9
+        stamp = man.get("captured_at_local") or (
+            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(epoch)) if epoch else "(清单无时间戳)")
+    else:
+        age_min = (time.time() - os.path.getmtime(path)) / 60.0
+        stamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(os.path.getmtime(path)))
+    fresh = age_min <= args.max_age_min
+    witnessed = (man is not None) and not man_problems
+    # 显式放行开关: 只有在**明知**没有见证时才用, 且结论会被降级成 UNVERIFIED
+    allow_unwitnessed = getattr(args, "allow_unwitnessed", False)
 
     print("=" * 74)
     print("  上板读回结果 (ILA over JTAG)")
     print("=" * 74)
     print(f"  数据文件 : {args.csv}")
-    print(f"  抓取时间 : {stamp}   ({age_min:.1f} 分钟前)")
-    if not fresh:
+    print(f"  抓取时间 : {stamp}   ({age_min:.1f} 分钟前)"
+          + ("   [来源: 采集清单]" if man else "   [来源: 文件 mtime —— 无见证!]"))
+    if man:
+        print(f"  采集清单 : {CAPTURE_MANIFEST}"
+              f"   prog={man.get('prog')} iters={man.get('iterations')} "
+              f"clk={man.get('clk_hz')} expect_tick={man.get('expect_tick')}")
+        if man.get("rtl_sha256"):
+            alg = man.get("rtl_sha_alg")
+            if alg == RTL_SHA_ALG:
+                note = (" (与当前 RTL 一致)" if sha256_tree() == man["rtl_sha256"] else
+                        " (**与当前 RTL 不一致** —— 这份上板证据不是当前 RTL 跑出来的!)")
+            else:
+                note = f" (清单声明的算法是 {alg!r}, 与 {RTL_SHA_ALG!r} 不同, 不做对比)"
+            print(f"  RTL 指纹 : {str(man['rtl_sha256'])[:16]}…{note}")
+    if not witnessed:
+        print()
+        print("  [BLOCK] **没有可信的采集见证** —— 不作为本次验证结论。")
+        for pb in man_problems:
+            print(f"          · {pb}")
+        print("          这意味着: 这份 CSV 可能是被 git 恢复出来的历史快照,")
+        print("            而不是这一次在板子上真的抓到的 (PITFALLS R20)。")
+        print("          正确做法: cmd /c fpga\\jtag_probe.bat  然后  cmd /c fpga\\ila_cap_done.bat")
+        if not allow_unwitnessed:
+            print("          (确实要旁路见证, 请显式加 --allow-unwitnessed —— 结论会标为 UNVERIFIED)")
+        print("-" * 74)
+    elif not fresh:
         print()
         print(f"  [STALE] 这份数据已超过 {args.max_age_min} 分钟 —— **不作为本次验证结论**。")
         print("          大概率是板子没连上 / 没有重新抓取。请先:")
@@ -2008,17 +2532,29 @@ def cmd_hw(args) -> int:
     done, mark = (ctrl >> 6) & 1, (ctrl >> 5) & 1
     illegal, p, f = (ctrl >> 2) & 1, (ctrl >> 1) & 1, ctrl & 1
     crc, tick = (res >> 31) & 1, res & 0x7FFFFFFF
-    iters = args.iterations
+    # ---- M-03: --iterations / --clk-hz / --expect-tick 从采集清单自动推断 ----
+    # 原默认值 1200 / 50e6 是 MMCM 之前的旧值, 直接用会**静默**算出
+    #   CoreMark/MHz = 0.9684 (真值 2.4211, 少报 2.5 倍) 和 24.78s (真值 17.70s),
+    # 而且同一份代码里 --clk-hz 那一半有告警、--iterations 那一半**没有任何告警**。
+    # 现在两者默认都是 None: 命令行不给就向采集清单要, 都没有就拒绝给结论 (不再猜)。
+    iters, iters_src = _resolve_hw_arg(args.iterations, man, "iterations")
+    clk_hz, clk_src = _resolve_hw_arg(args.clk_hz, man, "clk_hz")
+    expect_tick, exp_src = _resolve_hw_arg(args.expect_tick, man, "expect_tick")
+    if iters is None or clk_hz is None:
+        print("  [BLOCK] 无法确定 iterations / clk-hz: 命令行没给, 采集清单里也没有。")
+        print("          请显式传 --iterations <N> --clk-hz <Hz>, "
+              "或先做一次会写出采集清单的抓取 (ila_cap_done.bat)。")
+        return 1
     cmmhz = iters * 1e6 / tick if tick else 0
-    secs = tick / args.clk_hz
+    secs = tick / clk_hz
 
     # ---- tick 与 --expect-tick 的偏差: 大了必须**明确提示**, 不能默默放过 ----
     # 偏差大通常只有三个原因: ① --clk-hz 不是这个 bitstream 的真实时钟
     # ② --iterations 不是镜像里编译进去的值 ③ CSV 是旧快照 (见上面的新鲜度门槛)
     tick_dev = None
     tick_ok = True
-    if args.expect_tick:
-        tick_dev = abs(tick - args.expect_tick) / args.expect_tick * 100.0
+    if expect_tick:
+        tick_dev = abs(tick - expect_tick) / expect_tick * 100.0
         tick_ok = tick_dev <= args.tick_tol_pct
 
     # 头部与新鲜度已经在函数开头打印过, 这里不再重复
@@ -2026,36 +2562,48 @@ def cmd_hw(args) -> int:
     print(f"  score_result = 0x{res:08X}")
     print(f"    bit31 = {crc}  -> CRC 判定 {'全部匹配官方参考值' if crc else '不匹配 !!'}")
     print(f"    tick  = {tick:,}")
-    print(f"    iterations = {iters}")
+    print(f"    iterations = {iters}      [来源: {iters_src}]")
     print(f"    CoreMark/MHz = {cmmhz:.4f}")
-    print(f"    时长 = {secs:.2f} s @{args.clk_hz/1e6:.0f}MHz"
-          f"  (赛题要求 >= 10 s: {'满足' if secs >= 10 else '不满足 !!'})")
+    print(f"    时长 = {secs:.2f} s @{clk_hz/1e6:.0f}MHz"
+          f"  (赛题要求 >= 10 s: {'满足' if secs >= 10 else '不满足 !!'})"
+          f"   [clk 来源: {clk_src}]")
     print("    " + pc_note())
-    if args.expect_tick:
+    if expect_tick:
         tag = "OK" if tick_ok else "偏差过大 !!"
-        print(f"    对照预期 {args.expect_tick:,}: 偏差 {tick_dev:.3f}%"
-              f"  [{tag}, 门限 {args.tick_tol_pct}%]")
+        print(f"    对照预期 {expect_tick:,}: 偏差 {tick_dev:.3f}%"
+              f"  [{tag}, 门限 {args.tick_tol_pct}%]   [预期来源: {exp_src}]")
         if not tick_ok:
             print("    [WARN] tick 与预期不符 —— 先核对三件事 (别只看 PASS/FAIL):")
-            print(f"           1) --clk-hz {args.clk_hz:.0f} 必须等于该 bitstream 的真实系统时钟")
+            print(f"           1) clk-hz {clk_hz:.0f} 必须等于该 bitstream 的真实系统时钟")
             print("              (70MHz 版应为 70000000; 50000000 是 MMCM 之前的旧默认)")
-            print(f"           2) --iterations {iters} 必须等于镜像里编译进去的 ITERATIONS")
+            print(f"           2) iterations {iters} 必须等于镜像里编译进去的 ITERATIONS")
             print("           3) results/ila_done.csv 必须来自**本次**抓取 (不是旧快照)")
-    if abs(args.clk_hz - 50e6) < 1.0:
-        print("    [注意] 当前用的是 50MHz 默认值 —— 若 bitstream 已是 70MHz 版,")
+    if abs(clk_hz - 50e6) < 1.0:
+        print("    [注意] 当前用的是 50MHz —— 若 bitstream 已是 70MHz 版,")
         print("           时长/CoreMark-MHz 都会错 (必须显式传 --clk-hz 70000000)")
 
     ok = bool(locked and done and p and not f and not illegal and crc and tick_ok)
-    if not fresh:
-        # 陈旧数据绝不允许给出 PASS 结论 —— 否则板子掉线也会"验证通过"
+    # 【证据门槛】没有采集见证 / 数据陈旧时,**绝不**给出 "上板验证 PASS"。
+    # 注意这里用 `witnessed or allow_unwitnessed`: 旁路见证是显式行为, 且结论降级为
+    # UNVERIFIED —— 让"没证据"在读的人眼里一眼可见, 而不是混在 PASS 里。
+    if not (witnessed or allow_unwitnessed) or not fresh:
+        why = []
+        if not witnessed and not allow_unwitnessed:
+            why.append("无可信采集见证")
+        if not fresh:
+            why.append(f"数据已 {age_min:.0f} 分钟未更新")
         print(f"\n  => 结果本身: {'PASS' if ok else 'FAIL'}"
-              f"  (但数据已 {age_min:.0f} 分钟未更新, **不作为验证结论**)")
-        print("  => 本次验证: 未完成 (需要重新抓取)")
+              f"  (但 {'; '.join(why)}, **不作为验证结论**)")
+        print("  => 本次验证: 未完成 (需要重新抓取: cmd /c fpga\\ila_cap_done.bat)")
         return 1
+    if allow_unwitnessed and not witnessed:
+        print("\n  [UNVERIFIED] 显式旁路了采集见证 (--allow-unwitnessed) —— "
+              "下面的结论**不构成上板验证**。")
     print(f"\n  => 判据逐项: locked={locked}(需1) done={done}(需1) pass={p}(需1)"
           f" fail={f}(需0) illegal={illegal}(需0) crc={crc}(需1)"
           + (f" tick偏差={tick_dev:.3f}%(需<={args.tick_tol_pct}%)" if tick_dev is not None else ""))
-    print(f"  => 上板验证 {'PASS' if ok else 'FAIL'}")
+    print(f"  => 上板验证 "
+          f"{'PASS' if (ok and witnessed and fresh) else ('UNVERIFIED' if (ok and not witnessed) else 'FAIL')}")
     if args.record:
         res_m = parse_reports()
         m = {"cm_mhz": cmmhz, "fmax": res_m.get("fmax"), "lut": res_m.get("lut"),
@@ -2065,7 +2613,7 @@ def cmd_hw(args) -> int:
              "iters": iters, "ticks": tick,
              "note": ("上板实测 (ILA over JTAG): %d 迭代, %.2fs, CRC 判定=%d; "
                       "资源取自最近一次 synth 归档" % (iters, secs, crc))}
-        append_csv(args.tag or "HARDWARE-RERUN", m)
+        append_csv(args.tag or "HARDWARE-RERUN", m, args.status)
     print("=" * 74)
     return 0 if ok else 1
 
@@ -2114,12 +2662,19 @@ def main() -> int:
     p = sub.add_parser("doctor", help="环境自检")
     p.set_defaults(func=cmd_doctor)
 
-    p = sub.add_parser("check", help="R1 漂移检测 (文件清单/地址/编码/新鲜度)")
+    p = sub.add_parser("check", help="R1 漂移检测 (文件清单/地址/编码/新鲜度/综合警告)")
+    # 【M-06】把当前的综合警告固化成基线: 之后**新增**的警告才会被判为问题。
+    # 分诊完一批无害警告 (例如 dmem 高位地址未连) 之后跑一次即可。
+    p.add_argument("--update-baseline", action="store_true",
+                   help="把当前 fpga/build.log 的综合警告固化为基线 (分诊用)")
     p.set_defaults(func=cmd_check)
 
     p = sub.add_parser("verify", help="ModelSim 增量回归")
     p.add_argument("--only", nargs="*", help="只跑指定测试名")
     p.add_argument("--force", action="store_true", help="忽略缓存全量重跑")
+    # 【M-02】全量缓存命中时 exit 0 会让 CI 把"没跑"当"通过"。自动化调用请带这个开关。
+    p.add_argument("--require-run", action="store_true",
+                   help="若本次一项都没真跑(全 SKIP)则返回非零 —— 给 CI / 自动循环用")
     p.add_argument("--imem_comb_read", action="store_true",
                    help="[回退] imem 用组合读 (IMEM_COMB_READ, LUT ROM); "
                         "默认已是寄存读 -> BRAM, 一般不需要这个开关")
@@ -2156,26 +2711,31 @@ def main() -> int:
 
     p = sub.add_parser("hw", help="解析上板 ILA 读回结果 (results/ila_done.csv)")
     p.add_argument("--csv", default="results/ila_done.csv", help="ILA 抓取的 CSV")
-    # 【默认值是历史遗留, 上板判读必须显式传参】
-    # 1200 / 50e6 是"MMCM 之前、ITERATIONS=1200"那一代的默认值。现在镜像里是
-    # ITERATIONS=3000、时钟是 70 MHz, 用默认值算出的时长/CoreMark-MHz 会**全错**
-    # 而且看起来很正常 (静默错)。所以:
-    #   python tools\fpga_workflow.py hw --iterations 3000 --clk-hz 70000000 \
-    #          --expect-tick 1239100117 --tag clk70-hw
-    # (另一个已知口径问题: parse_reports() 里 period 硬编码 20.0, 即报告里的
-    #  fmax 仍按 50MHz 输入时钟换算 —— 本次先不改, 只在此标注。)
-    p.add_argument("--iterations", type=int, default=1200,
-                   help="镜像里编译进去的 ITERATIONS。默认 1200 是旧值, "
-                        "上板判读必须显式传当前值 (70MHz/3000 迭代: --iterations 3000)")
-    p.add_argument("--clk-hz", type=float, default=50e6,
-                   help="bitstream 的**真实**系统时钟 Hz。默认 50e6 是 MMCM 之前的旧值, "
-                        "70MHz 版必须显式传 --clk-hz 70000000, 否则时长/CoreMark-MHz 全错")
+    # 【M-03 修复】这三个参数**默认不再猜**。
+    # 原来的默认值 1200 / 50e6 是"MMCM 之前、ITERATIONS=1200"那一代的值; 现在镜像是
+    # ITERATIONS=3000 / 70 MHz, 用默认值会静默少报 CoreMark/MHz 2.5 倍
+    # (实测 hw 不带参数: 0.9684 而真值 2.4211) 且 --clk-hz 那一半有告警、--iterations
+    # 那一半连告警都没有。现在: 不给就向采集清单 (results/ila_done.capture.json) 要,
+    # 都没有就拒绝给结论。
+    p.add_argument("--iterations", type=int, default=None,
+                   help="镜像里编译进去的 ITERATIONS。省略则从采集清单推断(推荐)")
+    p.add_argument("--clk-hz", type=float, default=None,
+                   help="bitstream 的**真实**系统时钟 Hz。省略则从采集清单推断(推荐)")
     p.add_argument("--expect-tick", type=int,
-                   help="预期 tick, 用于算偏差 (超过 --tick-tol-pct 会给出明确提示)")
+                   help="预期 tick, 用于算偏差 (省略则从采集清单推断)")
+    # 【X-02】没有采集见证时默认拒绝给结论。确实要旁路就用这个开关, 结论会标 UNVERIFIED。
+    p.add_argument("--allow-unwitnessed", action="store_true",
+                   help="[危险] 允许在没有采集清单见证时给结论 —— 结论标为 UNVERIFIED, "
+                        "**不构成上板验证**")
     p.add_argument("--tick-tol-pct", type=float, default=0.5,
                    help="tick 允许偏差 %%, 超过则给出 [WARN] 并判 FAIL (默认 0.5)")
     p.add_argument("--tag", help="记录进 coremark.csv 的标签")
     p.add_argument("--record", action="store_true", help="追加一行到 results/coremark.csv")
+    # 【X-04】status 必须由调用方给: 原实现硬编码 keep, 工具**永远无法记录一个被否决的
+    # 实验**, 22 行 rejected 全是人工编辑出来的。默认 measure = "只测了, 还没决策"。
+    p.add_argument("--status", choices=CSV_STATUSES, default="measure",
+                   help="记进 coremark.csv 的 status (默认 measure=只测了还没决策; "
+                        "做决策用 keep / rejected)")
     # 数据新鲜度门限: 超过就拒绝给结论 (板子掉线时 CSV 不会更新, 否则会
     # 把几小时前的旧结果当成新验证 —— 实测踩过)
     p.add_argument("--max-age-min", type=float, default=20.0,
@@ -2187,6 +2747,11 @@ def main() -> int:
                    help="要综合进 imem/dmem 的程序基名 (默认 cm_hw = 跑分版)")
     p.add_argument("--tag", help="记录进 results/coremark.csv 用的标签")
     p.add_argument("--record", action="store_true", help="追加一行到 results/coremark.csv")
+    # 【X-04】status 必须由调用方给: 原实现硬编码 keep, 工具**永远无法记录一个被否决的
+    # 实验**, 22 行 rejected 全是人工编辑出来的。默认 measure = "只测了, 还没决策"。
+    p.add_argument("--status", choices=CSV_STATUSES, default="measure",
+                   help="记进 coremark.csv 的 status (默认 measure=只测了还没决策; "
+                        "做决策用 keep / rejected)")
     p.add_argument("--force", action="store_true", help="忽略缓存强制重建")
     # 【注意默认值】imem/dmem **都用 BRAM** —— 这是交付配置。
     # imem 靠"寄存读"落 RAMB36 (不定义任何宏即为默认路径), 组合读只是回退。

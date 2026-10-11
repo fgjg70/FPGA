@@ -353,12 +353,41 @@ def parse_block(block):
     return out
 
 
+def period_from_worst_setup(raw_blocks):
+    """从**最差 setup 路径块**里取它的 `Requirement:` 作为时钟周期。
+
+    【为什么不能直接用 parse_period() 的第 1 条】
+    报告里 `Period(ns): 20.000` 的**第一次出现**(timing.rpt:200) 属于 `sys_clk` 的
+    **脉宽(pulse width)明细块**, 而设计真正跑在 MMCM 出来的 `sys_clk_70`(14.286ns)。
+    脉宽余量一混进来, fmax 就被算成 1000/(20.000-0.888) = **52.32 MHz**
+    (真值 74.64) —— 而且这个错值看起来完全"正常"。
+    路径块里的 `Requirement` 与它的 `slack` **同源同一条路径**, 是唯一不会串台的口径。
+    (见 CODE-REVIEW-PLAN X-05; 与 fpga_workflow.parse_worst_setup_path 同一原理。)
+    """
+    setup = [b for b in raw_blocks if b.get('kind') == 'setup']
+    if not setup:
+        return None, None
+    worst = min(setup, key=lambda b: b['slack'])
+    grp = '?'
+    for ln in worst['lines']:
+        m = RE_GROUP.match(ln)
+        if m:
+            grp = m.group(1).strip('*')
+            break
+    for ln in worst['lines']:
+        m = RE_REQ.match(ln)
+        if m:
+            return float(m.group(1)), 'worst setup path Requirement (clock "%s")' % grp
+    return None, None
+
+
 def analyze(path, period_override):
     lines = read_lines(path)
     res = {'report': os.path.abspath(path), 'warnings': []}
 
     summary = parse_design_summary(lines)
-    blocks = [parse_block(b) for b in split_blocks(lines)]
+    raw_blocks = split_blocks(lines)
+    blocks = [parse_block(b) for b in raw_blocks]
 
     if summary is None and not blocks:
         res['ok'] = False
@@ -366,12 +395,19 @@ def analyze(path, period_override):
                         '也找不到任何 "Slack (MET/VIOLATED)" 路径块 -- 不是 Vivado timing report?')
         return res
 
-    period, period_src = parse_period(lines)
+    # 【口径顺序】最差 setup 路径的 Requirement 优先; 它保证 period 与 wns 同源。
+    period, period_src = period_from_worst_setup(raw_blocks)
     if period_override is not None:
         period, period_src = period_override, '--period (命令行覆盖)'
     elif period is None:
-        period, period_src = FALLBACK_PERIOD, 'DEFAULT %g ns (报告里没解析到, 请用 --period)' % FALLBACK_PERIOD
-        res['warnings'].append('没能从报告里解析出时钟周期, 已退回默认 %g ns' % FALLBACK_PERIOD)
+        period, period_src = parse_period(lines)
+        if period is None:
+            period, period_src = FALLBACK_PERIOD, 'DEFAULT %g ns (报告里没解析到, 请用 --period)' % FALLBACK_PERIOD
+            res['warnings'].append('没能从报告里解析出时钟周期, 已退回默认 %g ns' % FALLBACK_PERIOD)
+        else:
+            res['warnings'].append(
+                '报告里没有 setup 路径明细 -> 周期取自次级来源(%s); '
+                '若设计跑在生成时钟上, 这个值可能不是核心时钟, 建议显式 --period' % period_src)
 
     if summary is None:
         res['warnings'].append('没找到 Design Timing Summary 表, 只用路径块里的 slack')
