@@ -433,16 +433,48 @@ python tools\fpga_workflow.py check           # 漂移检测：含"37 小时未�
 | **`RB36 async control check` × 36** | 警告门基线里发现 `u_core/u_dmem/mem_reg_0 has an input control pin ...`（BRAM 异步控制引脚） | 警告门基线 | 待评估（非本轮范围） |
 | **`muldiv` 死寄存器 × 93** | `[Synth 8-3332] Sequential element (prod_ss_reg[*] / prod_uu_reg[*]) is unused and will be removed` —— 乘法器推断出的 DSP 内部寄存器被判定未用 | 警告门基线 | 低（功能已验证） |
 
-### 6.3 已实测的关键数字（**冻结后以最终综合为准**）
+### 6.3 最终数字（**已冻结，上板验证**）
 
-| 指标 | 审查前（文档） | 2026-10-11 11:04 综合 | 说明 |
-|---|---|---|---|
-| fmax | 69.8（文档）/ 76.92（错误工具值） | **74.4 MHz** | `sys_clk_70 @14.286ns`，WNS +0.854 |
-| LUT / FF | 2649 / 1234 | **2736 / 1251** | 含 R-01 + R48 + R-02 的代价 |
-| CoreMark/MHz | 2.4209 | **2.4209**（ticks 413070） | 不变（改动都是恒等变换） |
-| CoreMark/LUTs | 9.139e-4 | **8.848e-4** | −2.5%（用 LUT 换两处架构正确性 + mtval 合规） |
-| 绝对吞吐 | 169.0 | **180.2** | 比文档高 6.6% |
-| 上板 | `0x42` / tick 536,943,384 / 1300@50MHz | 待本轮 ILA 闭环复验 | |
+来源：`.fpga-cache/reports/20261011-111332-cm_hw/`（timing.rpt / util.rpt / metrics.json）
++ `results/coremark.csv` 行 `review-fixes-v1` + `results/ila_done.capture.json`（2026-10-11 11:19:07）。
+
+| 指标 | 基线 | **最终（上板验证）** | 变化 | 文档原值（错/旧） |
+|---|---|---|---|---|
+| CoreMark/MHz | 0.8263 | **2.4209** | **+193.0%** | 2.4209 ✅ |
+| fmax | 78.4 MHz | **74.4 MHz** | **−5.1%** | 69.8（错：MMCM 之前的 20ns 口径） |
+| CoreMark/LUTs | 2.361e-4 | **8.848e-4** | **+274.8%** | 9.139e-4 |
+| 绝对吞吐 | 64.8 | **180.2** | **+178.1%** | 169.0 |
+| 资源 | — | LUT **2736** / FF **1251** / BRAM **8** / DSP **8** | — | 2649 / 1234 / 8 / 8 |
+| 仿真 ticks | — | **413,070** | 不变 | 413,070 ✅ |
+
+fmax 口径：`sys_clk_70 @14.286ns`，WNS **+0.854**，`1000/(14.286 − 0.854) = 74.4 MHz`。
+
+**上板实测**（2026-10-11 11:19:07，`build_ila` → `ila_cap_done` 全自动闭环）：
+
+| 项 | 值 |
+|---|---|
+| `ila_ctrl` | `0xC2` → locked=1 done=1 pass=1 fail=0 **illegal=0** |
+| `score_result` | `0xC9DADA56`（bit31=1 → **结果有效：CRC 匹配 且 时长≥10 s**） |
+| tick | **1,239,079,510**（3000 迭代 @70 MHz，**17.70 s**） |
+| 硬件 CoreMark/MHz | **2.4212**（仿真 2.4209，差 0.01%） |
+| tick 与预期偏差 | **0.002%**（门限 0.5%） |
+| 程序状态 | `dbg_pc` 稳定在 `0x80001C50`，停在结尾 `j .`（`dbg_instr=0x0000006F`）→ 确认跑完 |
+| 判据 | `locked done pass crc secs>=10` 全 1；`fail illegal` 为 0 → **上板验证 PASS** |
+
+**这轮改动的代价（如实记录）**：`CoreMark/LUTs` 从 9.077e-4 降到 **8.848e-4（−2.5%）**，
+对应 +69 LUT / +17 FF / fmax −0.25%，换来 R-01（中断落气泡 → mepc=0）、
+R48（陷阱未冲 EX/MEM → 被抢占指令双执行）、R-02（mtval 恒 0）三处修复。
+中断/异常路径对评分三项**零贡献**，所以这是"用 2.5% 的一个分项换两处架构正确性 + 合规"的
+**自觉取舍**，不是测量误差。若要换回分数，可单独 `git revert` 对应的 commit。
+
+### 6.5 交付后的仓库状态
+
+- 工作区**干净**；跟踪体积 **64.1 MB → 1.6 MB**（E-01 出库 62.66 MiB 构建产物）
+- `python tools/fpga_workflow.py verify --force` → **PASS 11**；`--a-ext --force` → **PASS 11**
+- 前置等价性检查：`CHECK_EQUIV=PASS`（675 万组穷举，0 不一致）
+- `python tools/fpga_workflow.py check` → 7 项；`[7] 综合警告门` 基线 48 类/274 条
+- 量具自证：`parse_reports()` 对历史报告给出 74.64 / 69.81 / 76.00 / 74.99（与 `coremark.csv`
+  历史行逐行吻合）；`verify` 全 SKIP 时 `--require-run` 返回 1、不带开关返回 0
 
 ### 6.4 过程教训（值得进 PITFALLS 的一条）
 
