@@ -148,13 +148,16 @@ module core
   // 【C-10】前递选择: ID 段预选 (fwd_a_pre/fwd_b_pre) -> 随 ID/EX 打一拍
   // (id_ex_fwd_a/id_ex_fwd_b) -> EX 段前递 mux。`id_ex_fwd_*` 表示
   // "当前在 EX 的这条指令该选哪一路" (与 id_ex_* 同生命周期)。
-  fwd_sel_e    fwd_a_pre, fwd_b_pre, id_ex_fwd_a, id_ex_fwd_b;
-  // 【C-12b' 已回退（实测负结果，2026-10-11）】曾给 id_ex_fwd_a/b 加
-  //   `(* max_fanout = 16 *)`：Q 侧扇出确实降了，但**每份副本多一条 CE 引脚**，
-  //   而 top-1 恰是 fo=252 的 ID/EX CE 网络 ⇒ 131.25 档 WNS −0.173 → **−0.543**
-  //   （差 0.37ns）；随后综合里真出现 `id_ex_fwd_a_reg[1]_rep__1` 副本，其 D 路径
-  //   成为新的 top-1（−0.517）。⇒ 寄存器网的 max_fanout 在这里是"以 CE 换 Q"，
-  //   净亏，已回退。教训并入 PITFALLS R37-4/R40-3 那一族。
+  fwd_sel_e    fwd_a_pre, fwd_b_pre;
+  // 【C-12b' —— 曾判负、后经上下文反转, 已恢复 (2026-10-11)】
+  //   ① 孤立测量 (C-11 树, 7.619ns 档): −0.173 → **−0.543** —— Q 侧扇出确实降了, 但
+  //      **每份副本多一条 CE 引脚**, 与 top-1 的 fo=252 ID/EX CE 网络叠加 ⇒ 净亏;
+  //      综合里确实出现 `id_ex_fwd_a_reg[1]_rep__1` 副本, 其 D 路径成了新 top-1 (−0.517)。
+  //   ② 但在 **C-14+C-1 之后的当前树**里同一改动**反转为正**:
+  //      摘掉 → **−0.963 (116.5 MHz)**；加回 → **−0.517 (122.9 MHz)**  (+0.45ns / ≈+6 MHz)。
+  //   ⇒ 恢复它。方法论: 同一 RTL 改动的符号会随上下文翻转, **"孤立测量"不能再用于
+  //      组合决策**(PLAYBOOK 盲区 13 的加强版; 已记 PITFALLS 新条目)。
+  (* max_fanout = 16 *) fwd_sel_e id_ex_fwd_a, id_ex_fwd_b;
   logic [31:0] ex_rs1, ex_rs2, ex_a, ex_b, ex_alu_out, ex_pc_target;
   logic [31:0] ex_amo_addr;      // RV32A: AMO 的访存地址 (rs1 + imm), 与算子解耦
   // RV32M
@@ -166,6 +169,8 @@ module core
   logic [31:0] csr_rdata, csr_wdata, csr_src;
   logic        csr_we, is_csr;
   logic        exc_req, irq_take, trap_req, trap_enter, trap_redir;
+  // 【C-15】MRET 请求 (具名信号: csr_file 的端口与仿真断言共用同一份定义)
+  logic        mret_req_int;
   // 【X1 扇出约束 —— 按 fo 选目标, 不按信号名 (PITFALLS R36/R37)】
   // 2026-10-08 实测 (fpga/timing_paths.rpt, 基线 WNS 5.624 / fmax 69.6):
   //   **top-50 最差路径全部经过 any_redir**, 而它是关键路径上扇出最大的网:
@@ -203,9 +208,14 @@ module core
   ctrl_s       mem_wb_ctrl;
   logic [31:0] mem_wb_alu_out, mem_wb_load_data, mem_wb_pc_plus4;
   logic [4:0]  mem_wb_rd;
-  // 【C-12b' 已回退】曾为 `mem_wb_ctrl.wb_src` 拉一个 `(* max_fanout = 16 *)`
-  //   中间网 (`mem_wb_wb_src`) 以减少 fo=93 的 1.171ns 布线；与 `id_ex_fwd_a/b`
-  //   的属性**同一格测量**，整体净亏 0.37ns（见 EX 段声明处的记录），一并回退。
+  // 【C-12b' 恢复】为 `mem_wb_ctrl.wb_src` 拉一个带 max_fanout 的中间网: 它实测
+  //   **fo=93 / 单跳布线 1.171ns**, 且同时挂在 `fwd_wb_data` 与 `wb_data` 两个 mux 的
+  //   选择端 —— 是 106 档 head 里 2.58ns 布线的一段
+  //   (逐跳证据: .fpga-cache/reports/20261011-151158-cm_hw line 51-58)。
+  //   与 `id_ex_fwd_a/b` 的那个属性是**同一格**测量; 在 C-14+C-1 的当前树里合起来
+  //   把 WNS 从 −0.963 拉回 −0.517 (见 EX 段声明处的上下文反转记录)。
+  (* max_fanout = 16 *) wire [1:0] mem_wb_wb_src;
+  assign mem_wb_wb_src = mem_wb_ctrl.wb_src;
 
   // WB
   logic [31:0] wb_data;
@@ -219,6 +229,9 @@ module core
   // (只用于"错路指令永不提交"的断言窗口)。trap/mret 仍走**组合**通路。
   logic        br_redir, br_redir_eff, br_redir_r;
   logic        redir_flush, pc_flush;
+  // 【C-15】`redir_kill` = "**本拍 EX 里装的是错路指令 X0**"(= 上一拍检出误判)。
+  //   它的唯一职责是门控 X0 在 EX 的全部副作用 —— 见 EX 段的完整清单与断言。
+  logic        redir_kill, id_ex_flush;
   logic [31:0] br_tgt_r, pc_flush_pc;
 `ifndef SYNTHESIS
   // br_redir_r2 只被下面的仿真断言使用 ⇒ 综合里是"未使用时序元件"
@@ -469,7 +482,8 @@ module core
   //   那一拍 EX 里是**另一条真指令**(可能是分支/JAL/JALR), 它照常提交, 它的
   //   预测更新必须照做 —— 用并集 pipe_stall 门控会静默丢掉这次更新。
   assign is_ctrl_flow = (id_ex_ctrl.pc_sel != PC_NEXT);
-  assign btb_upd_en   = is_ctrl_flow && !hold_mem && !rst;
+  // C-15: 错路指令 X0 不许污染 BTB/RAS (ex_is_call/ex_is_ret 也由本信号门控)
+  assign btb_upd_en   = is_ctrl_flow && !hold_mem && !rst && !redir_kill;
 
   // --------------------------------------------------------------------------
   // 【历史记录】寄存读 IMEM 的五轮失败史与最终解法
@@ -602,7 +616,9 @@ module core
     .rst         (rst),
     // 陷阱也必须冲掉 ID/EX —— 否则触发指令会继续走到 MEM/WB 产生副作用,
     // 陷阱就不再是"精确"的了 (见本文件顶部陷阱注释)。
-    .flush       (any_redir),
+    // 【C-15】改用 id_ex_flush (= trap_redir || br_redir_r): 误判检出拍 N 不冲,
+    //   下一拍才冲 —— 让"组合 redirect"离开这条 CE。见 EX 段的 C-15 说明。
+    .flush       (id_ex_flush),
     .stall       (pipe_stall),
     .bubble      (id_ex_bubble),
     .valid_in    (id_en),
@@ -670,11 +686,12 @@ module core
 `else
   wire [31:0] amo_wb_value = 32'd0;
 `endif
+  // 【C-12b'】选择端用带 max_fanout 的中间网 mem_wb_wb_src (见声明处注释)
   wire [31:0] fwd_wb_data =
-        (mem_wb_ctrl.wb_src != WB_MEM) ? ((mem_wb_ctrl.wb_src == WB_PC4) ? mem_wb_pc_plus4
-                                                                        : mem_wb_alu_out)
-      : mem_wb_ctrl.mem_read           ? mem_wb_load_data
-      :                                  amo_wb_value;
+        (mem_wb_wb_src != WB_MEM) ? ((mem_wb_wb_src == WB_PC4) ? mem_wb_pc_plus4
+                                                              : mem_wb_alu_out)
+      : mem_wb_ctrl.mem_read      ? mem_wb_load_data
+      :                             amo_wb_value;
 
   always_comb begin
     // 前递 mux (C-10: 选择来自寄存器 id_ex_fwd_*, 不在本拍现算比较)
@@ -726,7 +743,9 @@ module core
   muldiv #(.XLEN(XLEN)) u_muldiv (
     .clk    (clk),
     .rst    (rst),
-    .op     (id_ex_ctrl.alu_op),
+    // 【C-15】错路 X0 不许启动 muldiv —— 否则一个错路 DIV 会把流水线冻结 ~32 拍
+    //   (功能仍安全: 不进 MEM、不写回, 但白等)。op 钉成 ALU_ADD 即整台惰性。
+    .op     (redir_kill ? ALU_ADD : id_ex_ctrl.alu_op),
     .a      (ex_a),
     .b      (ex_b),
     .result (md_result),
@@ -823,7 +842,10 @@ module core
 
   // 【关键】redirect 不再是"分支 taken", 而是"预测错误"。
   // 预测正确时绝不能冲刷, 否则两条正确路径被白白丢掉, 预测收益归零。
-  assign redirect_raw = !pred_ok;
+  // 【C-15】错路 X0 的"预测错误"不是真重定向: 不许进 redirect_raw ——
+  //   否则 (a) 它会在窗口里抖动 hazard 的 redirect, (b) TB 的误判统计会把它算进去
+  //   (实测未门控时 CoreMark 的 mispredict 从 8,020 虚涨到 8,894)。
+  assign redirect_raw = !pred_ok && !redir_kill;
 
   // ==========================================================================
   // Zicsr 与陷阱 (M-mode) —— 赛题高阶任务"完整异常/中断"
@@ -850,7 +872,9 @@ module core
     // 【C-2 口径修正】!hold_mem: mret 的 rs1/rs2 字段恒为 0 ⇒ load_use_mem 永远
     // 不会在 MRET 那一拍为 1 (它要求 ID 指令依赖一个非 0 的 load rd), 所以改口径
     // **行为不变**, 只是把"哪种停顿能让 EX 的副作用重来"这件事写对 (见 hazard 头注释)。
-    .mret_req    (is_mret && !hold_mem),
+    // 【C-15】!redir_kill: 错路 X0 不许执行 MRET。用一个具名线网, 好让断言也查它
+    // (断言里直接写表达式会与这里漂移)。
+    .mret_req    (mret_req_int),
     .mret_taken  (mret_taken),
     .mret_pc     (mret_pc),
     // P2 已接通: mtimecmp 定时器中断 (mmio_subsys 产生, 电平)
@@ -871,18 +895,24 @@ module core
   // 【C-2 口径修正】用 !hold_mem (= !(lsu_stall||ex_busy)) 而不是 !pipe_stall:
   //   load_use_mem 那一拍 EX 里的 CSR 指令**照常提交**, 被并集 pipe_stall 门控
   //   会静默丢掉一次 CSR 写 (而 pipe_stall=1 时 csr_we=0 看起来"很合理")。
-  assign csr_we    = is_csr && !hold_mem && !exc_req &&
+  // 【C-15】再加 !redir_kill: 误判恢复窗口那一拍的 EX 是**错路指令 X0**,
+  //   它绝不允许写 CSR (这是一条"错路指令干了真事"的致命路径)。
+  assign csr_we    = is_csr && !hold_mem && !exc_req && !redir_kill &&
                      (id_ex_ctrl.csr_cmd == 2'b01 || csr_src != 32'd0);
 
   // ---- 陷阱判定 (EX 段, 指令提交前) ----
   // 优先于分支重定向: 异常/中断一旦成立, 这条指令不能提交, 分支结果也不再重要。
   assign is_mret  = (id_ex_ctrl.sys_op == SYS_MRET);
+  // 【C-15】MRET 请求 (具名, 供端口与断言共用)
+  assign mret_req_int = is_mret && !hold_mem && !redir_kill;
   // 【C-2 口径修正】门控用 !hold_mem (= !(lsu_stall||ex_busy)) 而不是 !pipe_stall:
   //   只有**硬冻结**才让 EX 里的指令重算; 而 load_use_mem 那一拍 EX 里是另一条
   //   真指令, 它照常提交 ⇒ 异常必须当拍裁决, 否则会**静默丢掉**一个精确陷阱。
   //   等价性: C-2 之前 pipe_stall=1 只剩"EX 是 load"与硬冻结两种, 而 load 不可能
   //   是 illegal/ecall/ebreak ⇒ 原有行为逐位不变。
-  assign exc_req  = !hold_mem && (id_ex_ctrl.illegal ||
+  // 【C-15】再加 !redir_kill: 错路指令 X0 即使是 illegal/ecall/ebreak 也不许进陷阱
+  //   (否则 mepc 会记到错路 PC 上、精确性被破坏)。
+  assign exc_req  = !hold_mem && !redir_kill && (id_ex_ctrl.illegal ||
                                   id_ex_ctrl.sys_op == SYS_ECALL ||
                                   id_ex_ctrl.sys_op == SYS_EBREAK);
   assign exc_cause = id_ex_ctrl.illegal            ? CAUSE_ILLEGAL
@@ -904,7 +934,10 @@ module core
   //   否决一拍不会丢, 下一拍 (EX 是真指令且管道前进) 照常取走 —— "只晚一拍"。
   //   (不能让它在 load_use_mem 那一拍被取走并顺带冲掉 ID 里的消费者: 那会改变
   //    中断相位, timer_irq.S 测试 7 的 DELTA 标定就是钉在相位上的。)
-  assign irq_take  = irq_pending && !pipe_stall && !exc_req && !is_mret && id_ex_valid;
+  // 【C-15】再加 !redir_kill: 错路 X0 那一拍不许取中断 (电平信号晚一拍取, 无正确性
+  //   影响)。注意这里 id_ex_valid 为 1 (X0 是真指令), 所以必须显式门控。
+  assign irq_take  = irq_pending && !pipe_stall && !exc_req && !is_mret && id_ex_valid
+                  && !redir_kill;
   assign trap_req  = exc_req || irq_take;
   assign trap_cause = exc_req ? {1'b0, exc_cause} : irq_cause;
   // ---- mtval (R-02 修复 2026-10-11) ----
@@ -955,7 +988,10 @@ module core
   //   拉回分支目标并冲掉陷阱处理程序的第一条指令 (灾难)。而 trap_enter 本来就会
   //   用 ex_mem_reg.flush 把 EX 里那条分支冲掉 ⇒ 分支不提交、mepc=它的 PC ⇒
   //   MRET 后重新执行、那时再纠正 —— 完全正确。
-  assign br_redir_eff = br_redir && !trap_redir;
+  // 【C-15】X0 自己的误判不得登记 —— 否则下一拍会把 PC 拉回"错路指令的目标"。
+  //   (窗口里只有 br_redir_r=1 的那一拍会命中这个门; 之后 br_redir_r 落下,
+  //    正常分支照常登记。)
+  assign br_redir_eff = br_redir && !trap_redir && !redir_kill;
 
   always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
@@ -974,10 +1010,34 @@ module core
     end
   end
 
-  // 冲刷窗口 (2 拍, 见上面的 ①②③): 检出拍 + 下一拍都冲 ID/EX 与 IF/ID
+  // ---------------------------------------------------------------------------
+  // 【C-15】registered flush —— 把"组合 redirect"从 ID/EX 的 CE 上彻底摘掉
+  // ---------------------------------------------------------------------------
+  // 实测动机: C-11 只切掉了环的尾巴"redirect → PC/取指地址"; 此后 50 条最差路径
+  //   全部落在**使能端**上 (106 档: `… → id_ex_fwd_b_reg/CE`; 131.25 档: `… →
+  //   u_id_ex/imm_reg[4]/CE`), 逐跳拆开后 tail 2.07ns 就是
+  //   `redirect_raw → redirect → LUT4 → net 0.746 → LUT3 → net 0.719 → CE`。
+  // 做法: 误判检出拍 N **不再组合冲 ID/EX** (让错路指令 X0 进 EX 占一拍),
+  //   下一拍用**寄存器** `br_redir_r` 同时冲 ID/EX 与 **EX/MEM**(把 X0 挡在 MEM 外)。
+  //   ⇒ CE 锥的输入只剩寄存器 (br_redir_r / trap_enter / id_ex_bubble / pipe_stall),
+  //     那条 2.07ns 的尾链在**所有** ID/EX CE 上整体消失。
+  // 【周期数不变】无 C-15 时 EX 在 N+1/N+2 是两拍气泡; 有 C-15 时 N+1 装 X0、
+  //   N+2 仍是气泡, 目标指令同样在 N+3 进 EX ⇒ ticks 必须**逐位不变**。
+  // 【X0 的全部副作用必须门控 (redir_kill)】否则就是"错路指令干了真事":
+  //   csr_we / exc_req / irq_take / mret_req / btb_upd_en / br_redir_eff(X0 不许再
+  //   重定向) / muldiv 的 op(X0 是 M/D 时不许启动 32 拍除法). 另外 X0 的 store
+  //   请求来自 EX/MEM, 已被 ex_mem 的 flush 挡住。X0 的 ALU 结果、AMO 影子寄存器、
+  //   ex_rs2_d 都是死值 (永不进 MEM)。
+  // ---------------------------------------------------------------------------
+  assign redir_kill = br_redir_r;
+
+  // 冲刷窗口 (2 拍): 检出拍冲 IF/ID 与"错路指令的下一站", 下一拍冲 ID/EX 与 EX/MEM
   assign redir_flush = br_redir_eff || br_redir_r;
   assign trap_redir  = trap_enter || mret_taken;
   assign any_redir   = redir_flush || trap_redir;
+  // 【C-15】ID/EX 的冲刷相位: 检出拍 N **不冲** (让 X0 进 EX 一拍), 下一拍冲;
+  //   trap/mret 仍是当拍组合冲 (它们不经过 EX 一拍, 语义不动)。
+  assign id_ex_flush = trap_redir || br_redir_r;
 
   // PC 装载相位: trap/mret 当拍; 分支误判纠正延后一拍 (这两项都优先于停顿)
   assign pc_flush    = trap_redir || br_redir_r;
@@ -995,9 +1055,13 @@ module core
   hazard_unit u_hazard (
     // 【C-10 清理】id_ex_rs1/id_ex_rs2 两个端口已从 hazard_unit 删除 (前递预选
     // 之后模块内无使用者, 综合报 Synth 8-3331 unconnected port)。
-    .id_ex_mem_read   (id_ex_ctrl.mem_read),
-    .id_ex_reg_write  (id_ex_ctrl.reg_write),   // C-10: 前递预选
-    .id_ex_rd         (id_ex_rd),
+    // 【C-15】向 hazard **呈现**的 EX 指令: 错路 X0 那一拍必须当作"没有指令"。
+    //   否则 X0 若是 load, 会与同样错路的 ID 指令 X1 组成**假 load-use 停顿**
+    //   (实测未门控时 tb_sw_lu_bench 的 n_stall_lu 多 1: 3073 != 3072, 直接 FAIL;
+    //    CoreMark 的 stall 计数也虚涨 347 拍 —— 好在与 flush 同拍, ticks 仍逐位不变)。
+    .id_ex_mem_read   (id_ex_ctrl.mem_read && !redir_kill),
+    .id_ex_reg_write  (id_ex_ctrl.reg_write && !redir_kill),  // C-10 预选: X0 不算产生者
+    .id_ex_rd         (redir_kill ? 5'd0 : id_ex_rd),
     .ex_mem_reg_write (ex_mem_ctrl.reg_write),
     .ex_mem_mem_read  (ex_mem_ctrl.mem_read),
     .ex_mem_rd        (ex_mem_rd),
@@ -1071,7 +1135,11 @@ module core
     .clk           (clk),
     .rst           (rst),
     .stall         (hold_mem),
-    .flush         (trap_enter),
+    // 【C-15】多了一个 br_redir_r: 误判恢复窗口的那一拍, EX 里是错路指令 X0,
+    //   必须把它冲成气泡、**不能让它进 MEM**(否则错路 store 会真写存储器)。
+    //   为什么仍然只接这几项、不接 any_redir: redirect 那拍的 EX 里是**分支自己**,
+    //   它是真指令必须提交 (见上面两段注释); 而 X0 那一拍用 br_redir_r 精确区分。
+    .flush         (trap_enter || br_redir_r),
     .ctrl_in       (id_ex_ctrl),
     .alu_out_in    (ex_result),
     .store_data_in (ex_rs2),         // store 数据 (前递后)
@@ -1304,7 +1372,8 @@ module core
   );
 
   always_comb begin
-    case (mem_wb_ctrl.wb_src)
+    // 【C-12b'】选择端用带 max_fanout 的中间网 (见声明处注释)
+    case (mem_wb_wb_src)
 `ifdef LOAD_RESULT_REG
       // 【P3 实验C】从前递寄存器取, 而不是从"刚组合读出的数据"取 —— 这是砍掉
       // 关键路径的关键一步 (见 u_mem_wb 处注释)。
@@ -1403,18 +1472,27 @@ module core
   end
   `endif
 
-  // 【C-11 的机器化判据 —— "错路指令永不提交" (R48 的反面)】
-  //   分支误判检出后, 恢复窗口的两拍 (br_redir_r = N+1, br_redir_r2 = N+2)
-  //   内 EX 段**必须一直是气泡**; 目标指令要到 N+3 才进 EX。
-  //   为什么必须有它: 寄存 redirect 唯一的致命风险就是"被冲刷的错路指令晚一拍
-  //   才被冲, 于是有一条错路指令提交了"(寄存器写/存储器写)。这条断言与相位或
-  //   DELTA 无关, 覆盖整个回归的每一拍 —— 任何那样的事故都会立刻 $error。
-  //   (EX 里的分支自己不算: 它在 N 拍, 而窗口从 N+1 才开始。)
+  // 【C-11/C-15 的机器化判据 —— "错路指令永不提交" (R48 的反面)】
+  //   C-11 让误判纠正晚一拍; C-15 更进一步: 检出拍 N **不冲** ID/EX, 于是 N+1 拍
+  //   EX 里装着**错路指令 X0**(占一拍), 靠寄存器 `br_redir_r` 在 N+1 把 ID/EX 与
+  //   **EX/MEM** 一起冲掉, 并用 `redir_kill` 门控 X0 的全部副作用。
+  //   这条路线唯一的致命风险就是"X0 干了真事"。下面两条断言把两类事故钉死,
+  //   与相位/DELTA 无关, 覆盖整个回归的每一拍:
+  //     ① X0 那一拍 (redir_kill=1) 的 6 个副作用信号必须全 0
+  //        (写 CSR / 进陷阱 / 取中断 / MRET / 更新 BTB / 自己重定向);
+  //     ② 再下一拍 (br_redir_r2=1) EX/MEM 必须是气泡 —— X0 没进 MEM
+  //        (错路 store 写存储器、错路写回都会在这里暴露)。
+  //   注意 ① 检查的是**门控后的**信号 (br_redir_eff 而不是 hazard 的 redirect):
+  //   窗口里 X0 自己的 redirect_raw 可能为 1, 被门控后 br_redir_eff 必须为 0。
   `ifndef SYNTHESIS
   always_ff @(posedge clk) begin
-    if (!rst && id_ex_valid && (br_redir_r || br_redir_r2)) begin
-      $error("C-11: wrong-path instruction entered EX during redirect recovery (pc=0x%08x instr=0x%08x)",
-             id_ex_pc, id_ex_instr);
+    if (!rst && redir_kill &&
+        (csr_we || exc_req || irq_take || mret_req_int || btb_upd_en || br_redir_eff)) begin
+      $error("C-15: wrong-path X0 had a side effect in EX (csr=%b exc=%b irq=%b mret=%b btb=%b redir=%b pc=0x%08x)",
+             csr_we, exc_req, irq_take, mret_req_int, btb_upd_en, br_redir_eff, id_ex_pc);
+    end
+    if (!rst && br_redir_r2 && (ex_mem_ctrl != '0)) begin
+      $error("C-15: wrong-path instruction reached MEM (ex_mem_ctrl != 0)");
     end
   end
   `endif

@@ -416,13 +416,34 @@ module tb_sw;
       end
 `endif
 
+      // ======================================================================
+      // 【C-15 之后: EX 段统计必须排除"错路影子"】PITFALLS 盲区 6 (口径必须
+      //   对应计时区间里的**真指令**)。
+      // C-15 把误判纠正改成: 检出拍不再冲 ID/EX, 错路指令以 X0 形态进 EX **占
+      //   一拍**, 下一拍用寄存器 br_redir_r 把它连同 ID/EX、EX/MEM 一起冲掉;
+      //   这一拍 `u_dut.redir_kill`(= br_redir_r) 为 1, 且 **id_ex_ctrl 里留的
+      //   仍是那条错路指令自己的控制字** (core.sv:748 只把 alu_op 换成 ALU_ADD,
+      //   pc_sel 原样保留)。所以:
+      //     · 若错路指令本身是分支/JAL/JALR (误判后紧跟的错路码里很常见),
+      //       `pc_sel != 0` -> 被计进 ctrl-flow / 条件分支总数 **分母**;
+      //     · 它从未被"预测"过 (它的预测随 PC 一起被丢弃), 计入分母就是虚高。
+      //   实测 (CoreMark, C-15 前后): ctrl-flow 99616 -> 101245 (+1629, 其中
+      //   条件分支 70449 -> 71848), 而 mispredict 恒为 8020 —— 分子对、分母错,
+      //   于是 accuracy 被"抬高"、条件分支 taken%/BTB 命中率被稀释。
+      //   注意这**不是**放宽断言: n_mis/n_mis_* 走 redirect_raw, 而 C-15 已把
+      //   redirect_raw 门控成 `!pred_ok && !redir_kill`, 本来就是对的; 这里只是
+      //   让分母与"真指令"对齐。同理 n_stall_lu 那组是 RTL 侧把 X0 从 hazard
+      //   视角屏蔽后才是 3072 (不是 TB 放宽)。
+      //   若哪天 C-15 被回退, `u_dut.redir_kill` 不存在 -> 编译期报错 (大声),
+      //   不会静默算错。
+      // ======================================================================
       // 预测器精度: 每条控制流指令做一次预测 (停顿期间不重复计)
-      if (u_dut.id_ex_ctrl.pc_sel != 2'd0) begin
+      if (u_dut.id_ex_ctrl.pc_sel != 2'd0 && !u_dut.redir_kill) begin
         if (!u_dut.pipe_stall) n_ctrl++;
         if (u_dut.redirect_raw) n_mis++;
       end
       // 按类型统计预测错误 (pc_sel: 1=BR 2=J 3=JR)
-      if (u_dut.redirect_raw && !u_dut.pipe_stall) begin
+      if (u_dut.redirect_raw && !u_dut.pipe_stall && !u_dut.redir_kill) begin
         if      (u_dut.id_ex_ctrl.pc_sel == 2'd1) n_mis_br++;
         else if (u_dut.id_ex_ctrl.pc_sel == 2'd2) n_mis_jal++;
         else if (u_dut.id_ex_ctrl.pc_sel == 2'd3) n_mis_jalr++;
@@ -434,7 +455,8 @@ module tb_sw;
       // 修法完全不同, 必须先分清。
       // 做法: 用与 btb.sv 完全相同的 index/tag 切片, 在 EX 段 PC 上复现它的
       // 组合读公式 (btb.sv: pidx=pc[IDX+1:2], ptag=pc[PC_TOP-1:IDX+2])。
-      if (u_dut.id_ex_ctrl.pc_sel == 2'd1) begin
+      // !redir_kill: 错路影子不是"条件分支"的样本 (见上面那段口径说明)。
+      if (u_dut.id_ex_ctrl.pc_sel == 2'd1 && !u_dut.redir_kill) begin
         if (btb_has_entry(u_dut.id_ex_pc)) n_br_hit++;
         else                         n_br_nohit++;
         if (u_dut.redirect_raw && !u_dut.pipe_stall) begin
@@ -444,11 +466,11 @@ module tb_sw;
       end
 
       // pc_sel_e: PC_NEXT=0 PC_BR=1 PC_J=2 PC_JR=3
-      if (u_dut.id_ex_ctrl.pc_sel == 2'd1) begin
+      if (u_dut.id_ex_ctrl.pc_sel == 2'd1 && !u_dut.redir_kill) begin
         n_bcond++;
         if (u_dut.redirect) n_br_taken++;
       end
-      if (u_dut.redirect) begin
+      if (u_dut.redirect && !u_dut.redir_kill) begin
         if (u_dut.id_ex_ctrl.pc_sel == 2'd2) n_jal++;
         if (u_dut.id_ex_ctrl.pc_sel == 2'd3) n_jalr++;
       end
