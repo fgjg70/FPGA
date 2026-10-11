@@ -34,6 +34,20 @@ import tempfile
 import time
 
 # --------------------------------------------------------------------------
+# 控制台编码: Windows 默认代码页是 GBK, 而本工程的输出含大量中文与 => [i] [!] 之类的
+# 符号。stdout 一旦被重定向到管道/文件, Python 按 locale(GBK) 编码写出, 遇到非 GBK
+# 字符**直接抛 UnicodeEncodeError** —— 实测 `synth --record --status keep` 就因此崩溃,
+# 而 **CSV 已经写下去了** => "数据成功但命令失败", 最难排查的一类状态。
+# 这里把 stdout/stderr 统一钉成 UTF-8, 从根上消掉这一类 (tools/*.py 里的非 GBK 字符
+# 也已普查清零, 两道保险)。
+# --------------------------------------------------------------------------
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+# --------------------------------------------------------------------------
 # 路径常量 (全部用正斜杠, 因为 Vivado/Tcl 只吃正斜杠, 而 Windows 两种都认)
 # --------------------------------------------------------------------------
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -1564,7 +1578,7 @@ def parse_worst_setup_path(t: str) -> dict | None:
         Path Group:               sys_clk_70
         Path Type:                Setup (Max at Slow Process Corner)
         Requirement:              14.286ns  (... rise@14.286ns - ... rise@0.000ns)
-    ⇒ fmax = 1000 / (Requirement - Slack), 时钟名与周期都从同一块里取, 不硬编码。
+    => fmax = 1000 / (Requirement - Slack), 时钟名与周期都从同一块里取, 不硬编码。
     """
     blocks = re.split(r"(?m)^Slack \((?:MET|VIOLATED)\)", t)[1:]
     for b in blocks:
@@ -1792,7 +1806,7 @@ def append_csv(tag: str, m: dict, status: str | None = None) -> None:
     【X-04 修复】原实现把 `"status": "keep"` 写死, 于是**工具永远无法记录一个
     被否决的实验** —— 22 行 rejected 全是人工编辑出来的。实验日志的核心不变量
     (keep vs rejected) 因此没有机器约束, 而 cmd_report 又拿它当"最新保留配置"的
-    锚点 ⇒ 可能锚到一个已被否决的构建上。
+    锚点 => 可能锚到一个已被否决的构建上。
 
     现在: status 由调用方给 (CLI 的 --status), 默认 "measure" (诚实: 只测了)。
     【顺带修】CSV 单元格里的内层 `"` 没有转义成 `""`, 会让 read_csv_rows 的
@@ -1827,7 +1841,7 @@ def append_csv(tag: str, m: dict, status: str | None = None) -> None:
         f.write(",".join(cells) + "\n")
     print(f"\n  -> 追加到 results/coremark.csv: {tag}  (status={st})")
     if st == "measure":
-        print("     ℹ status=measure 表示'只测了还没决策' —— 它不会成为 report 的基线/最新保留配置。")
+        print("     [i] status=measure 表示'只测了还没决策' —— 它不会成为 report 的基线/最新保留配置。")
         print("        要记成决策, 用 --status keep 或 --status rejected。")
 
 
@@ -1984,7 +1998,7 @@ def cmd_synth(args) -> int:
             # 会被 parse_reports 算出一个"看起来很正常"的 fmax (例如 WNS=-1 -> 47.6 MHz),
             # 再被 append_csv 盖上 keep, 最终变成"一次正常的测量回归"记进 results/。
             #
-            # ⚠ 判据必须**整行精确匹配**: Vivado 会把执行过的 Tcl 源行回显进日志,
+            # [!] 判据必须**整行精确匹配**: Vivado 会把执行过的 Tcl 源行回显进日志,
             #   而 build.tcl 的注释里就写着 `#   puts "BUILD_TIMING=FAIL"` ——
             #   用 `"BUILD_TIMING=FAIL" in out` 会在**时序通过**时也误报致命错误
             #   (实测踩到, 见 2026-10-11 那次 synth: MET=1 却报 [FAIL])。
@@ -2074,7 +2088,10 @@ def cmd_synth(args) -> int:
                    "archive": arch_rel}, f, indent=1)
 
     if args.record:
-        append_csv(args.tag or f"synth-{prog}", compute_metrics(res))
+        # 【必须传 args.status】这里原来漏了第三个参数 => 正常构建路径下
+        # `--status keep` 被静默丢弃, 一律记成默认的 "measure" (实测: 想记 keep
+        # 的一行写成了 measure)。X-04 修的是"能不能记 rejected", 这条是"记了但记错"。
+        append_csv(args.tag or f"synth-{prog}", compute_metrics(res), args.status)
     return 0
 
 
