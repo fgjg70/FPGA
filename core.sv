@@ -140,7 +140,10 @@ module core
   logic [31:0] id_ex_pred_target;
 
   // EX
-  fwd_sel_e    fwd_a, fwd_b;
+  // 【C-10】前递选择: ID 段预选 (fwd_a_pre/fwd_b_pre) -> 随 ID/EX 打一拍
+  // (id_ex_fwd_a/id_ex_fwd_b) -> EX 段前递 mux。`id_ex_fwd_*` 表示
+  // "当前在 EX 的这条指令该选哪一路" (与 id_ex_* 同生命周期)。
+  fwd_sel_e    fwd_a_pre, fwd_b_pre, id_ex_fwd_a, id_ex_fwd_b;
   logic [31:0] ex_rs1, ex_rs2, ex_a, ex_b, ex_alu_out, ex_pc_target;
   logic [31:0] ex_amo_addr;      // RV32A: AMO 的访存地址 (rs1 + imm), 与算子解耦
   // RV32M
@@ -197,6 +200,12 @@ module core
 
   // 流水线控制
   logic        pipe_stall, if_id_flush, hold_mem;
+  // 【C-11】分支误判 redirect **寄存一拍** (切环): br_redir = 本拍检出;
+  // br_redir_r = 上一拍检出 (这一拍才装 PC 与取指地址); br_redir_r2 = 再下一拍
+  // (只用于"错路指令永不提交"的断言窗口)。trap/mret 仍走**组合**通路。
+  logic        br_redir, br_redir_eff, br_redir_r, br_redir_r2;
+  logic        redir_flush, pc_flush;
+  logic [31:0] br_tgt_r, pc_flush_pc;
 
   // ==========================================================================
   // IF 段
@@ -232,8 +241,13 @@ module core
     .clk       (clk),
     .rst       (rst),
     .stall     (fetch_hold),
-    .flush     (1'b0),          // 预留: trap 单元接管时改用 flush_pc
-    .flush_pc  ('0),
+    // 【C-2】重定向 (含 trap/mret) 必须能**越过停顿**装 PC: pipe_stall 现在多了一种
+    // "气泡型"停顿 (load_use_mem) —— 那一拍 EX 里可能是**与 load 无关**的分支或
+    // 陷阱指令, 它的重定向必须当拍生效。pc.sv 的优先级本来就是 flush > stall > pc_src,
+    // 所以把重定向接到 flush 口即可 (原先这里恒 0, 靠 "any_redir ⇒ !pipe_stall"
+    // 这条隐含不变量走 pc_src; C-2 打破了那条不变量, 见 hazard_unit 头注释)。
+    .flush     (any_redir),
+    .flush_pc  (pc_target),
     .pc_src    (pc_src),
     .pc_target (pc_target),
     .pc        (pc),
@@ -271,7 +285,22 @@ module core
   //   pc_d1, 于是从第一条指令起就错开。那个写法本身没错, **错在配错了对象**:
   //   addr=pc_next 必须配当前 pc, 不是配 pc 的延迟副本。
   // --------------------------------------------------------------------------
-  wire [31:0] pc_next = fetch_hold ? pc : (pc_src ? pc_target : pc_plus4);
+  // --------------------------------------------------------------------------
+  // 【C-2】取指地址 = 下一拍的 pc; **重定向优先于停顿**
+  // --------------------------------------------------------------------------
+  // 原写法 `fetch_hold ? pc : (pc_src ? pc_target : pc_plus4)` 把 fetch_hold
+  // 放在最高优先级 —— 它靠一条隐含不变量成立: "any_redir ⇒ !pipe_stall"
+  // (redirect 被 !pipe_stall 门控、trap/mret 也都被 !pipe_stall 门控)。
+  // C-2 引入了**气泡型停顿**(load_use_mem): 那一拍 EX 里可能是与 load 无关的
+  // 分支/陷阱指令, 它的重定向是真的、必须当拍生效 —— 而停顿也同时成立。
+  // 所以这里把重定向提到最高优先级 (与 pc.sv 的 flush > stall > pc_src 一致,
+  // u_pc 的 flush 口已接 any_redir/pc_target)。
+  // 逻辑等价性: any_redir=1 时原式的值本来就是 pc_target
+  // (`pc_src = any_redir || pred_taken` ⇒ pc_src=1) ⇒ 未改变任何原有行为。
+  // --------------------------------------------------------------------------
+  wire [31:0] pc_next = any_redir ? pc_target
+                      : fetch_hold ? pc
+                      : (pc_src ? pc_target : pc_plus4);
 `ifdef IMEM_COMB_READ
   // 回退(组合读): 当拍递地址当拍出数据, 接当前 pc 才与 rdata 同拍
   assign imem_addr = pc;
@@ -382,9 +411,13 @@ module core
   assign pred_target = btb_pred_target;
 `endif
 
-  // 控制流指令解析完成且结果有效时才更新 (停顿期间操作数可能未就绪)
+  // 控制流指令解析完成且结果有效时才更新。
+  // 【C-2 口径修正】门控从 !pipe_stall 改为 !hold_mem (= !(lsu_stall||ex_busy)):
+  //   硬冻结时 EX 里的指令会被重算, 副作用必须等它算完那一拍; 而 load_use_mem
+  //   那一拍 EX 里是**另一条真指令**(可能是分支/JAL/JALR), 它照常提交, 它的
+  //   预测更新必须照做 —— 用并集 pipe_stall 门控会静默丢掉这次更新。
   assign is_ctrl_flow = (id_ex_ctrl.pc_sel != PC_NEXT);
-  assign btb_upd_en   = is_ctrl_flow && !pipe_stall && !rst;
+  assign btb_upd_en   = is_ctrl_flow && !hold_mem && !rst;
 
   // --------------------------------------------------------------------------
   // 【历史记录】寄存读 IMEM 的五轮失败史与最终解法
@@ -556,12 +589,45 @@ module core
   wire [31:0] ex_mem_fwd_data = (ex_mem_ctrl.wb_src == WB_PC4) ? ex_mem_pc_plus4
                                                                : ex_mem_alu_out;
 
+  // ---- WB→EX 前递源 (C-2: load 数据刻意不在这条路上) ----
+  //   WB_MEM 且 mem_read (load) -> mem_wb_load_data —— MEM/WB 的**寄存器输出**
+  //        ↑ C-2 之后这一支**不可达** (见 hazard_unit 的 load_use_mem 证明):
+  //          "WB 段是 load 且命中前递"要求上一拍 ID 里有依赖它的指令, 而那一拍
+  //          ex_mem 正是这条 load ⇒ load_use_mem 会把消费者扣在 ID。
+  //          保留一个寄存器出口的意义在于: **它不再是 dmem 的组合输出** ——
+  //          于是 top-1 关键路径 (dmem RAMB36 CLK→DO → LSU 字节提取 → 前递 mux
+  //          → 分支判定 → 重定向 → 取指地址脚, 实测 12.466ns/route 67.8%)
+  //          从时序图里整段消失, 这正是 C-2 提频的机理。
+  //   WB_MEM 且 !mem_read (AMO/LR/SC, 仅 A_EN) -> amo_wb_value (见下, 也是寄存器)
+  //   其余 (WB_PC4 / WB_ALU) -> mem_wb_pc_plus4 / mem_wb_alu_out (都是寄存器)
+  // 【为什么 AMO 这一支必须自己拼, 不能用 wb_data】
+  //   wb_data 的 WB_MEM 支路是 load_store_unit 的**组合输出** (rdata_eff mux,
+  //   它把 dmem_rdata 当输入之一) —— 只要 wb_data 还挂在前递 mux 上, dmem 的
+  //   RAMB36 输出就仍然**结构上**能走到取指地址脚, 综合器没有"mem_read 与 wb_src
+  //   的组合约束"这条知识, 不会替你剪掉。所以这里用与 LSU 的 rdata_eff **逐位
+  //   等价**的寄存器版本:
+  //       AMO 那一拍 amo_mode_r=1 ⇒ rdata_eff = amo_sc ? 1 : amo_old
+  //   (amo_old 是 LSU 里锁存旧值的寄存器; amo_is_sc 由 core 锁存的 amo_op_r 译出;
+  //    AMO 的 off_wb/size_wb 恒为 0/WORD ⇒ 后面的字节提取是恒等操作。)
+  //   默认宏 (A_EN 关) 下该支路不可达 → amo_old 恒 0、综合成常量, 前递 mux 上
+  //   一个 dmem 负载都没有。
+`ifdef A_EN
+  wire [31:0] amo_wb_value = amo_is_sc ? 32'd1 : amo_old;
+`else
+  wire [31:0] amo_wb_value = 32'd0;
+`endif
+  wire [31:0] fwd_wb_data =
+        (mem_wb_ctrl.wb_src != WB_MEM) ? ((mem_wb_ctrl.wb_src == WB_PC4) ? mem_wb_pc_plus4
+                                                                        : mem_wb_alu_out)
+      : mem_wb_ctrl.mem_read           ? mem_wb_load_data
+      :                                  amo_wb_value;
+
   always_comb begin
-    // 前递 mux
-    ex_rs1 = (fwd_a == FWD_EX_MEM) ? ex_mem_fwd_data :
-             (fwd_a == FWD_MEM_WB) ? wb_data : id_ex_rs1_data;
-    ex_rs2 = (fwd_b == FWD_EX_MEM) ? ex_mem_fwd_data :
-             (fwd_b == FWD_MEM_WB) ? wb_data : id_ex_rs2_data;
+    // 前递 mux (C-10: 选择来自寄存器 id_ex_fwd_*, 不在本拍现算比较)
+    ex_rs1 = (id_ex_fwd_a == FWD_EX_MEM) ? ex_mem_fwd_data :
+             (id_ex_fwd_a == FWD_MEM_WB) ? fwd_wb_data : id_ex_rs1_data;
+    ex_rs2 = (id_ex_fwd_b == FWD_EX_MEM) ? ex_mem_fwd_data :
+             (id_ex_fwd_b == FWD_MEM_WB) ? fwd_wb_data : id_ex_rs2_data;
     // ALU 操作数 mux (契约见 rv32_pkg 顶部)
     ex_a = (id_ex_ctrl.alu_a_src == ALU_A_PC)   ? id_ex_pc :
            (id_ex_ctrl.alu_a_src == ALU_A_ZERO) ? 32'd0 : ex_rs1;
@@ -706,7 +772,10 @@ module core
     .trap_tval   (trap_tval),
     .trap_enter  (trap_enter),
     .trap_vector (trap_vector),
-    .mret_req    (is_mret && !pipe_stall),
+    // 【C-2 口径修正】!hold_mem: mret 的 rs1/rs2 字段恒为 0 ⇒ load_use_mem 永远
+    // 不会在 MRET 那一拍为 1 (它要求 ID 指令依赖一个非 0 的 load rd), 所以改口径
+    // **行为不变**, 只是把"哪种停顿能让 EX 的副作用重来"这件事写对 (见 hazard 头注释)。
+    .mret_req    (is_mret && !hold_mem),
     .mret_taken  (mret_taken),
     .mret_pc     (mret_pc),
     // P2 已接通: mtimecmp 定时器中断 (mmio_subsys 产生, 电平)
@@ -724,15 +793,23 @@ module core
                    :                                (csr_rdata & ~csr_src);
   // 规范: CSRRS/CSRRC 且源为 0 时不写 —— 读只读寄存器不得触发异常。
   // exc_req 也参与否决: 陷阱与 CSR 写不能同拍 (异常指令本身就不该有副作用)。
-  assign csr_we    = is_csr && !pipe_stall && !exc_req &&
+  // 【C-2 口径修正】用 !hold_mem (= !(lsu_stall||ex_busy)) 而不是 !pipe_stall:
+  //   load_use_mem 那一拍 EX 里的 CSR 指令**照常提交**, 被并集 pipe_stall 门控
+  //   会静默丢掉一次 CSR 写 (而 pipe_stall=1 时 csr_we=0 看起来"很合理")。
+  assign csr_we    = is_csr && !hold_mem && !exc_req &&
                      (id_ex_ctrl.csr_cmd == 2'b01 || csr_src != 32'd0);
 
   // ---- 陷阱判定 (EX 段, 指令提交前) ----
   // 优先于分支重定向: 异常/中断一旦成立, 这条指令不能提交, 分支结果也不再重要。
   assign is_mret  = (id_ex_ctrl.sys_op == SYS_MRET);
-  assign exc_req  = !pipe_stall && (id_ex_ctrl.illegal ||
-                                    id_ex_ctrl.sys_op == SYS_ECALL ||
-                                    id_ex_ctrl.sys_op == SYS_EBREAK);
+  // 【C-2 口径修正】门控用 !hold_mem (= !(lsu_stall||ex_busy)) 而不是 !pipe_stall:
+  //   只有**硬冻结**才让 EX 里的指令重算; 而 load_use_mem 那一拍 EX 里是另一条
+  //   真指令, 它照常提交 ⇒ 异常必须当拍裁决, 否则会**静默丢掉**一个精确陷阱。
+  //   等价性: C-2 之前 pipe_stall=1 只剩"EX 是 load"与硬冻结两种, 而 load 不可能
+  //   是 illegal/ecall/ebreak ⇒ 原有行为逐位不变。
+  assign exc_req  = !hold_mem && (id_ex_ctrl.illegal ||
+                                  id_ex_ctrl.sys_op == SYS_ECALL ||
+                                  id_ex_ctrl.sys_op == SYS_EBREAK);
   assign exc_cause = id_ex_ctrl.illegal            ? CAUSE_ILLEGAL
                    : id_ex_ctrl.sys_op == SYS_ECALL ? CAUSE_ECALL_M
                    :                                  CAUSE_BREAKPOINT;
@@ -748,6 +825,10 @@ module core
   //   位同时覆盖三者; 而 pipe_stall 只覆盖第一种。
   //   为什么不会丢掉中断: irq_pending 是电平, 气泡期 veto 之后下一拍 (EX 是真
   //   指令) 就会被取走, 只是晚一拍 —— 对电平中断没有正确性影响。
+  // 【C-2】irq_take 这里**故意保留** !pipe_stall: 中断是电平信号, 被气泡型停顿
+  //   否决一拍不会丢, 下一拍 (EX 是真指令且管道前进) 照常取走 —— "只晚一拍"。
+  //   (不能让它在 load_use_mem 那一拍被取走并顺带冲掉 ID 里的消费者: 那会改变
+  //    中断相位, timer_irq.S 测试 7 的 DELTA 标定就是钉在相位上的。)
   assign irq_take  = irq_pending && !pipe_stall && !exc_req && !is_mret && id_ex_valid;
   assign trap_req  = exc_req || irq_take;
   assign trap_cause = exc_req ? {1'b0, exc_cause} : irq_cause;
@@ -781,24 +862,54 @@ module core
     .id_ex_rs1        (id_ex_rs1),
     .id_ex_rs2        (id_ex_rs2),
     .id_ex_mem_read   (id_ex_ctrl.mem_read),
+    .id_ex_reg_write  (id_ex_ctrl.reg_write),   // C-10: 前递预选
     .id_ex_rd         (id_ex_rd),
     .ex_mem_reg_write (ex_mem_ctrl.reg_write),
     .ex_mem_mem_read  (ex_mem_ctrl.mem_read),
     .ex_mem_rd        (ex_mem_rd),
-    .mem_wb_reg_write (mem_wb_ctrl.reg_write),
-    .mem_wb_rd        (mem_wb_rd),
     .if_id_rs1        (id_rs1),
     .if_id_rs2        (id_rs2),
     .lsu_stall        (lsu_stall),
     .ex_busy          (md_busy),
     .redirect_raw     (redirect_raw),
-    .fwd_a            (fwd_a),
-    .fwd_b            (fwd_b),
+    .fwd_a_pre        (fwd_a_pre),              // C-10: ID 段预选 (非 EX 现算)
+    .fwd_b_pre        (fwd_b_pre),
     .pipe_stall       (pipe_stall),
     .id_ex_bubble     (id_ex_bubble),
     .hold_mem         (hold_mem),
     .redirect         (redirect)
   );
+
+  // --------------------------------------------------------------------------
+  // C-10: 前递预选的"随 ID/EX 打一拍"寄存器 (并行于 id_ex_reg, 4 位 FF)
+  // --------------------------------------------------------------------------
+  // 【为什么不能塞进 id_ex_reg.sv】那个文件不在本轮写入范围; 而且这里只需要
+  // 4 位, 单独一组 FF 更省事 (FF +4 对 1254 可忽略)。
+  // 【⚠ 必须与 id_ex_reg.sv 的控制优先级逐字一致: flush > bubble > stall】
+  //   两者用同一组信号 (any_redir / id_ex_bubble / pipe_stall), 于是永远同步:
+  //     · any_redir 或 id_ex_bubble -> 清成 FWD_REG (该拍进 EX 的是气泡)
+  //     · pipe_stall                -> 保持 (消费者被扣在 ID, 预选值下次重算)
+  //     · 其余                      -> 装入 fwd_*_pre (消费者这拍末进 EX)
+  //   改 id_ex_reg 的控制逻辑时**必须同步改这里** (PITFALLS R1: 改了 A 忘 B)。
+  // 【为什么组合上安全】预选描述的是"下一拍"的 ex_mem_*/mem_wb_* 位置关系:
+  //   下一拍 EX/MEM 段的产生者 = 本拍 ID/EX; 下一拍 MEM/WB 段的产生者 = 本拍
+  //   EX/MEM。只有在两者与本拍 ID 里的消费者**同拍前进**时才成立 —— 而
+  //   "消费者前进" ⟺ (flush|bubble|stall 全 0) ⟹ hold_mem=0 ⟹ 两个产生者也
+  //   同拍前进 (hold_mem=1 时 pipe_stall 也=1, 消费者不前进)。
+  always_ff @(posedge clk or posedge rst) begin
+    if (rst) begin
+      id_ex_fwd_a <= FWD_REG;
+      id_ex_fwd_b <= FWD_REG;
+    end
+    else if (any_redir || id_ex_bubble) begin
+      id_ex_fwd_a <= FWD_REG;
+      id_ex_fwd_b <= FWD_REG;
+    end
+    else if (!pipe_stall) begin
+      id_ex_fwd_a <= fwd_a_pre;
+      id_ex_fwd_b <= fwd_b_pre;
+    end
+  end
 
   // ==========================================================================
   // EX/MEM
@@ -809,8 +920,10 @@ module core
   //   · mret: 只改 CSR, 无数据副作用。
   // 注意 **不要** 给下面的 u_mem_wb 也加 flush: 陷阱那一拍 MEM/WB 里是更老的
   // 指令, 必须提交 —— 两边都冲就变成丢指令 (这是刻意的**不对称**)。
-  // 不变量: trap_enter=1 ⇒ hold_mem=0 (exc_req/irq_take 都被 !pipe_stall 门控,
-  // 而 hold_mem ⊆ pipe_stall), 所以 flush 与 stall 不会同拍冲突。
+  // 不变量: trap_enter=1 ⇒ hold_mem=0 (exc_req/mret_req 直接被 !hold_mem 门控;
+  // irq_take 被 !pipe_stall 门控而 hold_mem ⊆ pipe_stall), 所以 flush 与 stall
+  // 不会同拍冲突。C-2 之后 pipe_stall 多了"气泡型"停顿 (load_use_mem), 但
+  // trap_enter 仍不可能与 hold_mem 同拍 —— 该不变量照旧成立。
   ex_mem_reg u_ex_mem (
     .clk           (clk),
     .rst           (rst),

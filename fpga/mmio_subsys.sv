@@ -157,7 +157,27 @@ module mmio_subsys
   end
 
   // 电平: 到点就拉高, 直到软件写新的 mtimecmp
-  assign irq_timer = (cycle_cnt >= mtimecmp);
+  //
+  // 【2026-10-11 · 为 150 MHz 提频, 把 64 位比较器的输出寄存一拍】
+  //   它所在的链: cycle_cnt(64 位自由计数器) -> `>=` **64 位比较器** -> irq_timer
+  //     -> csr_file 的 mip / MIE / MTIE 门控 -> core.irq_take -> trap_enter
+  //     -> pc_target 的 4:1 优先级 mux -> pc_next -> **imem 地址脚**。
+  //   在 75 MHz 下这条链**不在 top-50**(实测 top-50 全部同源, 都是 dmem->imem 那条墙),
+  //   但在 150 MHz 的 6.667 ns 预算下, 一旦那条墙被"load 出前递"(C-2) 打断, 它就是
+  //   最可能接班成为新墙的候选之一: 64 位比较器(约 2~3 级 CARRY4) + CSR 门控 +
+  //   4:1 mux 全压在同一个周期里, 而它的起点还是一个自由计数器。
+  //   **零功能代价**: 中断是电平语义 —— R-01 的结论已明确写过"irq_pending 是电平,
+  //   晚一拍取不影响正确性"; 寄存只让中断入口晚 1 拍。复位值 0, 不影响复位后行为。
+  //   比较器自身的新路径是 `cycle_cnt FF -> 比较 -> irq_timer_r FF`, 余量很大。
+  //   ⚠ 唯一需要复验的:`sim/tb_soc_timer_irq` 是按逐拍期望构造的, 入口晚一拍可能
+  //   改变"哪一条指令被打断" ⇒ 该测试的期望值可能需要更新(**由验证泳道确认并给出
+  //   逐拍证据, 不允许为了让测试变绿而放宽断言**)。
+  logic irq_timer_r;
+  always @(posedge clk) begin
+    if (rst) irq_timer_r <= 1'b0;
+    else     irq_timer_r <= (cycle_cnt >= mtimecmp);
+  end
+  assign irq_timer = irq_timer_r;
 
   // ------------------------------------------------------------------------
   // UART 发送: 10 位帧 (start + 8 数据 + stop), LSB 先发
