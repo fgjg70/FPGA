@@ -2323,10 +2323,13 @@ def parse_profile(out: str) -> dict:
     num(r"^\s*fetch\s*=\s*(\d+)", "fetch")
     num(r"^\s*retire\(wb\)\s*=\s*(\d+)", "retire")
     num(r"^\s*redirects\s*=\s*(\d+)", "redirect_total")
-    # 实测冲刷拍数(验证泳道新增的 n_flush): tb_sw 打印
-    #   "redirects  = N   实测冲刷拍数 = M  -> 每次 x.xx 拍"
-    # 有了 M 就不再需要"每次 2 拍"的假设(实测是 1.00 拍/次)。
-    num(r"^\s*redirects\s*=\s*\d+\s+实测冲刷拍数\s*=\s*(\d+)", "redirect_flush_cycles")
+    # 实测冲刷拍数(验证泳道新增的 n_flush)。tb_sw 打印:
+    #   "redirects  = N   实测冲刷拍数 = M  -> 每次 x.xx 拍 ..."
+    # ⚠ **不能按中文匹配**: ModelSim 会把 $display 里的中文在日志里写成 `?`
+    #   (实测: "实测冲刷拍数" 落盘成 "???????????" —— 于是按中文写的正则永远不匹配,
+    #    而它会静默退回"每次 2 拍"的旧假设)。这里改成**按 ASCII 结构匹配**:
+    #   抓 `redirects = N` 之后、`->` 之前的那个 `= M`。
+    num(r"^\s*redirects\s*=\s*\d+.*?=\s*(\d+)\s*->", "redirect_flush_cycles")
     num(r"^\s*stalls\s*=\s*(\d+)", "stall_total")
     num(r"^\s*load-use\s*=\s*(\d+)", "stall_load_use")
     num(r"^\s*split-mem\s*=\s*(\d+)", "stall_split_mem")
