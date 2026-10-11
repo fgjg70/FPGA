@@ -1601,19 +1601,24 @@ def parse_worst_setup_path(t: str) -> dict | None:
     return None
 
 
-def parse_reports() -> dict:
+def parse_reports(tim: str | None = None, util: str | None = None) -> dict:
     """从 Vivado 报告里抽 fmax 与资源。
 
     fmax 的口径 (2026-10-11 修正): **从最差 setup 路径取**, 不读表格、不硬编码周期。
         fmax = 1000 / (该路径的 Requirement - 该路径的 Slack)
             = 1000 / (运行时钟周期 - 建立余量)
     同时输出该路径所属时钟名与周期, 便于核对"核心实际跑在哪个时钟上"。
+
+    `tim`/`util` 可显式指定报告路径。**缓存命中时必须传"那一次构建的归档副本"** ——
+    直接读 fpga/timing.rpt 会张冠李戴 (该文件每次构建都被覆盖, 任何一次别的配置的构建
+    都会把它改掉; 实测: 11 组 Pblock 重扫之后, fpga/timing.rpt 变成了最后那一组的数字,
+    而 synth-cache.json 里存的却是另一组的指纹)。
     """
     out = {"lut": None, "ff": None, "bram": None, "dsp": None,
            "wns": None, "fmax": None,
            "clk": None, "period_ns": None, "clk_mhz": None, "path": None}
 
-    util = abspath("fpga/util.rpt")
+    util = util or abspath("fpga/util.rpt")
     if os.path.exists(util):
         u = read_text(util)
 
@@ -1626,7 +1631,8 @@ def parse_reports() -> dict:
         out["bram"] = grab("Block RAM Tile")
         out["dsp"] = grab("DSPs")
 
-    tim = abspath("fpga/timing.rpt")
+    if tim is None:
+        tim = abspath("fpga/timing.rpt")
     if os.path.exists(tim):
         wp = parse_worst_setup_path(read_text(tim))
         if wp:
@@ -1874,10 +1880,27 @@ def cmd_synth(args) -> int:
         cstate = json.loads(read_text(cache))
     except Exception:
         cstate = {}
-    if not args.force and cstate.get("fingerprint") == fp and os.path.exists(abspath("fpga/cpu_a100t.bit")):
+    # 【必须从"那一次构建的归档"读数字, 不能读磁盘上的 fpga/timing.rpt】
+    # fpga/timing.rpt / util.rpt **每次构建都被覆盖**: 跑过别的配置之后 (实测: 11 组
+    # Pblock×place 重扫), 它描述的是**最后一次**构建, 而缓存里存的指纹属于**另一次**
+    # 同配置构建。两者一旦不同, 缓存命中就会把别的配置的数字当成这次的报出来 ——
+    # 与 M-01 同一族 (数字张冠李戴), 而且看起来完全正常。
+    # 实测现场: 重扫 11 组之后 fpga/timing.rpt 变成"无 Pblock"那组的 72.45 MHz,
+    # 而 synth-cache.json 里是另一组的指纹。
+    hit = (not args.force and cstate.get("fingerprint") == fp
+           and os.path.exists(abspath("fpga/cpu_a100t.bit")))
+    arc = cstate.get("archive")
+    arc_tim = os.path.join(REPO, arc, "timing.rpt") if arc else None
+    arc_utl = os.path.join(REPO, arc, "util.rpt") if arc else None
+    if hit and not (arc_tim and os.path.exists(arc_tim)):
+        print("  [warn] 缓存命中, 但找不到该次构建的归档报告 -> **强制重建**"
+              " (不能拿磁盘上别的构建的报告冒充这一份)")
+        hit = False
+    if hit:
         print(f"  [SKIP] RTL 与镜像都未变, 复用上次构建结果 "
               f"({time.strftime('%m-%d %H:%M', time.localtime(cstate.get('when', 0)))})")
-        res = parse_reports()
+        print(f"         (数字取自该次构建的归档: {arc})")
+        res = parse_reports(arc_tim, arc_utl)
         res["prog"] = prog
         print_metrics(compute_metrics(res))
         if args.record:
@@ -2028,22 +2051,27 @@ def cmd_synth(args) -> int:
 
     # 归档本次报告: timing.rpt/util.rpt 每次构建都被覆盖, 不留档就没法回查
     # (本项目就出现过"旧报告被覆盖后无法复核历史数字"的情况)
+    # 【2026-10-11 加固】归档目录**记进 synth-cache.json**, 供缓存命中时回读 ——
+    # 见下面 cache-hit 分支的注释: 从磁盘读 fpga/timing.rpt 会张冠李戴。
+    arch_rel = None
     try:
         stamp = time.strftime("%Y%m%d-%H%M%S")
         arch = os.path.join(CACHE_DIR, "reports", f"{stamp}-{prog}")
         os.makedirs(arch, exist_ok=True)
-        for n in ("timing.rpt", "util.rpt"):
+        for n in ("timing.rpt", "timing_paths.rpt", "util.rpt"):
             s = abspath("fpga/" + n)
             if os.path.exists(s):
                 shutil.copy2(s, os.path.join(arch, n))
         with open(os.path.join(arch, "metrics.json"), "w", encoding="utf-8") as f:
             json.dump(compute_metrics(res), f, indent=1, ensure_ascii=False)
-        print(f"  报告已归档: {posix(os.path.relpath(arch, REPO))}")
+        arch_rel = posix(os.path.relpath(arch, REPO))
+        print(f"  报告已归档: {arch_rel}")
     except OSError as e:
         print(f"  [warn] 报告归档失败: {e}")
 
     with open(cache, "w", encoding="utf-8") as f:
-        json.dump({"fingerprint": fp, "when": time.time(), "prog": prog}, f, indent=1)
+        json.dump({"fingerprint": fp, "when": time.time(), "prog": prog,
+                   "archive": arch_rel}, f, indent=1)
 
     if args.record:
         append_csv(args.tag or f"synth-{prog}", compute_metrics(res))
@@ -2905,7 +2933,9 @@ def main() -> int:
     p.add_argument("--timeout", type=int, default=3600, help="Vivado 超时秒数")
     p.add_argument("--lock-timeout", type=int, default=1800, help="等待构建锁的秒数")
     p.add_argument("--place-directive", default=None,
-                   help="覆盖 place_design 策略 (默认 WLDrivenBlockPlacement)")
+                   help="覆盖 place_design 策略。**build.tcl 的默认是 ExtraTimingOpt**"
+                        " (与 PB_RANGE 成对选定, 见 build.tcl 的实测表); "
+                        "传 WLDrivenBlockPlacement 可回到配对前的那个点")
     p.add_argument("--pblock-range", default=None,
                    help="给 PBLOCK_CELLS 加 Pblock, 例 CLOCKREGION_X1Y0:CLOCKREGION_X1Y3")
     p.add_argument("--pblock-cells", default=None,

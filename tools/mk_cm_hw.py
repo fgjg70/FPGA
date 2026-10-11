@@ -120,6 +120,26 @@ def main():
     expect_tick = int(round(536_943_384 / 1300 * iters))
     # 必须 > 实际运行时间: int(17.70) + 5 = 22 s, 与 build-repo 的契约一致
     wait_seconds = int(expect_tick / clk_hz) + 5
+
+    # ------------------------------------------------------------------
+    # 【31 位 tick 上限】上板 tick 是 mmio_subsys 里的 31 位计数器
+    # (score_result 的 bit31 被软件借去当"结果有效"标志), 上限 2^31-1 = 2,147,483,647 拍。
+    # 按实测基准外推: 1300 迭代 = 536,943,384 拍 => ITERATIONS_max = 5199。
+    # 3000 迭代用掉 57.7%, 安全; 但**将来继续提速要扩容 ITERATIONS 时**, 一旦越过
+    # 5,199 就会在硬件上回绕成一个小数字 —— 而它看起来完全像一个"变快了"的好成绩。
+    # 这里硬拦住, 不让那个坑有机会出现 (R35 的配套闸门)。
+    # ------------------------------------------------------------------
+    TICK_MAX = 2 ** 31 - 1
+    if expect_tick > TICK_MAX:
+        iters_max = int(1300 * TICK_MAX / 536_943_384)
+        print("  [BLOCK] ITERATIONS=%d 的预期 tick %d 超过 31 位上限 %d"
+              % (iters, expect_tick, TICK_MAX))
+        print("          按实测基准外推, ITERATIONS 最大只能到 **%d**。" % iters_max)
+        print("          越过它 tick 会在硬件上回绕, 而结果看起来像'变快了' —— 必须同时")
+        print("          扩宽 mmio_subsys 的计数器与 score_result 的打包方式。")
+        return 1
+    print("  [tick] 预期 %d / 上限 %d (占用 %.1f%%)"
+          % (expect_tick, TICK_MAX, 100.0 * expect_tick / TICK_MAX))
     build_json = {
         "prog": "cm_hw", "iterations": iters,
         "expect_tick": expect_tick, "wait_seconds": wait_seconds,
