@@ -6,15 +6,17 @@
 # ---- 时序: 板载 50 MHz 系统时钟 ----
 create_clock -period 20.000 -name sys_clk [get_ports sys_clk]
 
-# ---- 时序: MMCM 输出的 70 MHz 系统时钟 (top_a100t.sv 的 u_bufg_sys/O) ----
+# ---- 时序: MMCM 输出的 75 MHz 系统时钟 (top_a100t.sv 的 u_bufg_sys/O) ----
 # 约束写法与 RTL 里的 MMCME2_BASE 逐项对齐, 不做人脑换算:
-#   RTL   : CLKFBOUT_MULT_F = 21.0, DIVCLK_DIVIDE = 1, CLKOUT0_DIVIDE_F = 15.0
-#   XDC   : -multiply_by 21 -divide_by 15   ->  50 MHz * 21 / 15 = 70.000 MHz
-#   等价写法 (同一比值): -multiply_by 7 -divide_by 5, 因为 21/15 == 7/5.
-# 周期 = 1/70 MHz = 14.285714 ns. 下面这行是**声明性**的:
-#   它告诉 STA "这个 net 是 sys_clk 的 21/15 倍频", 相位与 sys_clk 对齐,
-#   跨时钟域路径 (keyin 50 MHz 域 -> 70 MHz 域, 目前没有功能通路) 因此可分析。
-# 用 create_generated_clock 而不是 create_clock -period 14.286: 前者带
+#   RTL   : CLKFBOUT_MULT_F = 21.0, DIVCLK_DIVIDE = 1, CLKOUT0_DIVIDE_F = 14.0
+#   XDC   : -multiply_by 21 -divide_by 14   ->  50 MHz * 21 / 14 = 75.000 MHz
+#   等价写法 (同一比值): -multiply_by 3 -divide_by 2, 因为 21/14 == 3/2.
+#   注意 VCO 没变 (50 * 21 / 1 = 1050 MHz), 只把 CLKOUT0 的分频从 15 改成 14,
+#   所以 70 -> 75 MHz 这一步是"同一 VCO 换抽头", 不引入新的 PLL 参数风险。
+# 周期 = 1/75 MHz = 13.333333 ns. 下面这行是**声明性**的:
+#   它告诉 STA "这个 net 是 sys_clk 的 21/14 倍频", 相位与 sys_clk 对齐,
+#   跨时钟域路径 (keyin 50 MHz 域 -> 75 MHz 域, 目前没有功能通路) 因此可分析。
+# 用 create_generated_clock 而不是 create_clock -period 13.333: 前者带
 #   -source 关系, 工具会把相位/抖动与源时钟关联; 后者会造出一个与源无关的
 #   新时钟, 跨域路径会被当成异步路径而**不再被分析** (静默丢掉检查)。
 # -source 必须给**端口/引脚**对象, 不能给 clock 对象:
@@ -22,12 +24,12 @@ create_clock -period 20.000 -name sys_clk [get_ports sys_clk]
 #     CRITICAL WARNING [Constraints 18-611/18-612]:
 #     "list of objects specified for option 'source' contains '1' objects of
 #      types '(clock)' other than the types '(port,pin)' supported" -> 约束不生效,
-#     时钟会退回 Vivado 自动推导名 (实测叫 sys_clk_raw), 报告里看不到 sys_clk_70。
+#     时钟会退回 Vivado 自动推导名 (实测叫 sys_clk_raw), 报告里看不到 sys_clk_75。
 #   改成 [get_ports sys_clk] (与上面 create_clock 的源是同一个对象) 才成立。
 # 该行不得含非 ASCII 字符, 否则 Vivado 2018.3 可能解析失败。
-create_generated_clock -name sys_clk_70 \
+create_generated_clock -name sys_clk_75 \
   -source [get_ports sys_clk] \
-  -multiply_by 21 -divide_by 15 \
+  -multiply_by 21 -divide_by 14 \
   [get_pins u_bufg_sys/O]
 
 # ---- 引脚 ----

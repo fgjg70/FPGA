@@ -36,21 +36,27 @@ module top_a100t
   localparam logic [31:0] TOHOST_ADDR = DMEM_BASE + 32'h2000;   // 与 sw/link.ld 保持一致
 
   // ==========================================================================
-  // 时钟: 板载 50 MHz -> MMCM -> 70 MHz  (MMCME2_BASE 原语 + BUFG, 不用 IP)
+  // 时钟: 板载 50 MHz -> MMCM -> 75 MHz  (MMCME2_BASE 原语 + BUFG, 不用 IP)
   // --------------------------------------------------------------------------
   // 核算 (XC7A100T-2, Artix-7 MMCME2 的合法区间):
   //   Fvco = Fclkin * CLKFBOUT_MULT_F / DIVCLK_DIVIDE
   //        = 50 MHz * 21 / 1 = **1050.000 MHz**
   //   Artix-7 MMCME2 的 VCO 合法区间 = 600 ~ 1200 MHz (SpeedGrade -2, BANDWIDTH
   //   OPTIMIZED) ==> 1050 MHz 落在区间内, 且距上下限都有余量。
-  //   Fclkout0 = Fvco / CLKOUT0_DIVIDE_F = 1050 / 15 = **70.000 MHz** (精确相等,
-  //   无小数误差)  ==> 周期 1/70 MHz = 14.2857 ns。
+  //   Fclkout0 = Fvco / CLKOUT0_DIVIDE_F = 1050 / 14 = **75.000 MHz** (精确相等,
+  //   无小数误差)  ==> 周期 1/75 MHz = 13.3333 ns。
   //   PFD 频率 = Fclkin / DIVCLK_DIVIDE = 50 / 1 = 50 MHz, 合法区间 10 ~ 500 MHz。
-  //   为什么是 21/1 而不是 7/5: CLKFBOUT_MULT_F / DIVCLK_DIVIDE 是 MMCM 内部
-  //   反馈分频比, 它决定"输出对输入的倍率" = 21/1 = 21; 而 1050/15 = 70 正好是
-  //   50 的 7/5。两个比值的乘积才是最终结果: 21/1 * 1/15 = 7/5。XDC 里的
-  //   create_generated_clock 用 -multiply_by 21 -divide_by 15 (等价于 7/5) 与本例化
+  //   【70 -> 75 MHz 这一步只换抽头, 不动 PLL 参数】CLKFBOUT_MULT_F / DIVCLK_DIVIDE
+  //   都没变 (VCO 仍 1050 MHz), 只是 CLKOUT0_DIVIDE_F 从 15 改成 14。所以这一步
+  //   不引入新的 PLL 锁定/VCO 风险, 唯一的风险是**时序** (见下方缺口核算)。
+  //   为什么是 21/1 而不是 3/2: CLKFBOUT_MULT_F / DIVCLK_DIVIDE 是 MMCM 内部
+  //   反馈分频比, 它决定"输出对输入的倍率" = 21/1 = 21; 而 1050/14 = 75 正好是
+  //   50 的 3/2。两个比值的乘积才是最终结果: 21/1 * 1/14 = 3/2。XDC 里的
+  //   create_generated_clock 用 -multiply_by 21 -divide_by 14 (等价于 3/2) 与本例化
   //   **逐项对齐**, 不靠人脑换算。
+  //   【时序缺口(改动前实算)】70 MHz 下最差路径 slack = +0.854 ns @14.286 ns
+  //   => 路径实需 13.432 ns; 75 MHz 约束 13.333 ns => 预期差约 **0.10 ns**。
+  //   也就是说这一步是"够得着但要挤"的目标, 必须靠物理优化把那 0.1 ns 挤出来。
   //
   // 【R43 根因修复 / 必须保留 CLKFBIN】70 MHz 版首次上板时 CPU 被永久复位:
   //   ILA 抓到 2048 拍全是 ila_ctrl=0x00 / score_result=0, dbg_pc 冻在 0x80000000,
@@ -65,8 +71,8 @@ module top_a100t
   //   绝不能把这行删掉, 也不要改成空连接。
   // ==========================================================================
   logic clk_fb;
-  logic clk_70_raw;
-  logic sys_clk_70;
+  logic clk_75_raw;
+  logic sys_clk_75;
   logic mmcm_locked;
 
   MMCME2_BASE #(
@@ -74,14 +80,14 @@ module top_a100t
     .CLKFBOUT_MULT_F    (21.0),     // VCO = 50 * 21 / 1 = 1050 MHz  (600~1200 OK)
     .CLKFBOUT_PHASE     (0.0),
     .CLKIN1_PERIOD      (20.000),   // 板载 50 MHz
-    .CLKOUT0_DIVIDE_F   (15.0),     // 1050 / 15 = 70.000 MHz
+    .CLKOUT0_DIVIDE_F   (14.0),     // 1050 / 14 = 75.000 MHz
     .CLKOUT0_DUTY_CYCLE (0.5),
     .CLKOUT0_PHASE      (0.0),
     .DIVCLK_DIVIDE      (1),
     .REF_JITTER1        (0.010),
     .STARTUP_WAIT       ("FALSE")
   ) u_mmcm (
-    .CLKOUT0  (clk_70_raw),
+    .CLKOUT0  (clk_75_raw),
     .CLKOUT0B (),
     .CLKOUT1  (),
     .CLKOUT1B (),
@@ -102,12 +108,12 @@ module top_a100t
   );
 
   // MMCM 出来的时钟**必须**过 BUFG 才能上全局时钟树。
-  // BUFG 的输出网就叫 sys_clk_70, 与 XDC 里 create_generated_clock -name sys_clk_70
+  // BUFG 的输出网就叫 sys_clk_75, 与 XDC 里 create_generated_clock -name sys_clk_75
   // 同名, 所以 timing summary 的时钟表里能直接看到这条约束的名字与周期
   // (14.286 ns), 不用靠自动推导名去反推。
   BUFG u_bufg_sys (
-    .I (clk_70_raw),
-    .O (sys_clk_70)
+    .I (clk_75_raw),
+    .O (sys_clk_75)
   );
 
   // ---- 复位同步: 异步置位 / 同步释放, 且**要求 MMCM 已锁定** ----
@@ -116,7 +122,7 @@ module top_a100t
   (* ASYNC_REG = "TRUE" *) logic [2:0] rst_sync;
   logic rst;
 
-  always @(posedge sys_clk_70 or negedge sys_rst_n) begin
+  always @(posedge sys_clk_75 or negedge sys_rst_n) begin
     if (!sys_rst_n)      rst_sync <= 3'b000;
     else if (mmcm_locked) rst_sync <= {rst_sync[1:0], 1'b1};
     else                  rst_sync <= 3'b000;
@@ -134,7 +140,7 @@ module top_a100t
   logic        irq_timer;
 
   core u_core (
-    .clk            (sys_clk_70),
+    .clk            (sys_clk_75),
     .rst            (rst),
     .dbg_pc         (dbg_pc),
     .dbg_id_pc      (dbg_id_pc),
@@ -161,10 +167,10 @@ module top_a100t
   logic        score_mark, score_done;
 
   mmio_subsys #(
-    .CLK_HZ  (70_000_000),         // 必须跟着 MMCM 改: 周期计数器/定时器按它分频
+    .CLK_HZ  (75_000_000),         // 必须跟着 MMCM 改: 周期计数器/定时器按它分频
     .BAUD_HZ (115_200)
   ) u_mmio (
-    .clk           (sys_clk_70),
+    .clk           (sys_clk_75),
     .rst           (rst),
     .we            (ext_we),
     .re            (ext_re),
@@ -186,7 +192,7 @@ module top_a100t
 
   // ---- 结果观测: 监视程序对 tohost 的写入 ----
   logic pass_r, fail_r;
-  always @(posedge sys_clk_70) begin
+  always @(posedge sys_clk_75) begin
     if (rst) begin
       pass_r <= 1'b0;
       fail_r <= 1'b0;
@@ -202,7 +208,7 @@ module top_a100t
   // 注意: 心跳计数器被 rst 清零, 而 rst 依赖 mmcm_locked => MMCM 没锁时
   // led[0] **熄灭**。这正好是一个不用 ILA 的粗判据: LED0 不闪 => 先查 MMCM/复位。
   logic [23:0] heartbeat;
-  always @(posedge sys_clk_70) begin
+  always @(posedge sys_clk_75) begin
     if (rst) heartbeat <= 24'd0;
     else     heartbeat <= heartbeat + 24'd1;
   end
@@ -237,7 +243,7 @@ module top_a100t
   assign ila_ctrl = {mmcm_locked, score_done, score_mark, dbg_redirect, dbg_stall, dbg_illegal, pass_r, fail_r};
 
   ila_0 u_ila (
-    .clk    (sys_clk_70),
+    .clk    (sys_clk_75),
     .probe0 (dbg_pc),        // IF 段取指地址: 看流水线推进
     .probe1 (dbg_instr),     // 与 dbg_id_pc 配对的指令
     .probe2 (ila_ctrl),      // {mmcm_locked, done, mark, redirect, stall, illegal, pass, fail}
