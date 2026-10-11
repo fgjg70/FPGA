@@ -26,6 +26,7 @@ R35 的公式按">=10 s"给下限；但**时钟变快不影响拍数**，只压�
 用法:
     python tools/mk_cm_hw.py 3000
 """
+import json
 import os
 import subprocess
 import sys
@@ -76,6 +77,32 @@ def main():
     for f in ("cm_hw.hex", "cm_hw.dmem.hex"):
         p = os.path.join(REPO, "sim", "prog", f)
         print("  %-18s %s" % (f, "OK" if os.path.exists(p) else "MISSING"))
+
+    # ------------------------------------------------------------------
+    # 【X-09 单一来源】把"这个 ITERATIONS 对应的预期 tick / 等待秒数 / 时钟"
+    # 写成一份小 JSON, 供 build.tcl / build_ila.tcl / ila_cap_done.tcl / cmd_hw 读取。
+    # 在此之前这三个数散落在三处**手工同步**的魔数里:
+    #   ila_cap_done.tcl 的 `after 22000`、fpga_workflow.py 的 `--expect-tick`、
+    #   build_ila.tcl 注释里的 "17.70 s" —— R35 要求每次提速后重算 ITERATIONS,
+    #   而三处只要漏改一处, 抓取就会落在程序跑完之前 (读到 score_result=0)。
+    # 该文件被 .gitignore 忽略 (sim/prog/*.build.json), 是**构建产物**不是源码。
+    # ------------------------------------------------------------------
+    clk_hz = 70_000_000
+    # 预期拍数按实测基准外推 (1300 迭代 = 536,943,384 拍); 以实测为准, 这里只做等待窗口
+    expect_tick = int(round(536_943_384 / 1300 * iters))
+    # 必须 > 实际运行时间: int(17.70) + 5 = 22 s, 与 build-repo 的契约一致
+    wait_seconds = int(expect_tick / clk_hz) + 5
+    build_json = {
+        "prog": "cm_hw", "iterations": iters,
+        "expect_tick": expect_tick, "wait_seconds": wait_seconds,
+        "clk_hz": clk_hz, "generated_by": "tools/mk_cm_hw.py",
+    }
+    jp = os.path.join(REPO, "sim", "prog", "cm_hw.build.json")
+    with open(jp, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(build_json, f, indent=2, ensure_ascii=False)
+    print("  %-18s %s" % ("cm_hw.build.json", "OK"))
+    print("  [build.json] ITERATIONS=%d expect_tick=%d wait_seconds=%ds clk=%dHz"
+          % (iters, expect_tick, wait_seconds, clk_hz))
     return 0
 
 

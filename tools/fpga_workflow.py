@@ -239,6 +239,14 @@ def parse_tcl_list(path: str, pattern: str) -> list[str] | None:
     out = []
     for it in items:
         p = posix(it)
+        # 【E-02 配套, 必须保留】build.tcl / build_ila.tcl 现在用 `$root/...` 前缀
+        # (root 由 [info script] 反推仓库根, 见 build-repo 的去硬编码修复)。
+        # 这里必须把前缀归一化掉 —— 否则 check 第 [1] 项会把 22 个文件全判成
+        # "缺 22 / 多 22" 的**假 FAIL**, 而那是最容易被当成真问题的一类噪声。
+        for pre in ("${root}/", "$root/"):
+            if p.startswith(pre):
+                p = p[len(pre):]
+                break
         if os.path.isabs(p):
             p = posix(os.path.relpath(p, REPO))
         out.append(p)
@@ -852,12 +860,34 @@ def cmd_check(args) -> int:
     hil_ok = True
     csv = abspath("results/ila_done.csv")
     if os.path.exists(csv):
-        age_min = (_t.time() - os.path.getmtime(csv)) / 60.0
-        stamp = _t.strftime("%m-%d %H:%M", _t.localtime(os.path.getmtime(csv)))
-        print(f"  最后一次上板数据: {stamp}  ({age_min:.0f} 分钟前)")
-        if age_min > 60:
-            print("  [warn] 已超过 1 小时没上板验证 —— 期间若改过 RTL, 那些改动**未经上板验证**")
-            warnings.append("上板验证数据超过 1 小时")
+        # 【X-02 修复】判据**不能是 CSV 的 mtime**: 该文件被 git 跟踪, 一次
+        # `git checkout --` 就把 mtime 刷成"现在"而内容逐字节没变 —— 本节于是
+        # 打印出"最后一次上板数据: 5 分钟前"这种**假新鲜度** (docs-sync 实测到现场:
+        # mtime=10-11 10:51 而真实采集时间是 10-09 21:29:30)。
+        # 现在与 `hw` 同源: 优先读采集清单, 缺失就明说"无见证", 不报假时间。
+        man, man_problems = load_capture_manifest(csv)
+        if man and not man_problems:
+            try:
+                epoch = float(man.get("captured_at_epoch") or 0)
+            except (TypeError, ValueError):
+                epoch = 0.0
+            age_min = (_t.time() - epoch) / 60.0 if epoch else 1e9
+            stamp = man.get("captured_at_local") or _t.strftime(
+                "%m-%d %H:%M", _t.localtime(epoch))
+            print(f"  最后一次上板数据: {stamp}  ({age_min:.0f} 分钟前)   [来源: 采集清单]")
+        else:
+            print("  [warn] results/ila_done.csv 存在, 但**没有采集见证** —— 不报新鲜度。")
+            print("         该 CSV 被 git 跟踪, 一次 checkout 就能把 mtime 刷成'现在',")
+            print("         伪造出'刚上板验证过'的假象 (X-02)。判据已改为采集清单:")
+            for pb in man_problems:
+                print(f"         · {pb}")
+            print("         真实最近一次的旁证: fpga/cap_done.log 的 CSV_MTIME / CAPTURE_OK")
+            warnings.append("上板数据缺少采集见证 (可能是 git 恢复出来的历史快照)")
+            age_min = None
+        if age_min is not None:                 # 只有拿到见证才谈"多久之前"
+            if age_min > 60:
+                print("  [warn] 已超过 1 小时没上板验证 —— 期间若改过 RTL, 那些改动**未经上板验证**")
+                warnings.append("上板验证数据超过 1 小时")
     else:
         print("  [warn] 没有 results/ila_done.csv —— 从未上板验证过")
         warnings.append("从未上板验证")
@@ -1895,6 +1925,18 @@ def cmd_synth(args) -> int:
             missing = [e for e in expect if e not in out]
             ok = "BUILD_OK" in out
             print(f"  [2/2] vivado rc={rc} {'BUILD_OK' if ok else 'FAILED'}  {dt:.0f}s")
+            # 【X-06 配套】build.tcl 现在自己断言时序收敛: 违约时打 BUILD_TIMING=FAIL
+            # 并**拒绝写 bitstream**。这里必须显式当致命错误 —— 否则一个时序违约的构建
+            # 会被 parse_reports 算出一个"看起来很正常"的 fmax (例如 WNS=-1 -> 47.6 MHz),
+            # 再被 append_csv 盖上 keep, 最终变成"一次正常的测量回归"记进 results/。
+            for l in out.splitlines():
+                if l.strip().startswith("BUILD_TIMING"):
+                    print("        " + l.strip())
+            if "BUILD_TIMING=FAIL" in out:
+                print("  [FAIL] 时序未收敛 (BUILD_TIMING=FAIL) —— build.tcl 已拒绝写 bitstream。")
+                print("         这不是脚本坏了, 是**门生效**。修 RTL/约束后重跑; "
+                      "不要用 --allow-timing-fail 之类的方式绕过。")
+                return 1
             if ok and missing:
                 print(f"  [FAIL] 请求的架构宏**没有生效**: {missing}")
                 print("         -> build.tcl 不认这些 env, 或 synth 没把它们写进环境。")
@@ -2254,21 +2296,25 @@ RTL_SHA_ALG = "sv-sorted-v1"
 
 
 def sha256_tree() -> str:
-    """仓库内 RTL 源文件的**内容指纹** (算法: sv-sorted-v1)。
+    """仓库内 RTL 源文件的**内容指纹**。
 
-    按相对路径排序后逐行拼 `<relpath>\\n<sha256>\\n`, 再对整串求 sha256。
-    覆盖根目录 `*.sv` 与 `fpga/*.sv` (顶层与外设也属于"被综合进去的 RTL")。
+    【算法必须与 fpga/build_ila.tcl 的 ILA_RTL_SHA 逐字节一致】(算法名 sv-sorted-v1):
+        sha256("FPGA-RTL-SHA-V1\\n" + Σ(relpath + "\\n" + 文件原始字节))
+    文件集 = 仓库根 `*.sv` + `fpga/*.sv`, 按仓库相对 POSIX 路径排序。
+    两边不一致的话, `hw` 里"这份上板证据是不是当前 RTL 跑出来的"就无法交叉校验。
+    (R41: 多写入者并行时, 建像前后各记一次哈希 —— 这条是它的机器化。)
     """
     files = sorted(
         glob.glob(os.path.join(REPO, "*.sv")) + glob.glob(os.path.join(REPO, "fpga", "*.sv")),
         key=lambda p: posix(os.path.relpath(p, REPO)))
-    h = hashlib.sha256()
+    h = hashlib.sha256(b"FPGA-RTL-SHA-V1\n")
     for p in files:
         h.update((posix(os.path.relpath(p, REPO)) + "\n").encode())
         try:
-            h.update((sha256_file(p) + "\n").encode())
+            with open(p, "rb") as fh:
+                h.update(fh.read())
         except OSError:
-            h.update(b"MISSING\n")
+            h.update(b"MISSING")
     return h.hexdigest()
 
 
@@ -2326,18 +2372,38 @@ def load_capture_manifest(csv_path: str) -> tuple[dict | None, list[str]]:
     return man, problems
 
 
-def _resolve_hw_arg(cli_val, man, key):
-    """hw 的参数取值: 命令行优先; 没给就从采集清单推断。返回 (值, 来源说明)。
+def load_build_json(prog: str = "cm_hw") -> dict:
+    """读 `sim/prog/<prog>.build.json` (X-09 单一来源, 由 tools/mk_cm_hw.py 写出)。
+
+    它给出该镜像的 ITERATIONS / 预期 tick / 等待秒数 / 真实时钟, 供 build.tcl、
+    build_ila.tcl、ila_cap_done.tcl 与 `hw` 共用 —— 在此之前这四个数散落在三处
+    手工同步的魔数里 (R35 要求每次提速后重算 ITERATIONS, 漏改一处就会抓空)。
+    文件不存在时返回 {} (调用方回退到"必须显式传参", 不静默用旧默认值)。
+    """
+    p = abspath(f"sim/prog/{prog}.build.json")
+    if not os.path.exists(p):
+        return {}
+    try:
+        j = json.loads(read_text(p))
+        return j if isinstance(j, dict) else {}
+    except Exception:                                # noqa: BLE001
+        return {}
+
+
+def _resolve_hw_arg(cli_val, sources: dict, key: str):
+    """hw 的参数取值: 命令行 > (采集清单 > 构建清单)。返回 (值, 来源说明)。
 
     M-03: 原来的默认值 (1200 / 50e6) 是 MMCM 之前的旧值, 直接跑就会静默少报
-    CoreMark/MHz 2.5 倍。现在默认 None => 必须由命令行或采集清单提供。
+    CoreMark/MHz 2.5 倍 (0.9684 vs 2.4211)。现在默认 None, 且必须有一个来源,
+    否则拒绝给结论。
     """
     if cli_val is not None:
-        if man and man.get(key) is not None and man.get(key) != cli_val:
-            return cli_val, f"命令行 (采集清单写的是 {man.get(key)} —— 不一致, 请确认)"
+        alt = sources.get(key)
+        if alt and alt[0] != cli_val:
+            return cli_val, f"命令行 (另有 {alt[1]} 写的是 {alt[0]} —— 不一致, 请确认)"
         return cli_val, "命令行"
-    if man and man.get(key) is not None:
-        return man.get(key), f"采集清单 {CAPTURE_MANIFEST}"
+    if key in sources:
+        return sources[key][0], sources[key][1]
     return None, "无"
 
 
@@ -2532,18 +2598,28 @@ def cmd_hw(args) -> int:
     done, mark = (ctrl >> 6) & 1, (ctrl >> 5) & 1
     illegal, p, f = (ctrl >> 2) & 1, (ctrl >> 1) & 1, ctrl & 1
     crc, tick = (res >> 31) & 1, res & 0x7FFFFFFF
-    # ---- M-03: --iterations / --clk-hz / --expect-tick 从采集清单自动推断 ----
+    # ---- M-03: --iterations / --clk-hz / --expect-tick 从清单自动推断 ----
     # 原默认值 1200 / 50e6 是 MMCM 之前的旧值, 直接用会**静默**算出
     #   CoreMark/MHz = 0.9684 (真值 2.4211, 少报 2.5 倍) 和 24.78s (真值 17.70s),
     # 而且同一份代码里 --clk-hz 那一半有告警、--iterations 那一半**没有任何告警**。
-    # 现在两者默认都是 None: 命令行不给就向采集清单要, 都没有就拒绝给结论 (不再猜)。
-    iters, iters_src = _resolve_hw_arg(args.iterations, man, "iterations")
-    clk_hz, clk_src = _resolve_hw_arg(args.clk_hz, man, "clk_hz")
-    expect_tick, exp_src = _resolve_hw_arg(args.expect_tick, man, "expect_tick")
+    # 现在两者默认都是 None: 命令行不给就向"采集清单"(描述这一次抓的那个 bitstream)
+    # 或"构建清单"(X-09 单一来源) 要, 都没有就拒绝给结论 (不再猜)。
+    bj = load_build_json(man.get("prog") if man and man.get("prog") else "cm_hw")
+    sources: dict[str, tuple] = {}
+    for k in ("iterations", "clk_hz", "expect_tick"):
+        if bj.get(k) is not None:
+            sources[k] = (bj[k], f"构建清单 sim/prog/{man.get('prog') if man and man.get('prog') else 'cm_hw'}.build.json")
+    if man:                                   # 采集清单描述的是**实际抓到的那个 bitstream**, 优先级更高
+        for k in ("iterations", "clk_hz", "expect_tick"):
+            if man.get(k) is not None:
+                sources[k] = (man[k], f"采集清单 {CAPTURE_MANIFEST}")
+    iters, iters_src = _resolve_hw_arg(args.iterations, sources, "iterations")
+    clk_hz, clk_src = _resolve_hw_arg(args.clk_hz, sources, "clk_hz")
+    expect_tick, exp_src = _resolve_hw_arg(args.expect_tick, sources, "expect_tick")
     if iters is None or clk_hz is None:
-        print("  [BLOCK] 无法确定 iterations / clk-hz: 命令行没给, 采集清单里也没有。")
+        print("  [BLOCK] 无法确定 iterations / clk-hz: 命令行没给, 采集清单与构建清单里也没有。")
         print("          请显式传 --iterations <N> --clk-hz <Hz>, "
-              "或先做一次会写出采集清单的抓取 (ila_cap_done.bat)。")
+              "或先跑一次 tools/mk_cm_hw.py (会写出 sim/prog/cm_hw.build.json)。")
         return 1
     cmmhz = iters * 1e6 / tick if tick else 0
     secs = tick / clk_hz
