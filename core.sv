@@ -241,13 +241,12 @@ module core
     .clk       (clk),
     .rst       (rst),
     .stall     (fetch_hold),
-    // 【C-2】重定向 (含 trap/mret) 必须能**越过停顿**装 PC: pipe_stall 现在多了一种
-    // "气泡型"停顿 (load_use_mem) —— 那一拍 EX 里可能是**与 load 无关**的分支或
-    // 陷阱指令, 它的重定向必须当拍生效。pc.sv 的优先级本来就是 flush > stall > pc_src,
-    // 所以把重定向接到 flush 口即可 (原先这里恒 0, 靠 "any_redir ⇒ !pipe_stall"
-    // 这条隐含不变量走 pc_src; C-2 打破了那条不变量, 见 hazard_unit 头注释)。
-    .flush     (any_redir),
-    .flush_pc  (pc_target),
+    // 【C-2 + C-11】重定向 (trap/mret/分支误判纠正) 必须能**越过停顿**装 PC。
+    //   · trap/mret: 检出当拍就装 (组合, 与历史语义一致);
+    //   · 分支误判: C-11 把它寄存一拍 -> 下一拍才装 (见下面 pc_flush 的说明)。
+    //   pc.sv 的优先级本来就是 flush > stall > pc_src, 所以接 flush 口。
+    .flush     (pc_flush),
+    .flush_pc  (pc_flush_pc),
     .pc_src    (pc_src),
     .pc_target (pc_target),
     .pc        (pc),
@@ -286,19 +285,22 @@ module core
   //   addr=pc_next 必须配当前 pc, 不是配 pc 的延迟副本。
   // --------------------------------------------------------------------------
   // --------------------------------------------------------------------------
-  // 【C-2】取指地址 = 下一拍的 pc; **重定向优先于停顿**
+  // 【C-11】取指地址 = 下一拍的 pc; 三类"改地址"事件的**相位**各不相同
   // --------------------------------------------------------------------------
-  // 原写法 `fetch_hold ? pc : (pc_src ? pc_target : pc_plus4)` 把 fetch_hold
-  // 放在最高优先级 —— 它靠一条隐含不变量成立: "any_redir ⇒ !pipe_stall"
-  // (redirect 被 !pipe_stall 门控、trap/mret 也都被 !pipe_stall 门控)。
-  // C-2 引入了**气泡型停顿**(load_use_mem): 那一拍 EX 里可能是与 load 无关的
-  // 分支/陷阱指令, 它的重定向是真的、必须当拍生效 —— 而停顿也同时成立。
-  // 所以这里把重定向提到最高优先级 (与 pc.sv 的 flush > stall > pc_src 一致,
-  // u_pc 的 flush 口已接 any_redir/pc_target)。
-  // 逻辑等价性: any_redir=1 时原式的值本来就是 pc_target
-  // (`pc_src = any_redir || pred_taken` ⇒ pc_src=1) ⇒ 未改变任何原有行为。
+  //   trap / mret      : 检出当拍生效 (pc_flush 的组合项) —— 语义与历史一致;
+  //   分支误判纠正     : **寄存一拍**后生效 (pc_flush 的 br_redir_r 项) ——
+  //                      这一项把 "分支比较 -> ex_taken -> redirect_raw ->
+  //                      redirect -> any_redir -> pc mux -> imem 地址脚" 这条
+  //                      组合环从中间切开 (C-10 之后它是 top-1, route 75.6%);
+  //   顺序取指         : pc_plus4 或 BTB 预测目标 (pred_taken/pred_target)。
+  // 检出那一拍 (br_redir=1) **不装 PC**: 让它照预测通路走一拍 (取回的错路指令
+  // 由 redir_flush 冲掉), 下一拍 (br_redir_r=1) 才把 br_tgt_r 装进 PC/取指地址。
+  // 配对不变式 imem_rdata(N) == mem[pc(N)] 仍然成立:
+  //   N+1 拍 pc 取 pc_next(N)=错路值, 而 addr(N)=pc_next(N) ⇒ rdata(N+1) 与之配对
+  //   (这条指令在 N+1 被 id_ex flush 冲掉); N+1 拍 addr=br_tgt_r 且 N+1 沿 pc 也
+  //   装 br_tgt_r ⇒ N+2 拍 pc=T、rdata=T ✓ 配对恢复。
   // --------------------------------------------------------------------------
-  wire [31:0] pc_next = any_redir ? pc_target
+  wire [31:0] pc_next = pc_flush ? pc_flush_pc
                       : fetch_hold ? pc
                       : (pc_src ? pc_target : pc_plus4);
 `ifdef IMEM_COMB_READ
@@ -844,16 +846,71 @@ module core
   // 访存地址错异常 (CAUSE_LOAD/STORE_MISALIGN) 本核按"支持非对齐访存"处理,
   // 故不产生 —— tb_core 的 basic.hex 专门测了非对齐访存, 必须继续通过。
 
-  // ---- 重定向: 分支预测错误 与 陷阱 共用 ----
-  assign trap_redir = trap_enter || mret_taken;
-  assign any_redir  = redirect || trap_redir;
+  // ==========================================================================
+  // 【C-11】重定向: 分支误判**寄存一拍**, 陷阱/MRET 保持组合
+  // --------------------------------------------------------------------------
+  // 动机 (实测): C-10 之后 top-1 是
+  //   u_ex_mem/ctrl_reg[wb_src][1]/C -> 前递 mux -> 分支比较(CARRY4) -> ex_taken
+  //     -> pred_ok -> redirect_raw -> redirect -> any_redir -> pc mux
+  //     -> u_imem/ADDRARDADDR      10.854ns (logic 2.653 / route 8.201 = 75.6%)
+  // 50 条最差路径同源、Δ(top1,top2)=0.007ns ⇒ 按 R47 "逻辑重排无空间",
+  // **必须把这条组合环从中间切断**。切点选在"分支误判"这一项上:
+  //   检出拍 N : 只冲刷 (不装 PC), 把 {纠正请求, 目标} 寄存;
+  //   下一拍 N+1: pc_flush 用**寄存器** br_redir_r/br_tgt_r 装 PC 与取指地址。
+  // 于是从分支比较到取指地址脚的那一段被一个 FF 隔开。
+  //
+  // 【为什么只切分支误判】trap_enter/mret 走组合通路是 R-01/R48 那套不变量的
+  // 前提 (ex_mem_reg.flush 只接 trap_enter、id_ex_valid 判据、trap 的精确性),
+  // 一行都不动 —— 它们的路径本来也不在 top-N 上。
+  //
+  // 【错路指令永不提交 (R48 的反面) —— 逐条论证】
+  //   记检出拍为 N (分支在 EX)。
+  //   ① N 拍: ID 里的错路指令 X0 在**同拍**被 id_ex_reg.flush(any_redir) 冲掉,
+  //      拍末 ID/EX 装气泡 ⇒ N+1 拍 EX 必是气泡;
+  //   ② EX 里的分支自己照常提交 (ex_mem_reg.flush 只接 trap_enter=0), JAL/JALR
+  //      的链接值照常写回 —— 它是真指令, 必须提交;
+  //   ③ N+1 拍: ID 里是 N-1 拍取回的错路指令 X1 (imem 输出寄存器冲不掉), 但
+  //      redir_flush 仍为 1 (br_redir_r) ⇒ 拍末 ID/EX 再装气泡 ⇒ N+2 拍 EX 仍是气泡;
+  //   ④ N+1 拍 addr = br_tgt_r ⇒ N+2 拍 imem 输出 = 目标指令 T; N+2 拍无冲刷
+  //      ⇒ 拍末 T 进 ID/EX ⇒ N+3 拍 T 在 EX。恢复窗口内 EX 全程是气泡。
+  //   ⇒ 任何错路指令都到不了 EX, 更到不了 MEM/WB: 不写寄存器、不写存储器。
+  //   (机器化判据: 文件末尾的 C-11 断言, 在整个回归的每一拍上检查 ③④。)
+  // ==========================================================================
+  assign br_redir = redirect;        // hazard 输出: 已被硬冻结 / load_use_ex 门控
+  // 【trap/mret 同拍优先 —— 必须抑制登记】同一拍既有 trap/mret 又有分支误判时:
+  //   当拍 PC 已经装 trap_vector/mret_pc; 若还把纠正登记到下一拍, 下一拍会把 PC
+  //   拉回分支目标并冲掉陷阱处理程序的第一条指令 (灾难)。而 trap_enter 本来就会
+  //   用 ex_mem_reg.flush 把 EX 里那条分支冲掉 ⇒ 分支不提交、mepc=它的 PC ⇒
+  //   MRET 后重新执行、那时再纠正 —— 完全正确。
+  assign br_redir_eff = br_redir && !trap_redir;
 
-  assign pc_src    = any_redir || pred_taken;
-  // 目标优先级: 陷阱入口 > MRET 返回 > 预测错误纠正 > 预测目标
-  assign pc_target = trap_enter ? trap_vector
-                   : mret_taken ? mret_pc
-                   : redirect   ? actual_target
-                   :              pred_target;
+  always_ff @(posedge clk or posedge rst) begin
+    if (rst) begin
+      br_redir_r  <= 1'b0;
+      br_redir_r2 <= 1'b0;
+      br_tgt_r    <= 32'd0;
+    end
+    else begin
+      br_redir_r  <= br_redir_eff;
+      br_redir_r2 <= br_redir_r;      // 只给断言用 (恢复窗口第 2 拍)
+      if (br_redir_eff) br_tgt_r <= actual_target;
+    end
+  end
+
+  // 冲刷窗口 (2 拍, 见上面的 ①②③): 检出拍 + 下一拍都冲 ID/EX 与 IF/ID
+  assign redir_flush = br_redir_eff || br_redir_r;
+  assign trap_redir  = trap_enter || mret_taken;
+  assign any_redir   = redir_flush || trap_redir;
+
+  // PC 装载相位: trap/mret 当拍; 分支误判纠正延后一拍 (这两项都优先于停顿)
+  assign pc_flush    = trap_redir || br_redir_r;
+  assign pc_flush_pc = trap_enter ? trap_vector
+                     : mret_taken ? mret_pc
+                     :              br_tgt_r;
+
+  // 预测通路: **不含 redirect** —— 检出拍照预测走一拍 (取回的东西被 ①③ 冲掉)
+  assign pc_src    = pred_taken;
+  assign pc_target = pred_target;
 
   // ==========================================================================
   // 冒险单元
@@ -1216,16 +1273,21 @@ module core
   // 反方向不会漏报: 真正无法处理的非法指令 (trap 未接线) 不会进 trap_enter, 标志照常置位。
   always_ff @(posedge clk or posedge rst) begin
     if (rst)                                                               dbg_illegal <= 1'b0;
-    else if (id_ex_ctrl.illegal && !pipe_stall && !redirect && !trap_enter) dbg_illegal <= 1'b1;
+    // C-11: 用 redir_flush (2 拍窗口) 而不是 redirect —— 恢复窗口那两拍 ID 里
+    // 还留着错路指令, 它译码出的 illegal 是假失败 (EX 里已经是气泡)。
+    else if (id_ex_ctrl.illegal && !pipe_stall && !redir_flush && !trap_enter) dbg_illegal <= 1'b1;
   end
 
-  // 跳转目标必须 4 字节对齐。陷阱接管后这条断言覆盖 redirect 与 trap_redir 两条路径:
-  // trap_vector 在 csr_file 里已按 {mtvec[31:2],2'b00} 对齐, mepc 写入时同样对齐,
-  // 所以两者本来就恒定对齐 —— 保留断言等于免费多一道保险。
+  // 跳转目标必须 4 字节对齐。陷阱接管后这条断言覆盖 trap/mret 与分支误判纠正
+  // 两条路径: trap_vector 在 csr_file 里已按 {mtvec[31:2],2'b00} 对齐, mepc 写入
+  // 时同样对齐, br_tgt_r 来自 actual_target (ex_pc_target 对 JALR 清最低位、
+  // 否则是 pc+4) —— 本来就恒定对齐, 保留断言等于免费多一道保险。
+  // 【C-11 口径】判据从 `any_redir && pc_target` 改为 `pc_flush && pc_flush_pc`:
+  //   pc_target 现在是"预测目标"(不装 PC), 真正装进 PC 的是 pc_flush_pc。
   `ifndef SYNTHESIS
   always_ff @(posedge clk) begin
-    if (!rst && any_redir && (pc_target[1:0] != 2'b00)) begin
-      $error("instruction address misaligned: target=%h", pc_target);
+    if (!rst && pc_flush && (pc_flush_pc[1:0] != 2'b00)) begin
+      $error("instruction address misaligned: target=%h", pc_flush_pc);
     end
   end
   `endif
@@ -1243,6 +1305,22 @@ module core
     if (!rst && trap_enter && !id_ex_valid) begin
       $error("trap_enter on an invalid EX instruction (R-01 regression): pc=0x%08x cause=0x%02x",
              id_ex_pc, trap_cause);
+    end
+  end
+  `endif
+
+  // 【C-11 的机器化判据 —— "错路指令永不提交" (R48 的反面)】
+  //   分支误判检出后, 恢复窗口的两拍 (br_redir_r = N+1, br_redir_r2 = N+2)
+  //   内 EX 段**必须一直是气泡**; 目标指令要到 N+3 才进 EX。
+  //   为什么必须有它: 寄存 redirect 唯一的致命风险就是"被冲刷的错路指令晚一拍
+  //   才被冲, 于是有一条错路指令提交了"(寄存器写/存储器写)。这条断言与相位或
+  //   DELTA 无关, 覆盖整个回归的每一拍 —— 任何那样的事故都会立刻 $error。
+  //   (EX 里的分支自己不算: 它在 N 拍, 而窗口从 N+1 才开始。)
+  `ifndef SYNTHESIS
+  always_ff @(posedge clk) begin
+    if (!rst && id_ex_valid && (br_redir_r || br_redir_r2)) begin
+      $error("C-11: wrong-path instruction entered EX during redirect recovery (pc=0x%08x instr=0x%08x)",
+             id_ex_pc, id_ex_instr);
     end
   end
   `endif
