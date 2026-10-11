@@ -16,6 +16,25 @@
 #   5) handler 用 mscratch 保存/恢复寄存器 (中断不破坏被抢占代码的寄存器)
 #   6) SoC 集成: 中断处理完之后 UART/GPIO 仍能正常工作
 #
+# 【测试 7 —— R-01 定向复现】中断落在 load-use 停顿之后的那个**流水线气泡**上
+#   触发序列 (旧 RTL, irq_take 没有"EX 段指令有效"判据):
+#     cycle A: EX = lw, ID = 它的距离 1 消费者  -> load_use=1, pipe_stall=1
+#     cycle B: EX = 刚注入的气泡 (id_ex_reg 把 pc 清成 0), pipe_stall=0
+#              -> 旧 RTL 在气泡上接受中断: mepc = 0; 而 ID 里那条消费者被
+#                 any_redir 同时冲掉、永不重执行; MRET 后 PC=0, imem 忽略高位
+#                 (只用 addr[13:2]) -> 从程序开头重跑。
+#   本测试的判据:
+#     · handler 断言 mepc != 0 —— 否则直接写 tohost = 99 (一眼看出是 R-01)
+#     · s5 记录"被打断的 add 在 mret 后确实重新执行"(见测试 7 代码)
+#   DELTA 是**实测标定值**: 先让 mtimecmp 在 load-use 窗口那一拍/下一拍到期,
+#   中断才会撞上气泡。改程序布局后必须用 +irq_trace 重新标定 (见文件末注释)。
+#
+# 【测试 8 —— R-02 定向】非法指令陷阱的 mtval 必须记录**触发指令的编码**。
+#   trap.S 用的非法编码是 0x00000000, 与旧 RTL 的"mtval 恒 0"不可区分 -> 测不出来;
+#   这里用非 0 的 0x0000007F (opcode 0b1111111 未定义), 三项一起断言:
+#     mcause=2, mepc=非法指令地址, mtval=0x0000007F。
+#   handler 的异常路径自检失败码: s11=1(mcause)/2(mepc)/3(mtval) -> tohost=111/112/113。
+#
 # 【两个必须记住的坑】
 #   a) MTIE 是 mie 的 bit7 = 0x80, 而 Zicsr 立即数形式只有 **5 位** (上限 31),
 #      **表达不了 0x80**。汇编器会把 `csrsi mie, 0x80` 按 &0x1F 静默截断成 0,
@@ -79,6 +98,56 @@ spin:
     li   t1, 1
     bne  s3, t1, fail4
 
+    # -------- 测试 7 (R-01): 中断不得落在 load-use 之后的气泡上 --------
+    csrsi mstatus, 8            # 重新开全局中断 (测试 4 把它关了)
+
+    li   s5, 0                  # 被中断指令"重执行"的证据 (见下)
+    li   t0, 0x90001F00         # dmem 暂存区 (空着, 不撞任何东西)
+    li   t1, 0x12345678
+    sw   t1, 0(t0)              # 准备 load 的源数据
+
+    # 武装定时器: mtimecmp = mtime + DELTA (DELTA 为实测标定值)
+    li   t0, 0xA0000030         # MTIME_LO
+    lw   t1, 0(t0)
+    lw   t2, 4(t0)
+    addi t1, t1, 9              # DELTA = 9 (标定见文件头说明)
+    li   t0, 0xA0000028         # MTIMECMP_LO
+    sw   t1, 0(t0)
+    sw   t2, 4(t0)              # 高位不变 (DELTA 不会溢出到高位)
+
+    # 【关键】紧接着放 load-use 对: lw 在 EX、距离 1 消费者在 ID -> 停顿一拍,
+    # 下一拍 EX 是刚注入的气泡。中断必须**拒绝**在那一拍被接受。
+    li   t0, 0x90001F00
+    lw   t3, 0(t0)
+    add  s5, s5, t3             # 距离 1 依赖 (load_use) —— 必须是这一条
+
+    # 等中断 (handler 把 s3 加 1; 第 2 次中断)
+    li   t1, 2
+wait7:
+    bne  s3, t1, wait7
+
+    # 被打断的 add 必须在 mret 后**重新执行一次**: s5 = mem[0x90001F00]
+    # (旧 RTL 会在气泡上陷入, 把这条 add 永久丢掉 -> s5 保持 0 或被清零)
+    li   t3, 0x12345678
+    bne  s5, t3, fail7
+
+    # -------- 测试 8 (R-02): 非法指令的 mtval 必须记录**指令编码** --------
+    # csr_file.sv 头注释承诺"非法指令放指令编码", 而旧 RTL 把 trap_tval 硬接 0
+    # ⇒ mtval 恒 0。trap.S 用的是 0x00000000, 与"恒 0"不可区分, 所以一直没暴露;
+    # 这里特意选**非 0** 的非法编码 0x0000007F (opcode 0b1111111 未定义)。
+    # 期望: mcause=2, mepc=非法指令地址, mtval=0x0000007F。三者任一不符 -> tohost=111+s11。
+    li   s10, 0                 # 异常进入次数
+    li   s11, 0                 # 异常路径自检失败码 (1=mcause 2=mepc 3=mtval)
+    auipc s7, 0                 # s7 = 本指令地址
+    addi  s7, s7, 16            # 非法指令在 +16 (布局见下)
+    li   s6, 0x7F               # 期望 mtval
+    # 布局: +0 auipc / +4 addi / +8 lui(s6) / +12 addi(s6) / +16 .word 非法指令
+    .word 0x0000007F
+    # handler 用 mepc+4 跳过非法指令后回到这里
+    li   t1, 1
+    bne  s10, t1, fail8         # 必须恰好进 1 次异常陷阱
+    bne  s11, zero, fail8       # handler 内的三项自检必须全过
+
     # -------- 测试 6: SoC 集成 —— 中断之后 UART/GPIO 仍正常 --------
     # (tb_soc 的收尾判定要求 gpio_out=0x5A5A5A5A 且回环收到 "OK\n")
     li   t0, 0xA0000000
@@ -121,7 +190,13 @@ handler:
 
     csrr t0, mcause
     srli t1, t0, 31             # t1 = 中断位
-    beq  t1, zero, h_fail       # 必须是中断, 不是异常
+    beq  t1, zero, h_exc        # bit31=0 -> 异常 (测试 8 的非法指令)
+    # 【R-01 断言】中断被接受的那一拍, EX 段必须是一条**真指令** (mepc != 0)。
+    # 旧 RTL 会在 load-use 之后注入的气泡上接受中断, 此时 id_ex_pc 被清成 0,
+    # mepc 记下来就是 0 —— 这里当场抓住, 直接写 tohost=99 上报, 不再 mret
+    # (避免带着坏 mepc 跑飞, 掩盖证据)。
+    csrr t2, mepc
+    beq  t2, zero, h_bad_mepc
     andi t0, t0, 0xF            # 低 4 位 = 中断码
     bne  t0, s2, h_fail         # 期望 7 = 机器定时器中断
 
@@ -153,6 +228,46 @@ h_fail:
     li   t0, 0xA0000028
     sw   t1, 0(t0)
     sw   t2, 4(t0)
+
+# ---------------------------------------------------------------------------
+# 异常路径 (测试 8 / R-02): 只支持非法指令 (mcause = 2)
+#   s7 = 期望 mepc (非法指令地址), s6 = 期望 mtval (非法指令编码)
+#   自检失败只记录到 s11 (1=mcause, 2=mepc, 3=mtval), 不跑飞; 主程序统一判定
+#   成功/失败都按 mepc+4 跳过非法指令 —— 保证"精确异常"语义可继续被验证
+# ---------------------------------------------------------------------------
+h_exc:
+    andi t0, t0, 0xF            # 去掉 bit31, 取异常码
+    li   t1, 2                  # 2 = illegal instruction
+    bne  t0, t1, h_exc_bad1
+    csrr t2, mepc
+    bne  t2, s7, h_exc_bad2     # mepc 必须指向触发指令本身
+    csrr t2, mtval
+    bne  t2, s6, h_exc_bad3     # mtval 必须是触发指令的编码 (R-02 的核心判据)
+    addi s10, s10, 1            # 记录一次成功的异常陷阱
+    j    h_exc_skip
+h_exc_bad1:
+    li   s11, 1
+    j    h_exc_skip
+h_exc_bad2:
+    li   s11, 2
+    j    h_exc_skip
+h_exc_bad3:
+    li   s11, 3
+h_exc_skip:
+    csrr t0, mepc
+    addi t0, t0, 4              # 精确异常: 跳过触发指令
+    csrw mepc, t0
+    j    h_ret
+
+# 【R-01 复现点】中断被接受在流水线气泡上 -> mepc = 0
+# 直接上报 tohost = 99 并停住: tb_soc 会把 tohost 判成"第 98 组失败",
+# 一眼就能从日志区分"R-01 复现"与其它失败。
+h_bad_mepc:
+    li   a0, 0x90002000
+    li   a1, 99
+    sw   a1, 0(a0)
+h_bad_spin:
+    j    h_bad_spin
 
 h_ret:
     # 恢复现场
@@ -208,6 +323,22 @@ fail3:
 fail4:
     li   a0, 0x90002000
     li   a1, 5
+    sw   a1, 0(a0)
+    j    done
+fail7:
+    li   a0, 0x90002000
+    li   a1, 8
+    sw   a1, 0(a0)
+    j    done
+# 测试 8 上报: 111/112/113 = handler 异常路径自检失败(mcause/mepc/mtval),
+#              114 = 异常陷阱进入次数 != 1
+fail8:
+    li   a0, 0x90002000
+    li   a1, 110
+    add  a1, a1, s11
+    bne  s11, zero, fail8_rep
+    li   a1, 114
+fail8_rep:
     sw   a1, 0(a0)
     j    done
 

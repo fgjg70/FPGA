@@ -99,6 +99,10 @@ module core
   // RV32A: LSU 的写相标志与读回的旧值 (供 MEM 段的 AMO 新值计算用)
   logic        amo_write_phase;
   logic [31:0] amo_old;
+  // RV32A: LR/SC 算子标志 (LR/SC **都不写内存**; SC 恒失败 -> rd=1)。
+  // 必须由下面 A_EN 段里**自己锁存**的 amo_op_r 译出, 不能用 ex_mem_ctrl.amo_op
+  // (那份会被 hold_mem 挡住 —— 本项目在这一点上踩过坑)。
+  logic        amo_is_lr, amo_is_sc;
   logic        id_ex_bubble;
 
   // 分支预测
@@ -857,6 +861,8 @@ module core
     //         能自然流到这里, LSU 的多周期序列即可启动。
     .amo_en            (ex_mem_ctrl.amo_en),
     .amo_newdata       (amo_newdata),
+    .amo_lr            (amo_is_lr),
+    .amo_sc            (amo_is_sc),
     .amo_write_phase   (amo_write_phase),
     .amo_old_out       (amo_old)
   );
@@ -921,6 +927,12 @@ module core
     else if (id_ex_ctrl.amo_en) amo_op_r <= id_ex_ctrl.amo_op;
   end
 
+  // LR.W / SC.W 标志: 从**锁存下来的** amo_op_r 译出, 整个多周期序列内稳定。
+  // 用途 (见 load_store_unit): ① S_AMO 相关闭写使能 (LR 只读、SC 不写);
+  //                          ② SC 的 rd 恒返回 1 (失败)。规范允许 SC 永远失败。
+  assign amo_is_lr = (amo_op_r == AMO_LR);
+  assign amo_is_sc = (amo_op_r == AMO_SC);
+
   alu #(.XLEN(XLEN)) u_amo_alu (
     .a       (amo_old),            // 从内存读回的旧值
     .b       (amo_rs2),            // rs2
@@ -950,6 +962,10 @@ module core
   // 既然默认不开 A 扩展, 就没有理由为它付这个代价 —— 用 `ifdef 让综合器
   // 把它整体裁掉 (与 GEMM_EN/RAS_EN/BTB_GSHARE 同样的做法)。
   assign amo_newdata = 32'd0;
+  // RV32A 关掉时把 LR/SC 标志钉成常量: LSU 里那两处门控/回读 mux 会被综合裁掉,
+  // 默认配置的面积与时序与加 A 扩展之前**逐位相同**。
+  assign amo_is_lr   = 1'b0;
+  assign amo_is_sc   = 1'b0;
 `endif
 
 

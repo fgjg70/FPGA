@@ -50,6 +50,16 @@ module load_store_unit
   //               传的是**已算好的结果**, 逻辑上等价于"新值"。)
   input  logic            amo_en,
   input  logic [31:0]     amo_newdata,
+  // LR.W / SC.W 算子标志 (由 core 的 amo_op_r 译出; 只有 A_EN 时可能为 1)
+  // 【为什么需要它们】原来 dmem_we/dmem_wstrb 在 S_AMO 相**只由相位决定、与算子无关**
+  // ⇒ LR.W 到了写相就把刚读到的那个字写成了 0 (实测复现); SC.W 写 0 且 rd 拿旧内存值。
+  // 修法 (都在本模块内, 不需要动 control_unit):
+  //   · dmem_we/dmem_wstrb 在 S_AMO 相再与 !(amo_lr|amo_sc) 相与 —— LR/SC **都不写内存**;
+  //   · SC 的 rd 走 rdata_eff 那一层返回 1 (恒失败) —— 规范**允许** SC 永远失败
+  //     (没有 forward-progress 要求), 单核无 cache 的机器不需要预约寄存器。
+  // 这样 LR.W 等价于一次普通字加载, SC.W 等价于"读一下就报失败"。
+  input  logic            amo_lr,
+  input  logic            amo_sc,
 
   // DMEM 接口 (寄存读: 地址第 N 拍, 数据第 N+1 拍)
   output logic [31:0]     dmem_addr,
@@ -140,10 +150,17 @@ module load_store_unit
   // ---- 写使能 ----
   // 原逻辑: TAIL 拍不再重复写 (跨字 store 在 IDLE 写头、HEAD 写尾即可)
   // AMO: 读相不写, 写相才写整个字 (4'b1111)
-  assign dmem_wstrb = (state == S_AMO)  ? (amo_wr ? 4'b1111 : 4'b0000)
+  // 【LR/SC 必须不写】amo_lr/amo_sc 在 S_AMO 相把写使能整个关掉:
+  //   · LR.W 只读 (原来会把读到的字写成 0 —— 实测复现);
+  //   · SC.W 恒失败 -> 不写内存, rd = 1 (见 rdata_eff)。
+  //   门控放在这里 (而不是 core 的 dmem_we_g) 同时覆盖内部 dmem 与外部 MMIO 两条路:
+  //   ext_we = dmem_we && !sel_dmem && ..., 只堵 dmem_we_g 的话, 打到 MMIO 地址的
+  //   LR/SC 仍会在写相产生一次 ext_we 脉冲 (对 UART 这类"读清"外设就是副作用)。
+  wire amo_no_write = amo_lr || amo_sc;
+  assign dmem_wstrb = (state == S_AMO)  ? ((amo_wr && !amo_no_write) ? 4'b1111 : 4'b0000)
                     : (req_write && state != S_TAIL)
                       ? ((state == S_IDLE) ? head_strb : tail_strb) : 4'b0000;
-  assign dmem_we    = (state == S_AMO)  ? amo_wr
+  assign dmem_we    = (state == S_AMO)  ? (amo_wr && !amo_no_write)
                     : (req_write && (state != S_TAIL));
 
   // 停顿: HEAD 拍 + "IDLE 且需要拆分" 的那一拍 + AMO 的**前两相**都要停
@@ -198,7 +215,8 @@ module load_store_unit
   //         却落成一棵 64 位、3 级 (8/16/32) 的可变移位树。
   // 新写法: 只做"取 4 个连续字节", 硬件就是一层 4:1 mux (选择信号 = off_wb[1:0]),
   //         没有任何移位级联。**逐位等价**已被穷举验证 (6,750,000 组
-  //         rd/head/off/size/uns/split 组合, 0 处不一致; 见 .rr2_scratch/check_equiv.py)。
+  //         rd/head/off/size/uns/split 组合, 0 处不一致; 见 tools/check_equiv.py ——
+  //         该脚本已随 2026-10-11 的仓库整理正式入库, 可独立运行复现)。
   //
   // 【为什么 split 要嵌进每一个字节】非 split 时 raw64 = {32'b0, rdata_eff},
   // 高 32 位是 0(不是 head_word_r), 所以 s0 = {s0_hi, rdata_eff} —— 否则
@@ -211,7 +229,14 @@ module load_store_unit
   // AMO 的"读回值"走同一条路: 旧值在 amo_old 里, 且 off/size 已按字对齐设好,
   // 所以下面的字节选择与符号扩展对它是恒等操作。
 `ifdef A_EN
-  wire [31:0] rdata_eff = amo_mode_r ? amo_old : dmem_rdata;
+  // AMO 的"读回值"走同一条路: 旧值在 amo_old 里 (off/size 已按字对齐设好, 字节选择
+  // 与符号扩展对它是恒等操作)。
+  // 【SC.W 的 rd】**规范允许 SC.W 永远失败** (没有 forward-progress 要求), 本核
+  // 单核无 cache、不实现预约寄存器, 所以 SC 恒返回 1 (失败)、绝不写内存。
+  // 这一层放在 rdata_eff 上, 后面 off_wb=0/size_wb=WORD (启动拍锁存) 会原样透传。
+  wire [31:0] rdata_eff = (amo_mode_r && amo_sc) ? 32'd1
+                        : amo_mode_r               ? amo_old
+                                                   : dmem_rdata;
 `else
   // A_EN 关闭时 amo_mode_r 恒为 0 (它只可能被 amo_en 置起, 见下面的时序段),
   // 所以这个 mux 对数据路是恒等的 —— 直接从数据路上摘掉, 少一级、少一根网。
