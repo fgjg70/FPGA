@@ -548,8 +548,9 @@ ref5 = 137.25 MHz（852 LUT，无前递/无预测/无 M·A·CSR·trap），主�
 ⇒ **`results/coremark.csv` 是唯一权威**；任何"当前值"都要带 `tag` 一起引用。
 
 > **2026-10-11 状态更新**：本条是**当时（2026-10-08/09）的历史观察**。
-> 现在 `results/gap-analysis.md` 已按冻结版重算为 **74.4 MHz / LUT 2736**（`review-fixes-v1`），
+> 现在 `results/gap-analysis.md` 已按**75 MHz 冻结版**重算为 **76.2 MHz / LUT 2734**（`clk75`），
 > 且 fmax 口径已修（不再是 `1000/(20−WNS)`）—— 引用时请配 `results/coremark.csv` 的 **`fmax_src`** 列。
+> 另注意 **R50**：提频（70→75 MHz）本身就会抬高 fmax，所以"运行频率"与"fmax"两项要一起读。
 
 ---
 

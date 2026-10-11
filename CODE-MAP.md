@@ -132,7 +132,7 @@ gemm_accel.sv         ← 自选题 GEMM 加速器
 
 ## 3. 工具链（`tools/` + `fpga/`）
 
-### 一站式入口：`tools/fpga_workflow.py`（2926 行 @2026-10-11 RTL/工具冻结后实测）
+### 一站式入口：`tools/fpga_workflow.py`（2973 行 @2026-10-11 75 MHz 冻结版实测）
 
 ```powershell
 python tools/fpga_workflow.py doctor      # 环境自检
@@ -148,8 +148,8 @@ python tools/fpga_workflow.py check       # 7 项漂移检测 + 综合警告门
 
 | 文件 | 作用 |
 |---|---|
-| `fpga/build.tcl` (461) | **非工程模式**综合流程：`synth → opt → Pblock → place → phys_opt → route → bitstream`；宏开关集中在文件头；路径用 `$root` 相对化 |
-| `fpga/daVinciPro.xdc` (49) | 引脚 + **`create_clock -period 20.000`** + MMCM 的 70 MHz 时钟约束 |
+| `fpga/build.tcl` (484) | **非工程模式**综合流程：`synth → opt → Pblock → place → phys_opt → route → bitstream`；宏开关集中在文件头；路径用 `$root` 相对化；**内建 `BUILD_TIMING=PASS/FAIL` 时序门** |
+| `fpga/daVinciPro.xdc` (51) | 引脚 + **`create_clock -period 20.000`**（板载 50 MHz 输入）+ MMCM 的 **75 MHz** 输出约束 |
 | `fpga/build_ila.tcl` + `ila_cap_*.tcl` | 上板 ILA 调试闭环（`jtag_probe` / `build_ila` / `ila_cap_done`）；抓取后写 **采集清单 `results/ila_done.capture.json`** |
 | `tools/check_equiv.py` (175) | LSU 字节通道等价性穷举（**675 万组，~5 s**）—— 交付版访存 mux 的正确性论证 |
 
@@ -218,14 +218,14 @@ rem 回退到 SPIx1（同样验证过）: powershell -File tools\flash_boot.ps1 
 
 | 文件 | 内容 |
 |---|---|
-| `HANDOFF.md` (1179 @2026-10-11) | **总入口**：当前交付配置、四项指标、存储策略、上板结论、口径纪律、`check` 7 项检查门 |
-| `HANDOFF-HW-LOOP.md` (311 @2026-10-11) | 上板闭环操作的逐步说明 |
-| `HANDOFF-WORKFLOW.md` (308 @2026-10-11) | 工作流用法 |
+| `HANDOFF.md` (1190 @2026-10-11) | **总入口**：当前交付配置、四项指标、存储策略、上板结论、口径纪律、`check` 7 项检查门 |
+| `HANDOFF-HW-LOOP.md` (319 @2026-10-11) | 上板闭环操作的逐步说明 |
+| `HANDOFF-WORKFLOW.md` (310 @2026-10-11) | 工作流用法 |
 | `tools/README.md` (243 @2026-10-11) | 统一工作流的逐子命令说明（含 `check` 7 项与综合警告门详解） |
 | `results/*.md` (22 篇) | 每项工作的**完整实测记录**（含所有失败尝试与原因） |
 | `results/coremark.csv` | 所有配置 × 四项指标的总表 |
 | `tools/flash_logs/REPORT.md` (212) | **QSPI Flash 固化**的完整报告（根因 / part 对照表 / 端到端命令 / 上电自举步骤）|
-| `skills/fpga-riscv-a100t/PITFALLS.md` (**R1~R49**) | **49 条踩坑记录**（改代码前扫一眼能省很多时间）；最值钱的新条目：**R43**（MMCM 漏接 `.CLKFBIN` 会把整颗 CPU 永久按在复位里）、**R47**（top-N 是"一堵墙"时 RTL 逻辑重排期望 ≈ 0）、**R48**（陷阱只冲 ID/EX ⇒ 被抢占指令双执行）、**R49**（多周期状态机写相与算子无关 ⇒ LR.W 把目标字清零）|
+| `skills/fpga-riscv-a100t/PITFALLS.md` (**R1~R51**) | **51 条踩坑记录**（改代码前扫一眼能省很多时间）；最值钱的新条目：**R43**（MMCM 漏接 `.CLKFBIN` 会把整颗 CPU 永久按在复位里）、**R47**（top-N 是"一堵墙"时 RTL 逻辑重排期望 ≈ 0）、**R48**（陷阱只冲 ID/EX ⇒ 被抢占指令双执行）、**R49**（多周期状态机写相与算子无关 ⇒ LR.W 把目标字清零）、**R50**（换频只换抽头最安全；提频本身也会抬高 fmax）|
 
 ---
 
@@ -234,15 +234,16 @@ rem 回退到 SPIx1（同样验证过）: powershell -File tools\flash_boot.ps1 
 | 指标 | 值 |
 |---|---|
 | CoreMark/MHz | **2.4209**（仿真 ticks 413,070） |
-| fmax | **74.4 MHz** —— `sys_clk_70` @14.286 ns，WNS **+0.854** ⇒ `1000/(14.286−0.854)` |
-| LUT / FF / BRAM / DSP | **2736 / 1251 / 8 / 8** |
-| CoreMark/LUTs | **8.848e-4** |
-| 绝对吞吐 | **180.2**（= CM/MHz × fmax） |
-| 上板（2026-10-11 11:19:07） | `ila_ctrl=0xC2`、CRC bit31=1、tick **1,239,079,510**、**17.70 s** @70 MHz（3000 迭代）、硬件 CM/MHz **2.4212** |
+| fmax | **76.2 MHz** —— `sys_clk_75` @13.333 ns（运行 75.00 MHz），WNS **+0.206** ⇒ `1000/(13.333−0.206)` |
+| LUT / FF / BRAM / DSP | **2734 / 1251 / 8 / 8** |
+| CoreMark/LUTs | **8.855e-4** |
+| 绝对吞吐 | **184.4**（= CM/MHz × fmax） |
+| 上板（2026-10-11 12:19:02） | `ila_ctrl=0xC2`、CRC bit31=1、tick **1,239,079,510**、**16.52 s** @75 MHz（3000 迭代）、硬件 CM/MHz **2.4212** |
 
-> 数字来源：`.fpga-cache/reports/20261011-111332-cm_hw/`（timing/util/metrics）+ `results/coremark.csv`
-> 行 `review-fixes-v1` + `results/ila_done.capture.json`（采集清单）。**fmax 必须带时钟名与周期**
+> 数字来源：`.fpga-cache/reports/20261011-121231-cm_hw/`（timing/util/metrics）+ `results/coremark.csv`
+> 行 `clk75` + `results/ila_done.capture.json`（采集清单）。**fmax 必须带时钟名 + 周期 + 运行频率**
 > （纪律见 `HANDOFF.md` §8「口径纪律」）；引用 `coremark.csv` 的 `fmax` 列要配 `fmax_src` 列。
+> ⚠️ **运行频率与 fmax 不独立**（PITFALLS R50）：约束收紧 14.286→13.333 ns 本身就让 fmax 74.4→76.2。
 
-> 上板一行的凭据是 **`results/ila_done.capture.json`（采集清单，2026-10-11 11:19:07）**，
+> 上板一行的凭据是 **`results/ila_done.capture.json`（采集清单，2026-10-11 12:19:02）**，
 > 不是 CSV 的 mtime（CSV 被 git 跟踪，mtime 可被 checkout 刷新 —— X-02）。

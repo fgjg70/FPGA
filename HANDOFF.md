@@ -4,7 +4,7 @@
 > 再读仓库里的两颗「记忆胶囊」：
 > - `skills/fpga-riscv-a100t/SKILL.md` — 环境事实 / 命令配方 / RTL 与工具链经验（24KB）
 > - `skills/fpga-riscv-a100t/PITFALLS.md` — **错误台账，症状优先**
->   （**59 KB / 877 行，R1~R49 共 49 条**，务必先看；最值钱的新条目是
+>   （**62 KB / 921 行，R1~R51 共 51 条**，务必先看；最值钱的新条目是
 >   **R43** MMCM 漏接 `.CLKFBIN` 会把整颗 CPU 永久按在复位里、**R47** top-N 是"一堵墙"时
 >   RTL 逻辑重排期望 ≈ 0）
 >
@@ -16,27 +16,29 @@
 > | **仿真通过** | ModelSim 回归 `python tools\fpga_workflow.py verify` 打印 `RESULT : PASS` | `verify` 输出 / `.fpga-cache/logs/` |
 > | **上板验证** | 真实板卡 JTAG 烧录 + ILA 读回 | `results/ila_done.capture.json`（采集清单）+ `fpga/cap_done.log`（`CAPTURE_OK`） |
 >
-> **最后一次成功的上板验证 = 2026-10-11 11:19:07** —— 判据是 **采集清单
+> **最后一次成功的上板验证 = 2026-10-11 12:19:02** —— 判据是 **采集清单
 > `results/ila_done.capture.json`**（`captured_at_local` / `csv_sha256` / `rtl_sha256` +
-> **22 个 RTL 文件**的哈希 / `iterations=3000` / `expect_tick=1239100117`），
+> **22 个 RTL 文件**的哈希 / `iterations=3000` / `clk_hz=75000000` / `expect_tick=1239100117` / `wait_seconds=21`），
 > 它由 `ila_cap_done.tcl` 写出、**被 .gitignore 忽略**（不入库 ⇒ 全新克隆必然没有 ⇒ `hw` 必然拒绝给结论）。
 > ⚠️ **`results/ila_done.csv` 的 mtime 是假见证**（X-02）：它被 git 跟踪，克隆/checkout/重写都会刷新
 > mtime 而不产生新采集 —— **2026-10-11 10:51 实测发生**（内容逐字节未变、mtime 变"现在"，`check` [HIL] 误报"刚上过板"）。
 > **本次采集对应的正是当前冻结的 RTL**（清单里记了 22 个文件的哈希，可机器复核）。
 >
-> **fmax 口径**：任何 fmax 都必须带**时钟名 + 周期** —— 现在设计主时钟是 **`sys_clk_70` @14.286 ns**，
-> 不是 `sys_clk` @20 ns；旧写法 `1000/(20 − WNS)` 已失效。`results/coremark.csv` 的 `fmax` 列
-> 必须配 **`fmax_src`** 列一起读。完整纪律见 §8「口径纪律」。
+> **fmax 口径**：任何 fmax 都必须带**时钟名 + 周期 + 运行频率** —— 现在设计主时钟是
+> **`sys_clk_75` @13.333 ns（运行 75.00 MHz）**，不是 `sys_clk` @20 ns；旧写法 `1000/(20 − WNS)` 已失效。
+> ⚠️ **"运行频率"与 `fmax` 不是独立的评分项**（PITFALLS **R50**）：把约束从 14.286 收紧到 13.333 ns
+> 之后 fmax 自己就从 74.4 升到 **76.2** —— 所以报 fmax 必须同时说清"在哪个约束下测的"。
+> `results/coremark.csv` 的 `fmax` 列必须配 **`fmax_src`** 列一起读。完整纪律见 §8「口径纪律」。
 
 ---
 
 ## 0. 一句话现状
 
-**RV32IM 五级流水线 CPU 已在真实板卡上跑通 CoreMark v1.0（3000 次迭代 / 约 17.7 秒 /
+**RV32IM 五级流水线 CPU 已在真实板卡上跑通 CoreMark v1.0（3000 次迭代 / 约 16.5 秒 @75 MHz /
 CRC 逐位匹配官方参考值），三项评分指标与绝对吞吐齐备，赛题基础任务全部完成，
 动态分支预测与完整异常/中断两项高阶任务完成，RV32A 原子指令已完成（9 AMO + LR.W；
 SC.W 按规范恒失败），应用场景（神经网络 GEMM）已落地。
-当前 RTL/软件/工具**已全部冻结并上板验证**；**最后一次成功采集 = 2026-10-11 11:19:07**
+当前 RTL/软件/工具**已全部冻结并上板验证**；**最后一次成功采集 = 2026-10-11 12:19:02**
 （凭据 `results/ila_done.capture.json`，记了 22 个 RTL 文件的哈希）。本节表格即该版实测值。
 
 仓库：`D:\USER\Desktop\FPGA\FPGA`（git，工作区干净）
@@ -58,35 +60,39 @@ cmd /c fpga\jtag_probe.bat                       REM 改 RTL 前先确认板子�
 | 指标 | 基线 | **当前（上板验证）** |
 |---|---|---|
 | CoreMark/MHz | 0.8263 | **2.4209**（+193.0%）（仿真 ticks **413,070**）|
-| fmax | 78.4 MHz | **74.4 MHz**（**−5.1%**）|
-| CoreMark/LUTs | 2.361e-4 | **8.848e-4**（+274.8%）|
-| 绝对吞吐 | 64.8 | **180.2**（+178.1%）|
-| 资源 | — | LUT **2736** / FF **1251** / **BRAM 8** / DSP 8 |
+| fmax | 78.4 MHz | **76.2 MHz**（**−2.8%**）|
+| CoreMark/LUTs | 2.361e-4 | **8.855e-4**（+275.0%）|
+| 绝对吞吐 | 64.8 | **184.4**（+184.6%）|
+| 资源 | — | LUT **2734** / FF **1251** / **BRAM 8** / DSP 8 |
+| 设计时钟 | — | **`sys_clk_75` @13.333 ns = 75.00 MHz** |
 
 > **四个指标的来源不是同一个东西，别混**：`fmax` 与资源来自 **Vivado 综合报告**
 > （`fpga/timing.rpt` / `fpga/util.rpt`）；`CoreMark/MHz` 来自**仿真** ticks（`results/coremark.csv`）；
 > 上板只提供 tick 与 CRC 佐证。
-> **fmax 口径**：`sys_clk_70` @14.286 ns，WNS **+0.854** ⇒ `1000/(14.286−0.854) = 74.4 MHz`。
-> ⚠️ 文档旧值 69.8 MHz 用的是**失效的** `1000/(20−WNS)`（MMCM 之前）—— 所以 69.8→74.4
-> **不是本轮提上来的**，而是口径更正；对基线 78.4 的真实差距是 **−5.1%**，不是旧文写的 −11.0%。
+> **fmax 口径**：`sys_clk_75` @13.333 ns，WNS **+0.206**（WHS +0.088）⇒ `1000/(13.333−0.206) = 76.2 MHz`。
+> ⚠️ 文档旧值 69.8 MHz 用的是**失效的** `1000/(20−WNS)`（MMCM 之前）—— 所以 69.8→76.2 是
+> **①口径更正**（→74.4 @70 MHz）+ **②提频**（70→75 MHz，→76.2）两件事叠加，不是"一轮逻辑优化"；
+> 对基线 78.4 的真实差距是 **−2.8%**，不是旧文写的 −11.0%。
 
-上板（**2026-10-11 11:19:07**，**3000 迭代** @70 MHz）：`ila_ctrl=0xC2`
+上板（**2026-10-11 12:19:02**，**3000 迭代** @75 MHz）：`ila_ctrl=0xC2`
 （bit7=mmcm_locked, bit6=done, bit1=pass, bit2=illegal=0）、CRC 判定 bit31=1、
-tick **1,239,079,510**（预期 1,239,100,117，偏差 **0.002%**）、**17.70 s**、
+tick **1,239,079,510**（预期 1,239,100,117，偏差 **0.002%**；**与 70 MHz 那次逐位相同**）、
+墙钟 **16.52 s**（70 MHz 时 17.70 s，−6.7%）、
 硬件 CoreMark/MHz **2.4212**（与仿真 2.4209 吻合 0.01%）。
 > **为正确性付出的代价（照实记，不藏）**：修 R-01/R48（中断精确性两处架构缺陷）与 R-02（mtval 合规）
-> 使 LUT 2649→**2736**、FF 1234→**1251**，`CoreMark/LUTs` 因此 9.077e-4→**8.848e-4（−2.5%）**、fmax −0.25%。
-> 中断/异常路径对评分三项零贡献，换来的是两处架构级正确性；绝对吞吐仍升到 **180.2**。
-> 见 PITFALLS **R48**（陷阱没冲 EX/MEM ⇒ 被抢占指令双执行）与 **R49**（LR.W 把目标字清零）。
+> 使 LUT 2649→**2734**、FF 1234→**1251**，`CoreMark/LUTs` 因此 9.077e-4→**8.855e-4（≈−2.4%）**。
+> 中断/异常路径对评分三项零贡献，换来的是两处架构级正确性。
+> 见 PITFALLS **R48**（陷阱没冲 EX/MEM ⇒ 被抢占指令双执行）、**R49**（LR.W 把目标字清零）、
+> **R50**（换频只换抽头 + 约束收紧反而让 fmax 变高）。
 
 回归：**PASS 11，无 XFAIL**（**仿真级**，判据 `python tools\fpga_workflow.py verify`；
 `tb_units` 的检查点数**以运行时打印为准** —— 它会自己打印
 `检查点: <N>`，文档里不要写死）。
 
-> 数字来源：`results/coremark.csv` 行 **`review-fixes-v1`**（413,070 / 2.4209 / 2736 / 1251 / 74.4）
-> + `.fpga-cache/reports/20261011-111332-cm_hw/`（timing/util/metrics）
+> 数字来源：`results/coremark.csv` 行 **`clk75`**（413,070 / 2.4209 / 2734 / 1251 / 76.2，`keep`）
+> + `.fpga-cache/reports/20261011-121231-cm_hw/`（timing/util/metrics）
 > + `results/ila_done.capture.json`（`score_result=0xC9DADA56` → bit31=1、tick 1,239,079,510）。
-> **本节即当前唯一权威口径**（RTL/软件/工具已冻结、已上板）；下文标了年份的小节都是历史留档。
+> **本节即当前唯一权威口径**；`review-fixes-v1`（70 MHz 那版）与更早各节都是历史留档。
 
 ### 存储策略：**imem 与 dmem 全部走 BRAM**（默认，非可选）
 
@@ -199,7 +205,7 @@ AI 模型性能 ⚠ 软件基线可信、加速单元不计入成绩
 
 | 项 | 价值 | 难度 |
 |---|---|---|
-| **fmax 还债 78.4→74.4** | 三项指标之一，**仍是最大失分点（−5.1%）** | 中（根因已定位，见 PITFALLS R47）|
+| **fmax 还债 78.4→76.2** | 三项指标之一，**仍是最大失分点（−2.8%）** | 中（根因已定位，见 PITFALLS R47/R50）|
 | ~~mtimecmp 定时器中断（P2）~~ | ✅ **已完成**（`tb_soc_timer_irq` PASS，见第 6 节 P2）| — |
 | Cache（2 路组相联 + 突发）| 高阶任务 —— **已分析判定架构性无收益，不实现** | — |
 | AI 加速单元 + 应用场景 | 应用场景 ✅ 已完成；**加速单元的 C 读回仍待修** | 高 |
@@ -226,7 +232,7 @@ AI 模型性能 ⚠ 软件基线可信、加速单元不计入成绩
 > 修好后实测：`IMEM_REG_READ` / `LOAD_RESULT_REG` 单独开都会 timeout，
 > `BTB_GSHARE` 慢 6%。三个宏已全部回退为默认关闭（与**上板验证过的配置**一致）。
 > **下表是 2026-10-05 那次事故更正的快照**，已被 2026-10-08 的改动超越；
-> **当前数字以本节顶部（第 0 节）那张表为准**（2.4209 / 74.4 / 8.848e-4 / 180.2，冻结版）。
+> **当前数字以本节顶部（第 0 节）那张表为准**（2.4209 / 76.2 / 8.855e-4 / 184.4 @75 MHz）。
 
 | 指标 | 基线 | 更正后（2026-10-05 口径）| 变化 |
 |---|---|---|---|
@@ -273,8 +279,9 @@ CoreMark/MHz 硬件 2.3615 vs 仿真 2.3611，吻合到 0.02%。
 | p2-timer-irq | 423,527 | 2.3611 | 2526 | 70.9 | keep（P2 完成时·含完整中断）|
 | lv4-noidid → lv4-final | 413,070 | **2.4209** | 2769 | 69.5 | keep（2026-10-08 删冗余 `if_id_reg`）|
 | issues-1234 / review-fix | 413,070 | 2.4209 | 2649 | 69.8 | keep（2026-10-08 交付配置）|
-| **review-fixes-v1** | **413,070** | **2.4209** | **2736** | **74.4** | **keep（2026-10-11 冻结版 = 当前交付配置）**|
-| — 同版 FF / BRAM / DSP | — | — | FF **1251** / BRAM 8 / DSP 8 | — | 上板：tick **1,239,079,510**、`ila_ctrl=0xC2`（2026-10-11 11:19:07）|
+| **clk75** | **413,070** | **2.4209** | **2734** | **76.2** | **keep（2026-10-11 75 MHz 冻结版 = 当前交付配置）**|
+| — 同版 FF / BRAM / DSP | — | — | FF **1251** / BRAM 8 / DSP 8 | — | 上板：tick **1,239,079,510**、`ila_ctrl=0xC2`（2026-10-11 12:19:02）|
+| review-fixes-v1 | 413,070 | 2.4209 | 2736 | 74.4 | keep（**历史**：同日 70 MHz 版）|
 
 > ⚠️ `fmax` 一列**混着两种口径**（MMCM 之前是 `1000/(20−WNS)`）——
 > 引用时必须看 `results/coremark.csv` 的 **`fmax_src`** 列（`tool`/`hand`），不要横向直接比大小。
@@ -443,7 +450,7 @@ D:\USER\Desktop\FPGA\FPGA\
 |---|---|---|
 | GPIO_OUT / GPIO_IN | 0xA0000000 / 04 | |
 | 64 位周期计数器 | 0xA0000008 / 0C | CoreMark 计时依赖它 |
-| UART TX / STAT / RX / RSTAT | 0xA0000010/14/18/1C | 115200 8N1，回环自测通过 |
+| UART TX / STAT / RX / RSTAT | 0xA0000010/14/18/1C | 115200 8N1，回环自测通过；`BAUD_DIV = CLK_HZ/115200`（@75 MHz = **651** ⇒ 实际 **115,207.4** baud，+0.0064%）|
 | **MMIO_MARK** | 0xA0000020 | W：单拍脉冲，ILA 触发点 |
 | **MMIO_RESULT** | 0xA0000024 | W/R：写锁存并置 done |
 | MTIMECMP / MTIME | 0xA0000028..0034 | **已实现**（P2 定时器中断：`mtime` 复用周期计数器，`mtime >= mtimecmp` → `mip.MTIP`）|
@@ -508,7 +515,7 @@ python tools\fpga_workflow.py synth --prog cm_hw --tag <标签> --record
 （它们每次构建都被覆盖，不留档就无法复核历史数字）。
 
 **上板复验：✅ 已完成**（见 P4 节）—— `score_result` bit31=1；当时 tick 508,155,404。
-**当前交付配置（2026-10-11 冻结版）为 tick 1,239,079,510 / 17.70 s @70 MHz / 3000 迭代**（见第 0 节）。
+**当前交付配置（2026-10-11 75 MHz 冻结版）为 tick 1,239,079,510 / 16.52 s @75 MHz / 3000 迭代**（见第 0 节）。
 注意 `results/coremark.csv` 里 `bram-v1`/`HARDWARE-VERIFIED`
 两行的 LUT=2481 用当前代码复现不出来，详见下方"P1 已完成"小节的说明。
 
@@ -866,7 +873,7 @@ ERROR: [Labtools 27-2269] No devices detected on target
 
 ### 【先跑这个】统一工作流入口
 
-`skills/fpga-riscv-a100t/PITFALLS.md` 记了 **R1~R49** 共 **49** 条坑，最高频的是 **R1「改了 A 忘了同步 B」——
+`skills/fpga-riscv-a100t/PITFALLS.md` 记了 **R1~R51** 共 **51** 条坑，最高频的是 **R1「改了 A 忘了同步 B」——
 全部静默失败**。这套工具把那条纪律从"靠人记"变成"机器每次都查"：
 
 ```bat
@@ -918,7 +925,9 @@ python tools/build_sw.py sw/coremark/*.c -I sw/coremark -D ITERATIONS=3000 \
     -D 'FLAGS_STR="-Os -march=rv32im -mabi=ilp32"' --march=rv32im \
     -o sim/prog/cm_hw.hex
 # 【R35】每次性能提升后必须重算 ITERATIONS (CoreMark 要求 >=10 s, 否则成绩无效)
-#   当前值: 3000 迭代 @70 MHz -> 17.70 s, expect_tick=1,239,100,117 (由 mk_cm_hw.py 写入清单)
+#   当前值: 3000 迭代 @75 MHz -> 16.52 s, expect_tick=1,239,100,117, wait_seconds=21
+#   (都由 tools/mk_cm_hw.py 写进 sim/prog/cm_hw.build.json, 不要在别处硬编码)
+#   31 位 tick 硬闸门: expect_tick > 2^31-1 直接 [BLOCK] (当前占 57.7%, 上限 ~5199 迭代)
 
 # 普通裸机程序 (build_sw 已自动包含 crt0.S 和 libc_min.c, 不要再手动传)
 python tools/build_sw.py sw/hello.c sw/portme.c -I sw -o sim/prog/hello.hex
@@ -1020,24 +1029,26 @@ rem 回退 SPIx1（同样验证过）: powershell -File tools\flash_boot.ps1 -If
 反例：RAS+BTB128 让 CoreMark/MHz +1.0%，但 fmax −4.6%、CoreMark/LUTs −4.4%，净亏，已回退。
 **优化前先测量** —— 当初就是靠剖析发现分支惩罚占 29%，才决定先做预测而不是 M 扩展。
 
-#### 【口径纪律】fmax 必须带**时钟名 + 周期**，否则不许进文档
+#### 【口径纪律】fmax 必须带**时钟名 + 周期 + 运行频率**，否则不许进文档
 
-引入 MMCM 之后，核心跑在 **`sys_clk_70`（14.286 ns）** 域上，而 `sys_clk`（20 ns）那一行
+引入 MMCM 之后，核心跑在 **`sys_clk_75`（13.333 ns = 75.00 MHz）** 域上，而 `sys_clk`（20 ns）那一行
 **已不是设计主时钟**。因此：
 
-1. **任何进入文档/报告的 fmax 都必须写出"哪条时钟 @ 多少 ns"**，并给出推导式。
-   只写 `fmax = 74.6` 会被误读成 20 ns 域的成绩。
+1. **任何进入文档/报告的 fmax 都必须写出"哪条时钟 @ 多少 ns（运行频率）"**，并给出推导式。
+   只写 `fmax = 76.2` 会被误读成 20 ns 域的成绩。
 2. 正确口径：**`fmax = 1000 / (该时钟周期 − 该路径 WNS)`**。
-   修好后的 `tools/fpga_workflow.py` 会直接打印完整推导，格式如：
-   `fmax 74.6 MHz   sys_clk_70 @14.286ns, 运行 70.00 MHz; WNS +0.888ns -> fmax=1000/(14.286 - 0.888)`
-   —— 以工具当次输出为准，本文不复述数字。
+   修好后的 `tools/fpga_workflow.py` 会直接打印完整推导，当前输出形如：
+   `fmax 76.2 MHz  sys_clk_75 @13.333ns, 运行 75.00 MHz; WNS +0.206ns -> fmax=1000/(13.333 - 0.206)`
+   —— 以工具当次输出为准。
 3. **旧口径 `1000/(20 − WNS)` 只在 MMCM 之前的 50 MHz 版本上成立，别再照抄**
    （PITFALLS **R42.1**；根因分析见 `CODE-REVIEW-PLAN.md` **M-01/X-01**）。
-4. `results/coremark.csv` 的 **`fmax` 列目前混着两种口径**（约 22 行是人工修正值，其余是旧工具
-   算出的虚高值）⇒ **引用该列时必须同时看 `fmax_src` 列**（`tool` / `hand` 来源标注，
-   由 Lead 在 M-01 落地时统一补齐并重算整列）。
+4. **`fmax` 与"运行频率"不是独立的两项**（PITFALLS **R50**）：约束从 14.286 收紧到 13.333 ns 后，
+   fmax 自己从 74.4 升到 **76.2**（工具在更紧的目标下更卖力）。所以报 fmax 时必须同时说清
+   **"在哪个约束/运行频率下测的"**，否则"提频"会被误当成"逻辑优化"。
+5. `results/coremark.csv` 的 **`fmax` 列混着两种口径**（人工修正值 + 旧工具算出的虚高值）⇒
+   **引用该列时必须同时看 `fmax_src` 列**（`tool` / `hand` 来源标注）。
 
-> 一句话：**"快了 1 MHz"只有配上"哪条时钟、周期多少、WNS 多少"才是一个可复核的结论。**
+> 一句话：**"快了 1 MHz"只有配上"哪条时钟、周期多少、运行频率多少、WNS 多少"才是一个可复核的结论。**
 
 #### 【检查门】`check` 现在有 **7 项**，第 7 项是**综合警告门**（M-06）
 
@@ -1064,7 +1075,7 @@ rem 回退 SPIx1（同样验证过）: powershell -File tools\flash_boot.ps1 -If
 
 另外 `check` 有一节非编号的 `[HIL] 硬件在环健康度`：上板数据超过 1 小时未更新 → `[warn]`。
 > ✅ 它**已改用采集清单见证**（与 `hw` 同源），输出形如
-> `最后一次上板数据: 2026-10-11 11:19:07  (9 分钟前)   [来源: 采集清单]`。
+> `最后一次上板数据: 2026-10-11 12:19:02  (N 分钟前)   [来源: 采集清单]`。
 > ⚠️ **mtime 永远不能当见证**：`results/ila_done.csv` 被 git 跟踪，2026-10-11 10:51
 > 实测过"内容未变、mtime 变现在"（X-02）；唯一见证是 `results/ila_done.capture.json`。
 
@@ -1127,7 +1138,7 @@ rem 回退 SPIx1（同样验证过）: powershell -File tools\flash_boot.ps1 -If
 ## 12. 建议的接手顺序
 
 ```
-1. 读 skills/fpga-riscv-a100t/PITFALLS.md   (10 分钟, 能省你几小时; 现已 R1~R49)
+1. 读 skills/fpga-riscv-a100t/PITFALLS.md   (10 分钟, 能省你几小时; 现已 R1~R51)
 2. 读 skills/fpga-riscv-a100t/SKILL.md      (环境与命令配方)
 3. 读 HANDOFF-WORKFLOW.md                   (10 轮优化循环 + 判定阈值 + 建议的子命令)
 4. 读 tools/README.md                       (统一工作流: doctor/check/verify/profile/synth/metrics/report)
@@ -1146,7 +1157,7 @@ rem 回退 SPIx1（同样验证过）: powershell -File tools\flash_boot.ps1 -If
 > `skills/fpga-workflow/SKILL.md` 里的标准动作。
 
 **当前三项指标已是可参赛水平（基础任务全完成 + BTB + 完整异常中断）。
-最大失分点是 fmax（78.4 → 74.4，还差 5.1%）。**
+最大失分点是 fmax（78.4 → 76.2，还差 2.8%）。**
 
 ---
 
@@ -1168,12 +1179,12 @@ rem 回退 SPIx1（同样验证过）: powershell -File tools\flash_boot.ps1 -If
 `PITFALLS` 本轮新增：R4（handler 破坏自己要用的寄存器）、R5（调试标志与事件不同流水级）、
 一·五（逐拍诊断: 粘滞标志 + `$fatal` 会让"猜"变成唯一手段）。
 
-git 提交：`e49f801`（原始）→ `97be06f` → `2ca639c` → `9083059` → …（本项目累计 **130** 次提交，
-`git rev-list --count HEAD` @2026-10-11）
+git 提交：`e49f801`（原始）→ `97be06f` → `2ca639c` → `9083059` → …（本项目累计 **>130** 次提交，
+`git rev-list --count HEAD` 现查 @2026-10-11）
 
 > ⚠️ **上面这张表与本节都是早期轮次的记录**（当时回归 6~7 项）。**当前状态以第 0 节为准**：
 > 回归 **PASS 11**（**仿真级**，判据 `fpga_workflow.py verify`）、四项指标 CoreMark/MHz **2.4209** /
-> fmax **74.4 MHz**（`sys_clk_70` @14.286 ns，WNS +0.854）/ CoreMark-LUTs **8.848e-4** / 绝对吞吐 **180.2**。
-> ⚠️ "RTL 已上板验证"这句**必须带时间**：最后一次采集 = **2026-10-11 11:19:07**
+> fmax **76.2 MHz**（`sys_clk_75` @13.333 ns，WNS +0.206）/ CoreMark-LUTs **8.855e-4** / 绝对吞吐 **184.4**。
+> ⚠️ "RTL 已上板验证"这句**必须带时间**：最后一次采集 = **2026-10-11 12:19:02**
 > （`results/ila_done.capture.json` + `fpga/cap_done.log`）；本节括号里的 tick 536,943,384 / 10.74 s
 > 是 2026-10-08 的历史值。本节保留是为了记录当时的演进过程。

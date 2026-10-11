@@ -86,9 +86,9 @@ cmd /c D:\USER\Desktop\FPGA\FPGA\fpga\build.bat
 ```python
 # ✅ 现在直接用工具: python tools\fpga_workflow.py metrics
 #    M-01 已修: 解析器从 Clock Summary 取各时钟周期, 在 Intra Clock Table 里按【设计主时钟】
-#    (sys_clk_70) 取 setup WNS, fmax = 1000/(T - WNS), 并把推导整行打印出来, 例如:
-#      fmax 74.4 MHz   sys_clk_70 @14.286ns, 运行 70.00 MHz; WNS +0.854ns -> fmax=1000/(14.286 - 0.854)
-#    ⇒ 只写 "fmax=xx" 的文档一律不合格: 必须带时钟名与周期。
+#    (sys_clk_75) 取 setup WNS, fmax = 1000/(T - WNS), 并把推导整行打印出来, 当前输出:
+#      fmax 76.2 MHz  sys_clk_75 @13.333ns, 运行 75.00 MHz; WNS +0.206ns -> fmax=1000/(13.333 - 0.206)
+#    ⇒ 只写 "fmax=xx" 的文档一律不合格: 必须带时钟名 + 周期 + 运行频率。
 # ⚠️ 反面教材(已失效, 别再照抄): 从 `sys_clk` 行取第一个数再按硬编码 20ns 换算 ——
 #    引入 MMCM 后 `sys_clk` 行不再有 setup 端点, 该正则会静默抓到【脉宽余量 WPWS=7.000】,
 #    报出虚高的 76.92 MHz。见 CODE-REVIEW-PLAN.md M-01 / X-01, PITFALLS R42.1。
@@ -164,12 +164,14 @@ python tools/fpga_workflow.py metrics --vs bram-v1       # 与历史某行对比
 **输入**：`fpga/timing.rpt` + `fpga/util.rpt` + 一个 ticks 值（来自仿真或上板）
 **输出**：`{cm_per_mhz, fmax, cm_per_lut, abs, delta_vs}`
 
-> **【fmax 口径纪律】`fmax` 这个数必须能回答"哪条时钟、周期多少、WNS 多少"。**
-> 引入 MMCM 后核心跑在 **`sys_clk_70` @14.286 ns**（不是 `sys_clk` @20 ns），
+> **【fmax 口径纪律】`fmax` 这个数必须能回答"哪条时钟、周期多少、运行频率多少、WNS 多少"。**
+> 引入 MMCM 后核心跑在 **`sys_clk_75` @13.333 ns（运行 75.00 MHz）**（不是 `sys_clk` @20 ns），
 > 所以旧公式 `1000/(20 − WNS)` **已失效**（`CODE-REVIEW-PLAN.md` M-01）。
-> 修好的工具会打印完整推导，形如
-> `fmax 74.6 MHz  sys_clk_70 @14.286ns, 运行 70.00 MHz; WNS +0.888ns -> fmax=1000/(14.286 - 0.888)`
+> 修好的工具会打印完整推导，当前形如
+> `fmax 76.2 MHz  sys_clk_75 @13.333ns, 运行 75.00 MHz; WNS +0.206ns -> fmax=1000/(13.333 - 0.206)`
 > —— **照抄这个格式，不要只写"fmax=xx"**。
+> ⚠️ **运行频率与 fmax 不独立**（PITFALLS **R50**）：约束从 14.286 收紧到 13.333 ns 后，
+> fmax 自己就从 74.4 升到 **76.2** —— 所以"提频"同时也是在动 fmax 这一项，报的时候要写清约束。
 > 另外 `results/coremark.csv` 的 `fmax` 列**混着两种口径**，引用时必须配 **`fmax_src`** 列读。
 
 **建议逻辑**（把第 [5] 步的纪律编码进去）：
@@ -227,7 +229,7 @@ stale = [f for f in RTL_AND_TOP_FILES if mtime(f) > mtime(ILA_BIT)]
 {
   "program": "cm_hw", "iterations": 3000,
   "done": 1, "pass": 1, "fail": 0, "illegal": 0,
-  "crc_ok": 1, "ticks": 1239079510, "seconds": 17.70,
+  "crc_ok": 1, "ticks": 1239079510, "seconds": 16.52, "clk_hz": 75000000,
   "cm_per_mhz": 2.4212, "csv": "results/ila_done.csv",
   "source": "results/ila_done.capture.json (采集清单)"
 }
