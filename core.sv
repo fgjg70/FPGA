@@ -1088,16 +1088,16 @@ module core
   );
 
   // --------------------------------------------------------------------------
-  // C-10: 前递预选的"随 ID/EX 打一拍"寄存器 (并行于 id_ex_reg, 4 位 FF)
+  // C-10: 前递预选的"随 ID/EX 打一拍"寄存器 (并行于 id_ex_reg, 4 位 FF + C-14 32 位)
   // --------------------------------------------------------------------------
   // 【为什么不能塞进 id_ex_reg.sv】那个文件不在本轮写入范围; 而且这里只需要
-  // 4 位, 单独一组 FF 更省事 (FF +4 对 1254 可忽略)。
-  // 【⚠ 必须与 id_ex_reg.sv 的控制优先级逐字一致: flush > bubble > stall】
-  //   两者用同一组信号 (any_redir / id_ex_bubble / pipe_stall), 于是永远同步:
-  //     · any_redir 或 id_ex_bubble -> 清成 FWD_REG (该拍进 EX 的是气泡)
-  //     · pipe_stall                -> 保持 (消费者被扣在 ID, 预选值下次重算)
-  //     · 其余                      -> 装入 fwd_*_pre (消费者这拍末进 EX)
-  //   改 id_ex_reg 的控制逻辑时**必须同步改这里** (PITFALLS R1: 改了 A 忘 B)。
+  // 36 位, 单独一组 FF 更省事。
+  // 【控制逻辑】**只有 `!pipe_stall`**: 硬冻结时保持; 其余 (含 flush/气泡拍) 一律装入
+  //   `fwd_*_pre`/`id_jr_p` —— 那些拍的值是 don't-care (论证见下面候选 B 那段)。
+  //   ⚠ 曾经要求"与 id_ex_reg 的 flush>bubble>stall 优先级逐字一致", 该要求已删除:
+  //   只有"清 0"会与 id_ex_reg 的 flush 相位耦合, 而现在不需要清 0。
+  //   **唯一保留的约束**: 本块必须在 `hold_mem=1` 的拍保持 ⇒ 用 `!pipe_stall`
+  //   (hold_mem ⊆ pipe_stall) ✓。
   // 【为什么组合上安全】预选描述的是"下一拍"的 ex_mem_*/mem_wb_* 位置关系:
   //   下一拍 EX/MEM 段的产生者 = 本拍 ID/EX; 下一拍 MEM/WB 段的产生者 = 本拍
   //   EX/MEM。只有在两者与本拍 ID 里的消费者**同拍前进**时才成立 —— 而
@@ -1109,13 +1109,35 @@ module core
   //   等价性推导见 pred_ok 处 (依赖 pred_target[1:0]==0, 由断言钉住)。
   wire [31:0] id_jr_p = if_pred_target - id_imm;
 
+  // --------------------------------------------------------------------------
+  // 【候选 B / 2026-10-11】删掉原来的 `else if (any_redir || id_ex_bubble) 清 FWD_REG`
+  // --------------------------------------------------------------------------
+  // 【为什么删 (时序)】评分流 top-50 里 **37 条**的终点就是这个块:
+  //   24 条 `id_ex_jr_p_reg/CE`、7+6 条 `id_ex_fwd_a_reg[*]_rep/D`。top-1 逐跳是
+  //     `ex_mem/ctrl_reg[wb_src] → (EX 目标加法链 7×CARRY4) → pred_ok → redirect_raw
+  //      → redirect → any_redir → id_ex_fwd_a1(fo=37) → LUT4 → 本块 D`
+  //   —— 即 **EX 的重定向组合锥同时挂在 D 端 mux 与 CE 上**。删掉清 0 之后:
+  //     D 端只依赖 `fwd_*_pre` / `id_jr_p`(都是本拍就绪的短逻辑), CE 只依赖 `pipe_stall`
+  //     ⇒ 整条 EX 重定向锥从本块上摘掉 (尾部 ≈1.5~2.0ns)。
+  // 【为什么删是等价的 (don't-care 论证, 不需要任何 bug-fix 故事)】
+  //   本块唯一的契约: "T 拍装进去的值 = T+1 拍 EX 里那条指令该用的值"。
+  //   `fwd_*_pre(T)`/`id_jr_p(T)` 正是按 **T 拍的消费者 = T 拍的 ID 指令**算的
+  //   ⇒ 只要那条指令**真的进 EX**, 装它就是对的。
+  //   而清 0 生效的三种来源, T+1 进 EX 的槽位**都是气泡或被杀的错路指令**:
+  //     · trap_enter / mret_taken ⇒ `id_ex_flush = trap_redir || br_redir_r` = 1
+  //       (core.sv:1049; `trap_redir = trap_enter || mret_taken` @:1045) ⇒ 气泡;
+  //     · br_redir_eff (误判检出拍, C-15 之后不冲 ID/EX) ⇒ 错路 X0 进 EX, 但它在
+  //       T+1 被 EX/MEM 的 `trap_enter || br_redir_r` 冲掉、副作用被 `redir_kill` 全门控 ⇒ 值无关;
+  //     · br_redir_r (检出后一拍) ⇒ id_ex_flush=1 ⇒ 气泡;
+  //     · id_ex_bubble (load_use) ⇒ T+1 进 EX 的是气泡 ⇒ 无关。
+  //   ⇒ 清 0 的那一拍, 值**永远**是 don't-care; 而真正进 EX 的指令, 其选择会在
+  //     "它还在 ID 的那一拍"被重新算好 ⇒ 删掉它没有任何可观测差异 (ticks 必须逐位不变)。
+  // 【CE 为什么必须保留 !pipe_stall】硬冻结 (lsu_stall / ex_busy) 时 ID/EX 与 EX 都不前进
+  //   ⇒ 选择也必须保持 (否则 EX 那条指令的选择会被重算成"下一拍消费者"的值)。
+  //   (原来的注释说"必须与 id_ex_reg 优先级逐字一致"—— 那条要求在删掉清 0 后不再需要:
+  //    本块只在 `!pipe_stall` 时更新, 而 flush/bubble 拍的值是 don't-care。)
   always_ff @(posedge clk or posedge rst) begin
     if (rst) begin
-      id_ex_fwd_a <= FWD_REG;
-      id_ex_fwd_b <= FWD_REG;
-      id_ex_jr_p  <= 32'd0;
-    end
-    else if (any_redir || id_ex_bubble) begin
       id_ex_fwd_a <= FWD_REG;
       id_ex_fwd_b <= FWD_REG;
       id_ex_jr_p  <= 32'd0;

@@ -347,6 +347,15 @@ wait_on_run impl_1
 if {[get_property PROGRESS [get_runs impl_1]] != "100%"} { error "IMPL FAILED" }
 open_run impl_1
 report_timing_summary -file $root/fpga/timing_ila.rpt
+# Per-hop detail for the worst paths. `report_timing_summary` only carries a handful
+# of paths, so when this flow FAILS the gate we cannot tell WHICH family is short --
+# that is exactly the evidence needed to decide "step the clock down" vs "fix RTL".
+# 2026-10-11: at 128.125 MHz the ILA flow reported 210 failing endpoints but the
+# summary kept only ~10 paths and no per-hop detail, so the failure families were
+# unknowable after the run (the report gets overwritten by the next build).
+# Mirrors build.tcl's own `timing_paths.rpt`/`timing_cells.rpt` diagnostics.
+report_timing -max_paths 100 -nworst 2 -input_pins -nets -file $root/fpga/timing_ila_paths.rpt
+puts "ILA_REPORT=timing_ila.rpt+timing_ila_paths.rpt"
 report_utilization   -file $root/fpga/util_ila.rpt
 
 # ===========================================================================
