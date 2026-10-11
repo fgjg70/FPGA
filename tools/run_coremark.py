@@ -14,6 +14,12 @@ import argparse, os, re, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
+
+# 【不许再有一份 fmax 解析副本】2026-10-11 风格审查抓出: 本文件曾是 fpga_workflow.py
+# 那个 M-01 bug 的**未修副本**(按 `^sys_clk` 取 WNS + 硬编码 `1000/(20-wns)`)。
+# 直接复用已修好的实现, 让"同一个口径"只有一个定义。
+sys.path.insert(0, HERE)
+from fpga_workflow import parse_worst_setup_path  # noqa: E402
 MSIM = r'D:\software\tools\Modelsim\win64'
 LIC = os.path.join(MSIM, 'LICENSE.TXT')
 GCC_DIR = r'D:\software\tools\riscv-none-elf\xpack-riscv-none-elf-gcc-15.2.0-1\bin'
@@ -132,10 +138,14 @@ def main():
         bram = m3.group(1) if m3 else ''
     if os.path.exists(tim) and lut:
         t = open(tim).read()
-        m4 = re.search(r'^sys_clk\s+([-\d.]+)', t, re.M)
-        if m4:
-            wns = float(m4.group(1))
-            fmax = '%.1f' % (1000.0 / (20.0 - wns))
+        # 【不许按时钟名 + 列对齐取 WNS】见 parse_worst_setup_path 的 docstring:
+        # MMCM 之后 `sys_clk` 行只剩脉宽端点(WNS/TNS 列为**空**), 而
+        # `^sys_clk\s+([-\d.]+)` 会跨过空列抓到 WPWS(7.000) ⇒ fmax 被算成
+        # 1000/(20-7.000)=76.92, 且**对 RTL 时序变化完全不敏感**(实测曾恒等 30+ 次)。
+        # 现在: 路径块里的字段是**带标签**的, 周期从报告的 Requirement 取, 不硬编码。
+        w = parse_worst_setup_path(t)
+        if w:
+            fmax = '%.1f' % (1000.0 / (w["requirement_ns"] - w["slack_ns"]))
     print('  LUT=%s FF=%s BRAM=%s fmax=%s MHz' % (lut, ff, bram, fmax))
 
     if args.record:

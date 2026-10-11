@@ -2938,12 +2938,18 @@ def main() -> int:
     # 【M-02】全量缓存命中时 exit 0 会让 CI 把"没跑"当"通过"。自动化调用请带这个开关。
     p.add_argument("--require-run", action="store_true",
                    help="若本次一项都没真跑(全 SKIP)则返回非零 —— 给 CI / 自动循环用")
-    p.add_argument("--imem_comb_read", action="store_true",
+    # 【R31/R17 族 · 2026-10-11 风格审查抓出】argparse 把 `--a_b` 与 `--a-b` 当**两个
+    # 不同选项**: 传错那一个**不会报错**, 而是**静默按默认配置运行**。历史上 verify 用
+    # 下划线、synth 用连字符, 两组 help 文本逐字相同 —— 正是"宏/开关没生效却不报错"
+    # 那一族(本仓库最忌讳的静默失效)。
+    # 统一做法: **规范形式一律连字符**; 并在 main() 里把 argv 的长选项名 `_` 归一成 `-`,
+    # 于是两种拼写都能落到同一个选项上, 老命令也不会失效。
+    p.add_argument("--imem-comb-read", action="store_true",
                    help="[回退] imem 用组合读 (IMEM_COMB_READ, LUT ROM); "
                         "默认已是寄存读 -> BRAM, 一般不需要这个开关")
-    p.add_argument("--imem_reg_read", action="store_true",
+    p.add_argument("--imem-reg-read", action="store_true",
                    help="[已废弃] imem 寄存读现已是默认行为; 保留仅为兼容旧命令")
-    p.add_argument("--load_reg", action="store_true",
+    p.add_argument("--load-reg", action="store_true",
                    help="load 结果由 MEM/WB 寄存器给出 (LOAD_RESULT_REG); 默认组合")
     p.add_argument("--gshare", action="store_true",
                    help="方向预测器用 gshare (BTB_GSHARE); 默认纯局部 Smith")
@@ -3067,7 +3073,21 @@ def main() -> int:
                    help="开启综合器寄存器重定时 (形式等价变换, ticks 必须不变)")
     p.set_defaults(func=cmd_synth)
 
-    args = ap.parse_args()
+    # 【长选项名归一: `_` -> `-`】argparse 把 `--imem_comb_read` 与 `--imem-comb-read`
+    # 当成**两个不同选项**: 传了没注册的那一个**不会报错**, 而是**静默按默认配置运行**
+    # (R31/R17 那一族, "开关没生效却不报错")。历史上 verify 子命令注册下划线、
+    # synth 子命令注册连字符, 两组 help 文本还逐字相同 —— 2026-10-11 风格审查抓出。
+    # 现在规范形式统一为连字符, 并在入口把 argv 的长选项名归一, 于是老命令(下划线)
+    # 依然有效, 而两种拼写一定落到同一个选项上。
+    # ⚠ 只归一 `=` **左边**的选项名 —— 否则 `--imem=sim/prog/lu_bench.hex` 的值会被
+    #   改成 `lu-bench.hex`(我自己第一版就踩了这个, 写在这里免得下一个人重犯)。
+    def _norm_long_opt(a: str) -> str:
+        if not a.startswith("--"):
+            return a
+        name, eq, val = a.partition("=")
+        return "--" + name[2:].replace("_", "-") + eq + val
+
+    args = ap.parse_args([_norm_long_opt(a) for a in sys.argv[1:]])
     return args.func(args)
 
 
