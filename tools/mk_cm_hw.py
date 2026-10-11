@@ -195,10 +195,19 @@ def main():
     # 这里硬拦住, 不让那个坑有机会出现 (R35 的配套闸门)。
     # ------------------------------------------------------------------
     TICK_MAX = 2 ** 31 - 1
-    if expect_tick > TICK_MAX:
-        iters_max = TICK_MAX // tpi
-        print("  [BLOCK] ITERATIONS=%d 的预期 tick %d 超过 31 位上限 %d"
-              % (iters, expect_tick, TICK_MAX))
+    # 【安全余量】不许贴着上限取值: 实测硬件 tick 与仿真外推有 **0.151% 偏差**
+    # (105MHz 档: 硬件 1,359,770,617 vs 预期 1,361,826,000)。方向虽有利, 但
+    # "把 0.016% 的余量当安全"是赌 —— 一旦某次改动让硬件 tick 偏高就回绕,
+    # 而回绕后看起来像个"变快了"的好成绩(正是本闸门要防的)。故留 0.5% 余量。
+    TICK_SAFETY = 1.005
+    # ⚠ 余量必须进**判据**, 不能只写在提示里 —— 我第一版就是只改了消息文本,
+    #   结果 4730 仍被放过(等于余量没生效)。这类"闸门看着在、其实没拦"的形态
+    #   比没有闸门更危险, 所以下面用 eff_max 做比较。
+    eff_max = int(TICK_MAX / TICK_SAFETY)
+    if expect_tick > eff_max:
+        iters_max = int(TICK_MAX / (tpi * TICK_SAFETY))
+        print("  [BLOCK] ITERATIONS=%d 的预期 tick %d 超过**含 %.1f%% 安全余量**的有效上限 %d"
+              % (iters, expect_tick, (TICK_SAFETY - 1) * 100, eff_max))
         print("          按实测基准外推, ITERATIONS 最大只能到 **%d**。" % iters_max)
         print("          越过它 tick 会在硬件上回绕, 而结果看起来像'变快了' —— 必须同时")
         print("          扩宽 mmio_subsys 的计数器与 score_result 的打包方式。")
