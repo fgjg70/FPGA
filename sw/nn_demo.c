@@ -47,6 +47,13 @@ typedef unsigned long long u64;
 
 extern void uart_send_char(char c);
 extern void report_done(void);
+extern void report_fail(void);     /* W-01: 自检失败 -> tohost=2 -> tb 变红 */
+
+/* ---- 期望值 (W-01) --------------------------------------------------------
+ * 256 个字全为 1 时 checksum() 的 FNV-1a 结果。**独立复算过** (不读本程序的
+ * 输出): 用 Python 逐字复刻 checksum() 的 `h ^= 1; h *= 16777619` 迭代 256 次
+ * 得 0x78d762c5, 与运行时打印一致。写错这个常量, 回归必须变红。 */
+#define PROBE_ALL_ONES_FNV 0x78d762c5u
 
 /* ---- 被测尺寸 (改这里即可调规模) ---- */
 #define N 16
@@ -187,6 +194,9 @@ static void gemm_hw_unpack(void) {
 
 int main(void) {
     u64 t0, t1;
+    /* W-01: 自检结果 —— 必须一路传到结尾并编码进 tohost, 否则算错也是绿灯 */
+    u32 probe_ok = 0u;      /* 最小读写链 + 校验和自检 */
+    u32 sw_ok    = 0u;      /* 软件 GEMM 对独立参考实现 */
 
     /* ---- 先做一组自检, 把"是软件 bug 还是核的 bug"分清楚 ----
      * 64 位乘法会调 libgcc 的 __muldi3 (RV32 没有 64 位乘), 而 32 位乘走 M 扩展。
@@ -216,7 +226,11 @@ int main(void) {
     {
         for (int i = 0; i < N; i++) for (int j = 0; j < N; j++) C[i][j] = 1;
         u32 h1 = checksum();                       /* 256 个 1 的 FNV-1a */
-        puts_("probe: all_ones_checksum="); puthex(h1); puts_("\n");
+        puts_("probe: all_ones_checksum="); puthex(h1);
+        puts_(" expect=");                  puthex(PROBE_ALL_ONES_FNV);
+        puts_(" probe_ok=");                putu(h1 == PROBE_ALL_ONES_FNV ? 1u : 0u);
+        puts_("\n");
+        probe_ok = (h1 == PROBE_ALL_ONES_FNV) ? 1u : 0u;   /* W-01: 判据 */
         for (int i = 0; i < N; i++) for (int j = 0; j < N; j++) C[i][j] = 0;
     }
 
@@ -250,6 +264,7 @@ int main(void) {
     puts_("  checksum_ref="); puthex(ref); puts_("\n");
     puts_("  mismatch=");     putu(bad);   puts_("\n");
     puts_("  sw_match=");     putu((cs == ref && bad == 0u) ? 1u : 0u); puts_("\n");
+    sw_ok = (cs == ref && bad == 0u) ? 1u : 0u;        /* W-01: 判据 */
 
     /* ======================================================================
      * 加速路径: 同一个问题, 走 GEMM 加速单元
@@ -264,7 +279,10 @@ int main(void) {
     if (!gemm_hw_present()) {
         puts_("  --- accelerator ---\n");
         puts_("  not_present=1 (未综合进本 bitstream; 设 GEMM_EN=1 重新构建)\n");
-        report_done();
+        /* W-01: 加速单元不在场只说明"这条路径没测", 软件路径的自检仍然必须判 */
+        puts_("  verdict_sw_ok="); putu(probe_ok && sw_ok); puts_("\n");
+        if (probe_ok && sw_ok) report_done();
+        else                   report_fail();
         return 0;
     }
     u32 rb = 0xDEADBEEFu;
@@ -405,6 +423,18 @@ int main(void) {
         }
     }
 
-    report_done();
+    /* ---- 结论必须编码进 tohost, 不能只打印 (W-01) ------------------------
+     * 硬件路径的判据是"逐元素 vs 独立参考"以及"vs 软件结果"两者都为 0;
+     * 软件路径的判据在上面的 sw_match。任何一条不过 -> tohost=2 -> tb 变红。 */
+    {
+        u32 all_ok = probe_ok && sw_ok && (bad_hw == 0u) && (diff_sw == 0u);
+        puts_("  verdict_probe="); putu(probe_ok);
+        puts_(" sw=");             putu(sw_ok);
+        puts_(" hw_vs_ref=");      putu(bad_hw == 0u ? 1u : 0u);
+        puts_(" hw_vs_sw=");       putu(diff_sw == 0u ? 1u : 0u);
+        puts_(" all_ok=");         putu(all_ok); puts_("\n");
+        if (all_ok) report_done();
+        else        report_fail();
+    }
     return 0;
 }

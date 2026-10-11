@@ -391,6 +391,11 @@ module tb_sw;
     if (n_wb != 0)
       $display("  CPI        = %0d.%02d  (cycles/wb)",
                cycles / n_wb, ((cycles * 100) / n_wb) % 100);
+    // 【W-03】取指对齐自检必须**判失败**, 不能只打印红字然后照旧 PASS。
+    // 这条检查是 "IMEM 寄存读" 那次改动 (R30) 的唯一安全网: 静默错位的症状是
+    // 程序行为莫名错乱, 而本 tb 之前无论 n_align_err 是多少都打印 RESULT : PASS。
+    if (n_align_err != 0)
+      $fatal(1, "[tb_sw] FAIL: 取指错位 %0d 次 (if_pc 与 if_instr 不同源)", n_align_err);
     $display("  RESULT : PASS");
     $finish;
   end

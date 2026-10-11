@@ -130,8 +130,27 @@ stop_time(void)
                               (g_crcmatrix == CRC_MATRIX_EXPECTED) &&
                               (g_crcstate  == CRC_STATE_EXPECTED);
         unsigned int ticks  = (unsigned int)MYTIMEDIFF(stop_time_val, start_time_val);
+        unsigned int valid  = crc_ok;
+#if CM_MIN_SECS_CHECK
+        /* 【W-02】上板/评分构建: 让 bit31 同时承担"时长 >= 10 s"的自证。
+         * ILA 是硬件上**唯一**的回报通道 (串口不通), 没有第二个寄存器位置可
+         * 放这个结论, 所以把它并入"结果有效"这一位:
+         *   bit31 = CRC 全部匹配  AND  实测 tick / 真实主频(HW_CLK_HZ) >= 10 s
+         * 结论: bit31=0 时无论原因是 CRC 错还是时长不足, 工具都拒绝给 PASS。 */
+        {
+            unsigned int secs = (unsigned int)time_in_secs((CORE_TICKS)ticks);
+            valid = crc_ok && (secs >= 10u);
+            ee_printf("[portme] rate gate: clk=%lu Hz ticks=%u secs=%u min10s=%s\n",
+                      (unsigned long)CLOCKS_PER_SEC, ticks, secs,
+                      (secs >= 10u) ? "ok" : "TOO SHORT");
+        }
+#endif
+        /* 仿真/回归构建 (未定义 HW_CLK_HZ) 故意**不打印、不加任何字符串**:
+         * 仿真侧 1 次迭代本来就不是有效成绩, 而多一条打印会让 core_portme.o
+         * 的代码/rodata 变大 -> 链接布局平移 -> CoreMark 的 ticks 从 413070
+         * 漂到 413072 (实测, 纯布局效应: 基准代码逐字节未变)。 */
         *(volatile unsigned int *)MMIO_RESULT_ADDR =
-            (crc_ok ? 0x80000000u : 0x00000000u) | (ticks & 0x7fffffffu);
+            (valid ? 0x80000000u : 0x00000000u) | (ticks & 0x7fffffffu);
     }
 }
 
@@ -171,16 +190,19 @@ portable_fini(core_portable *p)
     p->portable_id = 0;
 }
 
-/* CoreMark 结束后由 core_main.c 调 exit(); 我们借它通知宿主。
- * 注意: 报告"跑完"和"PASS"是两件事 —— 结果是否有效由 crc 行判定。 */
+/* CoreMark 结束后由 core_main.c 调 exit(); 我们借它把结论通知宿主 (W-01)。
+ *
+ * 【为什么必须按 code 区分】以前这里无论 code 是多少都写 tohost=1, 而
+ * sim/tb_sw.sv 只看 tohost: 于是"CRC 不匹配"也报 RESULT : PASS —— 11 项回归里
+ * CoreMark 这一项在结果错时仍是绿灯。现在:
+ *   code == 0 -> tohost=1 (tb_sw 判 PASS)
+ *   code != 0 -> tohost=2 (tb_sw $fatal -> 回归变红)
+ * 写完之后自旋, 保证 crt0 在 main 返回后不会再写一次 tohost=1 把失败覆盖掉。 */
 void
 exit(int code)
 {
-    (void)code;
-    /* 结果已在 stop_time() 上报; 这里保留一次写只是为了兼容可能直接走到 exit() 的流程 */
-    *(volatile unsigned int *)MMIO_RESULT_ADDR =
-        (unsigned int)MYTIMEDIFF(stop_time_val, start_time_val);
-    TOHOST_ADDR = 1u;
+    /* 结果已在 stop_time() 上报给 ILA; 这里把判定结果编码进 tohost 给仿真 tb */
+    TOHOST_ADDR = (code == 0) ? 1u : 2u;
     for (;;)
     {
     }

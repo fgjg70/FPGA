@@ -83,9 +83,29 @@ int  ee_printf(const char *fmt, ...);
 #define MEM_LOCATION "STATIC"
 #endif
 /* ticks 就是 CPU 周期, 所以 CLOCKS_PER_SEC = 主频。
- * 本核在达芬奇Pro 上跑 50 MHz (xdc: create_clock -period 20)。 */
-#ifndef CLOCKS_PER_SEC
-#define CLOCKS_PER_SEC 50000000
+ *
+ * 【W-02】主频只能有**一个来源**: 构建时传 `-DHW_CLK_HZ=70000000`, 它必须
+ * 等于 `fpga/top_a100t.sv` 里顶层参数 `.CLK_HZ(...)` (XDC 的 sys_clk_70)。
+ * 定义 HW_CLK_HZ 同时表示"这是上板/评分构建":
+ *   ① CLOCKS_PER_SEC = 该频率 -> time_in_secs()/Iterations-per-Sec 才是真的
+ *      (以前硬编码 50 MHz, 70 MHz 硬件上所有时间口径偏 1.4 倍: 3000 迭代真实
+ *       17.70 s 会被算成 24.78 s, ">=10 s 才有效" 这条门也宽了 1.4 倍)
+ *   ② CoreMark 自己的 ">=10 s 才算有效成绩" 判定生效 (CM_MIN_SECS_CHECK=1)
+ * 仿真 tb_sw 确实是 50 MHz (sim/tb_sw.sv:22) 且只跑 1 次迭代 (约 8 ms),
+ * 所以仿真/普通回归**不定义**该宏: CLOCKS_PER_SEC=50000000 且不做 >=10 s 判定
+ * (仿真不是评分运行, 拿它当"有效成绩"反而是错的)。 */
+#ifdef HW_CLK_HZ
+#  define CLOCKS_PER_SEC HW_CLK_HZ
+#  ifndef CM_MIN_SECS_CHECK
+#    define CM_MIN_SECS_CHECK 1
+#  endif
+#else
+#  ifndef CLOCKS_PER_SEC
+#    define CLOCKS_PER_SEC 50000000
+#  endif
+#  ifndef CM_MIN_SECS_CHECK
+#    define CM_MIN_SECS_CHECK 0
+#  endif
 #endif
 
 /* Data Types :
@@ -208,6 +228,10 @@ typedef struct CORE_PORTABLE_S
 /* target specific init/fini */
 void portable_init(core_portable *p, int *argc, char *argv[]);
 void portable_fini(core_portable *p);
+
+/* 【W-01】不返回: 把"算得对不对"编码进 tohost 后自旋 (见 core_portme.c)。
+ * 以前 exit() 无论 code 是多少都写 tohost=1, 于是 CRC 不匹配也是绿灯。 */
+void exit(int code);
 
 #if !defined(PROFILE_RUN) && !defined(PERFORMANCE_RUN) \
     && !defined(VALIDATION_RUN)

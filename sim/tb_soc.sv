@@ -19,7 +19,9 @@ module tb_soc;
   import rv32_pkg::*;
 
   localparam time TCLK_HALF  = 10ns;      // 50 MHz
-  localparam int  MAX_CYCLES = 400000;
+  // 【W-11】超时周期数由 +max_cycles=<N> 覆盖 (矩阵给 tb_soc 传 400000)。
+  // 原先这里完全没有 plusarg 解析, 矩阵的超时配置被静默忽略。
+  int unsigned max_cycles = 400000;
   localparam time BIT_TIME   = 8680ns;    // 1/115200 s
 
   // tohost 约定地址 = DMEM_BASE + 0x2000 (见 sw/link.ld)
@@ -177,9 +179,10 @@ module tb_soc;
   end
 
   initial begin
+    if (!$value$plusargs("max_cycles=%d", max_cycles)) max_cycles = 400000;
     repeat (4) @(posedge clk);
     rst = 1'b0;
-    $display("[tb_soc] reset released, PC=0x%08x", PC_RESET);
+    $display("[tb_soc] reset released, PC=0x%08x, max_cycles=%0d", PC_RESET, max_cycles);
   end
 
   // ---- 主循环: 只看 tohost / 非法指令 / 超时, 不做延时 ----
@@ -187,10 +190,10 @@ module tb_soc;
     if (!rst && !finished) begin
       cycles <= cycles + 1;
 
-      if (cycles > MAX_CYCLES) begin
+      if (cycles > max_cycles) begin
         finished = 1'b1;
         $display("[tb_soc] FAIL: timeout (%0d cycles), PC=0x%08x instr=0x%08x",
-                 MAX_CYCLES, dbg_pc, dbg_instr);
+                 max_cycles, dbg_pc, dbg_instr);
         $fatal(1);
       end
 

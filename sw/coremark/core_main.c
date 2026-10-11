@@ -132,6 +132,8 @@ main(int argc, char *argv[])
     if (sizeof(struct list_head_s) > 128)
     {
         ee_printf("list_head structure too big for comparable data!\n");
+        /* W-01: 这是硬失败, 不能靠 crt0 写 tohost=1 让回归变绿 */
+        exit(1);
         return MAIN_RETURN_VAL;
     }
     results[0].seed1      = get_seed(1);
@@ -379,12 +381,21 @@ for (i = 0; i < MULTITHREAD; i++)
                   default_num_contexts * results[0].iterations
                       / time_in_secs(total_time));
 #endif
+#if CM_MIN_SECS_CHECK
+    /* 【W-02】只有上板/评分构建 (定义 HW_CLK_HZ) 才做这条判定:
+     * 仿真 tb_sw 跑 1 次迭代 (约 8 ms), 拿它当"有效成绩"是错的;
+     * 而 CLOCKS_PER_SEC 只有在上板构建里才等于真实主频 (70 MHz),
+     * 也就是这条判定只有在它有意义的地方才生效。 */
     if (time_in_secs(total_time) < 10)
     {
         ee_printf(
             "ERROR! Must execute for at least 10 secs for a valid result!\n");
         total_errors++;
     }
+#else
+    ee_printf("[portme] min-10s rule not enforced (sim build, CM_MIN_SECS_CHECK=0), "
+              "secs=%u\n", (unsigned int)time_in_secs(total_time));
+#endif
 
     ee_printf("Iterations       : %lu\n",
               (long unsigned)default_num_contexts * results[0].iterations);
@@ -447,5 +458,13 @@ for (i = 0; i < MULTITHREAD; i++)
     /* And last call any target specific code for finalizing */
     portable_fini(&(results[0].port));
 
-    return MAIN_RETURN_VAL;
+    /* 【W-01】把"算得对不对"编码进 tohost 交给宿主判定 (见 core_portme.c):
+     *   total_errors == 0 -> tohost=1 (sim/tb_sw.sv 判 PASS)
+     *   total_errors != 0 -> tohost=2 (sim/tb_sw.sv $fatal -> 回归变红)
+     * 这一条覆盖: 三个数据类 CRC 不匹配 / seedcrc 无法识别 /
+     * check_data_types() 失败 / (上板构建) 时长 < 10 s。
+     * 【为什么不能靠 crt0 写 tohost】crt0 在 main 返回后**无条件**写 1,
+     * 会把这里的 2 覆盖掉 —— 所以必须走不返回的 exit()。 */
+    exit((int)(total_errors != 0));
+    return MAIN_RETURN_VAL;   /* exit() 不返回; 保留这句只为保持上游结构 */
 }

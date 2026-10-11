@@ -81,19 +81,37 @@ def main():
     rc, out = run(cmd, work, shell=True)
     print(out[-4000:] if rc != 0 else out[out.find('--- program output ---'):][:2500])
 
+    # ---- 失败判据 (W-10): 必须在解析 ticks **之前**判 ----------------------
+    # 【为什么】CoreMark 算错时打的是 "ERROR! list crc ...", 而 harness/本工具的
+    # 崩溃判据原先只有 "** Error"/"Fatal" —— 于是 CRC 不匹配也是绿灯 + exit 0,
+    # 还会被 --record 写进 results/coremark.csv。
+    # 另外 (W-01) 三个程序现在都把结论编码进 tohost: 算错 -> tohost=2 -> tb_sw
+    # 立即 $fatal, 日志段根本不会被 dump 出来。所以"解析不到 Total ticks"本身
+    # 也已经是失败信号, 这里必须给出**可读的原因**, 而不是一句"未能解析"。
+    bad = [l.strip() for l in re.findall(
+        r'^.*(?:ERROR!|Cannot validate operation|Errors detected).*$', out, re.M)]
+    tb_fail = [l.strip() for l in re.findall(r'^.*\[tb_sw\] FAIL:.*$', out, re.M)]
+    tb_ok = ('RESULT : PASS' in out)
+    if bad or tb_fail or not tb_ok:
+        print('=' * 60)
+        for line in (bad + tb_fail)[:6]:
+            print('  %s' % line)
+        if not tb_ok:
+            print('  [FAIL] 仿真没有 "RESULT : PASS" —— 程序已把"算得对不对"'
+                  '编码进 tohost (W-01), 说明它自判失败')
+        print('  [FAIL] CoreMark 结果不可信 -> 不记录 (exit 1)')
+        return 1
+
     ticks = re.search(r'Total ticks\s*:\s*(\d+)', out)
     iters = re.search(r'Iterations\s*:\s*(\d+)', out)
     if not ticks or not iters:
-        print('!! 未能解析 Total ticks / Iterations'); return 1
+        print('!! 仿真 PASS 但未能解析 Total ticks / Iterations'); return 1
     tick = int(ticks.group(1)); it = int(iters.group(1))
     cmmhz = it * 1e6 / tick
     print('=' * 60)
     print('  ticks = %d   iterations = %d' % (tick, it))
     print('  CoreMark/MHz = %.4f' % cmmhz)
-
-    # crc 校验
-    bad = re.findall(r'ERROR!.*crc.*', out)
-    print('  CRC errors: %d %s' % (len(bad), '(OK)' if not bad else '(FAIL!)'))
+    print('  CRC/有效性: OK (无 ERROR! 行, 且有 RESULT : PASS)')
 
     # --- 3. 资源 / fmax ---
     lut = ff = bram = fmax = ''

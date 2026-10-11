@@ -11,7 +11,8 @@
 //       写 N+1     -> 测试 N 失败, 结束仿真 FAIL
 //       0 (初值)   -> 尚未写入, 继续运行
 //   - 监视 core 的 dbg_illegal 粘滞标志: 任何非法指令都判失败;
-//   - 超时保护: 超过 MAX_CYCLES 未结束则报超时失败 (附当前 PC/指令)。
+//   - 超时保护: 超过 max_cycles 未结束则报超时失败 (附当前 PC/指令)。
+//     周期上限由 +max_cycles=<N> 覆盖 (默认 20000); 回归矩阵给的是 200000。
 // 运行: sim\run_core.bat   (先跑 tools/asm.py 生成 hex)
 // ============================================================================
 
@@ -19,7 +20,11 @@ module tb_core;
   import rv32_pkg::*;
 
   localparam time TCLK_HALF  = 5ns;      // 100 MHz 等效
-  localparam int  MAX_CYCLES = 20000;
+  // 【W-11】超时周期数必须可由 +max_cycles=<N> 覆盖: 回归矩阵给 tb_core 传的是
+  // 200000, 而这里原先是写死的 20000 —— 矩阵的超时配置是**死配置**, 五个
+  // tb_core* 项实际都在 20000 拍超时。写更长的新程序会得到假的 "timeout"。
+  // (写法照抄 sim/tb_sw.sv:104 的 $value$plusargs。)
+  int unsigned max_cycles = 20000;
 
   // tohost 约定地址 = DMEM_BASE + 0x2000 (见 sw/link.ld)
   localparam logic [31:0] TOHOST_ADDR     = DMEM_BASE + 32'h2000;
@@ -128,19 +133,20 @@ module tb_core;
       end
     end
 
+    if (!$value$plusargs("max_cycles=%d", max_cycles)) max_cycles = 20000;
     repeat (4) @(posedge clk);
     rst = 1'b0;
-    $display("[tb_core] 复位释放, PC=0x%08x", PC_RESET);
+    $display("[tb_core] 复位释放, PC=0x%08x, max_cycles=%0d", PC_RESET, max_cycles);
   end
 
   always_ff @(posedge clk) begin
     if (!rst && !finished) begin
       cycles <= cycles + 1;
 
-      if (cycles > MAX_CYCLES) begin
+      if (cycles > max_cycles) begin
         finished = 1'b1;
         $display("[tb_core] FAIL: 超时 (%0d 周期), 最后 PC=0x%08x instr=0x%08x",
-                 MAX_CYCLES, dbg_pc, dbg_instr);
+                 max_cycles, dbg_pc, dbg_instr);
         $fatal(1);
       end
 

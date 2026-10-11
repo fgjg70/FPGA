@@ -49,8 +49,32 @@ void start_time(void) { t_start = read_cycles(); }
 void stop_time(void)  { t_stop  = read_cycles(); }
 CORE_TICKS get_time(void) { return t_stop - t_start; }
 
-/* 把结果回报给宿主 (tb / ILA): 写 tohost = 1 */
-void report_done(void) { TOHOST = 1u; }
+/* ============================================================================
+ * 结论上报 (W-01) —— tohost 是本平台唯一能被 tb **自动判定**的通道。
+ * ----------------------------------------------------------------------------
+ * 约定 (见 sim/tb_sw.sv:129-138):
+ *   写 1      -> [tb_sw] 判 PASS, 并把日志缓冲区 dump 出来
+ *   写非 0/1  -> [tb_sw] $fatal -> 回归变红
+ *
+ * 【为什么必须由程序自己写】以前不管程序算出什么都无条件打印
+ * "RESULT : PASS", 于是算错也是绿灯 (11 项里有 3 项的结论只靠人眼看日志)。
+ * 所以每个程序都必须把"算得对不对"编码进 tohost:
+ *   全部自检通过 -> report_done()  (tohost = 1)
+ *   任何自检失败 -> report_fail()  (tohost = 2, 并**自旋**)
+ *
+ * report_fail() 必须自旋: main 返回后 crt0.S 会无条件再写一次 tohost=1,
+ * 若不挡住, 失败标志会被这一笔覆盖掉 (而覆盖发生在几个周期之后, 靠时序
+ * 侥幸让 tb 看到 2 是不允许的 —— 判定必须与写法无关地确定)。
+ * ========================================================================== */
+#define TOHOST_OK   1u
+#define TOHOST_FAIL 2u
+
+void report_done(void) { TOHOST = TOHOST_OK; }
+
+void report_fail(void) {
+    TOHOST = TOHOST_FAIL;
+    for (;;) { }          /* 见上方: 绝不让 crt0 再把 tohost 覆盖成 1 */
+}
 
 void _exit(int code) {
     (void)code;
