@@ -917,8 +917,16 @@ def test_matrix() -> list[dict]:
     """回归矩阵。rtl 用 'rtl' 表示全集, 'core' 表示仅 CPU 核 (不含 mmio/top)。"""
     core = discover_core_sv()
     return [
+        # 【W-09】tb_units 的 AMO 译码检查在 `` `ifdef A_EN `` 里, 而原来这里 defines
+        # 是空的 => 那 26 条 chk() 是**死代码**(实测检查点 243 -> 268, delta=25,
+        # 与源码计数 26-1 完全吻合)。README/CODE-MAP 一直宣称 tb_units 含 AMO 译码检查,
+        # 所以这里必须显式打开, 否则宣传的覆盖是假的。
+        # desc 里的"194"也删掉了 —— 检查点数以**运行时打印**为准(本工程自己的口径),
+        # 写死的数字会随 RTL 改动过期。
         {"name": "tb_units", "rtl": core, "tb": "sim/tb_units.sv",
-         "plus": [], "max_cycles": None, "timeout": 300, "desc": "194 项单元检查"},
+         "defines": ("A_EN",),
+         "plus": [], "max_cycles": None, "timeout": 300,
+         "desc": "单元回归 (检查点数以运行时打印为准)"},
         {"name": "tb_core_basic", "top": "tb_core", "rtl": "rtl", "tb": "sim/tb_core.sv",
          "imem": "sim/prog/basic.hex",
          "plus": [], "max_cycles": 200000, "timeout": 600, "desc": "系统级自校验"},
@@ -1115,6 +1123,24 @@ def _cmd_verify(args) -> int:
         print(f"  [BLOCK] 找不到 {MSIM}/vsim.exe")
         return 1
 
+    # ---- 前置: LSU 字节通道等价性 (E-03 的机器化) --------------------------
+    # tools/check_equiv.py 穷举 675 万组 (rd/head/off/size/uns/split), 验证交付版
+    # load_store_unit 的"4:1 字节 mux"与旧 64 位桶形移位器**逐位等价** —— 这是
+    # 交付版 LSU 唯一一处非平凡的等价性论证 (load_store_unit.sv:201 引用它)。
+    # 它此前活在仓库之外(.rr2_scratch)、未被跟踪、无人运行; 现在每次回归都跑 (约 5 s),
+    # 失败即中止 —— 否则"已穷举验证"这句话永远只是注释里的一句声称。
+    eq = abspath("tools/check_equiv.py")
+    if os.path.exists(eq):
+        rc_eq, out_eq, _ = run([PYTHON, eq, "--quiet"], timeout=600)
+        if rc_eq == 0 and "CHECK_EQUIV=PASS" in out_eq:
+            print("  [前置] LSU 字节通道等价性: CHECK_EQUIV=PASS (675 万组穷举)")
+        else:
+            print("  [前置] LSU 字节通道等价性: CHECK_EQUIV=FAIL —— 中止回归")
+            print(_indent(_tail_interesting(out_eq)))
+            return 1
+    else:
+        print("  [前置] 缺 tools/check_equiv.py —— 跳过等价性检查 (建议恢复)")
+
     state = load_state()
     results = []
 
@@ -1225,7 +1251,12 @@ def _cmd_verify(args) -> int:
         # 都会打印 "RESULT : PASS", 所以要求它**显式出现** (白名单, 不是黑名单):
         # 之前用 `"PASS" in out.upper()` 会把编译失败/超时误判成通过。
         saw_pass = "RESULT : PASS" in out2
-        crashed = ("** Error" in out2) or ("Fatal" in out2)
+        # 【W-10 配套】判据扩展: CoreMark 的 CRC 不匹配打的是 `ERROR! list crc ...`,
+        # 既不是 "** Error" 也不是 "Fatal" —— 原来那种 CRC 失败会**绿灯通过**
+        # (PITFALLS 的验收清单明确要求三个 CRC 匹配, 但那条从来没有自动化)。
+        crashed = (("** Error" in out2) or ("Fatal" in out2)
+                   or ("ERROR!" in out2) or ("Errors detected" in out2)
+                   or ("Cannot validate operation" in out2))
         timed_out = "TIMEOUT after" in out2
         got_pass = saw_pass and not crashed and not timed_out
 
@@ -1929,13 +1960,20 @@ def cmd_synth(args) -> int:
             # 并**拒绝写 bitstream**。这里必须显式当致命错误 —— 否则一个时序违约的构建
             # 会被 parse_reports 算出一个"看起来很正常"的 fmax (例如 WNS=-1 -> 47.6 MHz),
             # 再被 append_csv 盖上 keep, 最终变成"一次正常的测量回归"记进 results/。
-            for l in out.splitlines():
-                if l.strip().startswith("BUILD_TIMING"):
-                    print("        " + l.strip())
-            if "BUILD_TIMING=FAIL" in out:
+            #
+            # ⚠ 判据必须**整行精确匹配**: Vivado 会把执行过的 Tcl 源行回显进日志,
+            #   而 build.tcl 的注释里就写着 `#   puts "BUILD_TIMING=FAIL"` ——
+            #   用 `"BUILD_TIMING=FAIL" in out` 会在**时序通过**时也误报致命错误
+            #   (实测踩到, 见 2026-10-11 那次 synth: MET=1 却报 [FAIL])。
+            tl = [l.strip() for l in out.splitlines()]
+            for l in tl:
+                if l.startswith("BUILD_TIMING"):
+                    print("        " + l)
+            if any(l == "BUILD_TIMING=FAIL" or l.startswith("BUILD_TIMING=FAIL:")
+                   for l in tl):
                 print("  [FAIL] 时序未收敛 (BUILD_TIMING=FAIL) —— build.tcl 已拒绝写 bitstream。")
                 print("         这不是脚本坏了, 是**门生效**。修 RTL/约束后重跑; "
-                      "不要用 --allow-timing-fail 之类的方式绕过。")
+                      "不要用旁路开关绕过。")
                 return 1
             if ok and missing:
                 print(f"  [FAIL] 请求的架构宏**没有生效**: {missing}")
@@ -2456,12 +2494,20 @@ def cmd_hw(args) -> int:
               f"   prog={man.get('prog')} iters={man.get('iterations')} "
               f"clk={man.get('clk_hz')} expect_tick={man.get('expect_tick')}")
         if man.get("rtl_sha256"):
-            alg = man.get("rtl_sha_alg")
-            if alg == RTL_SHA_ALG:
-                note = (" (与当前 RTL 一致)" if sha256_tree() == man["rtl_sha256"] else
-                        " (**与当前 RTL 不一致** —— 这份上板证据不是当前 RTL 跑出来的!)")
-            else:
+            # 清单目前不写 rtl_sha_alg (只写 rtl_sha256)。这里**假定**它就是
+            # RTL_SHA_ALG —— 这个假定是**实证过的**: 2026-10-11 用当前 RTL 做的
+            # ILA 构建里, build_ila.tcl 打出的 ILA_RTL_SHA 与本文件 sha256_tree()
+            # 的结果逐字节一致 (61e28d8c4b6a5d9e…), 两个独立实现 (Tcl+certutil vs
+            # Python hashlib) 互证。若哪天算法改动, 这里会报"与当前 RTL 不一致",
+            # 从而立刻暴露 (而不是静默放过)。
+            alg = man.get("rtl_sha_alg") or RTL_SHA_ALG
+            if alg != RTL_SHA_ALG:
                 note = f" (清单声明的算法是 {alg!r}, 与 {RTL_SHA_ALG!r} 不同, 不做对比)"
+            elif sha256_tree() == man["rtl_sha256"]:
+                note = " (与当前 RTL 一致)"
+            else:
+                note = (" (**与当前 RTL 不一致** —— 这份上板证据不是当前 RTL 跑出来的! "
+                        "上板结论对当前代码无效)")
             print(f"  RTL 指纹 : {str(man['rtl_sha256'])[:16]}…{note}")
     if not witnessed:
         print()
@@ -2636,12 +2682,17 @@ def cmd_hw(args) -> int:
     # 头部与新鲜度已经在函数开头打印过, 这里不再重复
     print(f"  ila_ctrl     = 0x{ctrl:02X}  -> locked={locked} done={done} pass={p} fail={f} illegal={illegal}")
     print(f"  score_result = 0x{res:08X}")
-    print(f"    bit31 = {crc}  -> CRC 判定 {'全部匹配官方参考值' if crc else '不匹配 !!'}")
+    # 【W-02 后 bit31 的语义变了】原来 = "三个 CRC 匹配"; 现在 = "CRC 匹配 **且** 时长>=10s"
+    # (软件侧把 secs>=10 并进了这一位, 因为赛事规则要求成绩必须跑满 10 秒)。
+    # 文案必须跟着改, 否则读的人会把"跑了 8 秒"当成"结果有效"。
+    print(f"    bit31 = {crc}  -> 结果有效 (CRC 匹配 且 时长>=10s): "
+          f"{'是' if crc else '否 !!'}")
     print(f"    tick  = {tick:,}")
     print(f"    iterations = {iters}      [来源: {iters_src}]")
     print(f"    CoreMark/MHz = {cmmhz:.4f}")
+    secs_ok = secs >= 10.0
     print(f"    时长 = {secs:.2f} s @{clk_hz/1e6:.0f}MHz"
-          f"  (赛题要求 >= 10 s: {'满足' if secs >= 10 else '不满足 !!'})"
+          f"  (赛题要求 >= 10 s: {'满足' if secs_ok else '不满足 !!'})"
           f"   [clk 来源: {clk_src}]")
     print("    " + pc_note())
     if expect_tick:
@@ -2658,7 +2709,10 @@ def cmd_hw(args) -> int:
         print("    [注意] 当前用的是 50MHz —— 若 bitstream 已是 70MHz 版,")
         print("           时长/CoreMark-MHz 都会错 (必须显式传 --clk-hz 70000000)")
 
-    ok = bool(locked and done and p and not f and not illegal and crc and tick_ok)
+    # secs_ok 必须计入: 赛事硬性要求 >= 10 s, 而它此前**只被打印、不参与判定**
+    # (W-02 之前 bit31 也不含它, 所以一个 8 秒的成绩会被判 PASS)。
+    ok = bool(locked and done and p and not f and not illegal and crc
+              and tick_ok and secs_ok)
     # 【证据门槛】没有采集见证 / 数据陈旧时,**绝不**给出 "上板验证 PASS"。
     # 注意这里用 `witnessed or allow_unwitnessed`: 旁路见证是显式行为, 且结论降级为
     # UNVERIFIED —— 让"没证据"在读的人眼里一眼可见, 而不是混在 PASS 里。
@@ -2677,6 +2731,7 @@ def cmd_hw(args) -> int:
               "下面的结论**不构成上板验证**。")
     print(f"\n  => 判据逐项: locked={locked}(需1) done={done}(需1) pass={p}(需1)"
           f" fail={f}(需0) illegal={illegal}(需0) crc={crc}(需1)"
+          f" secs>=10={secs_ok}(需1)"
           + (f" tick偏差={tick_dev:.3f}%(需<={args.tick_tol_pct}%)" if tick_dev is not None else ""))
     print(f"  => 上板验证 "
           f"{'PASS' if (ok and witnessed and fresh) else ('UNVERIFIED' if (ok and not witnessed) else 'FAIL')}")

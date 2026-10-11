@@ -28,6 +28,7 @@ R35 的公式按">=10 s"给下限；但**时钟变快不影响拍数**，只压�
 """
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -39,6 +40,28 @@ CM_SRC = ["core_main.c", "core_list_join.c", "core_matrix.c",
           "core_state.c", "core_util.c", "core_portme.c", "ee_printf.c"]
 
 
+def read_clk_hz() -> int:
+    """从 `fpga/top_a100t.sv` 的 `.CLK_HZ(<N>)` 读真实系统时钟 —— **单一事实来源**。
+
+    【为什么必须读而不是写 70_000_000】(W-02)
+    `sw/coremark/core_portme.h` 的 CLOCKS_PER_SEC 曾经停在 50 MHz (MMCM 之前的值),
+    于是硬件侧"必须跑满 10 秒才算有效成绩"的判定**宽了 1.4 倍**
+    (1300 迭代 @70 MHz 真实 7.67 s 会被算成 10.74 s 并判合法)。
+    现在上板/评分构建靠 `-D HW_CLK_HZ=<真实频率>` 打开时长自证; 如果这里的频率与
+    `top_a100t.sv` 的 MMCM 配置不一致, 自证就变成自欺。所以两处必须同源。
+    """
+    p = os.path.join(REPO, "fpga", "top_a100t.sv")
+    try:
+        with open(p, encoding="utf-8", errors="replace") as f:
+            m = re.search(r"\.CLK_HZ\s*\(\s*([\d_]+)\s*\)", f.read())
+        if m:
+            return int(m.group(1).replace("_", ""))
+    except OSError:
+        pass
+    print("  [warn] 读不到 top_a100t.sv 的 .CLK_HZ(...) —— 退回 70 MHz")
+    return 70_000_000
+
+
 def main():
     if len(sys.argv) > 1:
         iters = int(sys.argv[1])
@@ -46,6 +69,7 @@ def main():
         iters = 3000
     opt = "-Os"
     march = "rv32im"
+    clk_hz = read_clk_hz()
     out = os.path.join(REPO, "sim", "prog", "cm_hw.hex")
 
     cmd = [PY, os.path.join(HERE, "build_sw.py")]
@@ -60,6 +84,10 @@ def main():
             return 1
     cmd += ["--include=" + os.path.join(REPO, "sw", "coremark"),
             "-D", "ITERATIONS=%d" % iters,
+            # 【W-02 配套, 必须传】定义 HW_CLK_HZ => core_portme.h 把它当作
+            # CLOCKS_PER_SEC 并打开 CM_MIN_SECS_CHECK(>=10 s 自证)。不传 = 硬件侧
+            # 的时长门静默失效, 而打印出来的秒数还会按 50 MHz 算 (少报 1.4 倍)。
+            "-D", "HW_CLK_HZ=%d" % clk_hz,
             # 必须是**一个** argv 元素, 且内含双引号 —— 这是 shell 里做不到的部分
             "-D", 'FLAGS_STR="%s -march=%s -mabi=ilp32"' % (opt, march),
             "--march=" + march, "--opt=" + opt, "-o", out]
@@ -87,7 +115,7 @@ def main():
     #   而三处只要漏改一处, 抓取就会落在程序跑完之前 (读到 score_result=0)。
     # 该文件被 .gitignore 忽略 (sim/prog/*.build.json), 是**构建产物**不是源码。
     # ------------------------------------------------------------------
-    clk_hz = 70_000_000
+    clk_hz = clk_hz                     # 与编译期 -D HW_CLK_HZ 同源 (见 read_clk_hz)
     # 预期拍数按实测基准外推 (1300 迭代 = 536,943,384 拍); 以实测为准, 这里只做等待窗口
     expect_tick = int(round(536_943_384 / 1300 * iters))
     # 必须 > 实际运行时间: int(17.70) + 5 = 22 s, 与 build-repo 的契约一致
