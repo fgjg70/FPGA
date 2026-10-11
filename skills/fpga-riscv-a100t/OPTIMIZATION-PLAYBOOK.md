@@ -325,7 +325,7 @@ date, tag, iters, ticks, coremark_per_mhz, lut, ff, bram, dsp, fmax_mhz, status,
 | **把 `!redirect` 折进冒险使能**（ref5 V4 的一步） | **反噬** | 当时看是"扁平化"，实际造出 `比较 → redirect → hit → pipe_stall → 地址` 一条 **10 级**的路，V6 才拆掉 |
 | **付 IPC 换 fmax**（主核实验 F / A'） | **净亏 −4.8%** | fmax 69.2 → **76.0（+9.8%）**，但 ticks 423,527 → **488,863（+15.4%）** ⇒ 吞吐 163.3 → **155.5** |
 | **radix-4 除法器** | 评分收益**精确 0**，fmax **−3.88%** | 见 §3.2 盲区 6 |
-| **RAS + BTB128** | 净亏 | CoreMark/MHz **+1.0%**，但 fmax **−4.6%**、CoreMark/LUTs **−4.4%** |
+| **RAS + BTB128** | 净亏 | CoreMark/MHz **+1.0%**，但 fmax **−4.6%**、CoreMark/LUTs **−4.4%** ——（**2026-10-11 更新**：gshare 已由 C-1 复活；RAS 的否决理由"栈顶 mux 在 `pc_target` 路径上"**已被 C-1 动摇**，`--ras` 现在 ticks 净赚 −0.36%，**须重测 fmax**）|
 | `trap/mret` 让路（把 `pc_target` 从 4:1 降到 2:1） | **实测失败，已回退** | `tb_core_trap` 第 1 组挂：`mret` 那拍 pc 装入 0 而非 `mepc`。**"理论等价"再次没成立**，根因未定位（需要逐拍基线对照轨迹，见 R27 的思路） |
 
 ---
@@ -517,7 +517,8 @@ ref5 = 137.25 MHz（852 LUT，无前递/无预测/无 M·A·CSR·trap），主�
 ---
 
 **盲区 9 — 失败实验的价值不在"此路不通"，而在「它逼出的那条不变量」。**
-主核实验 D 想把 load 结果改成寄存器前递，结果 `PASS 11 → PASS 4`。看起来是纯粹的失败，
+主核实验 D 想把 load 结果改成寄存器前递，结果 `PASS 11 → PASS 4`（**当时基线是 11 项；
+现在矩阵是 12 项**，见 `test_matrix()`）。看起来是纯粹的失败，
 但它暴露了一条不变量：
 
 > dmem 是**寄存读** ⇒ 数据比地址**晚一拍** ⇒ **"用寄存器前递"必须让"数据在锁存沿上已经是对的"成立。**
@@ -630,7 +631,7 @@ python tools\fpga_workflow.py profile --prog cm_rv32im  # 停顿构成 (预估 I
 
 # ============ 3) 功能回归 ============
 python tools\fpga_workflow.py verify
-#   期望: PASS 11 (含 CoreMark CRC 自校验)
+#   期望: PASS 12 (含 CoreMark CRC 自校验; "11" 是新增 tb_sw_lu_bench 之前的基线)
 
 # ============ 4) 综合 A (第一次) ============
 python tools\fpga_workflow.py synth --tag <tag>-a --record
@@ -699,7 +700,7 @@ python tools\fpga_workflow.py metrics --vs <base-tag>
 
 ### 5.2 动手后（8 条）
 
-- [ ] `verify` 是 **PASS 11**（含 CoreMark CRC 自校验）？
+- [ ] `verify` 是 **PASS 12**（含 CoreMark CRC 自校验；"11" 是新增 `tb_sw_lu_bench` 之前的基线）？
 - [ ] **自证串**打出来了吗？（证明宏/开关真的被解析 = 输入生效）
 - [ ] **FF / LUT 数变了没**？（物理生效；"复制"类改动 FF 必须涨）
 - [ ] **WNS 和关键路径变了吗**？（时序生效；报告逐位相同 = 空转，直接停）

@@ -65,7 +65,8 @@ CoreMark/LUTs **−4.4%** → 净亏，已回退。只看一项就会误判成"�
 ## 4. XFAIL 语义（**历史章节，当前已无 XFAIL 项**）
 
 > ⚠️ 本节写于 `tb_core_trap` 还是 XFAIL 的时候。**现在 `expect_fail_ok` 已全部摘掉、
-> 11 项全 PASS、无 XFAIL**（见 `tools/README.md`）。保留本节是因为这套语义仍适用于
+> **12 项**全 PASS、无 XFAIL**（见 `tools/README.md`；"11 项"是新增 `tb_sw_lu_bench` 之前的基线）。
+> 保留本节是因为这套语义仍适用于
 > 未来任何"预期失败"的测试；**不要以为现在还有 XFAIL**。
 
 `tb_core_trap` 标了 `expect_fail_ok`（异常/中断的 core 接线 = P1 待办）：

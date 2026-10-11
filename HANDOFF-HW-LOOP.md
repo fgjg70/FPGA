@@ -24,24 +24,26 @@
 你可以用 Tcl 脚本让 Vivado **自己烧录、自己等程序跑完、自己把内部信号抓下来、自己写成 CSV**。
 整个过程在一条 `cmd /c xxx.bat` 里完成，退出码和 CSV 文件就是判据。
 
-**已在真实板卡上跑通并留下证据。当前（2026-10-11 12:19:02 采集）**：
+**已在真实板卡上跑通并留下证据。最新档（2026-10-11 15:22:41 采集，105 MHz）**：
 
 ```
 ila_ctrl     = 0xC2  ->  mmcm_locked=1  done=1  pass=1  fail=0  illegal=0
-score_result = 0xC9DADA56
+score_result = 0xD24B8AFE
   bit31 = 1  ->  crclist/crcmatrix/crcstate 全部匹配 CoreMark 官方参考值
-  tick  =  1,239,079,510   (预期 1,239,100,117 -> 偏差 0.002%; 与 70MHz 那次逐位相同)
-  时长  =  16.52 s         (满足赛题 >=10 秒硬性要求, 3000 迭代 @75 MHz)
-  CoreMark/MHz = 2.4212    (仿真 2.4209)
+  tick  =  1,380,682,494   (预期 1,380,933,000 -> 偏差 0.02%)
+  时长  =  13.15 s         (满足赛题 >=10 秒硬性要求, 3000 迭代 @105 MHz)
+  CoreMark/MHz = 2.1728
 ```
 
 > 判据 = **采集清单 `results/ila_done.capture.json`**（`captured_at_local` / `csv_sha256` /
-> `rtl_sha256` + 22 个 RTL 文件哈希 / `iterations=3000` / `clk_hz=75000000` / `expect_tick` / `wait_seconds=21`）
+> `rtl_sha256` + 文件数 / `iterations=3000` / `clk_hz=105000000` / `expect_tick=1380933000` / `wait_seconds=18`）
 > + `fpga/cap_done.log` 的 `CAPTURE_OK`。
 > ⚠️ **`results/ila_done.csv` 的 mtime 不是证据**（X-02：git 操作会刷新它而不产生新采集）。
 > `ila_ctrl` 的位定义：bit7=`mmcm_locked` / bit6=`done` / bit5=`mark` / bit4=redirect / bit3=stall /
 > bit2=`illegal` / bit1=`pass` / bit0=`fail`。
-> **tick 与频率无关**（周期计数）—— 所以 70→75 MHz 之后 tick 逐位不变，变的只是墙钟（17.70→16.52 s）。
+> **tick 与频率无关**（周期计数）—— 所以 75→105 MHz 之后 tick 只随"RTL 版本"变，不随频率变。
+> ⚠️ **那次采集的 RTL 比当前源码早**：清单覆盖 **22** 个 `.sv`，当前树是 **23** 个
+> （`bht.sv` 由 `028ca4d` 在 15:55 引入）⇒ **硬件 2.1728 与当前源码仿真 2.2029 不是同一配置**。
 > 历史各次采集（`0x42` / tick 536,943,384 / 10.74 s 等）见 `results/hw-verified.md` 与第 7 节快照。
 
 ---
@@ -153,8 +155,8 @@ cmd /c D:\USER\Desktop\FPGA\FPGA\fpga\build_ila.bat
 **所有时序约束必须满足（WNS ≥ 0）**，否则上板结果不可信。
 
 > ⚠️ **别再按 `sys_clk` 这个时钟名去查** —— 引入 MMCM 之后核心跑在 MMCM 输出的
-> **`sys_clk_75`（13.333 ns = 75.00 MHz）** 域上，报告里 `sys_clk` 那一行**已经不再是设计主时钟**
-> （它只剩脉宽余量），照旧口径读会得出错误结论（这正是 M-01/X-01 那个 bug 的成因）。
+> **`sys_clk_core`** 域上（**频率无关命名**；旧名 `sys_clk_75` 已废），报告里 `sys_clk` 那一行
+> **已经不再是设计主时钟**（它只剩脉宽余量），照旧口径读会得出错误结论（这正是 M-01/X-01 那个 bug 的成因）。
 > ✅ **现在不用手工判读了**：`build_ila.tcl` 已内建时序门（`br_timing_gate`），打印
 > `ILA_TIMING_CONSTRAINTS_MET / ILA_TIMING_WNS / ILA_TIMING_WHS`，不满足则打印
 > **`ILA_TIMING=FAIL`** 并 `error`（**同时删掉 ILA bitstream，防止误烧**）；
@@ -271,17 +273,19 @@ cmd /c D:\USER\Desktop\FPGA\FPGA\fpga\ila_info.bat    REM 列出 ILA 与所有�
 > ```
 > （R20/R28：拿上一次的 CSV 当本次结论 = 虚假证据，所以新鲜度必须现查。）
 
-| 项 | 状态（**2026-10-11 75 MHz 冻结版**）|
+| 项 | 状态（**2026-10-11 现查**）|
 |---|---|
-| 设计时钟 | **`sys_clk_75` @13.333 ns = 75.00 MHz**（MMCM `CLKFBOUT_MULT_F=21 / DIVCLK_DIVIDE=1 / CLKOUT0_DIVIDE_F=14`，VCO 1050 MHz）|
-| 评分版时序 | fmax **76.2 MHz**（WNS **+0.206**、WHS +0.088；`All user specified timing constraints are met.`）|
-| 评分版资源 | LUT **2734** / FF **1251** / BRAM **8** / DSP **8** |
-| `fpga/cpu_a100t.bit` / ILA 版里嵌的程序 | `cm_hw`（CoreMark **3000** 迭代，`cm_hw.build.json` 记 `expect_tick=1,239,100,117`、`wait_seconds=21`）|
+| 时钟名 | **`sys_clk_core`**（**频率无关**命名；旧名 `sys_clk_75` 已废）—— XDC 用 `-multiply_by 21 -divide_by 8`（⇒ 131.25 MHz 目标）|
+| **已上板验证档** | **105 MHz**（`sys_clk_core` @9.524 ns；MMCM `CLKOUT0_DIVIDE_F` 按档位取）|
+| 该档评分版时序 | fmax **106.30 MHz**（WNS **+0.117** @9.524 ns）|
+| 该档评分版资源 | LUT **2706** / FF **1290** / BRAM **8** / DSP **8** |
+| `fpga/cpu_a100t.bit` / ILA 版里嵌的程序 | `cm_hw`（CoreMark **3000** 迭代；`cm_hw.build.json` 记 `expect_tick`、`wait_seconds`，**随档位自动写**）|
+| **当前设计目标档** | **131.25 MHz**（@7.619 ns）—— **时序未收敛**：`Timing constraints are not met.`、WNS **−0.963**、1141/4437 失败端点 |
 | **ILA 版 bitstream** | 改过 RTL 就必须按 §3 重建（约 5–6 分钟），否则抓到的是旧设计 |
-| 最后一次采集 | **2026-10-11 12:19:02**，tick **1,239,079,510**、`ila_ctrl=0xC2`、硬件 CM/MHz **2.4212** |
+| 最后一次采集 | **2026-10-11 15:22:41**，tick **1,380,682,494**、`ila_ctrl=0xC2`、硬件 CM/MHz **2.1728** |
 
-> 现查用：`fpga/timing.rpt` + `fpga/util.rpt` + `results/coremark.csv` 行 `clk75` +
-> `results/ila_done.capture.json`。**fmax 必须带时钟名 + 周期 + 运行频率**（纪律见 `HANDOFF.md` §8）。
+> 现查用：`fpga/timing.rpt` + `fpga/util.rpt` + `results/coremark.csv` 行 **`c14-105mhz`** +
+> `results/ila_done.capture.json`。**fmax 必须带时钟名 + 周期 + 运行频率 + WNS**（纪律见 `HANDOFF.md` §8）。
 
 > ℹ️ **等待时间/迭代数不再写死在 `.tcl` 里**（X-09 已落地）：`mk_cm_hw.py` 把
 > `sim/prog/cm_hw.build.json`（`iterations` / `expect_tick` / `wait_seconds` / `clk_hz`）写出来，
@@ -294,9 +298,10 @@ cmd /c D:\USER\Desktop\FPGA\FPGA\fpga\ila_info.bat    REM 列出 ILA 与所有�
 **代码在那之后变了**：CSR 接线给 `ctrl_s` 加了 5 个字段（`sys_op`/`csr_addr`/`csr_cmd`/
 `csr_src_imm`/`csr_uimm`），控制束变宽 → 流水线寄存器与布线都变多。
 CSV 里那两行是**当时那版代码**的实测值，不该改；新代码的数字应当**追加新行**。
-当前最新一行是 **`clk75`**（413,070 / 2.4209 / LUT 2734 / FF 1251 / fmax 76.2，`keep`）——
-即 2026-10-11 75 MHz 冻结版（上一行 `review-fixes-v1` 是同日 70 MHz 版，属历史）；
-引用 `fmax` 列时配 **`fmax_src`** 列读（该列混两种口径）。
+当前最新一行是 **`c14-105mhz`**（LUT 2706 / FF 1290 / fmax 106.3，`keep`）—— 即最新**已上板**档；
+上一行 `clk75`（LUT 2734 / fmax 76.2）与 `review-fixes-v1`（LUT 2736 / fmax 74.4）都是历史。
+⚠️ `fmax` 列混着两种口径，**`fmax_src` 列尚待 M-04 落地**（表头 12 列无此列）——
+在它落地前以该行 `notes` 为准，不要横向直接比大小。
 
 ---
 
@@ -310,10 +315,15 @@ CSV 里那两行是**当时那版代码**的实测值，不该改；新代码的
    （`python tools\mk_cm_hw.py` → 写 `sim/prog/cm_hw.build.json` 的
    `iterations`/`expect_tick`/`wait_seconds`/`clk_hz`），`ila_cap_done.tcl` 读它执行。
    等待时间必须 > 实际运行时长再留余量，否则会在 CoreMark 还没跑完时就抓，
-   读到 `score_result = 0`（当前：3000 迭代 @75 MHz → 16.52 s，等 **21 s**）。
+   读到 `score_result = 0`（105 MHz 档：3000 迭代 → 13.15 s，清单里 `wait_seconds=18`；
+   换档后由 `mk_cm_hw.py` 自动重算）。
    ⚠️ **提频不改 tick**（tick 与频率无关），所以 `ITERATIONS` 不变、只需重算 `wait_seconds`。
    ⚠️ **31 位 tick 硬闸门**：上板 tick 是 31 位计数器，`mk_cm_hw.py` 在
    `expect_tick > 2^31−1` 时直接 **`[BLOCK]`**（越过它 tick 会回绕，而结果**看起来像"变快了"**）。
-   当前占 **57.7%**，上限约 **5199 迭代**。
+   `expect_tick` **不是硬编码**：它 = `read_ticks_per_iter()`（最近一次 CoreMark 仿真日志的
+   **拍/迭代**）× ITERATIONS；闸门上限 = `TICK_MAX ÷ 拍每迭代`，**两者都随 RTL 语义变**。
+   例：采集那次（拍/迭代 460,311）expect_tick = **1,380,933,000**，占 **64.3%**；
+   当前仿真日志是 453,942 拍/迭代 ⇒ 上限约 **4730 迭代**。
+   ⇒ **改流水线语义之后必须重算**（`mk_cm_hw.py` 的注释里那句 5199 是更早基线的旧值）。
 4. **上板结果要落盘** —— 抓完的 CSV 写进 `results/`，并在 `results/` 里留一份文字结论
    （照 `results/hw-verified.md` 的格式）。不落盘就等于没测。

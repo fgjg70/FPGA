@@ -49,7 +49,7 @@ python tools\fpga_workflow.py report
 另有 `[HIL] 硬件在环健康度`（非编号）：报告最后一次上板数据的年龄与 bitstream 新鲜度，
 超 1 小时未上板 → `[warn]`。
 > ✅ 它**已改用采集清单见证**（与 `hw` 同源），输出形如
-> `最后一次上板数据: 2026-10-11 12:19:02  (N 分钟前)   [来源: 采集清单]`；
+> `最后一次上板数据: 2026-10-11 15:22:41  (N 分钟前)   [来源: 采集清单]`；
 > 清单缺失时告警而不是拿 CSV 的 mtime 冒充新鲜度。
 > 背景（X-02）：`results/ila_done.csv` 被 git 跟踪，**2026-10-11 10:51 实测到"内容未变、
 > mtime 变现在"导致的假新鲜度**（`check` 曾因此报"5 分钟前"）—— 所以**mtime 永远不能当见证**。
@@ -95,22 +95,28 @@ python tools\fpga_workflow.py report
 python tools\fpga_workflow.py check --update-baseline
 ```
 
-**首个基线**（实测 2026-10-11）：`fpga/build.log` **48 类 / 274 条**，基线 48 类 ⇒ 无新增；
-其中**已被证实有真东西**的是 `[Synth 8-3331] design mmio_subsys has unconnected port wstrb[3..0]`
+**首个基线**（2026-10-11 固化）：`fpga/build.log` 曾是 **48 类 / 274 条**。此后 RTL 泳道清掉了一批
+警告，**当前 build.log 是 23 类 / 245 条**，其中 **9 类不在旧基线里** ⇒ `[7]` 判 `[FAIL]`
+（**这是需要分诊、然后重新固化基线的状态**，不是文档问题）：
+```bat
+python tools\fpga_workflow.py check --update-baseline
+```
+首个基线里**已被证实有真东西**的是 `[Synth 8-3331] design mmio_subsys has unconnected port wstrb[3..0]`
 （= **X-08**，MMIO 写忽略 wstrb，Vivado 报了 4 次没人看）；
 `Timing 38-1` 反馈环警告**已消失**（R43 修复生效，且现在被门盯住 —— 出现即 `[FAIL]`）。
 
 ### 其他常用一行命令（干净克隆 / 交付前）
 
 ```bat
-python tools\build_sw.py --all              REM 建全部 11 个回归镜像 (干净克隆第一步)
+python tools\build_sw.py --all              REM 建全部 12 个回归镜像 (干净克隆第一步)
 python tools\build_sw.py --all --with-hw    REM 再多一个上板镜像 cm_hw.hex (含 HW_CLK_HZ)
 python tools\check_equiv.py                 REM LSU 字节通道等价性: 675 万组穷举, ~5 s
 ```
 
 ### `verify` — ModelSim 增量回归
 
-跑 **11 个**测试，每个测试的缓存键 = **参与编译的所有文件的内容哈希** + plusargs + 编译器版本。
+跑 **12 个**测试（矩阵 = `fpga_workflow.py` 的 `test_matrix()`），每个测试的缓存键 =
+**参与编译的所有文件的内容哈希** + plusargs + 编译器版本。
 内容没变就跳过（首次约 30 秒，之后未受影响时 < 1 秒）。
 
 | 测试 | 程序 | 内容 |
@@ -123,11 +129,12 @@ python tools\check_equiv.py                 REM LSU 字节通道等价性: 675 �
 | `tb_core_amo` | `amo.hex` | RV32A 原子指令（AMO 读-改-写 + min/max 符号语义）|
 | `tb_core_amo_diag` | `amo_diag.hex` | RV32A 单步诊断（tohost 直接上报失败环节）|
 | `tb_soc` | `mmio.hex` | 外设 + UART 环回 |
+| **`tb_sw_lu_bench`** | `lu_bench.hex` | **load-use 代价标定**：距离 1 = **2 拍** / 距离 2 = **1 拍** + checksum（`fcdb48e` 新增）|
 | `tb_sw_hello` | `hello.hex` | 裸机 hello |
 | `tb_sw_coremark` | `cm_rv32im.hex` | CoreMark 仿真 |
 | `tb_sw_nn_demo` | `nn_demo.hex` | 应用场景：神经网络 GEMM 核心 |
 
-当前基线：**PASS 11**，全量约 23 秒，未受影响时 2.8 秒。
+当前基线：**PASS 12**，全量约 25 秒，未受影响时 < 3 秒。
 
 **判定依据是 testbench 自己打印的 `RESULT : PASS`，不是 `vsim` 的退出码。**
 > ModelSim 用 `quit -f` 结束时，无论测试成败都返回 0。

@@ -884,6 +884,9 @@ CLKOUT0_DIVIDE_F = 15.0 → 14.0       -- 只动这一个抽头
 
 1. **赛题记三项指标, 改一项必须同时量三项** + 绝对吞吐 (CoreMark/MHz × fmax)。
    反例: RAS+BTB128 让 CoreMark/MHz +1.0%, 但 fmax −4.6%、CoreMark/LUTs −4.4% → 净亏, 回退。
+   > ⚠️ 该反例的**否决理由已被 C-1 动摇**（栈顶 mux 不再串在取指地址路径上）——
+   > `--ras` 现在 ticks 净赚 −0.36%（453,942 → 452,288），**须重测 fmax** 再下结论
+   > （`python tools\fpga_workflow.py synth --ras`）。见 `results/p4-c1-2stage-gshare.md`。
 2. **优化前先测量**。本工程靠剖析发现"分支惩罚 29%", 才决定先做预测而不是 M 扩展。
 3. **改动后重新量, 不凭感觉**。`phys_opt_design` 单用无效, 要配
    `place_design -directive ExtraTimingOpt` + `route_design -directive AggressiveExplore`。
@@ -907,7 +910,8 @@ CLKOUT0_DIVIDE_F = 15.0 → 14.0       -- 只动这一个抽头
 - [ ] 软件改了 → 重新构建 .hex **并重新综合 bitstream**?
 - [ ] .S 改了 → 重新汇编 .hex?
 - [ ] 地址/布局改了 → 所有引用点都同步了 (含 tb 和 .S)?
-- [ ] 全套仿真回归跑过 (units / basic / trap / timer_irq / m_ext / amo / amo_diag / soc / hello / coremark / nn_demo, 共 11 项)?
+- [ ] 全套仿真回归跑过 (units / basic / trap / timer_irq / m_ext / amo / amo_diag / soc / **lu_bench** / hello / coremark / nn_demo, 共 **12** 项)?
+      （"11 项"是新增 `tb_sw_lu_bench` 之前的基线；矩阵以 `tools/fpga_workflow.py` 的 `test_matrix()` 为准）
 - [ ] CoreMark 三个数据类 CRC (0xe714 / 0x1fd7 / 0x8e3a) 仍匹配?
 - [ ] 三项指标 + 绝对吞吐 都重新量并记进 results/coremark.csv?
 - [ ] **变快了 → 按 R35 重算 `ITERATIONS`**, 重建 imem+dmem 两个镜像并重新综合,

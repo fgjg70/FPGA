@@ -64,12 +64,12 @@ load-use 停顿  30,644  (7.1%)   <- 最大项
 
 #### [3] 仿真验证
 
-一条 .bat 跑完 11 个测试（`fpga_workflow.py verify` 已经把它自动化了，很好）：
+一条 .bat 跑完 12 个测试（`fpga_workflow.py verify` 已经把它自动化了，很好）：
 ```bat
 set "LM_LICENSE_FILE=D:\software\tools\Modelsim\win64\LICENSE.TXT"
 set "PATH=D:\software\tools\Modelsim\win64;%PATH%"
 vlib work
-vlog -sv -work work <20 个 RTL> fpga\mmio_subsys.sv sim\tb_units.sv sim\tb_core.sv sim\tb_soc.sv sim\tb_sw.sv
+vlog -sv -work work <21 个根 .sv + fpga\mmio_subsys.sv + fpga\top_a100t.sv> sim\tb_units.sv sim\tb_core.sv sim\tb_soc.sv sim\tb_sw.sv
 vsim -c -do "run -all; quit -f" work.tb_units
 vsim -c -do "run -all; quit -f" work.tb_core +imem=<abs>\basic.hex
 vsim -c -do "run -all; quit -f" work.tb_sw   +imem=<abs>\cm_rv32im.hex +dmem=<abs>\cm_rv32im.dmem.hex
@@ -86,9 +86,9 @@ cmd /c D:\USER\Desktop\FPGA\FPGA\fpga\build.bat
 ```python
 # ✅ 现在直接用工具: python tools\fpga_workflow.py metrics
 #    M-01 已修: 解析器从 Clock Summary 取各时钟周期, 在 Intra Clock Table 里按【设计主时钟】
-#    (sys_clk_75) 取 setup WNS, fmax = 1000/(T - WNS), 并把推导整行打印出来, 当前输出:
-#      fmax 76.2 MHz  sys_clk_75 @13.333ns, 运行 75.00 MHz; WNS +0.206ns -> fmax=1000/(13.333 - 0.206)
-#    ⇒ 只写 "fmax=xx" 的文档一律不合格: 必须带时钟名 + 周期 + 运行频率。
+#    取 setup WNS, fmax = 1000/(T - WNS), 并把推导整行打印出来。当前主时钟名 = sys_clk_core
+#    (131.25 MHz 目标档 @7.619 ns), 近期收敛档是 105 MHz: fmax = 1000/(9.524 - 0.117) = 106.30
+#    ⇒ 只写 "fmax=xx" 的文档一律不合格: 必须带时钟名 + 周期 + 运行频率 + WNS。
 # ⚠️ 反面教材(已失效, 别再照抄): 从 `sys_clk` 行取第一个数再按硬编码 20ns 换算 ——
 #    引入 MMCM 后 `sys_clk` 行不再有 setup 端点, 该正则会静默抓到【脉宽余量 WPWS=7.000】,
 #    报出虚高的 76.92 MHz。见 CODE-REVIEW-PLAN.md M-01 / X-01, PITFALLS R42.1。
@@ -137,10 +137,10 @@ ABS    = CM_MHZ * fmax         # 绝对吞吐 = 每秒多少次迭代
 
 | 环节 | 通过 | **可疑信号（要停下来查）** |
 |---|---|---|
-| 仿真 | 11 个测试都打印 `RESULT : PASS` | 某个测试没输出 / 输出为空 / 编译有 Error 但测试仍「过」 |
+| 仿真 | 12 个测试都打印 `RESULT : PASS`（矩阵见 `test_matrix()`）| 某个测试没输出 / 输出为空 / 编译有 Error 但测试仍「过」 |
 | CoreMark | `crclist 0xe714` `crcmatrix 0x1fd7` `crcstate 0x8e3a` | ticks 与上次**完全相同** → 大概率镜像没重建 |
-| 综合 | `BUILD_OK` 且 WNS > 0 | LUT 只有几十个 → 没装程序，被常量折叠 |
-| 上板 | `score_result` bit31 = 1 | `score_result` = 0 → 程序没跑完 / ILA 是旧 RTL |
+| 综合 | `BUILD_TIMING=PASS`（WNS ≥ 0）| LUT 只有几十个 → 没装程序，被常量折叠 |
+| 上板 | `score_result` bit31 = 1 **且**采集清单 `ila_done.capture.json` 新鲜 | `score_result` = 0 → 程序没跑完 / ILA 是旧 RTL；清单缺失 ⇒ `hw` 拒绝给结论 |
 | 任一环节 | 数字有变化且方向可解释 | **跨环节一致性过好**（镜像逐字节相同、指标一字不差） |
 
 ---
@@ -165,14 +165,16 @@ python tools/fpga_workflow.py metrics --vs bram-v1       # 与历史某行对比
 **输出**：`{cm_per_mhz, fmax, cm_per_lut, abs, delta_vs}`
 
 > **【fmax 口径纪律】`fmax` 这个数必须能回答"哪条时钟、周期多少、运行频率多少、WNS 多少"。**
-> 引入 MMCM 后核心跑在 **`sys_clk_75` @13.333 ns（运行 75.00 MHz）**（不是 `sys_clk` @20 ns），
+> 引入 MMCM 后核心跑在 MMCM 输出域，**时钟名已改为频率无关的 `sys_clk_core`**
+> （`fpga/daVinciPro.xdc`；旧名 `sys_clk_75` 已废），不是 `sys_clk` @20 ns，
 > 所以旧公式 `1000/(20 − WNS)` **已失效**（`CODE-REVIEW-PLAN.md` M-01）。
-> 修好的工具会打印完整推导，当前形如
-> `fmax 76.2 MHz  sys_clk_75 @13.333ns, 运行 75.00 MHz; WNS +0.206ns -> fmax=1000/(13.333 - 0.206)`
-> —— **照抄这个格式，不要只写"fmax=xx"**。
+> 修好的工具会打印完整推导，例如 105 MHz 档：
+> `fmax 106.30 MHz  sys_clk_core @9.524ns, 运行 105.00 MHz; WNS +0.117ns -> fmax=1000/(9.524 - 0.117)`
+> —— **照抄这个格式，不要只写"fmax=xx"**（时钟名/周期以当次报告为准）。
 > ⚠️ **运行频率与 fmax 不独立**（PITFALLS **R50**）：约束从 14.286 收紧到 13.333 ns 后，
-> fmax 自己就从 74.4 升到 **76.2** —— 所以"提频"同时也是在动 fmax 这一项，报的时候要写清约束。
-> 另外 `results/coremark.csv` 的 `fmax` 列**混着两种口径**，引用时必须配 **`fmax_src`** 列读。
+> fmax 自己就从 74.4 升到 76.2 —— 所以"提频"同时也是在动 fmax 这一项，报的时候要写清约束。
+> ⚠️ `results/coremark.csv` 的 `fmax` 列**混着两种口径**，此前要求"必须配 `fmax_src` 列读"，
+> 但**该列尚待 `CODE-REVIEW-PLAN.md` M-04 落地**（表头 12 列无此列）—— 在那之前以该行 `notes` 为准。
 
 **建议逻辑**（把第 [5] 步的纪律编码进去）：
 ```

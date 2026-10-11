@@ -15,67 +15,73 @@ graph LR
 
 > **口径（务必先读）**：本文把"验证"分成两级，**不要混为一谈** ——
 > - **仿真通过** = ModelSim 回归 `python tools\fpga_workflow.py verify`，判据是 testbench 打印的
->   `RESULT : PASS`（当前 **PASS 11**）；
-> - **上板验证** = 真实板卡 JTAG 烧录 + ILA 读回，判据是 **`fpga/cap_done.log` 里的
->   `CSV_MTIME=... AGE_SEC=0` + `CAPTURE_OK`**，以及 `results/ila_done.capture.json`（采集清单）。
->   ⚠️ **`results/ila_done.csv` 的 mtime 不是证据**（它是 git 跟踪文件，见下）。
->
-> **最后一次成功的上板验证 = 2026-10-11 12:19:02** —— 判据是 **`results/ila_done.capture.json`
-> （采集清单：`captured_at_local` / `csv_sha256` / `rtl_sha256` / `iterations` / `expect_tick`）**
-> 与 `fpga/cap_done.log` 里的 `CAPTURE_OK`。**全部 22 个 RTL 文件的哈希都被记进清单**，
-> 所以"这次采集对应哪版 RTL"是可机器复核的。
-> ⚠️ **`results/ila_done.csv` 的 mtime 不是证据**（X-02）：它是 git 跟踪文件，克隆/checkout/重写都会
-> 刷新 mtime 却不产生新采集 —— **2026-10-11 10:51 实测发生过**（内容逐字节未变，mtime 却成"5 分钟前"，
-> `check` 的 [HIL] 因此误报"刚上过板"）。**结论一律以采集清单为准**；清单缺失时 `hw` 拒绝给结论。
-> 上表所有数字都来自**冻结后**的 `clk75`（`.fpga-cache/reports/20261011-121231-cm_hw/`）
-> 与上面那次上板采集 —— 即 **75 MHz 提频版**；此前各版（`review-fixes-v1` 的 70 MHz 等）
-> 的历史数字都已在各自小节显式标注。
->
-> 另：上表的三个评分指标里，**fmax 与 LUT 来自 Vivado 综合报告**（`fpga/timing.rpt` / `fpga/util.rpt`），
-> **不是**上板测出来的；上板只提供 CoreMark 的 tick 与 CRC 佐证。**别把"综合实测"写成"上板实测"。**
->
-> **fmax 口径**：必须写出**时钟名 + 周期 + 运行频率**。现在设计主时钟是 **`sys_clk_75` @13.333 ns
-> （运行 75.00 MHz）**（不是 `sys_clk` @20 ns），口径 = `1000/(该时钟周期 − 该路径 WNS)`；
-> 旧式 `1000/(20−WNS)` 已失效。引用 `results/coremark.csv` 的 `fmax` 列时必须配 **`fmax_src`** 列。
-> ⚠️ **"运行频率"与 `fmax` 不是独立的**：把约束从 14.286 收紧到 13.333 ns 之后 fmax 反而从
-> 74.4 升到 **76.2**（工具在更紧的目标下更卖力）—— 所以报 fmax 时必须同时说清"在哪个约束下测的"。
-> 完整纪律见 `HANDOFF.md` §8「口径纪律」。
+>   `RESULT : PASS`（当前 **PASS 12**；12 项矩阵见 `tools/fpga_workflow.py` 的 `test_matrix()`）；
+> - **上板验证** = 真实板卡 JTAG 烧录 + ILA 读回，判据是 **采集清单 `results/ila_done.capture.json`**
+>   （`captured_at_local` / `csv_sha256` / `rtl_sha256` + 文件数 / `iterations` / `clk_hz` / `expect_tick`）
+>   与 `fpga/cap_done.log` 的 `CAPTURE_OK`。
+>   ⚠️ **`results/ila_done.csv` 的 mtime 不是证据**（X-02）；结论一律以采集清单为准。
 
-**平台**：正点原子 达芬奇Pro（XC7A100T-FGG484-2，板载 50 MHz）
+**当前口径（三件事必须一起写，否则会误导下一手）**
+
+| # | 项 | 值 | 来源（可复核） |
+|---|---|---|---|
+| ① | **时钟名** | **`sys_clk_core`** —— **频率无关命名**（名字里带频率会每改一次档就过期一次） | `fpga/daVinciPro.xdc`：`create_generated_clock -name sys_clk_core -multiply_by 21 -divide_by 8` |
+| ② | **已上板验证档** | **105 MHz**（`sys_clk_core` @9.524 ns），**2026-10-11 15:22:41** 采集 | `results/ila_done.capture.json`（`clk_hz=105000000`） |
+| ② | 该档上板实测 | `ila_ctrl=0xC2`、`score_result=0xD24B8AFE`（bit31=1）、tick **1,380,682,494**、**13.15 s**、硬件 CM/MHz **2.1728** | `results/ila_done.csv` + 采集清单（`expect_tick=1380933000`，偏差 0.02%） |
+| ② | 该档综合 | fmax **106.30 MHz**（WNS **+0.117** @9.524 ns）；LUT **2706** / FF **1290** / BRAM 8 / DSP 8 | `results/coremark.csv` 行 `c14-105mhz` + `.fpga-cache/reports/20261011-151614-cm_hw/metrics.json` |
+| ③ | **当前设计目标档** | **131.25 MHz**（`sys_clk_core` @7.619 ns）—— **时序未收敛**：`Timing constraints are not met.`、WNS **−0.963**、1141/4437 失败端点；当前工作区 LUT **2865** / FF **1393** / BRAM **9.5** | `fpga/timing.rpt`（`sys_clk_core` 行）+ `fpga/util.rpt`（2026-10-11 16:19 那次构建） |
+| — | **当前源码**（C-1 两级流水 gshare）**仿真** | ticks **453,942** ⇒ CoreMark/MHz **2.2029**（**未上板**） | `.fpga-cache/logs/tb_sw_coremark.log` |
+
+> ⚠️ **上板的那一版比当前源码早**：15:22 的采集清单覆盖 **22** 个 `.sv`，而当前树是 **23** 个
+> （`bht.sv` 由 `028ca4d` 在 **15:55** 引入）—— 所以"硬件 CM/MHz 2.1728"是 C-1 之前的数，
+> 与当前源码仿真的 **2.2029** 不同。**别把两者当成同一个配置**（这正是 X-03 要防的事）。
+>
+> **fmax 的来源怎么读（`fmax_src` 列尚待 M-04 落地）**：本文/其他文档此前要求"引用 `coremark.csv`
+> 的 `fmax` 列必须配 `fmax_src` 列" —— **该列目前并不存在**（表头 12 列无此列，`tools/`+`coremark.csv`
+> 全仓 0 命中）。现状是：**该列尚待 `CODE-REVIEW-PLAN.md` M-04 落地**。在它落地之前，
+> `fmax_mhz` 的来源以该行 `notes` 为准（人工修正的行会在备注里写明 "the fmax cell is hand-corrected"；
+> 其余行由 `fpga_workflow.py` 按**最差 setup 路径块自带的 `Requirement`** 算出）。
+> ⚠️ `coremark.csv` 第 2 行那句 `fmax_mhz = 1000 / (20 - wns_ns)` 是**旧口径**（MMCM 之前），
+> 已在 `HANDOFF.md` §8 被列为失效写法 —— 读到它请忽略，按上面的"最差路径块"口径理解。
+
+| 评分指标 | 基线 | **最新档（105 MHz，已上板）** | 变化 |
+|---|---|---|---|
+| **CoreMark/MHz** | 0.8263 | **2.1728**（硬件实测） | **+163.0%** |
+| **最高时钟频率 fmax** | 78.4 MHz | **106.30 MHz**（WNS +0.117 @9.524 ns） | **+35.6%** |
+| **CoreMark/LUTs** | 2.361e-4 | **8.03e-4**（派生） | **+240.1%** |
+| 绝对吞吐 (CM/MHz × fmax) | 64.8 | **231.0**（派生） | **+256.4%** |
+
+> 两个"派生"格按项目公式算：`CoreMark/LUTs = CM/MHz ÷ LUT`、`绝对吞吐 = CM/MHz × fmax`
+> （用本档的 2.1728 / 2706 / 106.30）。**基线的 78.4 MHz 是在 20 ns 约束下测的**，
+> 与现在的 `sys_clk_core` 不是同一口径 —— 跨约束直接比大小会被 R50 那条坑绊到，记结论时要说清约束。
+
+**资源**：LUT **2706** / FF **1290** / BRAM **8** / DSP 8（**105 MHz 已上板档**；工作区 131.25 目标未收敛版是 2865 / 1393 / 9.5）
+**设计时钟**：`sys_clk_core` —— MMCM `CLKFBOUT_MULT_F=21 / DIVCLK_DIVIDE=1`，`CLKOUT0_DIVIDE_F` 按档位取
+（10 = 105 MHz、8 = 131.25 MHz）；XDC 用 `-multiply_by 21 -divide_by 8` 建 131.25 MHz 的生成时钟
+**上板**（**2026-10-11 15:22:41 采集**）：**3000 迭代** / **13.15 s** @105 MHz / 与官方参考值 **逐位 CRC 匹配** /
+`ila_ctrl=0xC2`（bit7=locked, bit6=done, bit1=pass, bit2=illegal=0）、CRC bit31=1、
+tick **1,380,682,494**（预期 1,380,933,000，偏差 0.02%）、硬件 CoreMark/MHz **2.1728**
+
+> **两条必须一起读的诚实口径**：
+> 1. **fmax 一路从文档旧值 69.8 → 106.30 不是"一轮优化"**，它是三件事叠加：
+>    ① **口径更正**（旧值用的是 MMCM 之前已失效的 `1000/(20−WNS)`）→ 74.4；
+>    ② **提频 70 → 75 MHz** → 76.2（收紧约束本身也让工具更卖力，见 PITFALLS **R50**）；
+>    ③ **C-1 两级流水 gshare + 逐档提频 95/105 MHz** → **106.30**。
+>    **fmax 与"运行频率"不是独立评分项**，所以每写一个 fmax 都要带上"哪条时钟、周期、运行频率、WNS"。
+> 2. **为正确性付出的面积**：修 R-01/R48（中断精确性两处架构缺陷）与 R-02（mtval 合规）使
+>    LUT/FF 上升；此后 C-1（预测器两级流水）又换了面积与 IPC —— 逐档代价见 `results/coremark.csv`
+>    各行 `notes` 与 `results/p4-c1-2stage-gshare.md`。
+
+> **绝对吞吐是本项目的核心结论**：三项指标互相矛盾时，它是有意义的最终裁判
+> （新口径下约 **231**，见上表；口径来源写在同一行里）。
+
+**回归**（**仿真级**，判据来源 `python tools\fpga_workflow.py verify`）：**PASS 12**
+（`tb_units` 的检查点数以**运行时打印**为准 + **11 组**系统级/软件级测试，含新增
+`tb_sw_lu_bench` —— load-use 代价标定：距离 1 = 2 拍 / 距离 2 = 1 拍 + checksum），无 XFAIL。
+
+**平台**：正点原子 达芬奇Pro（XC7A100T-FGG484-2，板载 50 MHz 晶振 → MMCM → `sys_clk_core`）
 **赛题**：2026 紫光同创杯 · 选题一「基于紫光同创 RISC-V 指令集 CPU 设计」
 **基准**：CoreMark v1.0（PERFORMANCE_RUN）
-
-| 评分指标 | 基线 | **最终（上板验证）** | 变化 |
-|---|---|---|---|
-| **CoreMark/MHz** | 0.8263 | **2.4209** | **+193.0%** |
-| **最高时钟频率 fmax** | 78.4 MHz | **76.2 MHz** | **−2.8%** |
-| **CoreMark/LUTs** | 2.361e-4 | **8.855e-4** | **+275.0%** |
-| 绝对吞吐 (CM/MHz × fmax) | 64.8 | **184.4** | **+184.6%** |
-
-**资源**：LUT **2734** / FF **1251** / BRAM **8** / DSP 8（交付配置，不含 ILA）
-**设计时钟**：`sys_clk_75` @**13.333 ns** = **75.00 MHz**（MMCM：`CLKFBOUT_MULT_F=21 / DIVCLK_DIVIDE=1 / CLKOUT0_DIVIDE_F=14`）
-**上板**（**2026-10-11 12:19:02 采集**）：**3000 迭代** / **16.52 s** @75 MHz / 与官方参考值 **逐位 CRC 匹配** /
-`ila_ctrl=0xC2`（bit7=locked, bit6=done, bit1=pass, bit2=illegal=0）、CRC bit31=1、
-tick **1,239,079,510**（预期 1,239,100,117，偏差 0.002%）、硬件 CoreMark/MHz **2.4212**（仿真 2.4209）
-> **tick 与 70 MHz 那次逐位相同** —— 周期计数与频率无关，所以提频没有引入时序性行为偏差；
-> 变化的只是墙钟（17.70 s → **16.52 s**，−6.7%）与 fmax。
-
-> **三条必须一起读的诚实口径**：
-> 1. **fmax 从文档旧值 69.8 → 76.2 不是"一轮优化"**，它是两件事叠加：
->    ① **口径更正** —— 旧值用的是 MMCM 之前的 `1000/(20−WNS)`（约束周期 20 ns，已失效），
->    按现在的 `sys_clk_75` @13.333 ns、WNS **+0.206** 算 ⇒ `1000/(13.333−0.206) = 76.2 MHz`；
->    ② **提频** 70 → 75 MHz（口径更正后是 74.4 → 76.2）。对基线 78.4 的真实差距是 **−2.8%**。
-> 2. **为正确性付出的面积**：修 R-01/R48（中断精确性两处架构缺陷）与 R-02（mtval 合规）使
->    LUT **2649→2734（+85）**、FF **1234→1251（+17）**，`CoreMark/LUTs` 因此从 9.077e-4 降到
->    **8.855e-4（≈−2.4%）**。**这是自觉取舍**：中断/异常路径对评分三项零贡献，
->    但换掉的是两处架构级正确性缺陷。
-> 3. **绝对吞吐从 169.0 升到 184.4**，其中提频贡献 74.4→76.2（+2.4%），其余来自口径更正。
-
-> **绝对吞吐是本项目的核心结论**：**+184.6%** 表示同一块板每秒能跑 **2.85 倍**的
-> CoreMark 迭代数。三项评分指标互相矛盾时，它是有意义的最终裁判。
-
-**回归**（**仿真级**，判据来源 `python tools\fpga_workflow.py verify`）：**PASS 11**
-（`tb_units` 的检查点数以**运行时打印**为准 + **10 组**系统级/软件级测试），无 XFAIL。
 
 ---
 
@@ -84,9 +90,9 @@ tick **1,239,079,510**（预期 1,239,100,117，偏差 0.002%）、硬件 CoreMa
 | 项 | 状态 |
 |---|---|
 | RV32I + **M 扩展** + Zicsr + M-mode 异常/中断 | ✅ |
-| 动态分支预测（64 项 BTB + 2 位 Smith，精度 **88.7%** 实测）| ✅ |
+| 动态分支预测（**512 项两级流水 BTB + 8192 项 PHT/gshare**，C-1）| ✅ |
 | 完整异常/中断（ECALL/EBREAK/非法指令/mtimecmp 定时器中断/MRET）| ✅ |
-| 外设：UART 115200 8N1 收发（`BAUD_DIV=651 @75 MHz` ⇒ 实际 **115,207.4** baud，误差 +0.0064%）/ GPIO / 64 位定时器 | ✅ |
+| 外设：UART 115200 8N1 收发（`BAUD_DIV = CLK_HZ ÷ 115200` 整数除，**随档位变**：105 MHz→911⇒115,258 baud/+0.05%；131.25 MHz→1139⇒115,233/+0.028%）/ GPIO / 64 位定时器 | ✅ |
 | 应用场景：神经网络 GEMM 推理核心（与独立参考实现逐元素一致）| ✅ |
 | RV32A 原子指令 | ✅ **9 个 AMO + LR.W 完整；SC.W 按规范允许恒失败（rd=1，不写内存）—— 无预约寄存器。** `A_EN` 宏默认关（对 CoreMark 三项零贡献）；见 `results/p6-a-extension.md` §5.13、PITFALLS **R49** |
 | AI 加速单元（GEMM） | ⚠ 机制已验证（42.59× 计算加速），因面积与正确性门控关闭 |
@@ -111,9 +117,10 @@ tick **1,239,079,510**（预期 1,239,100,117，偏差 0.002%）、硬件 CoreMa
 | `pc.sv` | `pc` | PC 寄存器，带 `stall`/`flush` 钩子 |
 | `regfile.sv` | `regfile` | 2R1W，x0 恒零，**组合读 + 写旁路**，调试读口 |
 | `muldiv.sv` | `muldiv` | RV32M：乘法走 DSP，除法 32 步恢复余数法（多周期 `busy`）|
-| `btb.sv` | `btb` | 64 项 BTB + 2 位 Smith 方向预测器 |
+| `btb.sv` | `btb` | **512 项两级流水 BTB**（C-1 重写）；预测口来自寄存器，内部例化下面的 `bht`（`u_bht`）|
+| `bht.sv` | `bht` | **方向预测表 PHT：8192 项 × 2 位饱和计数器**（C-1 两级流水 gshare，1 块 RAMB18）；索引 `PC[13:1] ^ (GHR & mask)`；由 `btb.sv` 例化 |
 | `csr_file.sv` | `csr_file` | Zicsr + mstatus/mie/mip/mtvec/mepc/mcause/mtval/mscratch |
-| `ras.sv` | `ras` | 8 项返回地址栈（`RAS_EN` 门控，默认关 —— 实测净亏）|
+| `ras.sv` | `ras` | 8 项返回地址栈（`RAS_EN` 门控，默认关）。⚠️ 当年以"栈顶 mux 落在 `pc_target` 路径上"否掉它，而 **C-1 之后该理由很可能已失效**：实测 `--ras` ticks 453,942 → **452,288**（JALR 误判 3,650 → 2,796），**需重测 fmax**（`synth --ras` 已支持），见 `results/p4-c1-2stage-gshare.md` |
 | `gemm_accel.sv` | `gemm_accel` | int8 GEMM 加速单元（`GEMM_EN` 门控，默认关 —— 实测面积翻倍）|
 
 ### 流水线模块
@@ -130,11 +137,11 @@ tick **1,239,079,510**（预期 1,239,100,117，偏差 0.002%）、硬件 CoreMa
 | 文件 | 说明 |
 |---|---|
 | `sim/tb_units.sv` | 基础模块单元回归（含**全部历史 bug 的定向回归** + RV32A 的 ALU/译码检查）|
-| `sim/tb_core*.sv` / `tb_soc*.sv` / `tb_sw*.sv` | **10 组**系统级/软件级回归（连同 `tb_units` 共 **11 项**，全部 PASS）|
+| `sim/tb_core*.sv` / `tb_soc*.sv` / `tb_sw*.sv` | **11 组**系统级/软件级回归（连同 `tb_units` 共 **12 项**，全部 PASS；矩阵见 `tools/fpga_workflow.py` 的 `test_matrix()`）|
 | `sim/prog/*.S`、`sw/*.c` | 测试程序与裸机 C 程序（CoreMark、神经网络 GEMM、编译器探针）|
 | `tools/amo_vectors.py` | **RV32A 黄金向量生成器**（独立 Python 参考实现，108 条，双向交叉验证过）|
 | `tools/fpga_workflow.py` | 统一工作流入口：`doctor`/`check`/`verify`/`synth`/`report`/`metrics`/`profile`/`hw` |
-| `results/` | 成绩、逐轮优化记录、失败记录、赛题对照（22 篇 `.md` + 3 份 CSV）|
+| `results/` | 成绩、逐轮优化记录、失败记录、赛题对照（**26 篇** `.md` + 3 份 CSV）|
 | `skills/fpga-riscv-a100t/PITFALLS.md` | 踩坑记录 **R1~R51**（**51** 条编号记录，症状优先）|
 | `legacy/` | 最初的 Verilog 单周期代码 (历史留档) |
 
@@ -143,10 +150,10 @@ tick **1,239,079,510**（预期 1,239,100,117，偏差 0.002%）、硬件 CoreMa
 
 ## 跑测试
 
-**唯一可用入口是 ModelSim 统一工作流**（11 项全量回归）：
+**唯一可用入口是 ModelSim 统一工作流**（**12 项**全量回归）：
 
 ```bat
-python tools\fpga_workflow.py verify            :: 增量回归 (基线 PASS 11)
+python tools\fpga_workflow.py verify            :: 增量回归 (基线 PASS 12)
 python tools\fpga_workflow.py verify --force    :: 忽略缓存, 强制全量重跑
 python tools\fpga_workflow.py verify --only tb_units tb_soc   :: 只跑指定项
 ```
@@ -225,15 +232,19 @@ store: shifted = {32'b0, rs2} << (8*addr[1:0]), 写使能为掩码移位到两�
 
 - **默认关闭的四个宏**（都留了实测数据与复现开关，不要重复试）：
   `A_EN`（RV32A：9 AMO + LR.W 完整、SC.W 按规范恒失败，但对 CoreMark 三项零贡献）、
-  `GEMM_EN`（面积翻倍 + C 读回未修完）、`RAS_EN` 与 `BTB_GSHARE`（实测净亏）。
+  `GEMM_EN`（面积翻倍 + C 读回未修完）、`RAS_EN` 与 `BTB_GSHARE`。
+  > ⚠️ **`RAS_EN` 的旧结论需要重测**：当年否掉它的理由是"8:1 栈顶 mux 落在 `pc_target` 路径上"，
+  > 而 **C-1 把 `pred_target` 的两个来源都变成寄存器输出之后该理由很可能已失效** ——
+  > `p4-c1-2stage-gshare.md` 实测 `--ras` 让 ticks 从 453,942 降到 **452,288**（−0.36%）、
+  > JALR 误判 3,650 → 2,796。**要不要默认打开取决于 `--ras` 的 fmax 实测**（`synth --ras` 已支持）。
 - **Cache（2 路组相联 + 总线突发）**：**分析判定架构性无收益**，不实现 ——
   `imem`/`dmem` 都已是单周期命中的片上 BRAM，没有它要掩盖的存储器延迟。
   定量依据见 `results/p7-cache-analysis.md`。
-- **fmax 剩余空间**：当前 **76.2 MHz**（`sys_clk_75` @13.333 ns，WNS +0.206；对基线 78.4 差 **−2.8%**）。
-  关键路径 `u_dmem/mem_reg_0/CLKBWRCLK → u_imem/rdata_reg_3/ADDRARDADDR[5]`，
-  data path 12.466 ns = logic 4.011（32.2%）+ **route 8.455（67.8%）**、16 级逻辑 ——
-  **route 占 2/3**，纯改 RTL 收益有限（PITFALLS **R47**：top-N 是墙时逻辑重排期望≈0）。
-  另见 **R50**：收紧约束本身就会让 fmax 变高（74.4→76.2），所以"提频"同时也是在动 fmax 这一项。
+- **fmax 剩余空间**：最新已上板档 = **106.30 MHz**（`sys_clk_core` @9.524 ns，WNS **+0.117**）；
+  **当前设计目标是 131.25 MHz（@7.619 ns），时序尚未收敛**（WNS **−0.963**、1141/4437 失败端点）
+  ⇒ 下一步是**物理/结构手段**把 131.25 收下来（route 占比 2/3，见 PITFALLS **R47**：
+  top-N 是墙时逻辑重排期望≈0）。
+  另见 **R50**：**收紧约束本身就会让 fmax 变高**（74.4→76.2 就是实例），所以"提频"与 fmax 不是独立两项。
 - **`LOAD_RESULT_REG`**：实测更差，已否决（`results/p4-macro-failure.md` 5.2）。
 - **唯一未完成项**：GEMM 加速单元的 C 读回 + 缓冲改 BRAM（不计入成绩）。
 - **设计坑记录** (都踩过并已修复，代码注释里有详细说明)：
