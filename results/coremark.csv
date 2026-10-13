@@ -208,3 +208,7 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-11,deliv117,1,453942,2.2029,2659,1349,9,8,119.1,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-11,cB-128,1,453942,2.2029,2654,1349,9,8,129.6,measure,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-13,candA-128,1,453942,2.2029,2627,1348,9,8,128.3,measure,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-13,camp-s1,1,461712,2.1659,2848,1447,9,8,133.0,timing_fail,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-13,camp-s2---no-lc,1,461712,2.1659,2930,1465,9,8,139.7,timing_fail,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-13,camp-s2---fanout-limit400,1,461712,2.1659,2848,1447,9,8,133.0,timing_fail,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-13,camp-s2---fanout-limit128,1,461712,2.1659,2759,1441,9,8,135.7,timing_fail,fpga_workflow.py synth (PROG=cm_hw)

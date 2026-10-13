@@ -331,5 +331,70 @@ Dest   : u_muldiv/prod_uu_reg__2/PCIN[0]
 
 ---
 
+## 8. 150 MHz 战役（2026-10-13 夜，进行中）
+
+**起因**：用户裁定"**如果有办法 150MHz 也满足了**"，并批准承受必要的 IPC 代价；
+两条约束：**不换工具链**（往盘古迁移）、**不缩 BRAM**。
+
+**战前核实**（详见 `results/FREQ-VERDICT.md`）：他们 = 162~174 MHz @ 速度等级 **-1**（论文 Table I），
+Wiki 默认 160 MHz；**"230+ MHz" 在论文/源码/Wiki 三处都查不到**。
+= 我们 128.125 已上板、134.375 只差 0.081 ns，且**配方/路由指令/放置指令/区域约束四类免费旋钮已全部试穷**。
+
+### 战役 step1 · C-12c 作为**解锁器**重新落盘（`core.sv`）
+- **为什么**：150 档的绑定族是 **DSP 级联 44~49/50 条**（`prod_uu_reg/PCIN`）——
+  **不拆掉这堵墙，其他族根本轮不到当绑定族**。C-12c 上次被判净亏（+2.08% ticks、墙转移），
+  但那是"单点"视角；战役里它是**必要代价**（`2.158 × 150 = 323.7` vs 现在 `2.2029 × 128.125 = 282.2` ⇒ 仍 **+14.7%**）。
+- **结果**：150 档 **−0.852**（与上次逐位复现 ✓ 机制成功：DSP 族消失），但**墙如期转移**：
+```
+22 条  u_ex_mem/alu_out_reg/D        -0.846
+16 条  u_mmio/tx_cnt_reg/R           -0.801   (复位网)
+ 4 条  u_ex_mem/alu_out_reg/CE       -0.852   <- top-1 落在 **CE**
+ 3 条  u_mmio/tx_idx_reg/R           -0.735
+ 2 条  u_imem/rdata_reg/ADDRARDDR     -0.793
+```
+- **逐跳（本次最有价值的一张图）**：
+```
+Source: u_imem/rdata_reg_2/CLKARDCLK (指令字) → Dest: u_ex_mem/alu_out_reg[2]/CE
+7.081ns / 5 级(LUT5×3+LUT6×2), 逻辑合计只有 0.525ns
+  hop2 LUT6 0.105/0.411  u_imem/id_ex_fwd_b[1]_i_4_n_0
+  hop3 LUT5 0.105/0.566  u_imem/fwd_b_pre4
+  hop4 LUT5 0.105/0.496  u_id_ex/dbg_illegal_reg            fo=45
+  hop5 LUT6 0.105/0.830  u_lsu/rd_addr_reg[0]               fo=121
+  hop6 LUT5 0.105/**1.317** u_ex_mem/rd_addr_reg[0]_0       fo=122
+```
+  ⇒ **几乎全是布线 + 扇出（两跳就 2.147ns = 30%）**，不是逻辑深度。
+- **真正的锥（`rtl-bypass` 从逐跳解出，比我最初的 `md_busy` 假设更准）**：
+```
+imem 指令字 → rs1/rs2 相等比较(网名 rd_addr_reg, fo≈121/122) → load_use → pipe_stall
+  → !pipe_stall → irq_take → trap_req → trap_enter → flush → **ex_mem 数据字段的 CE**
+```
+  **教训**：`md_busy` 那条假设被逐跳**否证**了（`is_muldiv ← id_ex_ctrl.alu_op`、`redir_kill ← br_redir_r`、
+  `md_served` 全是寄存器 ⇒ `md_busy` 已是纯寄存器驱动）。**"看族 → 逐跳"这一步不能省**。
+
+### 战役 step2 · 三个工具单选项（首次单独测，而非整套配方）
+| 单选项 | WNS@150 | 增益 | 结论 |
+|---|---|---|---|
+| 基线（A+C+C-12c） | −0.852 | — | |
+| **`synth_design -no_lc`** | **−0.490** | **+0.362** | ✓ **有效**：证实"LUT 合并把两条无关锥并在一个 LUT 里"的假象真实存在 |
+| `-fanout_limit 400` | −0.852 | 0 | 无变化 |
+| `-fanout_limit 128` | −0.703 | +0.149 | 轻微有效 |
+
+- **`-fanout_limit 128` 的族分布把诊断钉死了**：
+```
+31 条  u_ex_mem/alu_out_reg/D   -0.692
+11 条  u_csr/mtval_reg/CE       -0.288   <- 全是 **trap 锥**
+ 2 条  u_csr/mepc_reg/CE        -0.260   <- 同为 trap 锥
+(reset 网 tx_cnt_reg/R 已消失)
+```
+  ⇒ `alu_out/D`、`mtval/CE`、`mepc/CE` **全部由同一条 `trap_enter → flush → CE` 锥驱动** ⇒
+  下一步就该**把这锥从数据字段的 CE 上摘掉**。
+- **工具新增两个开关**（都进综合缓存指纹，避免"改了选项却命中旧缓存"）：
+  `--no-lc`、`--fanout-limit N`；另有 `--synth-recipe perf_high`（他们整套配方，实测更差，已排除）。
+- **教训（这是本节最该记的一条）**：**只测"整套配方"会掩盖单选项的真实作用**。
+  我们此前把 `Flow_PerfOptimized_high` 整套搬过来 = **−1.621（更差 0.85ns）**，于是很容易下结论
+  "工具选项没用"；而**单独**测 `-no_lc` 却赚 **0.362ns**。**"整套"的负结果必须先拆成单项再否证。**
+
+---
+
 *维护约定：**每完成一项改动（含负结果）就往 §1/§5 追加一行**，并附 `file:line` + CSV 行名 +
 一句"最该学的一点"。数字一律从 `results/coremark.csv` 复核，不手抄。*

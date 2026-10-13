@@ -336,6 +336,24 @@ if {[info exists ::env(SYNTH_RECIPE)] && $::env(SYNTH_RECIPE) eq "perf_high"} {
 } else {
   puts "BUILD_SYNTH_RECIPE_OFF=1"
 }
+# ---- 【单选项实验: -no_lc / -fanout_limit (2026-10-13 150 战役)】 --------------------
+# step1 逐跳: top-1 的两跳高扇出布线(fo=121/122)占 2.147ns, 且 hop2/hop3 落在 C-10 的
+# `fwd_b_pre` => 怀疑综合器把"译码 LUT"与"前递预选 LUT"**合并**(LUT combining)了, 使本该
+# 是"寄存器->寄存器"的短路径变成"从 imem 指令字出发的 5 级锥"。
+# 对症药两条: `-no_lc`(禁 LUT 合并) 与 `-fanout_limit`(降全局扇出指导, 让工具复制高扇出驱动器)。
+# ⚠ 我们只测过**整套** Flow_PerfOptimized_high(=-1.621 更差); 这两个**单独**从未测过。
+if {[info exists ::env(SYNTH_NO_LC)] && $::env(SYNTH_NO_LC) eq "1"} {
+  lappend SYNTH_OPT -no_lc
+  puts "BUILD_SYNTH_NO_LC=1"
+} else {
+  puts "BUILD_SYNTH_NO_LC_OFF=1"
+}
+if {[info exists ::env(SYNTH_FANOUT_LIMIT)] && $::env(SYNTH_FANOUT_LIMIT) ne ""} {
+  lappend SYNTH_OPT -fanout_limit $::env(SYNTH_FANOUT_LIMIT)
+  puts "BUILD_SYNTH_FANOUT_LIMIT=$::env(SYNTH_FANOUT_LIMIT)"
+} else {
+  puts "BUILD_SYNTH_FANOUT_LIMIT_OFF=1"
+}
 synth_design -top top_a100t -part $part {*}$RETIM_OPT {*}$SYNTH_OPT -verilog_define "IMEM_INIT_FILE=\"$imem\" DMEM_INIT_FILE=\"$dmem\" $IMEM_DEFS"
 puts "BUILD_PROG=$PROG"
 

@@ -163,11 +163,21 @@ module core
   // RV32M
   logic [31:0] ex_result, md_result;
   logic        md_busy, is_muldiv;
-  // 【C-12c 复测 —— 已判负并回退 (2026-10-13), 见下面对应的记录段】
-  //   曾在此加 `md_a_r/md_b_r/md_op_r/md_served/md_busy_raw` 五个信号, 把 muldiv 的
-  //   操作数寄存一拍。机制成功 (DSP 级联族 49 条全部消失、DSP 数仍 8 = 未吸收),
-  //   但 **WNS −0.770 → −0.852、达成 fmax 134.5 → 132.9、ticks +2.08%**
-  //   ⇒ 绝对吞吐 −3.2%, 净亏 ⇒ 回退。
+  // 【C-12c · 三次落盘的完整历史 (供轨迹参考, 别只看最后一次)】
+  //   ① 首次 (C-11 时代): 净亏, 回退 —— 当时绑定族是 BTB/CE, DSP 链不在关键路径上,
+  //      白付 +2.05% ticks。
+  //   ② 复测 (候选 A+C 树, 150 档): **机制完全成功** —— DSP 级联族 49 条从 top-50 消失、
+  //      `util.rpt` DSP48E1 仍 **8**(未被吸收进 AREG/BREG)、断言 0 触发、12/12 全绿;
+  //      但 WNS −0.770 → −0.852、ticks +2.08% ⇒ 绝对吞吐 −3.2%, 作为"单点优化"是净亏, 曾回退。
+  //   ③ **本次重新落盘 (2026-10-13, 用户批准"计划 B: 冲 150MHz 的结构战役")**:
+  //      它不再是收益本身, 而是**解锁器** —— 不拆掉 DSP 级联这堵墙, 第 2 族
+  //      `ex_mem/alu_out_reg/D`(22 条) 与第 3 族复位网(16 条) 根本轮不到当绑定族。
+  //      代价被"150 上板"覆盖: 2.158×150 = 323.7 vs 现档 2.2029×128.125 = 282.2 ⇒ **+14.7%**。
+  //      Lead 的归档口径 = `status=measure`(既非 keep 也非 rejected)。
+  logic [31:0] md_a_r, md_b_r;
+  logic [4:0]  md_op_r;
+  logic        md_served;        // EX 里这条 M/D 已经发射过 (一次性; 指令离开 EX 自动清)
+  logic        md_busy_raw;      // muldiv 自己的 busy (原 `md_busy` 这个名字留给"有效 busy")
   logic        ex_taken;
 
   // ---- Zicsr / 陷阱 (M-mode) ----
@@ -787,51 +797,73 @@ module core
   end
 
   // --------------------------------------------------------------------------
-  // 【C-12c 复测 —— 负结果, 已回退 (2026-10-13)】把 muldiv 操作数先寄存一拍
+  // 【C-12c · 第三次落盘 (2026-10-13)】muldiv 操作数寄存一拍 = 150 战役的**解锁器**
   // --------------------------------------------------------------------------
-  // 【试过什么】`md_a_r/md_b_r/md_op_r` 锁存 `ex_rs1/ex_rs2/id_ex_ctrl.alu_op`,
-  //   配 `md_served` 一次性发射 (发射置 1、muldiv 报完成清 0)、空闲时把 op 喂
-  //   `ALU_ADD` (防止陈旧算子让 muldiv 的一拍 `done_r` 重发 —— 上次就是这个坑),
-  //   以及断言 `md_start && md_busy_raw ⇒ $error`。做法本身是对的: 那次实测
-  //   **该断言全程 0 触发** ✓, 功能 12/12 全绿, ticks 453,942 → 463,366
-  //   (+9,424 = 每条 M/D 多占 1 个 EX 拍, 与预登记一致且与上次同类实现逐位相同)。
-  // 【为什么仍然是负结果 (机制成功, 但净亏)】150 档实测:
-  //     A+C 基线   : WNS **−0.770**, 达成 fmax 134.5, ticks 453,942
-  //     A+C+C-12c  : WNS **−0.852**, 达成 fmax 132.9, ticks 463,366 (+2.08%)
-  //   ⇒ 绝对吞吐 2.2029×134.5 = 296.3 → 2.158×132.9 = 286.8 = **−3.2%**
-  //   **机制确实生效**: `util.rpt` DSP48E1 仍 8 (**没被吸收进 AREG/BREG**)、
-  //   而 **DSP 级联族 (49 条) 从 top-50 里完全消失** ✓ —— "操作数 → DSP → 积寄存器"
-  //   那条单周期链被断开了 ✓。坏消息是**墙转移了且更分散** (工具判语"分散 ⇒
-  //   结构改动收益有限"), 新族: 22 条 `ex_mem/alu_out_reg/D`(−0.846)、
-  //   **16 条 `u_mmio/tx_cnt_reg/R`(−0.801, 复位网扇出 —— 全新瓶颈类别)**、
-  //   4 条 `ex_mem/alu_out_reg/CE`、2 条 `imem/rdata_reg/ADDRARDADDR`。
-  //   ⇒ 用 +2.08% 的 ticks 换一个"墙转移到复位网/EX 数据通路"的结果, 不划算。
-  // 【教训(值得进 CHANGELOG)】"**打断一条链"不等于"消除一个瓶颈**": 必须同时看
-  //   **墙转移到哪里**(本工程的 `path_families.py` + `Δ(top1,top2)`)。当设计变成
-  //   "均匀地差 0.8ns"时, 单点结构改动就没有杠杆了 —— 那要靠**全局网**
-  //   (复位/时钟扇出) 或约束档位选择, 而不是继续打单族。
-  // 【保留的替代手段】若将来 150 仍是目标, 顺序建议: ①复位网扇出 (全局) →
-  //   ②`alu_out_reg/D` 那条 22 条的 EX 数据通路族 → ③之后才考虑再断 DSP 链。
+  // 【为什么必须落它】150 档绑定族 = **DSP 级联 44~49/50 条** (`prod_uu_reg/PCIN`,
+  //   data_path 6.245~6.247ns): 前端 logic 只有 0.21ns 但布线 1.375ns、DSP 内部
+  //   A→M→P **3.397ns**(占 54%) ⇒ 整条链塞不进 6.667ns 周期。**不拆这堵墙**,
+  //   第 2 族 `ex_mem/alu_out_reg/D`(22 条) 与第 3 族复位网(16 条) 轮不到当绑定族。
+  // 【代价与判据】每条 M/D 多占 1 个 EX 拍 ⇒ ticks 453,942 → **463,366 (+9,424,
+  //   +2.08%)**, `cycles` +9,711 = `stall` 增量, 分解恒等式闭合 ✓; 换 150 上板:
+  //   2.158×150 = 323.7 > 2.2029×128.125 = 282.2 ⇒ 净 +14.7%。
+  //
+  // 【上次的坑 —— 用"一次性发射"根治, 逐条对应】
+  //   首次失败: 陈旧 `md_op_r` 让 muldiv 的一拍 `done_r` **重发** ⇒ busy 提前落下
+  //   ⇒ 拿到旧积 (tb_core_m_ext 第 2 组 / CoreMark tohost=0x5252 / nn_demo tohost=2)。
+  //   三条不变量:
+  //     ① 空闲时喂 `ALU_ADD` (`md_op_eff`) ⇒ muldiv 自己不会重发;
+  //     ② `md_served` 一次性: 发射置 1、muldiv 报完成清 0 (`md_served <= md_start | (md_served & ~md_done)`)
+  //        ⇒ 同一条指令只发射一次; 指令离开 EX 后自然不再满足 `md_start` 条件;
+  //     ③ 断言 `md_start && md_busy_raw ⇒ $error` (文件末尾) ⇒ 将来改 busy 语义造成
+  //        "在途又发射"会立刻被回归抓住。第 ② 次实测该断言全程 0 触发 ✓。
+  // 【逐拍时间线 (乘法; 除法把 T+1 那段拉成 32 步迭代)】
+  //   T   : md_served=0 ⇒ op=ALU_ADD (muldiv 空闲); **锁存** md_a_r/md_b_r/md_op_r;
+  //         md_busy=1 (锁存拍必须冻结, 否则操作数会在半路变)
+  //   T+1 : md_served=1 ⇒ op=md_op_r ⇒ 乘法开始; busy_raw=1 ⇒ md_busy=1
+  //   T+2 : done_r=1(内部) ⇒ busy_raw=0 ⇒ md_done=1 ⇒ **md_busy=0** ⇒ 放行,
+  //         EX/MEM 在这一沿捕获刚寄存好的积 ✓
+  //   T+3 : md_served 已清 ⇒ op=ALU_ADD ⇒ muldiv idle ✓ (不重发、不多冻)
+  // 【C-15 耦合】`is_muldiv_eff = is_muldiv && !redir_kill`: 错路 X0 不发射
+  //   (否则一个错路 DIV 会冻 32 拍; X0 那拍 md_start=0 ⇒ op=ALU_ADD ⇒ 整台惰性)。
+  // 【`md_busy` 这个名字必须保留】`core.sv` 的 `.ex_busy(md_busy)` 与
+  //   `sim/tb_sw.sv:390,400` 的 `u_dut.md_busy` 都引用它 (它 = **有效 busy**)。
   // --------------------------------------------------------------------------
+  wire is_muldiv_eff = is_muldiv && !redir_kill;
+  wire md_start      = is_muldiv_eff && !md_served;
+  wire md_done       = md_served && !md_busy_raw;   // muldiv 报完成那一拍 (busy 落下的拍)
+  wire [4:0] md_op_eff = md_served ? md_op_r : ALU_ADD;
+  assign md_busy     = md_start || (md_served && !md_done);
+
+  always_ff @(posedge clk or posedge rst) begin
+    if (rst) begin
+      md_a_r    <= 32'd0;
+      md_b_r    <= 32'd0;
+      md_op_r   <= ALU_ADD;
+      md_served <= 1'b0;
+    end
+    else begin
+      if (md_start) begin
+        md_a_r  <= ex_rs1;
+        md_b_r  <= ex_rs2;
+        md_op_r <= id_ex_ctrl.alu_op;
+      end
+      md_served <= md_start | (md_served & ~md_done);
+    end
+  end
 
   muldiv #(.XLEN(XLEN)) u_muldiv (
     .clk    (clk),
     .rst    (rst),
-    // 【C-15】错路 X0 不许启动 muldiv —— 否则一个错路 DIV 会把流水线冻结 ~32 拍
-    //   (功能仍安全: 不进 MEM、不写回, 但白等)。op 钉成 ALU_ADD 即整台惰性。
-    .op     (redir_kill ? ALU_ADD : id_ex_ctrl.alu_op),
-    // 【C-12a】操作数**直取 ex_rs1/ex_rs2**, 不再经 ALU_A/ALU_B 操作数 mux。
-    //   等价性依据 (control_unit.sv:57-98): M 扩展走 OPC_REG R 型路径 ⇒
-    //     alu_a_src 保持默认 ALU_A_RS1、alu_b_src 显式 ALU_B_RS2
-    //   ⇒ 对 MUL/MULH/MULHSU/MULHU/DIV/DIVU/REM/REMU 恒有 `ex_a ≡ ex_rs1`、
-    //     `ex_b ≡ ex_rs2` —— **逐位等价**的改写, 不是近似。
-    //   (AMO 的 alu_b_src=ALU_B_IMM 不影响: `is_muldiv` 只认上面那 8 个 alu_op,
-    //    AMO 走 ALU_AMO_*, 本来就不进 muldiv。)
-    //   【实测效果】128.125 档 WNS −0.437 → **−0.077**, 达成 124.1 → 129.9 MHz ✓
-    .a      (ex_rs1),
-    .b      (ex_rs2),
+    // 【C-12c】op 只在"在途"那一拍给真算子, 其余给 ALU_ADD ⇒ muldiv 空闲、不自己重发。
+    //   (C-15 的"错路 X0 不许启动"由 `is_muldiv_eff` 在 md_start 里保证, 见上。)
+    .op     (md_op_eff),
+    // 【C-12c】操作数取**寄存一拍**的值 (本节的目的: 把前端从 DSP 输入锥里摘掉)。
+    //   (C-12a 的等价性结论被继承: M 扩展恒有 `ex_a ≡ ex_rs1`、`ex_b ≡ ex_rs2`,
+    //    这里锁存的就是这两个值 ✓)
+    .a      (md_a_r),
+    .b      (md_b_r),
     .result (md_result),
-    .busy   (md_busy)
+    .busy   (md_busy_raw)
   );
 
   // 写回结果: M 指令取 muldiv, CSR 指令取读到的旧值, 其余取 ALU。
@@ -1643,10 +1675,19 @@ module core
   end
   `endif
 
-  // 【C-12c 的机器化判据 —— 已随该改动回退 (2026-10-13)】
-  //   原断言: `md_start && md_busy_raw ⇒ $error` ("锁存操作数那一拍 muldiv 必须空闲")。
-  //   它在该改动全程 0 触发 ⇒ 发射纪律成立; 但改动本身因"墙转移到复位网/EX 数据通路"
-  //   而净亏(绝对吞吐 −3.2%), 已回退。断言随信号一起删除, 记录留在 RV32M 段。
+  // 【C-12c 的机器化判据 —— 发射那一拍 muldiv 必须空闲】
+  //   `md_start` 的语义是"锁存操作数并发射"; 若同一拍 muldiv 还在忙 (busy_raw=1),
+  //   说明"在途又发射" —— 后果是它的 `done_r` 会因为**新算子**而重发、busy 提前落下、
+  //   EX 捕获到**旧积**(首次 C-12c 就是这样坏的: tb_core_m_ext 第 2 组 /
+  //   CoreMark tohost=0x5252 / nn_demo tohost=2)。这条断言与相位无关,
+  //   覆盖整个回归每一拍, 将来任何人改 muldiv 的 busy 语义都会立刻被抓。
+  `ifndef SYNTHESIS
+  always_ff @(posedge clk) begin
+    if (!rst && md_start && md_busy_raw) begin
+      $error("C-12c: muldiv not idle at operand-latch cycle (md_start && busy_raw)");
+    end
+  end
+  `endif
 
   // ==========================================================================
   // 流水线效率观测 (纯观测, 不参与逻辑; 未连接时会被综合优化掉)

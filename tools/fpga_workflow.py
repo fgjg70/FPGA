@@ -1911,6 +1911,8 @@ def cmd_synth(args) -> int:
     h.update(("synth=" + (getattr(args, "synth_directive", None) or "default")).encode())
     h.update(("rs=" + (getattr(args, "resource_sharing", None) or "default")).encode())
     h.update(("recipe=" + (getattr(args, "synth_recipe", None) or "default")).encode())
+    h.update(("no_lc=" + ("1" if getattr(args, "no_lc", False) else "0")).encode())
+    h.update(("folim=" + str(getattr(args, "fanout_limit", None))).encode())
     h.update(("physopt=" + (getattr(args, "phys_opt_directive", None) or "default")).encode())
     h.update(b"retiming" if args.retiming else b"noretiming")
     fp = h.hexdigest()[:32]
@@ -1992,6 +1994,12 @@ def cmd_synth(args) -> int:
             # no_lc/keep_equivalent_registers/shreg_min_size)从未测过。
             if getattr(args, "synth_recipe", None):
                 benv["SYNTH_RECIPE"] = args.synth_recipe
+            # 【单选项实验】见 build.tcl 的注释: 对症"译码 LUT 与前递预选 LUT 被合并"
+            # 造成的 5 级长锥 + fo=121/122 高扇出布线(占该路径 2.147ns/30%)。
+            if getattr(args, "no_lc", False):
+                benv["SYNTH_NO_LC"] = "1"
+            if getattr(args, "fanout_limit", None) is not None:
+                benv["SYNTH_FANOUT_LIMIT"] = str(args.fanout_limit)
             if getattr(args, "phys_opt_directive", None):
                 benv["PHYS_OPT_DIRECTIVE"] = args.phys_opt_directive
             if args.retiming:
@@ -2049,6 +2057,12 @@ def cmd_synth(args) -> int:
                 expect.append("BUILD_SYNTH_RECIPE=" + args.synth_recipe)
             else:
                 expect.append("BUILD_SYNTH_RECIPE_OFF=1")
+            expect.append("BUILD_SYNTH_NO_LC=1" if getattr(args, "no_lc", False)
+                          else "BUILD_SYNTH_NO_LC_OFF=1")
+            if getattr(args, "fanout_limit", None) is not None:
+                expect.append("BUILD_SYNTH_FANOUT_LIMIT=" + str(args.fanout_limit))
+            else:
+                expect.append("BUILD_SYNTH_FANOUT_LIMIT_OFF=1")
             if args.load_reg:      expect.append("BUILD_LOAD_RESULT_REG=1")
             if args.gshare:        expect.append("BUILD_BTB_GSHARE=1")
             if args.ras:           expect.append("BUILD_RAS_EN=1")
@@ -3087,6 +3101,12 @@ def main() -> int:
                         "注意 PerformanceOptimized **不存在**于 2018.3(会立刻 "
                         "[Common 17-161] 报错)。RVCoreP 的 main.xpr 用 Directive=7, "
                         "按该枚举 = FewerCarryChains")
+    p.add_argument("--no-lc", action="store_true",
+                   help="传给 synth_design 的 -no_lc(禁 LUT 合并)。对症:\n"
+                        "150 战役 step1 发现译码 LUT 与前递预选 LUT 被合并, 造出 5 级长锥")
+    p.add_argument("--fanout-limit", type=int, default=None,
+                   help="synth_design -fanout_limit N(全局扇出指导)。对症 top-1 上\n"
+                        "fo=121/122 的两跳布线(单跳 1.317ns)。默认不传(工具默认值)")
     p.add_argument("--synth-recipe", default=None, choices=["perf_high"],
                    help="整套综合配方。perf_high = RVCoreP 的 Flow_PerfOptimized_high 等价物: -resource_sharing off -fanout_limit 400 -fsm_extraction one_hot -no_lc -keep_equivalent_registers -shreg_min_size 5 (从他们的 main.xpr synth_1 Run Description 逐条抄出)")
     p.add_argument("--resource-sharing", default=None,
