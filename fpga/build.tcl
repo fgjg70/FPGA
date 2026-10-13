@@ -314,6 +314,28 @@ if {[info exists ::env(RESOURCE_SHARING)] && $::env(RESOURCE_SHARING) ne ""} {
 } else {
   puts "BUILD_RESOURCE_SHARING_OFF=1"
 }
+# ---- 【RVCoreP 的生产配方: Flow_PerfOptimized_high, 整套搬到非工程流】 --------
+# 2026-10-13 从他们的 main.xpr 里抄出**完整选项组** —— 此前我们只搬了 `-directive`
+# (AlternateRoutability), 这一整套**从未测过**, 是"我们为什么慢"的头号待验证假设。
+#   synth_1 的 Run Description 原文:
+#     "Higher performance designs, resource sharing is turned off, the global fanout
+#      guide is set to a lower number, FSM extraction forced to one-hot, LUT combining
+#      is disabled, equivalent registers are preserved, SRL are inferred with a larger
+#      threshold"
+#   XPR Strategy 选项: ResourceSharing=2(off) / RepFanoutThreshold=400 /
+#     FsmExtraction=one_hot / NoCombineLuts=1 / KeepEquivalentRegisters=1 / ShregMinSize=5
+#   逐条对应 synth_design 的参数:
+#     -resource_sharing off -fanout_limit 400 -fsm_extraction one_hot
+#     -no_lc -keep_equivalent_registers -shreg_min_size 5
+# 注意: `-fanout_limit` 就是我们反复看到的 fo=93/128/252 那些网的"全局扇出指导"。
+if {[info exists ::env(SYNTH_RECIPE)] && $::env(SYNTH_RECIPE) eq "perf_high"} {
+  lappend SYNTH_OPT -resource_sharing off -fanout_limit 400 \
+                    -fsm_extraction one_hot -no_lc -keep_equivalent_registers \
+                    -shreg_min_size 5
+  puts "BUILD_SYNTH_RECIPE=perf_high"
+} else {
+  puts "BUILD_SYNTH_RECIPE_OFF=1"
+}
 synth_design -top top_a100t -part $part {*}$RETIM_OPT {*}$SYNTH_OPT -verilog_define "IMEM_INIT_FILE=\"$imem\" DMEM_INIT_FILE=\"$dmem\" $IMEM_DEFS"
 puts "BUILD_PROG=$PROG"
 

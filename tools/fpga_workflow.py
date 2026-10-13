@@ -1816,7 +1816,7 @@ def print_metrics(m: dict) -> None:
 #   keep     = 决策为"保留"
 #   rejected = 决策为"否决"(必须能由工具写入 —— 原实现硬编码 keep, 见 CODE-REVIEW-PLAN X-04)
 #   measure  = 只测了、还没做决策 (默认值就是它, 不再冒充 keep)
-CSV_STATUSES = ("keep", "rejected", "measure")
+CSV_STATUSES = ("keep", "rejected", "measure", "timing_fail")
 
 
 def append_csv(tag: str, m: dict, status: str | None = None) -> None:
@@ -1910,6 +1910,7 @@ def cmd_synth(args) -> int:
     # 而我们从来没扫过 synth/phys_opt 这两个旋钮。不进指纹 = 改策略却命中旧缓存。
     h.update(("synth=" + (getattr(args, "synth_directive", None) or "default")).encode())
     h.update(("rs=" + (getattr(args, "resource_sharing", None) or "default")).encode())
+    h.update(("recipe=" + (getattr(args, "synth_recipe", None) or "default")).encode())
     h.update(("physopt=" + (getattr(args, "phys_opt_directive", None) or "default")).encode())
     h.update(b"retiming" if args.retiming else b"noretiming")
     fp = h.hexdigest()[:32]
@@ -1986,6 +1987,11 @@ def cmd_synth(args) -> int:
                 benv["SYNTH_DIRECTIVE"] = args.synth_directive
             if getattr(args, "resource_sharing", None):
                 benv["RESOURCE_SHARING"] = args.resource_sharing
+            # 【RVCoreP 的 Flow_PerfOptimized_high 整套配方】见 build.tcl 注释:
+            # 此前只搬了 -directive; 这一整套(resource_sharing/fanout_limit/fsm/
+            # no_lc/keep_equivalent_registers/shreg_min_size)从未测过。
+            if getattr(args, "synth_recipe", None):
+                benv["SYNTH_RECIPE"] = args.synth_recipe
             if getattr(args, "phys_opt_directive", None):
                 benv["PHYS_OPT_DIRECTIVE"] = args.phys_opt_directive
             if args.retiming:
@@ -2039,6 +2045,10 @@ def cmd_synth(args) -> int:
                 expect.append("BUILD_RESOURCE_SHARING=" + args.resource_sharing)
             else:
                 expect.append("BUILD_RESOURCE_SHARING_OFF=1")
+            if getattr(args, "synth_recipe", None):
+                expect.append("BUILD_SYNTH_RECIPE=" + args.synth_recipe)
+            else:
+                expect.append("BUILD_SYNTH_RECIPE_OFF=1")
             if args.load_reg:      expect.append("BUILD_LOAD_RESULT_REG=1")
             if args.gshare:        expect.append("BUILD_BTB_GSHARE=1")
             if args.ras:           expect.append("BUILD_RAS_EN=1")
@@ -2065,6 +2075,21 @@ def cmd_synth(args) -> int:
                 print("  [FAIL] 时序未收敛 (BUILD_TIMING=FAIL) —— build.tcl 已拒绝写 bitstream。")
                 print("         这不是脚本坏了, 是**门生效**。修 RTL/约束后重跑; "
                       "不要用旁路开关绕过。")
+                # 【2026-10-13 补】门的失败**也是数据**: 报告里已经写出了
+                # **达成 fmax / WNS / 资源**, 而那正是"这一档还差多少"的唯一证据。
+                # 此前失败构建**完全不进 CSV** ⇒ 冲 150 的全部失败点(含各自达成 fmax)
+                # 只留在会被下一次构建覆盖的 fpga/timing.rpt 里, **负结果台账是残缺的**。
+                # 现在把失败点记成 status=timing_fail —— 明确标注"这不是可交付结论,
+                # 只是达成值", 于是它既不可被当成 keep 锚点, 又不会丢证据。
+                try:
+                    res_f = parse_reports()
+                    res_f["prog"] = prog
+                    print("       [计时] 该失败点的**达成值** (不是可交付结论):")
+                    print_metrics(compute_metrics(res_f))
+                    append_csv(args.tag or f"synth-{prog}", compute_metrics(res_f),
+                               "timing_fail")
+                except Exception as e:                       # noqa: BLE001
+                    print(f"       [warn] 失败点归档时出错(不影响『门生效』的判定): {e}")
                 return 1
             if ok and missing:
                 print(f"  [FAIL] 请求的架构宏**没有生效**: {missing}")
@@ -3062,6 +3087,8 @@ def main() -> int:
                         "注意 PerformanceOptimized **不存在**于 2018.3(会立刻 "
                         "[Common 17-161] 报错)。RVCoreP 的 main.xpr 用 Directive=7, "
                         "按该枚举 = FewerCarryChains")
+    p.add_argument("--synth-recipe", default=None, choices=["perf_high"],
+                   help="整套综合配方。perf_high = RVCoreP 的 Flow_PerfOptimized_high 等价物: -resource_sharing off -fanout_limit 400 -fsm_extraction one_hot -no_lc -keep_equivalent_registers -shreg_min_size 5 (从他们的 main.xpr synth_1 Run Description 逐条抄出)")
     p.add_argument("--resource-sharing", default=None,
                    help="-resource_sharing 取值 (off/on/auto)。ref5 的 V4 用过 off "
                         "作为 +9.16 MHz 批次的一部分, 而本核此前完全没有这个旋钮")
