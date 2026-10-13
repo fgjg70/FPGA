@@ -289,3 +289,100 @@ RESULT : PASS
 [btb] 2-STAGE gshare ACTIVE: BTB=512 (IDX=9 TAG=3) PHT=8192 GH=13 HIST_ALL=1
 [btb] legacy pred_* ports tied to NO-PREDICTION; wire p2_pc/q_* instead
 ```
+> 第二行是 C-1 当时的原样输出；候选 A 之后实际接线是
+> `.p2_pc(p2_pc_ns) / .p2_hold(p2_hold) / .p2_pc_pht(pc_next) / .q_*`（见附录 A.3）。
+
+---
+
+# 附：候选 A —— BTB 查表地址去掉停顿项（2026-10-13 落盘）
+
+## A.1 动机（来自 ILA 流 timing 报告）
+交付档受 **ILA 流**限制：同样的 RTL，ILA 流比评分流差 ~0.5~0.9 ns，失败侧最大的族是
+`u_core/u_btb/q_vld_reg/D`（另有同族 `q_cond_r_reg/D`）。逐跳拆解（评分流 `timing_paths.rpt`
+第 8/第 28 条，两条同源）：
+
+| 段 | 内容 | 耗时 | 占比 |
+|---|---|---:|---:|
+| A | imem BRAM `rdata_reg_2` clk→DO（指令 bit18 = `rs1[3]`） | 2.125 ns | 26.7% |
+| B | **译码/冒险/PC 选择锥** 5 级 LUT + 6 段布线（网名 `load_use_ex`/`done_r`/`valid`/`pc_flush`） | 3.721 ns | **46.7%** |
+| C | 地址线 → `vld_reg_*/DPRA1` | 0.943 ns | 11.8% |
+| D | 分布式 RAM 读 + MUXF7 | 0.246 ns | 3.1% |
+| E | 末级 LUT（`q_vld_i_1`） | 0.894 ns | 11.2% |
+
+⇒ 这是**查表读 → 打拍**，不是更新口写（更新口全场只以 +0.097 的 hold 检查出现）。
+但**真正的大头是 B 段**：C-1 把 `p2_pc = pc_next`（含 `fetch_hold`）当查表地址，
+于是"指令译码 + load-use 冒险"整锥（其中布线占 83%）被拉进了 `q_*` 的 D 端。
+
+## A.2 一个"看起来等价、其实改了行为"的实测（本轮最值钱的一条）
+第一版按建议把**整条相位链**（含 bht 的 `ctr_q/idx_d1/idx_d2/pcw_d1/pcw_d2/ctr_d1`）
+用 CE 一起冻结。**实测不是逐位等价**：
+
+| | ticks | cycles | 误判 | 精度 |
+|---|---:|---:|---:|---:|
+| 参考（老实现） | 453,942 | 503,160 | 8,020 | 91.95% |
+| 整链冻结 | **454,996** | 504,234 | **8,557** | 91.41% |
+
+二分：**"只冻结、地址不改" = 同样 454,996** ⇒ 与地址无关，是冻结本身。
+逐拍 trace diff 定位到**首个分歧：cycle 8283，停顿中冻结的 PC = `0x80000e6c`**：
+```
+8282  pc=0x80000e6c  pred_taken=1  pred_target=0x80000eec   两边相同
+8283  参考 = 0                                              |  整链冻结 = 1
+```
+**根因**：停顿期 **GHR 仍被 EX 里刚解析的控制流推动**（更新口不受停顿影响），
+而老实现的查表地址 = 冻结 PC，于是 **PHT 索引 = 冻结PC ^ 当前GHR** ⇒ 同一个 PC 的方向
+预测会被用**漂移后的 GHR 重算并刷新一次**。这条"停顿期刷新"**是现有 ticks 的组成部分**。
+
+## A.3 落盘设计（实测逐位不变）
+```
+p2_pc      = pc_flush ? pc_flush_pc : (pc_src ? pc_target : pc_plus4)   // 快地址, 去 fetch_hold
+p2_hold    = fetch_hold && !pc_flush                                    // 只冻结 6 个 BTB 输出寄存器
+p2_pc_pht  = pc_next                                                    // 老地址, 只喂 PHT 读口
+bht        : 一律不冻结 (ctr_q/idx_d1/idx_d2/pcw_d1/pcw_d2/ctr_d1 照常走)
+imem_addr  : 仍用带 fetch_hold 的老 pc_next —— 一行未改
+```
+- BTB 表项在停顿期不会变 ⇒ "输出 CE 冻结" ≡ 老实现"重读同址"（见 A.4）。
+- 晚到的 `fetch_hold` 锥只剩 **CE pin** 与 **PHT 的 BRAM 地址建立**，不再穿过
+  `LUTRAM 读 + MUXF7 + 末级 LUT → q_vld_reg/D`。
+
+## A.4 可审计的等价性边界（不是"trace 没差所以等价"）
+依据 `core.sv:486 btb_upd_en = is_ctrl_flow && !hold_mem && !rst && !redir_kill` 与
+`hazard_unit.sv:97-99`（`pipe_stall = load_use||lsu_stall||ex_busy`，`hold_mem = lsu_stall||ex_busy`）：
+
+| 停顿来源 | 门控 | 停顿拍会写表吗 |
+|---|---|---|
+| `load_use_ex`（EX 是 load） | `is_ctrl_flow=0` | 不会 ✅ |
+| `lsu_stall` | `hold_mem=1` | 不会 ✅ |
+| `ex_busy` | `hold_mem=1` | 不会 ✅ |
+| `load_use_mem`（EX 是真指令） | `hold_mem=0` | **若 EX 是控制流 ⇒ 会** ⚠ |
+
+**残余窗口** = `load_use_mem ∧ EX 是控制流 ∧ uidx==pidx`（IDX=9 ⇒ `upd_pc[10:2]==pc[10:2]`，
+同一 2 KB 窗别名）。此时老实现下一拍读到的是**被别名写覆盖**的表项（tag 变 ⇒ `q_hit` 掉 0），
+冻结版保持旧预测 ⇒ **只影响预测，不影响正确性**（误判由 EX 重定向兜底），且冻结版在别名情形下
+其实更"对"。**绝不**为了"可证逐位等价"去门控更新口：`load_use_mem` 那拍 EX 会前进，
+丢一次写就**永久少写一个表项**，那才是真会改 ticks 的做法。
+
+## A.5 验收证据（落盘后，同一份 RTL）
+| 判据 | 结果 |
+|---|---|
+| `verify --force` | **PASS 12** |
+| CoreMark ticks | **453,942**（逐位等于改前）/ cycles 503,160 |
+| 误判 / 精度 | 8,020 / 91.95% |
+| `align_err_cnt` | **0**（10 万次更新的索引/PC 对齐自证） |
+| PHT_SUM / BTB_SUM | **10019 / 1461117 —— 与改前逐位相同** |
+| 四配置（默认 / `IMEM_COMB_READ` / `RAS_EN` / `A_EN`） | 改前改后**逐位一致**（RAS 档 452,288 / 7,167 / 92.81%） |
+| 逐拍 trace（改前的整链冻结版 vs 本版） | 503,161 行 0 差异（本版 vs 参考） |
+
+## A.6 复现
+```powershell
+python .fpga-cache\pred-eval\run.py frozen hold    # 本版 vs 参考: 0 差异
+python .fpga-cache\pred-eval\run.py holdka         # 被否掉的"整链冻结": +537 误判
+python .fpga-cache\pred-eval\run.py comb hcomb ras hras fa_ext ha_ext   # 宏矩阵
+```
+落盘物（最终指纹，2026-10-13）：
+
+| 文件 | SHA256（前 16 位 … 后 8 位） | 说明 |
+|---|---|---|
+| `btb.sv` | `7373CCD3C19622D5…7963B50B6B` | 229 行；**落盘后再把 A.2 的 8283 教训补进文件头（纯注释，不改行为/不改网表）** ⇒ 与 `rtl-bypass` 那轮四配置实测（其运行早于该注释编辑）数字不受影响 |
+| `bht.sv` | `71137FFE95FE10D2…7EBF88CB3` | 148 行；未再改动 |
+| `core.sv` | `1C94157937FB9DE0…83DDD75AF` | `rtl-bypass` 的 5 行接线（2 wire + 3 连接） |
+

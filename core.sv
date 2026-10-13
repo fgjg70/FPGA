@@ -344,6 +344,43 @@ module core
   assign imem_addr = pc_next;
 `endif
 
+  // --------------------------------------------------------------------------
+  // 【候选 A / 2026-10-13】BTB 查表地址去掉停顿锥 (与 rtl-pred 的 btb/bht 同一次落盘)
+  // --------------------------------------------------------------------------
+  // 【问题】BTB 原来用 `pc_next` 当查表地址, 而 `pc_next` 含 `fetch_hold`
+  //   (= `pipe_stall || !boot_done`) ⇒ "BRAM 输出 → 译码 → load-use 冒险 → 停顿/
+  //   优先级"整锥被拉进 BTB 的 **D 端**, 再穿过 LUTRAM 读 + MUXF7 + 末级 LUT。
+  //   ILA 流 top-1 实测: 2.125(BRAM) + **3.721(锥, 83% 布线)** + 0.943 + 0.246 + 0.894
+  //   = 7.966ns, 其中锥之后那 ≈2.08ns 就是可以省掉的部分。
+  // 【做法】**分离"快地址"与"停顿标志"**:
+  //   · `p2_pc_ns` = 不带停顿的下一拍地址 (源全是寄存器/小加法器) → 查表;
+  //   · `p2_hold`  = 停顿且未冲刷        → 只当 BTB/PHT 寄存器的 **CE**;
+  //   · `p2_pc_pht`= 老的 `pc_next`      → **只喂方向表 (bht)**, 见下面的关键理由。
+  //   于是晚到的停顿锥只落到 (a) CE 引脚 (b) BRAM 地址建立, 不再穿 LUTRAM 读树。
+  // 【为什么 PHT 必须继续用老地址 (rtl-pred 实测, 这条最反直觉)】停顿期 **GHR 仍在
+  //   被 EX 解析的控制流推动** ⇒ 老实现(地址=冻结 PC)会用**漂移后的 GHR 重算 PHT 索引**,
+  //   把同一个 PC 的方向"刷新"一次。**那个刷新是现有 ticks 的组成部分**: 整链冻结后
+  //   ticks 453,942 → 454,996 (+0.23%)、误判 8,020 → 8,557 (首个分歧 cycle 8283)。
+  //   ⇒ 冻结必须**只冻 BTB 输出 + 保留 PHT 用老地址重算**; bht 一律不冻结。
+  // 【相位契约 (三情形归纳, 保证 ticks 逐位不变)】`q_*(T+1)` 仍对应 `pc(T+1)`:
+  //   ① 无停顿无冲刷: `p2_pc_ns(T)=pc_plus4(T)=pc(T+1)`, `p2_hold=0` → 装 ✓
+  //   ② 停顿 (fetch_hold=1, 无冲刷): `pc(T+1)=pc(T)`, 而 `q_*(T)` 已对应 `pc(T)`
+  //      ⇒ 需要"重复上一拍" ⇒ `p2_hold=1` 冻结 ✓ (此时 `p2_pc_ns` 查出的是错值, 丢弃)
+  //   ③ 冲刷: `p2_pc_ns(T)=pc_flush_pc` 且 `p2_hold=0` (`&& !pc_flush`) → 装 ✓
+  // 【等价性的边界 (可审计, 不用"trace 没差"当证明)】老实现在停顿期是"地址保持 +
+  //   输出重采样", 只有当**表在停顿拍被写**时两者才可能不同。穷举停顿来源:
+  //     load_use_ex (EX 是 load ⇒ is_ctrl_flow=0) / lsu_stall / ex_busy (⇒ hold_mem=1)
+  //     ⇒ `btb_upd_en = is_ctrl_flow && !hold_mem && !rst && !redir_kill` 全为 0 ✅
+  //     **唯一窗口** = `load_use_mem` (hold_mem=0) ∧ EX 是控制流 ∧ (index,tag) 与被查
+  //     的 pc **别名** (IDX=9/TAG=3)。此时老实现下一拍会读到**被别名写覆盖**的表项
+  //     (通常后果是 tag 不匹配 ⇒ `q_hit` 掉 0), 冻结版保持旧预测 ⇒ **只差预测, 不差
+  //     正确性** (误判由 EX 重定向兜底), 且冻结版在别名情形下反而更"对"。
+  //     CoreMark 503,161 拍逐拍 trace 0 差异 ⇒ 未触发。
+  // 【绝不门控更新口】`load_use_mem` 那拍 EX 会前进, 门控会把一次表写**永久**丢掉。
+  // --------------------------------------------------------------------------
+  wire [31:0] p2_pc_ns = pc_flush ? pc_flush_pc : (pc_src ? pc_target : pc_plus4);
+  wire        p2_hold  = fetch_hold && !pc_flush;
+
   imem #(.BASE(IMEM_BASE), .BYTES(IMEM_BYTES)) u_imem (
     .clk   (clk),
     .addr  (imem_addr),
@@ -405,9 +442,13 @@ module core
     .pred_taken  (),
     .pred_target (),
     .pred_is_ret (),
-    // [B] 两级流水口: T 拍 p2_pc = pc_next (下一拍进 ID 的地址),
-    //     T+1 拍 q_* 对应当拍 pc (见上面的相位契约)
-    .p2_pc       (pc_next),
+    // [B] 两级流水口: T 拍查表地址 = **不带停顿的**下一拍地址 `p2_pc_ns` (候选 A),
+    //     T+1 拍 `q_*` 对应当拍 pc; `p2_hold=1` 时用 CE 冻结 `q_*` (= 重复上一拍);
+    //     `p2_pc_pht` 必须接**老的** `pc_next` (停顿期要用漂移 GHR 重算方向表索引,
+    //     见上面候选 A 的说明 —— 接错会让 ticks 变 +0.23%)。
+    .p2_pc       (p2_pc_ns),
+    .p2_hold     (p2_hold),
+    .p2_pc_pht   (pc_next),
     .q_hit       (pred_hit),
     .q_taken     (pred_taken),
     .q_target    (btb_pred_target),
@@ -1015,7 +1056,33 @@ module core
 `ifndef SYNTHESIS
       br_redir_r2 <= br_redir_r;      // 只给断言用 (恢复窗口第 2 拍)
 `endif
-      if (br_redir_eff) br_tgt_r <= actual_target;
+      // ----------------------------------------------------------------------
+      // 【候选 C / 2026-10-13】**去掉 br_tgt_r 的 CE** (原来: `if (br_redir_eff) …`)
+      // ----------------------------------------------------------------------
+      // 【动机】候选 A 之后 Vivado 128.125 档的**单一支配族**是
+      //   `u_core/br_tgt_r_reg/CE` (**32 条**, worst +0.013 = 边界), 逐跳:
+      //     `mem_wb/ctrl_reg[wb_src] → 前递/wb_data mux → ex_rs1 → 目标加法器
+      //      (CARRY4×4 + C-14 的 ex_jr_diff CARRY4×2) → pred_ok → redirect_raw
+      //      → redirect → br_redir_eff(fo=33) → br_tgt_r_reg[4]/CE`
+      //   CE 端必须等完**整条** `pred_ok→redirect_raw→redirect→br_redir_eff`
+      //   (hops 12–15 ≈ **1.23ns**); 而 D 端在加法器之后就结束了
+      //   (`ex_ctrl_sum → actual_target` 只是一个 mux) ⇒ 去掉 CE, 那 1.23ns 直接消失。
+      // 【等价性 (逐位, 1 行改动)】`br_tgt_r` 的唯一消费点是
+      //     `pc_flush_pc = trap_enter ? trap_vector : mret_taken ? mret_pc : br_tgt_r`
+      //   而它只在 `pc_flush = trap_redir || br_redir_r` 时才被装进 PC/取指地址
+      //   ⇒ **`br_tgt_r` 被"读取"当且仅当 `br_redir_r=1`** (trap/mret 分支各取自己的
+      //   地址, 不读它)。又 `br_redir_r(T+1) = br_redir_eff(T)` ⇒ T+1 消费到的值
+      //   = T 沿捕获的 `actual_target` = **CE 版本捕获的同一个值** ✓
+      //   ⇒ 无条件捕获与 CE 版**逐位等价** (ticks 必须 453,942 不变)。
+      //   (其它时刻 br_tgt_r 的值被随意更新, 但没人读 —— TB 侧只有 `+trace` 的
+      //    `$display` 打印 actual_target (`sim/tb_sw.sv:491`), 无数值断言。)
+      // 【副作用面】删 CE 后 `br_redir_eff` (fo=33) 的功能性终点只剩 `br_redir_r/D`
+      //   (1 位); `redir_flush → any_redir → if_id_flush` 在候选 B 之后**已是纯观测**
+      //   ⇒ 整条 EX 重定向锥离开功能数据通路。
+      // 【预登记负结果条件】若族 slack 不动 (只是从 CE 换到 D 而没变短) 或 ticks 变化
+      //   ⇒ 立即回退本次改动并如实报负。
+      // ----------------------------------------------------------------------
+      br_tgt_r    <= actual_target;   // 【候选 C】无条件捕获 (消费端 br_redir_r 已门控)
     end
   end
 

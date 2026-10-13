@@ -54,7 +54,8 @@ module bht
   input  logic        clk,
   input  logic        rst,
 
-  // 预测读口: T 拍给地址 (core 的 pc_next); T+1 拍 ctr_q 有效
+  // 预测读口: T 拍给地址 (= core 的 pc_next **逐位原样**, 由 btb 用早期值+晚期 hold 选出来);
+  //   T+1 拍 ctr_q 有效
   input  logic [31:0] pred_pc,
   output logic [1:0]  ctr_q,
 
@@ -117,11 +118,10 @@ module bht
     else begin
       // 写口 (T+2 拍 = 该指令在 EX): 用 2 拍前的**读索引**, 不用当前 GHR 重算
       if (upd_en) mem[wr_idx] <= ctr_new;
-      // 读口 (T 拍地址 -> T+1 拍数据)。同拍读写同址读到旧值 (read-first),
-      // 由 EX 段重定向兜底, 与旧设计逐位同策略。
+      // 读口: 同拍读写同址读到旧值 (read-first), 由 EX 段重定向兜底。
+      // 【不冻结】停顿期地址仍是"冻结 PC", 但 GHR 会漂移 -> 参考实现的预测会被刷新,
+      //   这里逐位复现该行为 (bit-exact), 见 run.py 的 trace 定位 (cycle 8283)。
       ctr_q <= mem[rd_idx];
-
-      // 索引/计数器/PC 一起随流水走
       idx_d1 <= rd_idx;      idx_d2 <= idx_d1;
       pcw_d1 <= pc_w;        pcw_d2 <= pcw_d1;
       ctr_d1 <= ctr_q;
