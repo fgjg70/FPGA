@@ -716,8 +716,23 @@ module core
   //   WB_PC4 (JAL/JALR 的链接值) -> ex_mem_pc_plus4
   //   其余                       -> ex_mem_alu_out
   // 少了这一层选择, 紧跟 jal 的消费者会从"跳转目标"里取链接值 (真踩过)。
-  wire [31:0] ex_mem_fwd_data = (ex_mem_ctrl.wb_src == WB_PC4) ? ex_mem_pc_plus4
-                                                               : ex_mem_alu_out;
+  //
+  // 【候选 F / 2026-10-16】**这层选择已搬进 EX/MEM 寄存器 (派生寄存器)**
+  //   原来这里是组合 wire:
+  //       ex_mem_fwd_data = (ex_mem_ctrl.wb_src == WB_PC4) ? ex_mem_pc_plus4 : ex_mem_alu_out
+  //   ⇒ 那个选择寄存器 `ex_mem_ctrl.wb_src` 实测 **fo=73 / 单跳布线 0.811ns** ✗, 被串在
+  //     "前递数据 mux → 前递 mux → 操作数 mux" 三级 mux 之前 ⇒ 交付档 top-1
+  //     (7.104ns, **route 占 73.9%**, 26 条同族) 的头段就是它。
+  //   现在改由 `u_ex_mem` 的派生寄存器 `fwd_data` 驱动 (mux 挪到"输入全是寄存器"那一级,
+  //   见 `ex_mem_reg.sv` 文件头"候选 F"段): EX 段的前递数据变成**纯寄存器输出** ✓
+  //   ⇒ 选择布线 + 1 级 mux 从执行头段消失, 且 `wb_src` 的扇出从 73 降到模块内部。
+  //   【等价性】T+1 用的值必须等于 T+1 拍 EX/MEM 那条指令的写回数据; 而 `ex_mem_*`(T+1)
+  //   正是 `ex_mem_reg` 的**输入**(T) ⇒ 派生寄存器锁存的是同一批值 ⇒ **逐位相同** ✓
+  //   (ticks 逐位不变; flush 拍不门控, 因为 ctrl='0 ⇒ 前递选择恒 FWD_REG ⇒ don't-care ✓)
+  //   【同族纠错】150 档逐跳里出现的 `md_b_r_reg[15]` 网名是**合并假象**(代表名), 不代表
+  //   C-12c 把扇出加到了操作数 mux 上 —— 已写进 `ex_mem_reg.sv` 头部, 防重犯。
+  // ==========================================================================
+  wire [31:0] ex_mem_fwd_data;     // 由 u_ex_mem 的派生寄存器驱动 (见下面例化的 .fwd_data)
 
   // ---- WB→EX 前递源 (C-2: load 数据刻意不在这条路上) ----
   //   WB_MEM 且 mem_read (load) -> mem_wb_load_data —— MEM/WB 的**寄存器输出**
@@ -1338,7 +1353,9 @@ module core
     .alu_out       (ex_mem_alu_out),
     .store_data    (ex_mem_store_data),
     .pc_plus4      (ex_mem_pc_plus4),
-    .rd_addr       (ex_mem_rd)
+    .rd_addr       (ex_mem_rd),
+    // 【候选 F】前递数据的派生寄存器 (mux 在"输入全是寄存器"那一级做, 见 ex_mem_reg.sv 头)
+    .fwd_data      (ex_mem_fwd_data)
   );
 
   // ==========================================================================

@@ -291,7 +291,15 @@ if {[info exists ::env(IMEM_COMB_READ)] && $::env(IMEM_COMB_READ) ne ""} {
 set_property verilog_define "USE_ILA=1 IMEM_INIT_FILE=\"$ILA_IMEM\" DMEM_INIT_FILE=\"$ILA_DMEM\"$ARCH_DEFS" [current_fileset]
 
 create_ip -name ila -vendor xilinx.com -library ip -module_name ila_0
-set_property -dict [list CONFIG.C_NUM_OF_PROBES {4} CONFIG.C_PROBE0_WIDTH {32} CONFIG.C_PROBE1_WIDTH {32} CONFIG.C_PROBE2_WIDTH {8} CONFIG.C_PROBE3_WIDTH {32} CONFIG.C_DATA_DEPTH {2048} CONFIG.C_INPUT_PIPE_STAGES {2}] [get_ips ila_0]
+# 【采集深度 2048 -> 1024, 2026-10-16】判读只看**最后一行**(程序停在结尾 `j .`,
+# 全部行都是同一个终态), 深度对证据几乎没有贡献, 却要 2048x104bit ~= 6 块 RAMB36 的
+# 布线/拥塞。150 档实测: **评分流 +0.018 而 ILA 流 -0.293**(差 0.311ns, 而 138.75 档
+# 只差 0.023) => 调试核在高频下开始竞争布线。
+#   [!] IP 只接受 C_DATA_DEPTH 属于 {1024,2048,4096,...} —— 我第一版写 512, IP 报
+#       `IP_Flow 19-3461 Value '512' is out of the range` (有效值从 1024 起)。
+# 同时把 C_INPUT_PIPE_STAGES 2 -> 4: 让调试核的输入再深两级流水, 进一步把它对被观测
+# 信号的影响隔离出去(计数/判读都不依赖 ILA 的采样延迟 —— 我们读的是终态快照)。
+set_property -dict [list CONFIG.C_NUM_OF_PROBES {4} CONFIG.C_PROBE0_WIDTH {32} CONFIG.C_PROBE1_WIDTH {32} CONFIG.C_PROBE2_WIDTH {8} CONFIG.C_PROBE3_WIDTH {32} CONFIG.C_DATA_DEPTH {1024} CONFIG.C_INPUT_PIPE_STAGES {4}] [get_ips ila_0]
 
 update_compile_order -fileset sources_1
 
@@ -311,23 +319,31 @@ update_compile_order -fileset sources_1
 # NOTE: keep this file PURE ASCII (same convention as build.tcl).
 # ===========================================================================
 set_property STEPS.SYNTH_DESIGN.ARGS.DIRECTIVE AlternateRoutability [get_runs synth_1]
-# ---- 【把 150 战役选中的两个综合选项同步到工程流】 ---------------------------------
-# 2026-10-16: 评分流在 150 档靠 `-no_lc` + `-fanout_limit 128` 把 WNS 从 -0.382 拉到 -0.172
-# (两个选项都是"单变量实测有效"的: -no_lc 在 C-12c+E' 树上 +0.21, 合起来再 +0.21)。
+# ---- 【把评分流的综合选项同步到工程流】 ---------------------------------------------
+# 2026-10-16: 评分流靠 `-no_lc` + `-fanout_limit N` 在 150 档拿到关键余量。
 # 若上板流不带同样的选项 => **上板验证的网表 != 评分的网表**, 证据链失真
-# (这正是本文件 306-310 行那段注释立的规矩)。
-# project 模式里这些选项走 `STEPS.SYNTH_DESIGN.ARGS.MORE OPTIONS`。
-# ---- ILA_SYNTH_MORE: 2026-10-16 tried, REVERTED ---------------------------
-# Vivado 2018.3 project mode rejected BOTH spellings of the extra-options property
-#   STEPS.SYNTH_DESIGN.ARGS.MORE_OPTIONS and ...ARGS.MORE OPTIONS
-# with [Common 17-170] Unknown option '<the whole env string>'.
-# Root cause note: that comment line also contained a bracketed Vivado error id,
-# which the Tcl echo parser tried to COMMAND-SUBSTITUTE -> another reason to keep
-# this file PURE ASCII and free of bracketed pseudo-code in comments.
-# CONCLUSION: do not plumb synth options into project mode through that property.
-# The 138.75 MHz delivery uses DEFAULT synth options in BOTH flows (scoring and
-# ILA), which is a STRONGER evidence alignment than carrying flags in one only.
-set_property STEPS.PLACE_DESIGN.ARGS.DIRECTIVE ExtraTimingOpt [get_runs impl_1]
+# (这正是 306-310 行立的规矩)。
+#
+# 【真名是查出来的, 不是猜的】先试 `STEPS.SYNTH_DESIGN.ARGS.MORE OPTIONS` 失败
+# (两种拼写都报 Common 17-170)。最后用 list_property 把 synth_1 的属性全打出来,
+# 发现这两个选项**本来就是一等属性**:
+#     STEPS.SYNTH_DESIGN.ARGS.NO_LC        (0/1)      <- synth_design -no_lc
+#     STEPS.SYNTH_DESIGN.ARGS.FANOUT_LIMIT (默认 10000) <- synth_design -fanout_limit
+# => 根本不需要 MORE OPTIONS。教训: 属性名不要猜, 用 list_property 打出来。
+if {[info exists ::env(ILA_NO_LC)] && $::env(ILA_NO_LC) eq "1"} {
+  set_property STEPS.SYNTH_DESIGN.ARGS.NO_LC 1 [get_runs synth_1]
+  puts "ILA_NO_LC=1"
+}
+if {[info exists ::env(ILA_FANOUT_LIMIT)] && $::env(ILA_FANOUT_LIMIT) ne ""} {
+  set_property STEPS.SYNTH_DESIGN.ARGS.FANOUT_LIMIT $::env(ILA_FANOUT_LIMIT) [get_runs synth_1]
+  puts "ILA_FANOUT_LIMIT=$::env(ILA_FANOUT_LIMIT)"
+}
+if {[info exists ::env(ILA_PLACE_DIR)] && $::env(ILA_PLACE_DIR) ne ""} {
+  set_property STEPS.PLACE_DESIGN.ARGS.DIRECTIVE $::env(ILA_PLACE_DIR) [get_runs impl_1]
+  puts "ILA_PLACE_DIR=$::env(ILA_PLACE_DIR)"
+} else {
+  set_property STEPS.PLACE_DESIGN.ARGS.DIRECTIVE ExtraTimingOpt [get_runs impl_1]
+}
 set_property STEPS.PHYS_OPT_DESIGN.IS_ENABLED 1 [get_runs impl_1]
 set_property STEPS.PHYS_OPT_DESIGN.ARGS.DIRECTIVE AggressiveExplore [get_runs impl_1]
 set_property STEPS.ROUTE_DESIGN.ARGS.DIRECTIVE AggressiveExplore [get_runs impl_1]

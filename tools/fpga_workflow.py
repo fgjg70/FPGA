@@ -1320,6 +1320,20 @@ def _cmd_verify(args) -> int:
         os.makedirs(LOG_DIR, exist_ok=True)
         with open(os.path.join(LOG_DIR, name + ".log"), "w", encoding="utf-8") as f:
             f.write(out2)
+        # 【2026-10-16 加固】把**默认配置**的那一份另存为 canonical 副本。
+        # 为什么: `mk_cm_hw.read_ticks_per_iter()` 必须拿"默认配置"的每迭代拍数, 但
+        # verify 会按顺序跑 默认 / --a-ext / --imem_comb_read / --ras, **每次都覆盖同名日志**
+        # => 最后留在 `tb_sw_coremark.log` 里的可能是 RAS 配置的数
+        # (实测: 461,712 vs 默认 463,366, 差 0.36%), 而上板 tick 判据的门限只有 0.5%
+        # —— 等于把大半余量**静默**吃掉, 而预期值看起来完全正常。这类"错得很安静"的
+        # 数值正是本工程最防的一类缺陷, 所以默认配置的那一份必须单独留档。
+        if name == "tb_sw_coremark" and not defines:
+            try:
+                with open(os.path.join(LOG_DIR, name + ".default.log"), "w",
+                          encoding="utf-8") as f:
+                    f.write(out2)
+            except OSError:
+                pass
         # 【X-03】给日志配一份**来源元数据**。
         # 下游 (compute_metrics -> latest_ticks) 会从 tb_sw_coremark.log 里读 CoreMark
         # ticks 去算 CoreMark/MHz, 但日志本身不携带"这是哪版 RTL 跑出来的"。

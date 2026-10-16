@@ -72,6 +72,41 @@
 //   ⇒ `mem_read=0` 时不可能误判 ✓; regfile 的同拍写优先旁路由 `wb_reg_write` 给 ✓。
 //   观测面: `sim/tb_sw.sv:402` 只读 `ex_mem_ctrl.mem_read` ✓, 全仓无断言看数据字段 ✓。
 // ============================================================================
+//
+// ============================================================================
+// 【候选 F · 2026-10-16 · **已落盘**】把前递数据 mux 变成 EX/MEM 的**派生寄存器**
+// ============================================================================
+// 【病灶 (150/138.75 档 top-1, 26 条 `u_ex_mem/alu_out_reg/D` 族)】
+//   交付档 top-1 = 7.104ns / **route 5.252ns (73.9%)** / logic 1.852ns, 12 级:
+//     hop1 `ex_mem/ctrl_reg[wb_src][1]`  **fo=73**, route 0.811
+//       → hop2 LUT4 (原 core.sv 的 `ex_mem_fwd_data` 选择)
+//       → hop3 LUT5 (前递 mux) → hop4 LUT3 (操作数 mux `ex_b`) → ALU 进位链 → 结果 mux → D
+//   ⇒ **74% 是布线**: 那个 **fo=73 的选择寄存器**(`ex_mem_ctrl.wb_src`) 的布线(0.81ns)
+//     被串在"指令执行头段"的 3 级 mux 之前 ⇒ 这条路是"选择信号晚到 + 远距离布线"型,
+//     不是逻辑深度型 (`tools/path_families.py` 判"分散"; 单修 top-1 天花板 0.002ns)。
+// 【改法】在**输入全是寄存器**的这一级做那个 mux, 结果寄存:
+//     `fwd_data <= (ctrl_in.wb_src == WB_PC4) ? pc_plus4_in : alu_out_in;`
+//   (原来是 core.sv 里的组合 wire `ex_mem_fwd_data = (ex_mem_ctrl.wb_src == WB_PC4) ? …`)
+//   ⇒ EX 段的前递数据直接来自**寄存器输出** ⇒ 那 0.81ns 选择布线 + 1 级 mux 从执行头段消失;
+//     并且 `ex_mem_ctrl.wb_src` 的 fanout 从 73 降到"只在 ex_mem 内部用" ⇒ 布线问题结构性消失。
+// 【等价性 (逐位)】T+1 拍 EX 段消费的 `ex_mem_fwd_data` 必须等于"T+1 拍 EX/MEM 里那条指令
+//   的写回数据"; 原式在 T+1 用 `ex_mem_*`(T+1) 计算, 而 `ex_mem_*`(T+1) **就是本模块的
+//   输入(T)** (同一批寄存器在 T 沿捕获) ⇒ 本派生寄存器在 T 沿锁存的正是同一批值 ✓✓
+//   ⇒ 与原实现**逐位相同** (ticks 必须不变)。
+// 【为什么不门控 flush】flush 拍 `ctrl='0` ⇒ `ex_mem_ctrl.reg_write=0` ⇒ core 的前递选择
+//   恒 FWD_REG ⇒ 该值 don't-care ✓; 且若在这里加 flush, 会给"ALU→本 FF"的路多压一级 mux ✗。
+// 【代价】+32 FF, **零 IPC**。
+// ============================================================================
+//
+// 【同族纠错记录 (2026-10-16) —— 防后人重犯】
+//   150 档那条路径的 hop2 曾显示网名 **`u_mem_wb/md_b_r_reg[15]`**, 让人以为是
+//   "C-12c 的操作数寄存器把扇出加到了 ALU 操作数 mux 上"。**这是误读**:
+//   Vivado 的网名是"代表寄存器名"(合并/命名假象, 见 PITFALLS 盲区 13), 而
+//   C-12c 的 `md_a_r/md_b_r` **只喂 muldiv**, 并没有增加操作数 mux 的扇出
+//   (那一路早被 C-12a 从 muldiv 输入锥上摘掉了)。
+//   ⇒ 真正在头段的是 **`ex_mem_ctrl.wb_src`(fo=73)** + 前递数据 mux + 前递 mux + 操作数 mux。
+//   ⇒ 教训: **不要按代表性网名推断结构**, 要回到 RTL 数据流去核 (这次核完才发现抓手是 F)。
+// ============================================================================
 
 module ex_mem_reg
   import rv32_pkg::*;
@@ -92,7 +127,9 @@ module ex_mem_reg
   output logic [31:0] alu_out,
   output logic [31:0] store_data,
   output logic [31:0] pc_plus4,
-  output logic [4:0]  rd_addr
+  output logic [4:0]  rd_addr,
+  // 【候选 F / 2026-10-16】前递数据的**派生寄存器** (见文件头 "候选 F" 段)
+  output logic [31:0] fwd_data
 );
 
   always_ff @(posedge clk or posedge rst) begin
@@ -123,6 +160,11 @@ module ex_mem_reg
       store_data <= store_data_in;
       pc_plus4   <= pc_plus4_in;
       rd_addr    <= rd_addr_in;
+      // 【候选 F】派生寄存器: 与原来 core.sv 里那条**组合** wire 逐位同值,
+      //   只是把 mux 挪到"输入全是寄存器"的这一级 ⇒ EX 段的前递数据变成纯寄存器输出。
+      //   不门控 flush: flush 拍 ctrl='0 ⇒ reg_write=0 ⇒ 前递选择恒 FWD_REG ⇒ don't-care
+      //   (见文件头; 若在这里加 flush, 反而会给"ALU→本FF"的那条路多压一级 mux)。
+      fwd_data   <= (ctrl_in.wb_src == WB_PC4) ? pc_plus4_in : alu_out_in;
     end
   end
 

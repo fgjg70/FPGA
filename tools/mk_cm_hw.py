@@ -71,11 +71,29 @@ def read_ticks_per_iter():
     返回 None 表示读不到 —— 调用方必须 BLOCK, 不许退回常数。
     """
     log = os.path.join(REPO, ".fpga-cache", "logs", "tb_sw_coremark.log")
-    try:
-        with open(log, encoding="utf-8", errors="replace") as f:
-            txt = f.read()
-    except OSError:
+    # 【2026-10-16 加固】优先读**默认配置**的 canonical 副本。
+    # 为什么: `verify` 会按顺序跑 默认/--a-ext/--imem_comb_read/--ras 并覆盖同名日志,
+    # 最后留下的可能是 RAS 配置的数(实测 461,712 vs 默认 463,366, 差 0.36%),
+    # 而这里算出的 expect_tick 是上板 tick 判据(门限 0.5%)的**唯一**基准 —— 用错配置
+    # 会把大半余量静默吃掉。fpga_workflow.cmd_verify 现在会另存 `.default.log`。
+    log_def = os.path.join(REPO, ".fpga-cache", "logs", "tb_sw_coremark.default.log")
+    used = None
+    for cand in (log_def, log):
+        try:
+            with open(cand, encoding="utf-8", errors="replace") as f:
+                txt = f.read()
+        except OSError:
+            continue
+        if re.search(r"Total ticks\s*:\s*\d+", txt):
+            used = cand
+            break
+    if used is None:
         return None
+    if used != log_def:
+        print("  [warn] 每迭代拍数取自 %s (默认配置副本缺失) —— 若最近跑过宏配置, "
+              "这个值可能不是默认配置的" % os.path.basename(used))
+    else:
+        print("  [tpi] 每迭代拍数取自默认配置副本 %s" % os.path.basename(used))
     m = re.search(r"Total ticks\s*:\s*(\d+)", txt)
     it = re.search(r"Iterations\s*:\s*(\d+)", txt)
     if not m or not it:
@@ -157,7 +175,7 @@ def main():
         print("          **不许回退成硬编码常数** —— 那会让上板判据失真。")
         return 1
     expect_tick = tpi * iters
-    print("  [tick] 每迭代 %d 拍 (取自 tb_sw_coremark.log 的 Total ticks/Iterations) x %d 迭代"
+    print("  [tick] 每迭代 %d 拍 (取自**默认配置** CoreMark 日志的 Total ticks/Iterations) x %d 迭代"
           % (tpi, iters))
     # 必须 > 实际运行时间: int(运行秒数) + 5, 与 build-repo 的契约一致
     wait_seconds = int(expect_tick / clk_hz) + 5
