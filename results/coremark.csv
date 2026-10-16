@@ -226,3 +226,4 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-16,camp-s8-F,1,463366,2.1581,2710,1483,9,8,144.2,timing_fail,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-16,deliv140,1,463366,2.1581,2678,1504,9,8,140.6,measure,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-16,deliv150-uart,1,463366,2.1581,2997,1507,9,8,144.9,timing_fail,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-16,deliv150u2,1,461712,2.1659,3088,1465,9,8,132.9,timing_fail,fpga_workflow.py synth (PROG=cm_hw)
