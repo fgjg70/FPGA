@@ -317,12 +317,16 @@ set_property STEPS.SYNTH_DESIGN.ARGS.DIRECTIVE AlternateRoutability [get_runs sy
 # 若上板流不带同样的选项 => **上板验证的网表 != 评分的网表**, 证据链失真
 # (这正是本文件 306-310 行那段注释立的规矩)。
 # project 模式里这些选项走 `STEPS.SYNTH_DESIGN.ARGS.MORE OPTIONS`。
-if {[info exists ::env(ILA_SYNTH_MORE)] && $::env(ILA_SYNTH_MORE) ne ""} {
-  set_property STEPS.SYNTH_DESIGN.ARGS.MORE_OPTIONS $::env(ILA_SYNTH_MORE) [get_runs synth_1]
-  puts "ILA_SYNTH_MORE=$::env(ILA_SYNTH_MORE)"
-} else {
-  puts "ILA_SYNTH_MORE_OFF=1"
-}
+# ---- ILA_SYNTH_MORE: 2026-10-16 tried, REVERTED ---------------------------
+# Vivado 2018.3 project mode rejected BOTH spellings of the extra-options property
+#   STEPS.SYNTH_DESIGN.ARGS.MORE_OPTIONS and ...ARGS.MORE OPTIONS
+# with [Common 17-170] Unknown option '<the whole env string>'.
+# Root cause note: that comment line also contained a bracketed Vivado error id,
+# which the Tcl echo parser tried to COMMAND-SUBSTITUTE -> another reason to keep
+# this file PURE ASCII and free of bracketed pseudo-code in comments.
+# CONCLUSION: do not plumb synth options into project mode through that property.
+# The 138.75 MHz delivery uses DEFAULT synth options in BOTH flows (scoring and
+# ILA), which is a STRONGER evidence alignment than carrying flags in one only.
 set_property STEPS.PLACE_DESIGN.ARGS.DIRECTIVE ExtraTimingOpt [get_runs impl_1]
 set_property STEPS.PHYS_OPT_DESIGN.IS_ENABLED 1 [get_runs impl_1]
 set_property STEPS.PHYS_OPT_DESIGN.ARGS.DIRECTIVE AggressiveExplore [get_runs impl_1]
