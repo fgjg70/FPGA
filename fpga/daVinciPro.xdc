@@ -32,7 +32,7 @@ create_clock -period 20.000 -name sys_clk [get_ports sys_clk]
 # 该行不得含非 ASCII 字符, 否则 Vivado 2018.3 可能解析失败。
 create_generated_clock -name sys_clk_core \
   -source [get_ports sys_clk] \
-  -multiply_by 21 -divide_by 7 \
+  -multiply_by 111 -divide_by 40 \
   [get_pins u_bufg_sys/O]
 
 # ---- 引脚 ----
