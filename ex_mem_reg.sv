@@ -36,6 +36,41 @@
 // 【对称性警告】mem_wb_reg **故意不加 flush**: 陷阱那一拍 MEM/WB 里是"更老的
 //   指令", 它必须提交 (陷阱的精确性只要求冲掉触发指令本身)。给 mem_wb_reg
 //   加 flush 会丢指令 —— 见 core.sv 里 u_mem_wb 处的注释。
+//
+// ============================================================================
+// 【候选 D′ · 2026-10-13 · **已判负并回退**】flush 只冲 ctrl, 数据字段只受 stall
+// ============================================================================
+// 【试过什么】把 `flush` 从 5 个字段的 CE/D 上收窄到只有 `ctrl`, 数据字段只保留
+//   `CE = !stall`。**动机** (150 档 top-1 = `u_ex_mem/alu_out_reg[2]/CE`):
+//   Source = imem 的指令字寄存器, 7.081ns / 5 级 / logic 仅 5×0.105 = 0.525ns,
+//   两跳高扇出布线 = **2.147ns (30%)**。逐跳解出的真实锥是
+//     `if_id_rs1/rs2 → 相等比较(网名 rd_addr_reg[*], fo≈121/122) → load_use
+//      → pipe_stall → !pipe_stall → irq_take → trap_req → trap_enter → flush → CE`
+//   (`core.sv` 的 `irq_take` 里有 `!pipe_stall`; `pipe_stall` 的 `load_use` 项正是
+//    `if_id_rs*` 与 `id_ex_rd/ex_mem_rd` 的比较), 而原来 `flush` 把 5 个字段一起清零
+//   ⇒ 这条锥被接到 **122 个** CE 引脚上。
+// 【结果 (Lead 实测, 150 档, 基线 = A+C+C-12c 的 −0.852)】
+//     + `--no-lc`            → **−0.490**  (目前最好; 工具侧单选项)
+//     + D′ 单独              → **−1.021**  (**更差 0.169** ⇒ 回退)
+//     + D′ + `--no-lc`       → **−0.582**  (比 `-no-lc` 单独更差 0.092)
+//   D′ 的族分布: 19 条 `ex_mem/alu_out_reg/D`(−0.503) —— **`alu_out/CE` 那一族确实被治掉了** ✓,
+//     但**墙转移到新族**: 8 条 `id_ex/rs1_data_reg/CE`(−0.411) + 2 条 `id_ex/rs2_data_reg/CE`(−0.357),
+//     另有 7+7 条 `csr/mepc|mtval_reg/CE`(D′ 够不到, 它们在 csr_file 里由 `trap_enter` 直接写)。
+// 【结论 —— "墙转移"的第三个实例】本设计在 150 档对单点结构改动的响应是**墙转移**:
+//   摘掉一条 CE 锥, 别的 CE 锥接班。⇒ 优先用**工具侧单选项**(`--no-lc` 零 ticks 代价 +0.362ns),
+//   而不是付 IPC 代价买断某一条链。(另两个实例: C-12c 断 DSP 链、C-18a 单片 DSP 见各自文件。)
+//
+// 【仍然有效的文档: `flush` 那一拍各字段的消费者审计】`ctrl='0` ⇒ 该指令是气泡
+//   ⇒ 其余字段全是 don't-care (下表是本文件"改 flush 语义时怎么证明没坏"的依据):
+//   | 字段 | 消费者 (core.sv) | 门控依据 |
+//   |---|---|---|
+//   | `alu_out`    | LSU `req_addr`(:1336) / `ex_mem_fwd_data`(:715) / mem_wb(:1510) | LSU 的 `dmem_we/re` 由 `ctrl.mem_write/mem_read` 给; 前递由 `id_ex_fwd_*` 选, 而它由 `ex_mem_ctrl.reg_write=0` ⇒ FWD_REG; mem_wb 写由 `ctrl.reg_write=0` 给 |
+//   | `store_data` | LSU `req_wdata`(:1337) | `ctrl.mem_write=0` |
+//   | `pc_plus4`   | `ex_mem_fwd_data` 的 WB_PC4 分支 / mem_wb | `ctrl.wb_src` + `ctrl.reg_write=0` |
+//   | `rd_addr`    | mem_wb `rd_addr_in`(:1528) / hazard `ex_mem_rd`(:1207) | regfile 写由 `ctrl.reg_write=0`; 前递/冒险比较由 `ex_mem_ctrl.reg_write/mem_read=0` |
+//   两条间接消费者: hazard 的 `load_use_mem` = `ex_mem_mem_read && rd!=0 && match(...)`
+//   ⇒ `mem_read=0` 时不可能误判 ✓; regfile 的同拍写优先旁路由 `wb_reg_write` 给 ✓。
+//   观测面: `sim/tb_sw.sv:402` 只读 `ex_mem_ctrl.mem_read` ✓, 全仓无断言看数据字段 ✓。
 // ============================================================================
 
 module ex_mem_reg
@@ -70,6 +105,12 @@ module ex_mem_reg
     end
     else if (flush) begin
       // 注入气泡: 被抢占的指令不写寄存器、不写存储器, MRET 后重新执行它
+      // 【候选 D′ 已回退 (2026-10-13)】曾改成"flush 只冲 ctrl、数据字段只受 stall 门控"
+      //   (理论依据: ctrl='0 ⇒ 其余字段 don't-care, 审计见文件头)。机制上确实治好了
+      //   `u_ex_mem/alu_out_reg/CE` 那一族, 但 150 档实测**更差**: −0.490 → −1.021
+      //   (单独) / −0.490 → −0.582 (叠加 --no-lc) —— 墙转移到了 `id_ex/rs1_data_reg/CE`
+      //   (8 条) 与 `rs2_data_reg/CE` (2 条)。⇒ 按预登记条件回退, 恢复"全字段清零"。
+      //   (审计表保留在文件头: 它是"flush 这一拍哪些字段真的被消费"的完整记录。)
       ctrl       <= '0;
       alu_out    <= '0;
       store_data <= '0;

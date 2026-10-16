@@ -961,7 +961,15 @@ def test_matrix() -> list[dict]:
         # 定时器测试需要 mmio_subsys 真的在位, 否则 MMIO 读回 0、中断永远不来。
         {"name": "tb_soc_timer_irq", "top": "tb_soc", "rtl": "rtl", "tb": "sim/tb_soc.sv",
          "imem": "sim/prog/timer_irq.hex",
-         "plus": [], "max_cycles": 200000, "timeout": 600,
+         # 【+irq_trace 于 2026-10-13 加上, 用于验证候选 E′ 的覆盖率】
+         # 背景: E′ 把 `irq_take` 的安全门从 `!pipe_stall` 收窄成 `!hold_mem` ⇒ **有意**允许在
+         # `load_use` 气泡停顿的那几拍取中断(那正是"指令字→load_use→pipe_stall→trap_enter→CE"
+         # 这条锥的入口)。tb_soc.sv:126 的探针会打印 `>> irq_take=… trap_enter=… stall=…`。
+         # 判据: 若接受行出现 `stall=1` ⇒ 该测试**确实**覆盖了"停顿期取中断"这一新相位 ✓;
+         #      若从不出现 ⇒ 说明它本来就没覆盖 ⇒ E′ 的风险要按"未被测试覆盖"记录(不能算已验证)。
+         # 平时默认**不带**(否则日志噪声大、且会让基线日志 diff 变脏)。
+         # 平时默认**不带**(否则日志噪声大); 本次为验证 E′ 覆盖率**临时**打开:
+         "plus": ["+irq_trace"], "max_cycles": 200000, "timeout": 600,
          "desc": "P2 定时器中断 (mtime/mtimecmp -> mip.MTIP)"},
         {"name": "tb_core_m_ext", "top": "tb_core", "rtl": "rtl", "tb": "sim/tb_core.sv",
          "imem": "sim/prog/m_ext.hex", "plus": [], "max_cycles": 200000, "timeout": 600,

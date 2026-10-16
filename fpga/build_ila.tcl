@@ -311,6 +311,18 @@ update_compile_order -fileset sources_1
 # NOTE: keep this file PURE ASCII (same convention as build.tcl).
 # ===========================================================================
 set_property STEPS.SYNTH_DESIGN.ARGS.DIRECTIVE AlternateRoutability [get_runs synth_1]
+# ---- 【把 150 战役选中的两个综合选项同步到工程流】 ---------------------------------
+# 2026-10-16: 评分流在 150 档靠 `-no_lc` + `-fanout_limit 128` 把 WNS 从 -0.382 拉到 -0.172
+# (两个选项都是"单变量实测有效"的: -no_lc 在 C-12c+E' 树上 +0.21, 合起来再 +0.21)。
+# 若上板流不带同样的选项 => **上板验证的网表 != 评分的网表**, 证据链失真
+# (这正是本文件 306-310 行那段注释立的规矩)。
+# project 模式里这些选项走 `STEPS.SYNTH_DESIGN.ARGS.MORE OPTIONS`。
+if {[info exists ::env(ILA_SYNTH_MORE)] && $::env(ILA_SYNTH_MORE) ne ""} {
+  set_property STEPS.SYNTH_DESIGN.ARGS.MORE_OPTIONS $::env(ILA_SYNTH_MORE) [get_runs synth_1]
+  puts "ILA_SYNTH_MORE=$::env(ILA_SYNTH_MORE)"
+} else {
+  puts "ILA_SYNTH_MORE_OFF=1"
+}
 set_property STEPS.PLACE_DESIGN.ARGS.DIRECTIVE ExtraTimingOpt [get_runs impl_1]
 set_property STEPS.PHYS_OPT_DESIGN.IS_ENABLED 1 [get_runs impl_1]
 set_property STEPS.PHYS_OPT_DESIGN.ARGS.DIRECTIVE AggressiveExplore [get_runs impl_1]
