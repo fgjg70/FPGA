@@ -36,12 +36,29 @@ volatile ee_s32 seed5_volatile = 0;
 #define LOG_LIMIT 0x1000u
 static ee_u32 log_pos = 0;
 
+/* ---- MMIO (UART 部分提到前面, 供下面的镜像使用) ----
+ * MMIO_UART_TX   = 0xA000_0010  W: 发送一个字节 (bit[7:0])
+ * MMIO_UART_STAT = 0xA000_0014  R: bit0 = TX 忙
+ * 硬件**不会**自动排队: 忙的时候写 TX 会丢/扰乱这一帧 => 必须先轮询 STAT。 */
+#define UART_TX_ADDR   (*(volatile ee_u32 *)0xA0000010u)
+#define UART_STAT_ADDR (*(volatile ee_u32 *)0xA0000014u)
+
 void
 uart_send_char(char c)
 {
     if (log_pos < LOG_LIMIT - 1u)
         LOG_BASE[log_pos++] = c;
     LOG_BASE[log_pos] = 0;   /* 保持 NUL 结尾, tb 可直接当字符串读 */
+
+    /* 【2026-10-17 UART 上板验证通道】把同一份输出**镜像到 MMIO UART**。
+     * 为什么: 本工程的日志本来只写 dmem(给 TB 读字符串), **一个字节都不走串口**,
+     *   于是"用 UART 绕开 ILA"这条路是断的。150 档在**带 ILA 的上板流**上过不去时序
+     *   (调试核抢布线), 而**评分流**能过门 => 让软件把结论也送到串口, 就能用
+     *   **真正要交付的那份网表**上板验证。
+     * 为什么不会污染测量: CoreMark 的打印发生在 `stop_time()` **之后**, 不在
+     *   MMIO_MARK -> MMIO_RESULT 的测量窗口内 => 测量窗口里的 tick 逐位不变。 */
+    while (UART_STAT_ADDR & 1u) { }              /* 等 TX 空闲 (硬件不排队) */
+    UART_TX_ADDR = (ee_u32)(unsigned char)c;
 }
 
 /* ---- MMIO ---- */

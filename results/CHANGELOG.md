@@ -499,7 +499,60 @@ tick = 2,128,330,451  (预期 2,131,483,600, 偏差 0.148% << 0.5% 门限)
 `mk_cm_hw` 的"每迭代拍数"此前会读到**最后一次**运行的配置（实测：RAS 配置 461,712 vs
 默认配置 463,366，差 0.36%）⇒ `verify` 现在把**默认配置**那一份另存为
 `tb_sw_coremark.default.log`，`mk_cm_hw` 优先读它并标明来源。**差 0.36% 会静默吃掉上板
-0.5% 门限的大半余量，而预期值看起来完全正常** —— 又是"错得很安静"那一类。
+0.5% 门限的大半余量，而预期值完全正常** —— 又是"错得很安静"那一类。
+
+---
+
+## 11. UART 验证通道打通（2026-10-17 晨）
+
+**动机**：150 档在 ILA 流上过不去（调试核抢布线）。若能用**评分流那份网表**上板、
+再从 **UART** 读回 CoreMark 结论，就多一条**独立于调试核**的验证通道。
+
+### 三个必须先查清的硬事实（都在开始写代码前查了）
+1. 本机那颗 FTDI 是 **单通道 FT232H**（`VID_0403&PID_6014`, `type=232H`,
+   `desc='Digilent USB Device'`），序列号 `210512180081` == JTAG 目标 ⇒ **它只是 JTAG 下载线**，
+   不是板载串口；当时本机**没有任何 USB 转串口设备**。
+2. 用户接上 **CH340 适配器**后出现 **COM13** ✓（`VID_1A86&PID_7523`）。
+3. **`uart_send_char()` 根本不往 UART 写** —— 它写的是 **DMEM 日志缓冲** `0x9000_3000`
+   （NUL 结尾，"给 TB 当字符串读"）。⇒ 串口上一个字节都不会有。**这是整条路此前不通的根因。**
+
+### 改动（软件 1 处 + 工具 3 个）
+- `sw/coremark/core_portme.c`：`uart_send_char()` **镜像**到 `MMIO_UART_TX (0xA0000010)`，
+  写前**轮询** `MMIO_UART_STAT (0xA0000014)` 的 bit0（硬件**不排队**，忙时写会扰乱该帧）。
+  **为什么不会污染测量**：CoreMark 的打印发生在 `stop_time()` **之后**，
+  不在 `MMIO_MARK → MMIO_RESULT` 的测量窗口内 ⇒ 实测 ticks **逐位不变 463,366** ✓。
+- `fpga/prog_uart.tcl` + `prog_uart.bat`：只烧写、不采集。
+- `tools/uart_capture.py`：列口 / 采集 115200 8N1 / 解析判据（`--list` / `--port` / `--parse`）。
+- `tools/ftdi_probe.py`：用 D2XX 列 FTDI 通道（查"哪颗 FTDI 是什么"用）。
+
+### 踩到的两个坑（都在脚本层面）
+1. **`open_hw_manager` 在 Vivado 2018.3 的 batch 里不是有效命令**
+   （`invalid command name "open_hw_manager"`）⇒ 必须用 **`open_hw`**
+   （与 `jtag_probe.tcl` / `ila_cap_done.tcl` 一致）。
+2. **`.bat` 不要写 `if` 块 / `%~dp0` 体操**：我这版触发 `for was unexpected at this time` ✗。
+   照 `jtag_probe.bat` 的极简样板（`call settings64.bat` + `cd /d` + `vivado -mode batch`）就对 ✓。
+
+### 结果：**两条独立通道交叉验证同一个交付档**
+```
+ILA over JTAG : tick 2,128,330,451   (三次采集逐位一致)
+UART (COM13) : tick 2,128,330,449   (差 2 拍 = 0.0000001%)
+                [portme] rate gate: clk=138750000 Hz ticks=2128330449 secs=15 min10s=ok
+                CoreMark Size 666 / Iterations/Sec 306 / Iterations 4600
+                crclist 0xe714 crcmatrix 0x1fd7 crcstate 0x8e3a crcfinal 0x382f
+                **Correct operation validated** ✓
+```
+证据归档：`results/uart_done.txt`（原始输出）+ `results/uart_done.capture.json`（含 bit/RTL 哈希）。
+
+### 这条通道**没有**解决 150（诚实结论）
+UART 通道的价值是**去掉调试核那份网表**，但**评分流本身在 150 也不过门**（最好 −0.172）。
+本轮又实测了 140.625（−0.091）、143.75（−0.404）、144.53125（−0.113）、146.09375（**−0.051**）
+⇒ **评分流在 140~150 之间不可靠过门**，最好的落点也只到 ~145（146.09 档差 0.051）。
+⇒ 交付档仍是 **138.75 MHz**，但它现在有 **ILA + UART 两条独立证据** ✓。
+
+---
+
+*维护约定：**每完成一项改动（含负结果）就往 §1/§5 追加一行**，并附 `file:line` + CSV 行名 +
+一句"最该学的一点"。数字一律从 `results/coremark.csv` 复核，不手抄。*
 
 ### 交付档最终状态（上板两次采集逐位一致）
 ```
