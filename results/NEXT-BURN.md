@@ -13,9 +13,10 @@
 | 实测 tick | **2,128,330,449**（偏差 0.148%）—— 与 138.75 MHz 档**逐位相同** |
 | 实测性能 | **Iterations/Sec 328**／14 s／**CoreMark/MHz 2.1613**／绝对吞吐 **324.2** |
 | 正确性 | `Correct operation validated`；`crclist 0xe714 / crcmatrix 0x1fd7 / crcstate 0x8e3a / crcfinal 0x382f` |
-| 时序 | 评分流 **WNS +0.000 MET**（压线！）；**不带 ILA**（见下） |
-| bitstream | `fpga/cpu_a100t.bit`（**评分流**产物，不是 ILA 流） |
-| 综合/实现选项 | `-no_lc` + `-fanout_limit 128` + `--pblock-range CLOCKREGION_X0Y1:CLOCKREGION_X2Y3` + `--contain-routing` |
+| 时序 | 评分流 **WNS +0.007 MET**（**压线**，见 §6 的余量说明）；**不带 ILA**（ILA 流在 150 过不去） |
+| bitstream | `fpga/cpu_a100t.bit`（评分流）sha256 **`794b50e6…`**；`cpu_a100t_spix4.bit`（SPIx4 启动）sha256 **`ef3c970a…`** |
+| **综合/实现选项（合法配方）** | `--no-lc --fanout_limit 128 --pblock-range off --contain-routing --place-directive AltSpreadLogic_high` |
+| 约束合法性 | **0 Critical Warning**（旧配方用越界 Pblock `X0Y1:X2Y3` → `CRITICAL [Vivado 12-4433]`，而该 Pblock **从未生效**；改成 `off` 才复现 +0.007） |
 | RTL 指纹 | 见 `results/uart_done.capture.json` 的 `rtl_sha256` |
 
 ## 2. 为什么用 UART 而不是 ILA 验证（关键）

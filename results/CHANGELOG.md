@@ -610,5 +610,46 @@ crclist 0xe714  crcmatrix 0x1fd7  crcstate 0x8e3a  crcfinal 0x382f
 
 ---
 
+## 13. 合法 150 MHz 达成 + "留余量"的完整否证（2026-10-17 晚）
+
+### 13.1 重大发现：**交付档的越界 Pblock 其实从未生效**
+用户要求"别让 150 压线、试改 RTL"，同时提出"MMCM 换 PLL 也许更好"。两条都试了，都判负；
+但**在排查过程中发现了一个更重要的事实**：
+
+```
+越界 Pblock X0Y1:X2Y3 触发 CRITICAL [Vivado 12-4433] "Constraint ranges extend outside the device"
+=> 意味着 resize_pblock **失败、整个 pblock 没被应用**
+=> 交付档实际用的是「无 Pblock + contain-routing + AltSpreadLogic_high」
+=> 显式改成 `--pblock-range off` 后：**WNS +0.007、MET、构建日志 0 个 Critical Warning**
+```
+⇒ **合法 150 MHz 成立** ✓（`--no-lc --fanout_limit 128 --pblock-range off --contain-routing
+--place-directive AltSpreadLogic_high`），评分 bitstream `794b50e6…`、SPIx4 镜像 `ef3c970a…`，
+已烧进 QSPI 并通过 **16 MB 读回逐字节校验** ✓。
+
+**教训（写进纪律）：CRITICAL 约束警告不能"看着它过了"就放过 —— 它可能意味着那条约束根本没生效，
+而你以为的"调参结果"其实是"没调参"的结果。**
+
+### 13.2 "给 150 留余量"——8 组实验全部判负（诚实清单）
+
+| 尝试 | WNS@150 | 判读 |
+|---|---|---|
+| 交付档（无 pblock + contain + AltSpread） | **+0.007** | 设计极限 |
+| 换 **PLLE2**（VCO 1200/8，因 PLLE2 的 VCO 区间是 800~1600，原 1050 非法） | −0.421 | ✗ **clock uncertainty 与 MMCM 完全相同（0.043 ns）** ⇒ 换原语无效 |
+| RTL：`id_ex` 控制网（fo=132）加 `max_fanout` | −0.276 | ✗ 第 5 个"墙转移"（新长 `id_ex/rs1|rs2_data_reg/CE` 族） |
+| RTL：bht `align` 自证链在综合视图移除 | −0.006 | ✗ **机制完全成功**（原 top-1 整条消失）但墙转到 EX 数据通路 ⇒ 第 6 个"墙转移" |
+| 合法 Pblock `X0Y0:X3Y2` / `X0Y0:X2Y2` / `X0Y1:X2Y2` @150 | −0.348 / −0.467 / −0.131 | ✗ |
+| 合法 Pblock @145.3125 / @143.75 | −0.001 / −0.295 | ✗（且**非单调**：更松反而更差） |
+| 合法基线 + `route NoTimingRelaxation` / `route Explore` / `phys_opt Explore` / `place WLDriven` | +0.007 / +0.003 / −0.037 / −0.780 | ✗ 无一提余量 |
+
+**结论**：150 MHz 时 **10 个族全部挤在 +0.026~+0.119 ns**（最大族 24 条 +0.048）——
+设计**正好卡在自己的极限上**。"墙转移"实例累计 **6 个**，全部"机制成功、时序净负"。
+⇒ **150 MHz 的工程余量拿不到**；要余量只能降频（138.75 档余量 +0.033/+0.150，且已验证）。
+
+### 13.3 顺带修正的命名漂移
+`clk_75_raw` → `clk_core_raw`、`mmcm_locked` → `clk_locked`（名字里的 75 早在 128/150 档就过期了）——
+本轮 PLL 实验时一并改了，回退 PLL 时保留命名修正。
+
+---
+
 *维护约定：**每完成一项改动（含负结果）就往 §1/§5 追加一行**，并附 `file:line` + CSV 行名 +
 一句"最该学的一点"。数字一律从 `results/coremark.csv` 复核，不手抄。*
