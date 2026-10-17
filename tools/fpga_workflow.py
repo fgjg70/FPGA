@@ -1935,6 +1935,7 @@ def cmd_synth(args) -> int:
     h.update(("recipe=" + (getattr(args, "synth_recipe", None) or "default")).encode())
     h.update(("no_lc=" + ("1" if getattr(args, "no_lc", False) else "0")).encode())
     h.update(("folim=" + str(getattr(args, "fanout_limit", None))).encode())
+    h.update(("optdir=" + (getattr(args, "opt_directive", None) or "default")).encode())
     h.update(("physopt=" + (getattr(args, "phys_opt_directive", None) or "default")).encode())
     h.update(b"retiming" if args.retiming else b"noretiming")
     fp = h.hexdigest()[:32]
@@ -2022,6 +2023,9 @@ def cmd_synth(args) -> int:
                 benv["SYNTH_NO_LC"] = "1"
             if getattr(args, "fanout_limit", None) is not None:
                 benv["SYNTH_FANOUT_LIMIT"] = str(args.fanout_limit)
+            # 【opt_design directive】150 档留余量: ExploreWithRemap / NoLUTCombining 等
+            if getattr(args, "opt_directive", None):
+                benv["OPT_DIRECTIVE"] = args.opt_directive
             if getattr(args, "phys_opt_directive", None):
                 benv["PHYS_OPT_DIRECTIVE"] = args.phys_opt_directive
             if args.retiming:
@@ -2085,6 +2089,10 @@ def cmd_synth(args) -> int:
                 expect.append("BUILD_SYNTH_FANOUT_LIMIT=" + str(args.fanout_limit))
             else:
                 expect.append("BUILD_SYNTH_FANOUT_LIMIT_OFF=1")
+            if getattr(args, "opt_directive", None):
+                expect.append("BUILD_OPT_DIRECTIVE=" + args.opt_directive)
+            else:
+                expect.append("BUILD_OPT_DIRECTIVE_OFF=1")
             if args.load_reg:      expect.append("BUILD_LOAD_RESULT_REG=1")
             if args.gshare:        expect.append("BUILD_BTB_GSHARE=1")
             if args.ras:           expect.append("BUILD_RAS_EN=1")
@@ -3103,6 +3111,10 @@ def main() -> int:
                    help="启用 RV32A 原子指令 + 多周期读-改-写 (A_EN); 默认关闭 (评分零收益)")
     p.add_argument("--timeout", type=int, default=3600, help="Vivado 超时秒数")
     p.add_argument("--lock-timeout", type=int, default=1800, help="等待构建锁的秒数")
+    p.add_argument("--opt-directive", default=None,
+                   help="opt_design -directive(150 档留余量用)。可取值同 Vivado:\n"
+                        "ExploreWithRemap / NoLUTCombining / AggressiveExplore / Explore\n"
+                        "等。ExploreWithRemap 会重映射 LUT 网表, NoLUTCombining 关 LUT 合并")
     p.add_argument("--place-directive", default=None,
                    help="覆盖 place_design 策略。**build.tcl 的默认是 ExtraTimingOpt**"
                         " (与 PB_RANGE 成对选定, 见 build.tcl 的实测表); "

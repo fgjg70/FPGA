@@ -449,7 +449,22 @@ if {$PB_ON} {
   puts "BUILD_PBLOCK_OFF=1"
 }
 
-opt_design
+# ---- 【opt_design directive】2026-10-17: 150 档留余量 -----------------------
+# 剩下的"软件侧重构"杠杆里唯一没用过的一个。
+#   ExploreWithRemap : 重映射 LUT 网表(可能改变关键路径的 LUT 层级)
+#   NoLUTCombining   : 关 LUT 合并(与 synth 的 -no_lc 呼应)
+#   AggressiveExplore/Explore(运行时多重策略)
+set OPT_DIR ""
+if {[info exists ::env(OPT_DIRECTIVE)] && $::env(OPT_DIRECTIVE) ne ""} {
+  set OPT_DIR $::env(OPT_DIRECTIVE)
+}
+if {$OPT_DIR eq ""} {
+  opt_design
+  puts "BUILD_OPT_DIRECTIVE_OFF=1"
+} else {
+  opt_design -directive $OPT_DIR
+  puts "BUILD_OPT_DIRECTIVE=$OPT_DIR"
+}
 # Place directive is overridable so physical-optimization experiments are
 # reproducible from the workflow instead of hand-run Vivado.
 # DEFAULT = ExtraTimingOpt, CHOSEN TOGETHER WITH the Pblock above.
