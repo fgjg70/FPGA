@@ -73,3 +73,26 @@ Correct operation validated            crclist 0xe714  crcfinal 0x382f
 5. **31 位 tick 闸门**：每迭代 463,366 拍 ⇒ 迭代上限 **4611**；越过它 `mk_cm_hw` 会 BLOCK 并提前返回
    （镜像与 build.json 都不更新，看起来像"没报错"）。
 6. **串口必须"先监听后烧写"**（见 §3）。
+
+## 6. FLASH 自启动（2026-10-17 已完成并验证）
+
+**现状**：板子的 QSPI FLASH 里已经烧好 **150 MHz** 的启动镜像，**断电重启即自启动**，无需 JTAG。
+
+```powershell
+# 重新构建 SPIx4 启动镜像（注意两个 env）
+$env:SPI_BOOT_X4 = '1'; $env:BIT_NAME = 'cpu_a100t_spix4.bit'
+python tools\fpga_workflow.py synth --no-lc --contain-routing --fanout-limit 128 `
+    --pblock-range CLOCKREGION_X0Y1:CLOCKREGION_X2Y3 --place-directive AltSpreadLogic_high `
+    --tag spix4-150 --record --status measure
+# 烧写 + 读回校验（脚本自带 accessor 加载与 16MB diff）
+powershell -File tools\flash_boot.ps1 -Bit "D:/USER/Desktop/FPGA/FPGA/fpga/cpu_a100t_spix4.bit" -Iface SPIx4
+```
+**判据**：`VERDICT=PROGRAM_OK` + `VERIFY=PASS`（读回逐字节一致）—— **不要只看"Flash programming completed successfully"**
+（PITFALLS R44：`VERIFY=0`+`CFG_PROGRAM=0` 时它照样打印成功）。
+
+**已验证**：断电重启后从 QSPI 自动加载、以 150 MHz 运行、UART 在上电约 15 s 后打印 CoreMark 结论；
+`Total ticks = 2,128,330,449` 与 JTAG 通道**逐位一致**。
+
+⚠ **余量说明**：150 MHz 的 WNS 是 **+0.007 ns（压线）**。尝试过 6 种"加余量"方案（降频到 148.44/146.875、
+VCO 1200、opt_design 的 ExploreWithRemap、其它 Pblock/放置/物理指令）**全部更差** —— 150 档正是这套工具
+对该设计的"甜点"。若要更大工程余量，回退到 **138.75 MHz**（WNS +0.033/+0.050，ILA+UART 双验证过）。
