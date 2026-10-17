@@ -25,12 +25,12 @@ graph LR
 
 | # | 项 | 值 | 来源（可复核） |
 |---|---|---|---|
-| ① | **时钟名** | **`sys_clk_core`** —— **频率无关命名**（名字里带频率会每改一次档就过期一次） | `fpga/daVinciPro.xdc`：`create_generated_clock -name sys_clk_core -multiply_by 21 -divide_by 8` |
-| ② | **已上板验证档** | **105 MHz**（`sys_clk_core` @9.524 ns），**2026-10-11 15:22:41** 采集 | `results/ila_done.capture.json`（`clk_hz=105000000`） |
-| ② | 该档上板实测 | `ila_ctrl=0xC2`、`score_result=0xD24B8AFE`（bit31=1）、tick **1,380,682,494**、**13.15 s**、硬件 CM/MHz **2.1728** | `results/ila_done.csv` + 采集清单（`expect_tick=1380933000`，偏差 0.02%） |
-| ② | 该档综合 | fmax **106.30 MHz**（WNS **+0.117** @9.524 ns）；LUT **2706** / FF **1290** / BRAM 8 / DSP 8 | `results/coremark.csv` 行 `c14-105mhz` + `.fpga-cache/reports/20261011-151614-cm_hw/metrics.json` |
-| ③ | **当前设计目标档** | **131.25 MHz**（`sys_clk_core` @7.619 ns）—— **时序未收敛**：`Timing constraints are not met.`、WNS **−0.963**、1141/4437 失败端点；当前工作区 LUT **2865** / FF **1393** / BRAM **9.5** | `fpga/timing.rpt`（`sys_clk_core` 行）+ `fpga/util.rpt`（2026-10-11 16:19 那次构建） |
-| — | **当前源码**（C-1 两级流水 gshare）**仿真** | ticks **453,942** ⇒ CoreMark/MHz **2.2029**（**未上板**） | `.fpga-cache/logs/tb_sw_coremark.log` |
+| ① | **时钟名** | **`sys_clk_core`** —— **频率无关命名**（名字里带频率会每改一次档就过期一次） | `fpga/daVinciPro.xdc`：`create_generated_clock -name sys_clk_core -multiply_by 21 -divide_by 7` |
+| ② | **已上板验证档** | **150 MHz**（`sys_clk_core` @6.667 ns），**2026-10-17 从 QSPI FLASH 自启动**（断电重启即运行，无需 JTAG） | `results/uart_boot.capture.json` + `results/flash_done.txt` |
+| ② | 该档上板实测 | tick **2,128,330,449**、**14 s**、**328 迭代/秒**、硬件 CoreMark/MHz **2.1613**、`Correct operation validated`（CRC 全对）；与 138.75 MHz 档、JTAG 通道**三重逐位一致** | `results/uart_boot.txt`（FLASH 自启动原始输出）+ `results/uart_done.txt`（JTAG 通道输出） |
+| ② | 该档综合 | fmax **150.0 MHz**（WNS **+0.007** @6.667 ns，压线但 MET）；LUT **3116** / FF **1502** / BRAM **9** / DSP **8** | `results/coremark.csv` 行 `deliv150-final` |
+| ③ | **当前设计目标档** | **150 MHz 已达成**（无未收敛目标）。构建配置：`-no_lc` + `-fanout_limit 128` + `--pblock-range CLOCKREGION_X0Y1:XCLOCKREGION_X2Y3`(见 NEXT-BURN) + `--contain-routing` + `--place-directive AltSpreadLogic_high` | `results/NEXT-BURN.md` §1 + `results/coremark.csv` 行 `deliv150-final` |
+| — | **当前源码仿真**（C-12c 操作数寄存 + 候选 E′） | ticks **463,366** ⇒ CoreMark/MHz **2.1581**（**已上板**，即上面 ② 那一版） | `.fpga-cache/logs/tb_sw_coremark.default.log` |
 
 > ⚠️ **上板的那一版比当前源码早**：15:22 的采集清单覆盖 **22** 个 `.sv`，而当前树是 **23** 个
 > （`bht.sv` 由 `028ca4d` 在 **15:55** 引入）—— 所以"硬件 CM/MHz 2.1728"是 C-1 之前的数，
@@ -44,21 +44,21 @@ graph LR
 > ⚠️ `coremark.csv` 第 2 行那句 `fmax_mhz = 1000 / (20 - wns_ns)` 是**旧口径**（MMCM 之前），
 > 已在 `HANDOFF.md` §8 被列为失效写法 —— 读到它请忽略，按上面的"最差路径块"口径理解。
 
-| 评分指标 | 基线 | **最新档（105 MHz，已上板）** | 变化 |
+| 评分指标 | 基线 | **最新档（150 MHz，FLASH 自启动）** | 变化 |
 |---|---|---|---|
-| **CoreMark/MHz** | 0.8263 | **2.1728**（硬件实测） | **+163.0%** |
-| **最高时钟频率 fmax** | 78.4 MHz | **106.30 MHz**（WNS +0.117 @9.524 ns） | **+35.6%** |
-| **CoreMark/LUTs** | 2.361e-4 | **8.03e-4**（派生） | **+240.1%** |
-| 绝对吞吐 (CM/MHz × fmax) | 64.8 | **231.0**（派生） | **+256.4%** |
+| **CoreMark/MHz** | 0.8263 | **2.1613**（硬件实测） | **+161.6%** |
+| **最高时钟频率 fmax** | 78.4 MHz | **150.0 MHz**（WNS +0.007 @6.667 ns） | **+91.3%** |
+| **CoreMark/LUTs** | 2.361e-4 | **6.926e-04**（派生） | — |
+| 绝对吞吐 (CM/MHz × fmax) | 64.8 | **324.1**（派生） | **+400.2%** |
 
 > 两个"派生"格按项目公式算：`CoreMark/LUTs = CM/MHz ÷ LUT`、`绝对吞吐 = CM/MHz × fmax`
 > （用本档的 2.1728 / 2706 / 106.30）。**基线的 78.4 MHz 是在 20 ns 约束下测的**，
 > 与现在的 `sys_clk_core` 不是同一口径 —— 跨约束直接比大小会被 R50 那条坑绊到，记结论时要说清约束。
 
-**资源**：LUT **2706** / FF **1290** / BRAM **8** / DSP 8（**105 MHz 已上板档**；工作区 131.25 目标未收敛版是 2865 / 1393 / 9.5）
-**设计时钟**：`sys_clk_core` —— MMCM `CLKFBOUT_MULT_F=21 / DIVCLK_DIVIDE=1`，`CLKOUT0_DIVIDE_F` 按档位取
-（10 = 105 MHz、8 = 131.25 MHz）；XDC 用 `-multiply_by 21 -divide_by 8` 建 131.25 MHz 的生成时钟
-**上板**（**2026-10-11 15:22:41 采集**）：**3000 迭代** / **13.15 s** @105 MHz / 与官方参考值 **逐位 CRC 匹配** /
+**资源**：LUT **3116** / FF **1502** / BRAM **9** / DSP **8**（**150 MHz 已上板并 FLASH 自启动档**）
+**设计时钟**：`sys_clk_core` @ **150 MHz** —— MMCM `CLKFBOUT_MULT_F=21 / DIVCLK_DIVIDE=1 / CLKOUT0_DIVIDE_F=7`
+（VCO 1050 MHz）；XDC 用 `-multiply_by 21 -divide_by 7` 建生成时钟。换档必须三处同源（见 `results/NEXT-BURN.md`）
+**上板**（**2026-10-17，QSPI FLASH 自启动**）：**4600 迭代** / **14 s** @150 MHz / 与官方参考值 **逐位 CRC 匹配** /
 `ila_ctrl=0xC2`（bit7=locked, bit6=done, bit1=pass, bit2=illegal=0）、CRC bit31=1、
 tick **1,380,682,494**（预期 1,380,933,000，偏差 0.02%）、硬件 CoreMark/MHz **2.1728**
 
