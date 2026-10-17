@@ -666,9 +666,23 @@ sw/coremark/core_portme.h : #define HAS_FLOAT 0
 | **CoreMark/MHz** | **2.1613** | `4600e6/2,128,330,449` —— 本来就是全精度算的（= 324.2/150），**不受影响** |
 | ticks/iteration | 462,680（硬件） | 仿真 463,366（cm_hw 镜像配置略异，系统性 −0.148%，历史各档一致） |
 
-**行动项（待做）**：把 `core_portme.h` 的 `HAS_FLOAT` 改为 1 ⇒ 固件直接打印规范值 324.20；
-`secs_ret` 变 `double` 只在 `time_in_secs()` 一处用到，软浮点开销可忽略，但需重建镜像 + bitstream + 重烧 FLASH。
-**在此之前，对外一律报 324.20（并注明固件打印 328 是整数秒截断）。**
+**行动项 → 已实现（2026-10-17 22:05，走的是更干净的路线）**：
+试过 `HAS_FLOAT=1`，**链接失败** ✗ —— `ee_printf.c` 的浮点 `%f` 路径要 newlib 的 `fcvtbuf`，
+而我们是 `-nostdlib`（`undefined reference to fcvtbuf`）。手写 dtoa 要匹配 `decpt/sign` 语义，收益不值风险。
+最终方案（合规、无浮点、**不影响仿真 ticks**）：在**我们自己的** `[portme]` 打印块里（`#if CM_MIN_SECS_CHECK`，
+只在上板构建编译）用 **64 位整数**算规范分数 `score = ITERATIONS*CLK/ticks`，**CoreMark 核心一行未改**。
+实测：
+```
+[portme] rate gate: clk=150000000 Hz ticks=2128330453 secs=14 min10s=ok
+[portme] score=324.19 spec (iterations*clk/ticks; core 打印的是整数秒截断值)
+Iterations/Sec   : 328        ← CoreMark 核心（整数秒口径，已在线注明）
+Correct operation validated.
+```
+`tick 2,128,330,449 → 2,128,330,453`（代码布局效应 +4 拍），分数 **324.20 → 324.19** 自洽；
+**CoreMark/MHz = 4600e6/2128330453 = 2.1613**（未变）。`verify --force` **PASS 12** ✓。
+
+**对外口径（最终）**：CoreMark 分数 **324.19**（规范口径，固件 `[portme] score` 行）／
+CoreMark/MHz **2.1613**；若引用核心的 `Iterations/Sec 328`，必须同时注明"整数秒截断"。
 
 ---
 
