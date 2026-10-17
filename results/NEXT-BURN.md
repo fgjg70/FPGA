@@ -1,72 +1,75 @@
-# 当前交付档（2026-10-16 起）—— 138.75 MHz 已上板验证 PASS
+# 当前交付档（2026-10-17 起）—— **150 MHz 已上板验证 PASS** 🎯
 
-> 本文件由 Lead 维护：**每次换档就更新这里**。它只写"要做什么、期望看到什么、出问题怎么办"。
-> 轨迹与"为什么"在 `results/CHANGELOG.md`，主频差距核实与结论在 `results/FREQ-VERDICT.md`。
+> 本文件由 Lead 维护：**每次换档就更新这里**。只写"要做什么、期望看到什么、出问题怎么办"。
+> 轨迹与"为什么"在 `results/CHANGELOG.md`（§12 = 150 达成全过程），主频核实见 `results/FREQ-VERDICT.md`。
 
-## 1. 烧什么（已就绪、已上板验证过）
+## 1. 烧什么（已就绪、已上板验证）
 
 | 项 | 值 |
 |---|---|
-| 频率 | **138.75 MHz**（VCO = 50 × 22.2 = 1110 MHz, N=8；XDC `-multiply_by 111 -divide_by 40`） |
+| 频率 | **150 MHz**（VCO = 50 × 21 = 1050, N=7；XDC `-multiply_by 21 -divide_by 7`） |
 | 迭代 | **4600**（C-12c 后每迭代 463,366 拍） |
 | 预期 tick | **2,131,483,600**（31 位占用 99.3%） |
-| 采集等待 | **20 s**（内置） |
-| 实测 | tick **2,128,330,451**（偏差 0.148%）／**15.34 s**／CoreMark/MHz **2.1613**／299.9 迭代/秒 |
-| 两条流 | 评分流 WNS **+0.033** PASS；ILA 流 `ILA_TIMING=PASS`（WNS **+0.010**） |
-| RTL 指纹 | `ca43541eeae9b4d42baa9652069ce4c53144b197547a691ba6b1d8f0333c2eca` |
+| 实测 tick | **2,128,330,449**（偏差 0.148%）—— 与 138.75 MHz 档**逐位相同** |
+| 实测性能 | **Iterations/Sec 328**／14 s／**CoreMark/MHz 2.1613**／绝对吞吐 **324.2** |
+| 正确性 | `Correct operation validated`；`crclist 0xe714 / crcmatrix 0x1fd7 / crcstate 0x8e3a / crcfinal 0x382f` |
+| 时序 | 评分流 **WNS +0.000 MET**（压线！）；**不带 ILA**（见下） |
+| bitstream | `fpga/cpu_a100t.bit`（**评分流**产物，不是 ILA 流） |
+| 综合/实现选项 | `-no_lc` + `-fanout_limit 128` + `--pblock-range CLOCKREGION_X0Y1:CLOCKREGION_X2Y3` + `--contain-routing` |
+| RTL 指纹 | 见 `results/uart_done.capture.json` 的 `rtl_sha256` |
 
-**综合选项：两条流都用默认值。**（`-no_lc`/`-fanout_limit` 只在 150 档工具挣扎时有效，
-在 138.75 档反而让余量变小；而且 Vivado 2018.3 的工程流**无法**通过
-`STEPS.SYNTH_DESIGN.ARGS.MORE OPTIONS` 传选项 —— 两种拼写都报 `Common 17-170`，已实测。）
+## 2. 为什么用 UART 而不是 ILA 验证（关键）
 
-## 2. 命令（板子上电后）
+- **带 ILA 的网表在 150 过不去时序**（−0.293~−0.514）：调试核在高频抢布线；
+- **评分流只差 0.172 ns**，补齐后 **WNS +0.000** ⇒ 交付的必须是**评分流那份网表**；
+- 于是观测通道改用 **UART**：软件把日志镜像到 `MMIO_UART_TX (0xA0000010)`
+  （打印发生在 `stop_time()` 之后 ⇒ 不污染测量窗口，ticks 逐位不变）。
+
+## 3. 命令
 
 ```powershell
 cd D:\USER\Desktop\FPGA\FPGA
-cmd /c fpga\jtag_probe.bat        # 应识别到 xc7a100t_0 (Digilent/210512180081)
-cmd /c fpga\ila_cap_done.bat      # 烧写 + 采集（内置 20 s 等待）
-python tools\fpga_workflow.py hw  # 判读
+# 1) 重建（如需）: 先确认时钟三处同源 + 重建镜像
+python tools\mk_cm_hw.py 4600
+python tools\fpga_workflow.py synth --no-lc --fanout-limit 128 `
+    --pblock-range CLOCKREGION_X0Y1:CLOCKREGION_X2Y3 --contain-routing `
+    --tag deliv150 --record --status keep
+# 2) 只烧写（不采集）
+cmd /c fpga\prog_uart.bat
+# 3) 读串口（先开监听, 再烧写! 程序配置完就跑, 14 秒后打印）
+python tools\uart_capture.py --list
+python tools\uart_capture.py --port COM13 --seconds 40 --out .fpga-cache\logs\uart_150.txt
 ```
-全部满足才算 PASS：`ila_ctrl=0xC2`（locked/done/pass=1）· `score_result` bit31=1 ·
-tick 偏差 ≤0.5% · 时长 ≥10 s · `dbg_pc` 静止在结尾 `j .`（`dbg_instr=0x0000006F`）。
-**采集后尽快判读**（超过 20 分钟会判 STALE 并拒绝作为结论）。
+**注意顺序**：`uart_capture.py` 必须先起监听，再 `prog_uart.bat`；否则 14.5 秒后的输出会错过。
 
-## 3. 回退与对照（已上板验证过的档位，可随时回退）
+预期判据（全部满足才算 PASS）：
+```
+Total ticks ≈ 2,131,483,600（±0.5%）   Iterations/Sec ≈ 328   Total time ≈ 14 s（>=10s ✓）
+Correct operation validated            crclist 0xe714  crcfinal 0x382f
+[portme] rate gate: clk=150000000 Hz ... min10s=ok
+```
 
-| 档 | 迭代 | 配置要点 |
+## 4. 回退档（都已上板验证过）
+
+| 档 | 验证通道 | 备注 |
 |---|---|---|
-| **138.75 MHz** | 4600 | 当前交付（C-12c + 候选 E′） |
-| 128.125 MHz | 3000 | 候选 B 树（无 C-12c，CoreMark/MHz 2.2063，10.61 s） |
-| 118.75 / 105 / 75 MHz | 3000 | 更早的档位 |
+| **150 MHz** | UART | 当前交付（压线 WNS +0.000） |
+| 138.75 MHz | ILA + UART | WNS +0.033/+0.050；调试核轻，两条通道都过 |
+| 128.125 MHz | ILA | 候选 B 树（无 C-12c，CM/MHz 2.2063） |
 
-**换档三处必须同源**（改一处就要改三处）：
-`fpga/top_a100t.sv` 的 `.CLKFBOUT_MULT_F` / `.CLKOUT0_DIVIDE_F` / `.CLK_HZ` +
-`fpga/daVinciPro.xdc` 的 `create_generated_clock -multiply_by/-divide_by`。
-改完必须重跑 `python tools\mk_cm_hw.py <iters>`（它会重建镜像与 `cm_hw.build.json`），
-再 `cmd /c fpga\build_ila.bat`。
+**换档三处必须同源**：`fpga/top_a100t.sv` 的 `.CLKFBOUT_MULT_F`/`.CLKOUT0_DIVIDE_F`/`.CLK_HZ` +
+`fpga/daVinciPro.xdc` 的 `create_generated_clock -multiply_by/-divide_by`；改完跑
+`python tools\mk_cm_hw.py <iters>` 再重建。**并且：见到任何 WNS，先用 `period = 1000/fmax + WNS`
+反推约束周期、对到标准档，再往下推理**（这条规矩已写进 `core.sv`/`ex_mem_reg.sv` 文件头）。
 
-## 4. 150 MHz 还差多少（诚实状态）
+## 5. 已知环境坑
 
-```
-150 档: 评分流 WNS -0.172 (差 0.172ns) ; ILA 流还要再差 ~0.02~0.16 => 实际差 ~0.35ns
-绑定族(150档, 做到 -0.172 时): 24 条 u_ex_mem/alu_out_reg/D + 13 条 u_imem/rdata_reg/ADDRARDADDR
-```
-已经用掉的手段（每项都实测）：C-12c（机制收益 +0.47ns 但 +2.08% ticks）、`-no_lc`、候选 E′、`-fanout_limit 128`。
-**剩余可选手段**：①复位网走 BUFG／同步复位重构（第 3 族）②`alu_out_reg/D` 那 24 条＝EX 数据通路本体
-（结构出路只有 ALU 流水化，代价远超 C-12c ⇒ 不建议）③取指地址锥（13 条，`C-8` 的老地盘）。
-
-## 5. 已知环境坑（务必先看，避免误判）
-
-1. **`IP_Flow 19-3505` 间歇故障**：建 ILA 像前必须**彻底清掉** `fpga/ila_proj.xpr` /
-   `.srcs` / `.cache` / `.hw` / `.ip_user_files` / `.Xil`，并确认没有别的 Vivado 在跑；
-   清干净后重试通常就过。**别把 IP 故障误记成"这一档时序不够"**（会白白降档）。
-2. **Vivado 在"目标几乎不可行"时会确定性崩溃**（`EXCEPTION_ACCESS_VIOLATION`，
-   rc=3221225477，常在 Phase 11 增量布局）：实测 `--fanout-limit 64` 与 `--retiming` 都触发。
-   **崩溃有时是"设计不可行"的症状，不是工具坏了**。
-3. **非单调性**：约束放松反而可能更差（工具早停）⇒ 选档只能实测，不能插值。
-   实测：150 → −0.172；142.1875 → **−0.307**；138.75 → +0.033。
-4. 编排脚本（`.ps1`/`.tcl`）**必须纯 ASCII**：Vivado 会把含中文的注释按 GBK 解码搞乱，
-   而且**注释里别写方括号伪代码**（如 `Common 17-170` 那种带方括号的错误号）——
-   回显时会被当命令替换。
-5. `mk_cm_hw.py` 的**31 位 tick 闸门**：C-12c 使每迭代拍数升到 463,366 ⇒ 迭代上限降到 **4611**。
-   越过它 `mk_cm_hw` 会 BLOCK 并提前返回（**镜像与 build.json 都不会更新**，看起来像"没报错"）。
+1. **`IP_Flow 19-3505` 间歇故障**：建 ILA 像前彻底清 `fpga/ila_proj.*` 与 `fpga/.Xil`，重试通常就过。
+2. **Vivado 在"几乎不可行的目标"上会确定性崩溃**（`EXCEPTION_ACCESS_VIOLATION`，rc=3221225477）：
+   `--fanout-limit 64`/`--retiming` 在 150 档都触发过。
+3. **非单调/不可插值**：同配置不同 Pblock 差 0.1~0.3 ns；**WNS=+0.000 是合格但要交叉验证**。
+4. **脚本必须纯 ASCII**；**`.bat` 用极简样板**（`call settings64.bat` + `cd /d` + `vivado -mode batch`）；
+   Tcl 里用 **`open_hw`**（不是 `open_hw_manager`）。注释里别写方括号伪代码。
+5. **31 位 tick 闸门**：每迭代 463,366 拍 ⇒ 迭代上限 **4611**；越过它 `mk_cm_hw` 会 BLOCK 并提前返回
+   （镜像与 build.json 都不更新，看起来像"没报错"）。
+6. **串口必须"先监听后烧写"**（见 §3）。
