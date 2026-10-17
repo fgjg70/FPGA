@@ -160,6 +160,23 @@ stop_time(void)
             ee_printf("[portme] rate gate: clk=%lu Hz ticks=%u secs=%u min10s=%s\n",
                       (unsigned long)CLOCKS_PER_SEC, ticks, secs,
                       (secs >= 10u) ? "ok" : "TOO SHORT");
+            /* 【2026-10-17】打印**规范口径**的 CoreMark 分数。
+             * 核心代码打的 "Iterations/Sec" 用 time_in_secs()（HAS_FLOAT=0 => 整数秒），
+             * 14.1889 s 被截成 14 s => 328.57，比规范值 324.20 虚高 1.3%。
+             * 这里只在**上板构建**（CM_MIN_SECS_CHECK）里，用 64 位整数算规范值：
+             *   score = iterations / (ticks/clk) = iterations * clk / ticks
+             * 不引浮点（HAS_FLOAT=1 需要 newlib 的 fcvtbuf，-nostdlib 下没有）；也**不改**
+             * CoreMark 核心（合规）。小数两位用整数拆位打印，避免依赖 %02 宽度支持。 */
+            {
+                unsigned long long num   = (unsigned long long)ITERATIONS *
+                                           (unsigned long long)CLOCKS_PER_SEC;
+                unsigned long long whole = num / (unsigned long long)ticks;
+                unsigned long long frac  = (num % (unsigned long long)ticks) * 100ULL /
+                                           (unsigned long long)ticks;
+                ee_printf("[portme] score=%lu.%lu%lu spec (iterations*clk/ticks; core 打印的是整数秒截断值)\n",
+                          (unsigned long)whole,
+                          (unsigned long)(frac / 10ULL), (unsigned long)(frac % 10ULL));
+            }
         }
 #endif
         /* 仿真/回归构建 (未定义 HW_CLK_HZ) 故意**不打印、不加任何字符串**:
