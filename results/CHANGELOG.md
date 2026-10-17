@@ -649,6 +649,27 @@ crclist 0xe714  crcmatrix 0x1fd7  crcstate 0x8e3a  crcfinal 0x382f
 `clk_75_raw` → `clk_core_raw`、`mmcm_locked` → `clk_locked`（名字里的 75 早在 128/150 档就过期了）——
 本轮 PLL 实验时一并改了，回退 PLL 时保留命名修正。
 
+### 13.4 **CoreMark 分数口径纠正：328 → 324.20**（2026-10-17 晚）
+上板打印的 `Iterations/Sec : 328` **比规范值虚高 1.3%**，根因在移植层：
+
+```c
+sw/coremark/core_portme.h : #define HAS_FLOAT 0
+=> coremark.h            : typedef ee_u32 secs_ret;        // 整数秒
+=> core_portme.c         : time_in_secs() 做整数除法        // 14.1889 s -> 14 s
+=> core_main.c           : iterations / time_in_secs(total_time) = 4600/14 = 328.57 -> 打印 328
+```
+
+| 口径 | 值 | 说明 |
+|---|---|---|
+| **规范口径（全精度时间）** | **324.20** | `4600 / (2,128,330,449 / 150e6)` = 4600/14.1889 |
+| 固件打印（整数秒） | 328 | 截断造成 **+1.3% 虚高**，**不能**当宣称分数 |
+| **CoreMark/MHz** | **2.1613** | `4600e6/2,128,330,449` —— 本来就是全精度算的（= 324.2/150），**不受影响** |
+| ticks/iteration | 462,680（硬件） | 仿真 463,366（cm_hw 镜像配置略异，系统性 −0.148%，历史各档一致） |
+
+**行动项（待做）**：把 `core_portme.h` 的 `HAS_FLOAT` 改为 1 ⇒ 固件直接打印规范值 324.20；
+`secs_ret` 变 `double` 只在 `time_in_secs()` 一处用到，软浮点开销可忽略，但需重建镜像 + bitstream + 重烧 FLASH。
+**在此之前，对外一律报 324.20（并注明固件打印 328 是整数秒截断）。**
+
 ---
 
 *维护约定：**每完成一项改动（含负结果）就往 §1/§5 追加一行**，并附 `file:line` + CSV 行名 +
