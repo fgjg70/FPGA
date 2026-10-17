@@ -248,3 +248,5 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-17,margin-146_875_000,1,463366,2.1581,3119,1472,9,8,143.3,timing_fail,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-17,vco1200,1,463366,2.1581,3118,1511,9,8,146.6,timing_fail,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-17,deliv150-final,1,463366,2.1581,3116,1502,9,8,150.2,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-17,deliv150-final,1,463366,2.1581,3116,1502,9,8,150.2,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-17,spix4-150,1,463366,2.1581,3116,1502,9,8,150.2,measure,fpga_workflow.py synth (PROG=cm_hw)
