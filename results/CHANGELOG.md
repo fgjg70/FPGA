@@ -688,3 +688,20 @@ CoreMark/MHz **2.1613**；若引用核心的 `Iterations/Sec 328`，必须同时
 
 *维护约定：**每完成一项改动（含负结果）就往 §1/§5 追加一行**，并附 `file:line` + CSV 行名 +
 一句"最该学的一点"。数字一律从 `results/coremark.csv` 复核，不手抄。*
+
+### 13.5 **FLASH 自启动验证 PASS（交付闭环）**
+2026-10-17 22:2x，板子断电重启（**无 JTAG 介入**），从 QSPI 自启动，串口输出：
+
+```
+[portme] rate gate: clk=150000000 Hz ticks=2128330453 secs=14 min10s=ok
+[portme] score=324.19 spec (iterations*clk/ticks; core 打印的是整数秒截断值)
+CoreMark Size 666 / Total ticks 2,128,330,453 / 14 s / 328 iter/s / 4600 iterations
+crclist 0xe714 / crcmatrix 0x1fd7 / crcstate 0x8e3a / crcfinal 0x382f
+Correct operation validated.
+```
+**关键交叉验证**：`ticks = 2,128,330,453` 与 **JTAG 烧写那次完全相同** ⇒ 自启动与烧写路径**行为逐位一致** ✓；
+`clk=150000000` ✓、`score=324.19 spec` ✓、CRC 四件套 ✓。
+FLASH 镜像 `cpu_a100t_spix4.bit` sha256 `650e7a7f…`，烧写后 16 MB 读回逐字节 `VERIFY=PASS` ✓。
+
+> 方法教训：**上电输出是一次性的**（程序只运行一次），但 **CH340 驱动的 FIFO 会暂存**，
+> 所以"先重启、后发现没在监听"时，立刻开一个短采集往往还能捞回来 —— 本次就是这样救回来的。
