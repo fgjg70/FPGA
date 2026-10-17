@@ -26,9 +26,9 @@ graph LR
 | # | 项 | 值 | 来源（可复核） |
 |---|---|---|---|
 | ① | **时钟名** | **`sys_clk_core`** —— **频率无关命名**（名字里带频率会每改一次档就过期一次） | `fpga/daVinciPro.xdc`：`create_generated_clock -name sys_clk_core -multiply_by 21 -divide_by 7` |
-| ② | **已上板验证档** | **150 MHz**（`sys_clk_core` @6.667 ns），**2026-10-17 从 QSPI FLASH 自启动**（断电重启即运行，无需 JTAG） | `results/uart_boot.capture.json` + `results/flash_done.txt` |
-| ② | 该档上板实测 | tick **2,128,330,449**、**14 s**、**328 迭代/秒**、硬件 CoreMark/MHz **2.1613**、`Correct operation validated`（CRC 全对）；与 138.75 MHz 档、JTAG 通道**三重逐位一致** | `results/uart_boot.txt`（FLASH 自启动原始输出）+ `results/uart_done.txt`（JTAG 通道输出） |
-| ② | 该档综合 | fmax **150.0 MHz**（WNS **+0.007** @6.667 ns，压线但 MET）；LUT **3116** / FF **1502** / BRAM **9** / DSP **8** | `results/coremark.csv` 行 `deliv150-final` |
+| ② | **已上板验证档** | **150 MHz**（`sys_clk_core` @6.667 ns），**2026-10-17 从 QSPI FLASH 自启动**（断电重启即运行，无需 JTAG） | `results/uart_flash_boot_final.txt`（入库原始输出）+ `results/flash_done.txt` |
+| ② | 该档上板实测 | tick **2,128,330,453**、**14 s**、**CoreMark 规范分数 324.19**（固件 `[portme] score=324.19 spec` 行）、硬件 CoreMark/MHz **2.1613**、`Correct operation validated`（CRC 全对）。注：核心打印的 `Iterations/Sec 328` 是整数秒截断值，**不作为宣称分数**（成因见 `results/CHANGELOG.md` §13.4） | `results/uart_flash_boot_final.txt`（FLASH 断电重启自启动原始输出）+ `results/uart_scoreprint.txt`（JTAG 通道输出） |
+| ② | 该档综合 | fmax **150.2 MHz**（WNS **+0.007** @6.667 ns，压线但 MET，**0 Critical Warning**）；LUT **3098** / FF **1447** / BRAM **9** / DSP **8** | `results/coremark.csv` 行 `legal150-*` |
 | ③ | **当前设计目标档** | **150 MHz 已达成**（无未收敛目标）。构建配置：`--no-lc` + `--fanout_limit 128` + `--pblock-range off` + `--contain-routing` + `--place-directive AltSpreadLogic_high`（**合法，0 Critical Warning**） | `results/NEXT-BURN.md` §1 + `results/coremark.csv` 行 `deliv150-final` |
 | — | **当前源码仿真**（C-12c 操作数寄存 + 候选 E′） | ticks **463,366** ⇒ CoreMark/MHz **2.1581**（**已上板**，即上面 ② 那一版） | `.fpga-cache/logs/tb_sw_coremark.default.log` |
 
