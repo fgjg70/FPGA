@@ -29,7 +29,7 @@ graph LR
 | ② | **已上板验证档** | **150 MHz**（`sys_clk_core` @6.667 ns），**2026-10-17 从 QSPI FLASH 自启动**（断电重启即运行，无需 JTAG） | `results/uart_boot.capture.json` + `results/flash_done.txt` |
 | ② | 该档上板实测 | tick **2,128,330,449**、**14 s**、**328 迭代/秒**、硬件 CoreMark/MHz **2.1613**、`Correct operation validated`（CRC 全对）；与 138.75 MHz 档、JTAG 通道**三重逐位一致** | `results/uart_boot.txt`（FLASH 自启动原始输出）+ `results/uart_done.txt`（JTAG 通道输出） |
 | ② | 该档综合 | fmax **150.0 MHz**（WNS **+0.007** @6.667 ns，压线但 MET）；LUT **3116** / FF **1502** / BRAM **9** / DSP **8** | `results/coremark.csv` 行 `deliv150-final` |
-| ③ | **当前设计目标档** | **150 MHz 已达成**（无未收敛目标）。构建配置：`-no_lc` + `-fanout_limit 128` + `--pblock-range CLOCKREGION_X0Y1:XCLOCKREGION_X2Y3`(见 NEXT-BURN) + `--contain-routing` + `--place-directive AltSpreadLogic_high` | `results/NEXT-BURN.md` §1 + `results/coremark.csv` 行 `deliv150-final` |
+| ③ | **当前设计目标档** | **150 MHz 已达成**（无未收敛目标）。构建配置：`--no-lc` + `--fanout_limit 128` + `--pblock-range off` + `--contain-routing` + `--place-directive AltSpreadLogic_high`（**合法，0 Critical Warning**） | `results/NEXT-BURN.md` §1 + `results/coremark.csv` 行 `deliv150-final` |
 | — | **当前源码仿真**（C-12c 操作数寄存 + 候选 E′） | ticks **463,366** ⇒ CoreMark/MHz **2.1581**（**已上板**，即上面 ② 那一版） | `.fpga-cache/logs/tb_sw_coremark.default.log` |
 
 > ⚠️ **上板的那一版比当前源码早**：15:22 的采集清单覆盖 **22** 个 `.sv`，而当前树是 **23** 个
@@ -52,21 +52,21 @@ graph LR
 | 绝对吞吐 (CM/MHz × fmax) | 64.8 | **324.1**（派生） | **+400.2%** |
 
 > 两个"派生"格按项目公式算：`CoreMark/LUTs = CM/MHz ÷ LUT`、`绝对吞吐 = CM/MHz × fmax`
-> （用本档的 2.1728 / 2706 / 106.30）。**基线的 78.4 MHz 是在 20 ns 约束下测的**，
+> （用本档的 2.1613 / 3098 / 150.2）。**基线的 78.4 MHz 是在 20 ns 约束下测的**，
 > 与现在的 `sys_clk_core` 不是同一口径 —— 跨约束直接比大小会被 R50 那条坑绊到，记结论时要说清约束。
 
-**资源**：LUT **3116** / FF **1502** / BRAM **9** / DSP **8**（**150 MHz 已上板并 FLASH 自启动档**）
+**资源**：LUT **3098** / FF **1447** / BRAM **9** / DSP **8**（**合法 150 MHz 档**；`results/coremark.csv` 行 `legal150-*`）
 **设计时钟**：`sys_clk_core` @ **150 MHz** —— MMCM `CLKFBOUT_MULT_F=21 / DIVCLK_DIVIDE=1 / CLKOUT0_DIVIDE_F=7`
 （VCO 1050 MHz）；XDC 用 `-multiply_by 21 -divide_by 7` 建生成时钟。换档必须三处同源（见 `results/NEXT-BURN.md`）
-**上板**（**2026-10-17，QSPI FLASH 自启动**）：**4600 迭代** / **14 s** @150 MHz / 与官方参考值 **逐位 CRC 匹配** /
-`ila_ctrl=0xC2`（bit7=locked, bit6=done, bit1=pass, bit2=illegal=0）、CRC bit31=1、
-tick **1,380,682,494**（预期 1,380,933,000，偏差 0.02%）、硬件 CoreMark/MHz **2.1728**
+**上板**（**2026-10-17，QSPI FLASH 断电重启自启动**，无 JTAG 介入）：**4600 迭代** / **14 s** @150 MHz / 与官方参考值 **逐位 CRC 匹配** /
+`[portme] rate gate: clk=150000000 Hz` + `[portme] score=324.19 spec`、`Correct operation validated`、
+tick **2,128,330,453**（与 JTAG 烧写那次**逐位相同**）、硬件 CoreMark/MHz **2.1613**、**规范分数 324.19**
 
 > **两条必须一起读的诚实口径**：
 > 1. **fmax 一路从文档旧值 69.8 → 106.30 不是"一轮优化"**，它是三件事叠加：
 >    ① **口径更正**（旧值用的是 MMCM 之前已失效的 `1000/(20−WNS)`）→ 74.4；
 >    ② **提频 70 → 75 MHz** → 76.2（收紧约束本身也让工具更卖力，见 PITFALLS **R50**）；
->    ③ **C-1 两级流水 gshare + 逐档提频 95/105 MHz** → **106.30**。
+>    ③ **C-1 两级流水 gshare + 逐档提频 95/105/128.125/138.75/150 MHz** → **150.2**。
 >    **fmax 与"运行频率"不是独立评分项**，所以每写一个 fmax 都要带上"哪条时钟、周期、运行频率、WNS"。
 > 2. **为正确性付出的面积**：修 R-01/R48（中断精确性两处架构缺陷）与 R-02（mtval 合规）使
 >    LUT/FF 上升；此后 C-1（预测器两级流水）又换了面积与 IPC —— 逐档代价见 `results/coremark.csv`
@@ -92,7 +92,7 @@ tick **1,380,682,494**（预期 1,380,933,000，偏差 0.02%）、硬件 CoreMar
 | RV32I + **M 扩展** + Zicsr + M-mode 异常/中断 | ✅ |
 | 动态分支预测（**512 项两级流水 BTB + 8192 项 PHT/gshare**，C-1）| ✅ |
 | 完整异常/中断（ECALL/EBREAK/非法指令/mtimecmp 定时器中断/MRET）| ✅ |
-| 外设：UART 115200 8N1 收发（`BAUD_DIV = CLK_HZ ÷ 115200` 整数除，**随档位变**：105 MHz→911⇒115,258 baud/+0.05%；131.25 MHz→1139⇒115,233/+0.028%）/ GPIO / 64 位定时器 | ✅ |
+| 外设：UART 115200 8N1 收发（`BAUD_DIV = CLK_HZ ÷ 115200` 整数除，**随档位变**：105 MHz→911⇒115,258 baud/+0.05%；131.25 MHz→1139⇒115,233/+0.028%；150 MHz→1302⇒115,207 baud/−0.006%）/ GPIO / 64 位定时器 | ✅ |
 | 应用场景：神经网络 GEMM 推理核心（与独立参考实现逐元素一致）| ✅ |
 | RV32A 原子指令 | ✅ **9 个 AMO + LR.W 完整；SC.W 按规范允许恒失败（rd=1，不写内存）—— 无预约寄存器。** `A_EN` 宏默认关（对 CoreMark 三项零贡献）；见 `results/p6-a-extension.md` §5.13、PITFALLS **R49** |
 | AI 加速单元（GEMM） | ⚠ 机制已验证（42.59× 计算加速），因面积与正确性门控关闭 |
@@ -240,10 +240,10 @@ store: shifted = {32'b0, rs2} << (8*addr[1:0]), 写使能为掩码移位到两�
 - **Cache（2 路组相联 + 总线突发）**：**分析判定架构性无收益**，不实现 ——
   `imem`/`dmem` 都已是单周期命中的片上 BRAM，没有它要掩盖的存储器延迟。
   定量依据见 `results/p7-cache-analysis.md`。
-- **fmax 剩余空间**：最新已上板档 = **106.30 MHz**（`sys_clk_core` @9.524 ns，WNS **+0.117**）；
-  **当前设计目标是 131.25 MHz（@7.619 ns），时序尚未收敛**（WNS **−0.963**、1141/4437 失败端点）
-  ⇒ 下一步是**物理/结构手段**把 131.25 收下来（route 占比 2/3，见 PITFALLS **R47**：
-  top-N 是墙时逻辑重排期望≈0）。
+- **fmax 现状**：最新已上板档 = **150.2 MHz**（`sys_clk_core` @6.667 ns，WNS **+0.007** MET，**0 Critical Warning**）；
+  **无未收敛目标**，合法配方见 `results/NEXT-BURN.md` §1。
+  **余量已实测拿不到**（8 组实验全部更差，见 `results/CHANGELOG.md` §13.2）：150 档 10 个族全挤在 +0.026~+0.119 ns；
+  要工程余量须降到 **138.75 MHz** 档（+0.033/+0.150，ILA+UART 双验证）。
   另见 **R50**：**收紧约束本身就会让 fmax 变高**（74.4→76.2 就是实例），所以"提频"与 fmax 不是独立两项。
 - **`LOAD_RESULT_REG`**：实测更差，已否决（`results/p4-macro-failure.md` 5.2）。
 - **唯一未完成项**：GEMM 加速单元的 C 读回 + 缓冲改 BRAM（不计入成绩）。
