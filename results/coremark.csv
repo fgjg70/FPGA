@@ -267,3 +267,5 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-17,legal-plWL,1,461712,2.1659,3127,1483,9,8,134.3,timing_fail,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-17,legal150-final,1,461712,2.1659,3098,1447,9,8,150.2,keep,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-17,legal150-spix4,1,461712,2.1659,3098,1447,9,8,150.2,measure,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-17,legal150-final2,1,461712,2.1659,3098,1447,9,8,150.2,keep,fpga_workflow.py synth (PROG=cm_hw)
+2026-10-17,legal150-spix4b,1,461712,2.1659,3098,1447,9,8,150.2,measure,fpga_workflow.py synth (PROG=cm_hw)

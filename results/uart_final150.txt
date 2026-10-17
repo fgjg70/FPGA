@@ -1,0 +1,16 @@
+[portme] rate gate: clk=150000000 Hz ticks=2128330449 secs=14 min10s=ok
+2K performance run parameters for coremark.
+CoreMark Size    : 666
+Total ticks      : 2128330449
+Total time (secs): 14
+Iterations/Sec   : 328
+Iterations       : 4600
+Compiler version : GCC15.2.0
+Compiler flags   : -Os -march=rv32im -mabi=ilp32
+Memory location  : STATIC
+seedcrc          : 0xe9f5
+[0]crclist       : 0xe714
+[0]crcmatrix     : 0x1fd7
+[0]crcstate      : 0x8e3a
+[0]crcfinal      : 0x382f
+Correct operation validated. See README.md for run and reporting rules.
