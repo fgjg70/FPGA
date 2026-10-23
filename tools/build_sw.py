@@ -191,10 +191,16 @@ def regression_images(include_hw=False, clk_hz=None):
                      sources=['sw/nn_demo.c', 'sw/portme.c'], includes=[SW],
                      march='rv32im', opt='-O0', out='sim/prog/nn_demo.hex'))
     cm_srcs = ['sw/coremark/' + f for f in CM_SRC]
-    cm_defs = ['FLAGS_STR="-Os -march=rv32im -mabi=ilp32"']
+    # 【I-0 / 2026-10-23】CoreMark 优化级别 -Os -> -O2。
+    # 实测(本机 ModelSim): ticks 463,364 -> 371,390, CM/MHz 2.158 -> 2.693 (+24.8%),
+    # CRC-valid=1。代价: .text 9,676 -> 13,152 B (imem 占用 59% -> 80%)。
+    # ⚠ 不要顺手改 -O3: .text 会溢出 16 KB imem 2,404 字节(需 >=20 KB),
+    #   见 results/CM42-PLAN.md 附录 A。改这里必须重跑 `verify --force` 全量 12 项。
+    CM_OPT = '-O2'
+    cm_defs = ['FLAGS_STR="%s -march=rv32im -mabi=ilp32"' % CM_OPT]
     imgs.append(dict(kind='cc', name='cm_rv32im', sources=cm_srcs,
                      includes=[os.path.join(SW, 'coremark')], march='rv32im',
-                     defines=['ITERATIONS=1'] + cm_defs,
+                     opt=CM_OPT, defines=['ITERATIONS=1'] + cm_defs,
                      out='sim/prog/cm_rv32im.hex'))
     # 上板跑分镜像: ITERATIONS 按 R35 给足 >=10 s (70 MHz 下 3000 次约 17.7 s),
     # 并传入真实主频 (HW_CLK_HZ) 让 >=10 s 判定与时间口径都是真的。
@@ -204,7 +210,7 @@ def regression_images(include_hw=False, clk_hz=None):
             hw_defs.append('HW_CLK_HZ=%d' % clk_hz)
         imgs.append(dict(kind='cc', name='cm_hw', sources=cm_srcs,
                          includes=[os.path.join(SW, 'coremark')], march='rv32im',
-                         defines=hw_defs, out='sim/prog/cm_hw.hex'))
+                         opt=CM_OPT, defines=hw_defs, out='sim/prog/cm_hw.hex'))
     return imgs
 
 
