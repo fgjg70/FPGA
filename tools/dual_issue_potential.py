@@ -368,18 +368,23 @@ class Machine:
         self.pc = npc
 
 
-def pair_stats(ins_list, same_pkg, allow_br_slot1, intra_bypass):
+def pair_stats(ins_list, same_pkg, allow_br_slot1, intra_bypass, dual_lsu=False):
     """返回可配对数。
 
     same_pkg       : True = 两条必须在同一 8 字节取指包内
     allow_br_slot1 : True = 允许 BR 进 slot1 (需要两个分支端口 / squash 逻辑)
     intra_bypass   : True = 允许 slot0 的 ALU 结果同拍旁路给 slot1 (需额外组合路径)
+    dual_lsu       : True = 双 LSU 端口, 允许 LOAD/STORE 进 slot1
+                     (dmem 需改真双端口 BRAM, 面积 +1 块)
     slot0 是 BR/JMP 时一律不算配对 —— taken 会冲刷 slot1, 白发射不计入吞吐。
     """
     n = len(ins_list)
     allowed = {T_ALU, T_MUL}
     if allow_br_slot1:
         allowed.add(T_BR)
+    if dual_lsu:
+        allowed.add(T_LOAD)
+        allowed.add(T_STORE)
     pairs = 0
     i = 0
     while i + 1 < n:
@@ -509,10 +514,12 @@ def main():
 
     n = len(window)
     variants = [
-        ('A 严格  (同包, 无BR-slot1, 无同拍旁路)', True,  False, False),
-        ('B 放宽  (同包, 允许BR-slot1)',            True,  True,  False),
-        ('C 宽松  (跨包, 允许BR-slot1)',            False, True,  False),
-        ('D 激进  (跨包, BR-slot1, 同拍旁路)',      False, True,  True),
+        ('A 严格  (同包, 无BR-slot1, 无同拍旁路)', True,  False, False, False),
+        ('B 放宽  (同包, 允许BR-slot1)',            True,  True,  False, False),
+        ('C 宽松  (跨包, 允许BR-slot1)',            False, True,  False, False),
+        ('D 激进  (跨包, BR-slot1, 同拍旁路)',      False, True,  True,  False),
+        ('E 双LSU (跨包, BR-slot1, load/store进slot1)', False, True, False, True),
+        ('F 双LSU+旁路 (E + 同拍旁路)',             False, True,  True,  True),
     ]
 
     # 类型分布
@@ -541,8 +548,8 @@ def main():
     print()
 
     results = []
-    for label, same, br1, intra in variants:
-        p, _ = pair_stats(window, same, br1, intra)
+    for label, same, br1, intra, dlsu in variants:
+        p, _ = pair_stats(window, same, br1, intra, dlsu)
         stalls = base_stall * args.stall_factor
         cyc = (n - p) + stalls
         cm = 1e6 / cyc
