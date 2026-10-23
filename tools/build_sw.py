@@ -108,7 +108,8 @@ def build_image(sources, output, includes=(), defines=(), march='rv32i', opt='-O
             print('MISSING SOURCE: %s' % s, file=sys.stderr)
             return 1
 
-    cmd = [gcc, '-march=' + march, '-mabi=ilp32', opt,
+    # opt 允许写成多个开关 (如 "-O3 -fno-unroll-loops"); 单个 "-Os" split 后等价。
+    cmd = [gcc, '-march=' + march, '-mabi=ilp32'] + opt.split() + [
            '-ffreestanding', '-fno-builtin', '-fno-strict-aliasing',
            '-nostdlib', '-nostartfiles',
            '-Wl,-Map=' + mapf,
