@@ -2004,6 +2004,17 @@ def cmd_synth(args) -> int:
                 benv["PBLOCK_RANGE"] = args.pblock_range
                 if args.pblock_cells:
                     benv["PBLOCK_CELLS"] = args.pblock_cells
+            else:
+                # 【R58 / 2026-10-24 实测踩到两次】**不传 ≠ 关闭**。build.tcl:427 里
+                # `set PB_ON 1` + `set PB_RANGE "CLOCKREGION_X0Y1:CLOCKREGION_X2Y2"`
+                # 是**默认值**, 只有显式 PBLOCK_RANGE=off 才会关掉 Pblock。
+                # 也就是说"手敲命令时忘了写 --pblock-range off", 实际得到的是
+                # **带 Pblock 的构建**, 而它与"合法配方"的差别是 fmax 150.2 -> 147.0
+                # (WNS +0.007 -> -0.138)。当时两次 10 分钟的构建全白跑, 因为输出
+                # 看起来完全正常(有 LUT/FF/fmax), 只是数字悄悄换了配置。
+                print("  [WARN] 没传 --pblock-range: build.tcl 的默认是 **有 Pblock**"
+                      "(PB_ON=1, CLOCKREGION_X0Y1:CLOCKREGION_X2Y2)。")
+                print("         要复现交付档(合法配方)必须显式传 --pblock-range off (R58)。")
             if args.contain_routing:
                 benv["CONTAIN_ROUTING"] = "1"
             if args.route_directive:

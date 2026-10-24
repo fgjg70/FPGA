@@ -197,7 +197,20 @@ def regression_images(include_hw=False, clk_hz=None):
     # CRC-valid=1。代价: .text 9,676 -> 13,152 B (imem 占用 59% -> 80%)。
     # ⚠ 不要顺手改 -O3: .text 会溢出 16 KB imem 2,404 字节(需 >=20 KB),
     #   见 results/CM42-PLAN.md 附录 A。改这里必须重跑 `verify --force` 全量 12 项。
-    CM_OPT = '-O2'
+    # 【2026-10-24 交付档】在 -O2 之上叠两个开关, 实测 ticks 371,390 -> 369,506 (-0.507%):
+    #   -mbranch-cost=1      GCC 默认把分支当"贵"(-mbranch-cost=3), 倾向用算术换分支; 本核有
+    #                        BTB/PHT, 分支便宜 => 1。⚠ **只有 1 有效**: bc=0 / bc=2 都精确回到
+    #                        371,440(与基线同档), 但 .text 却变了 —— "看着改了、其实白改"的陷阱。
+    #   -fira-loop-pressure  寄存器分配按循环压力优化, 在 bc1 之上再省 318 拍。
+    #   试过但无效/略负, 别再重复: -frename-registers(+8)、-fschedule-insns2(0)、
+    #     -fschedule-insns(0)、-mtune=sifive-7-series(+147)、-mtune=sifive-u74(+147)、
+    #     -funroll-loops(编译失败)。
+    #   【实测: 镜像内容不影响网表】两种镜像综合出**完全相同**的 LUT 3,098 / FF 1,447 / WNS +0.007
+    #     => "换 .hex 不用重测时序"这句话在本核上是成立的(但必须真测过才能说, 见 CHANGELOG §17.4)。
+    #   ⚠ 体积余量只剩 272 B: cm_rv32im .text 13,152 -> 13,456 B;
+    #     cm_hw(ITERATIONS=3000+HW_CLK_HZ) 15,804 -> 16,112 B / imem 16,384 B。
+    #     给 CoreMark 加任何代码前先量 .text。
+    CM_OPT = '-O2 -mbranch-cost=1 -fira-loop-pressure'
     cm_defs = ['FLAGS_STR="%s -march=rv32im -mabi=ilp32"' % CM_OPT]
     imgs.append(dict(kind='cc', name='cm_rv32im', sources=cm_srcs,
                      includes=[os.path.join(SW, 'coremark')], march='rv32im',
