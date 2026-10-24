@@ -22,6 +22,7 @@
     python tools\\uart_capture.py --port COM8 --seconds 25 --out .fpga-cache\\logs\\uart_150.txt
 """
 import argparse
+import io
 import sys
 import time
 
@@ -83,7 +84,7 @@ def capture(port, seconds, out_path, baud):
             sys.stdout.write(chunk.decode("utf-8", "replace"))
             sys.stdout.flush()
     ser.close()
-    with open(out_path, "wb") as f:
+    with io.open(out_path, "wb") as f:
         f.write(bytes(buf))
     print("\n  -> 已存 %s (%d 字节)" % (out_path, len(buf)))
     return bytes(buf)

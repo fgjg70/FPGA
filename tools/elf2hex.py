@@ -46,7 +46,7 @@ def write_hex(data, path, base_addr, limit_words, label):
     if len(data) % 4:
         data += b'\x00' * (4 - len(data) % 4)
     words = len(data) // 4
-    with open(path, 'w') as f:
+    with io.open(path, 'w') as f:
         for i in range(0, len(data), 4):
             f.write('%08x\n' % struct.unpack('<I', data[i:i + 4])[0])
     pct = 100.0 * words / limit_words

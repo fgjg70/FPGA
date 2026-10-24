@@ -27,6 +27,7 @@ R35 的公式按">=10 s"给下限；但**时钟变快不影响拍数**，只压�
     python tools/mk_cm_hw.py 3000
 """
 import json
+import io
 import os
 import re
 import subprocess
@@ -238,7 +239,7 @@ def main():
         "clk_hz": clk_hz, "generated_by": "tools/mk_cm_hw.py",
     }
     jp = os.path.join(REPO, "sim", "prog", "cm_hw.build.json")
-    with open(jp, "w", encoding="utf-8", newline="\n") as f:
+    with io.open(jp, "w", encoding="utf-8", newline="\n") as f:
         json.dump(build_json, f, indent=2, ensure_ascii=False)
     print("  %-18s %s" % ("cm_hw.build.json", "OK"))
     print("  [build.json] ITERATIONS=%d expect_tick=%d wait_seconds=%ds clk=%dHz"

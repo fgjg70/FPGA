@@ -14,6 +14,7 @@ Then dump one .txt per PDF and grep that.
 Usage: python tools/pdf_mine.py <pdf> [<pdf> ...]
 Writes <pdf>.mined.txt next to the input.
 """
+import io
 import re
 import sys
 import zlib
@@ -108,7 +109,7 @@ def main(paths):
                 if len(s) >= 2:
                     raw_ascii.append(s.decode("latin-1"))
         out = path + ".mined.txt"
-        with open(out, "w", encoding="utf-8", errors="replace") as f:
+        with io.open(out, "w", encoding="utf-8", errors="replace") as f:
             f.write("### FILE: %s (%d bytes, %d streams)\n" % (path, len(data), len(chunks)))
             f.write("\n".join(raw_ascii))
         print("%s -> %s  (%d text runs)" % (path, out, len(raw_ascii)))

@@ -102,7 +102,10 @@ module core
   // RV32A: LR/SC 算子标志 (LR/SC **都不写内存**; SC 恒失败 -> rd=1)。
   // 必须由下面 A_EN 段里**自己锁存**的 amo_op_r 译出, 不能用 ex_mem_ctrl.amo_op
   // (那份会被 hold_mem 挡住 —— 本项目在这一点上踩过坑)。
+  // 【本分支更新】预约寄存器落地后 SC.W 不再恒失败: amo_sc_ok 由 LSU 的
+  // 预约寄存器判定 (LR 之后地址匹配 -> 成功), rd = 成功 0 / 失败 1 (规范)。
   logic        amo_is_lr, amo_is_sc;
+  logic        amo_sc_ok;
   logic        id_ex_bubble;
 
   // 分支预测
@@ -289,6 +292,29 @@ module core
   assign fetch_hold = pipe_stall || !boot_done;
 `endif
 
+  // --------------------------------------------------------------------------
+  // 【RVC · 本分支新增】当前 pc 处指令的长度与"顺序下一地址" pc_nxi
+  // --------------------------------------------------------------------------
+  // 【为什么 pc+4 变成了 pc+2/+4】C 扩展引入 16 位指令后, "下一条顺序指令"
+  //   的地址取决于**当前这条指令的长度**。关键观察 (RV32C 编码空间的性质):
+  //     · 32 位指令永远是 4 字节对齐的 (bits[1:0]=11 且 4 字节对齐);
+  //     · 16 位指令 2 字节对齐。
+  //   所以取指**永远不会跨字**: imem 仍按字读, 取哪一半由 pc[1] 决定 ——
+  //     pc[1]=0: 指令 = word; 若 word[1:0] != 11 则是 16 位 (长 2), 否则 32 位;
+  //     pc[1]=1: 指令必是 word[31:16] 的 16 位半字 (32 位指令不可能从
+  //              bit1=1 处开始; 若该半字 [1:0]=11 则是非法编码, 长度仍按 2)。
+  // 【pc_nxi 的语义统一】下游所有"pc_plus4"的消费者需要的其实是同一个量:
+  //     链接值 (JAL/JALR 写回 rd) = 下一条顺序指令地址 —— 16 位 C.JAL 是
+  //     pc+2 (规范 "C" 章: return address = pc+2), 32 位 JAL 是 pc+4;
+  //     分支不跳的落点 = pc + 分支长度; 取指顺序地址 = 同上。
+  //   ⇒ 把"下一条顺序指令地址"算一次 (pc_nxi), 三处共用, 语义天然一致。
+  // 【时序代价】pc_plus2 是一级加法器; 选通 if_c16 依赖 imem_rdata[1:0]
+  //   (BRAM 输出寄存器) —— 即"取指字出 BRAM → 1 级 LUT → pc_next mux"。
+  //   这是 RVC 取指的固有代价 (下一 PC 依赖当前指令长度), 无法提前一拍。
+  wire        if_c16   = pc[1] || (imem_rdata[1:0] != 2'b11);
+  wire [31:0] pc_plus2 = pc + 32'd2;
+  wire [31:0] pc_nxi   = if_c16 ? pc_plus2 : pc_plus4;
+
   pc #(.XLEN(XLEN), .RESET_PC(PC_RESET)) u_pc (
     .clk       (clk),
     .rst       (rst),
@@ -301,6 +327,7 @@ module core
     .flush_pc  (pc_flush_pc),
     .pc_src    (pc_src),
     .pc_target (pc_target),
+    .pc_nxi    (pc_nxi),
     .pc        (pc),
     .pc_plus4  (pc_plus4)
   );
@@ -354,7 +381,7 @@ module core
   // --------------------------------------------------------------------------
   wire [31:0] pc_next = pc_flush ? pc_flush_pc
                       : fetch_hold ? pc
-                      : (pc_src ? pc_target : pc_plus4);
+                      : (pc_src ? pc_target : pc_nxi);
 `ifdef IMEM_COMB_READ
   // 回退(组合读): 当拍递地址当拍出数据, 接当前 pc 才与 rdata 同拍
   assign imem_addr = pc;
@@ -397,7 +424,7 @@ module core
   //     CoreMark 503,161 拍逐拍 trace 0 差异 ⇒ 未触发。
   // 【绝不门控更新口】`load_use_mem` 那拍 EX 会前进, 门控会把一次表写**永久**丢掉。
   // --------------------------------------------------------------------------
-  wire [31:0] p2_pc_ns = pc_flush ? pc_flush_pc : (pc_src ? pc_target : pc_plus4);
+  wire [31:0] p2_pc_ns = pc_flush ? pc_flush_pc : (pc_src ? pc_target : pc_nxi);
   wire        p2_hold  = fetch_hold && !pc_flush;
 
   imem #(.BASE(IMEM_BASE), .BYTES(IMEM_BYTES)) u_imem (
@@ -594,7 +621,14 @@ module core
   //   保留这几个名字当别名 => 两个 testbench 一行都不用改, 而且自检的
   //   不变量 (imem_rdata == mem[pc]) 完全不变、继续有效。
   assign if_pc          = pc;
-  assign if_pc_plus4    = pc_plus4;
+  // 【RVC · 语义更新】if_pc_plus4 这个名字沿用历史, 但它承载的值现在是
+  // **"下一条顺序指令地址" pc_nxi** (= pc + 当前指令长度):
+  //   · 链接值 (WB_PC4 写回 rd): C.JAL/C.JALR 是 pc+2, JAL/JALR 是 pc+4 ——
+  //     恰好都等于"下一条指令的地址" (规范 "C" 章: return address = pc+2);
+  //   · 分支实际不跳时的重定向落点: 同样是 pc + 分支长度;
+  //   · RAS push (RAS_EN): 返回地址 = 同上。
+  // 三类消费者要的是同一个量, 所以 IF/ID 这一级只带 pc_nxi 一个值。
+  assign if_pc_plus4    = pc_nxi;
   assign if_instr       = imem_rdata;
   assign if_pred_taken  = pred_taken;
   assign if_pred_target = pred_target;
@@ -627,7 +661,43 @@ module core
   //   寄存器号 -> hazard_unit 可能误判 load-use -> 平白拉停 pipe_stall ->
   //   而 redirect 被 !pipe_stall 门控 -> **重定向被推迟一拍** (历史同类 bug:
   //   random "配错对象", 见 core.sv 早期停顿气泡的记录)。
+  // ==========================================================================
+  // 【RVC · 本分支新增】取指字 → 实际指令的提取与规范化展开 (ID 段入口)
+  // ==========================================================================
+  // 取到的 32 位字 (imem_rdata, 与 if_pc 配对) 里装的是:
+  //   pc[1]=0: 一条 32 位指令 (word[1:0]=11) 或一条 16 位指令 (word[15:0]);
+  //   pc[1]=1: 一条 16 位指令 (word[31:16]; 32 位指令不可能从 bit1=1 开始)。
+  // 两条路径:
+  //   · id_instr —— **规范化后的指令**, 喂给译码器/寄存器号提取/立即数生成:
+  //     16 位编码经 rvc_expand 展开成标准 32 位形式, control_unit / imm_gen /
+  //     regfile 读口 / hazard 的 load-use 比较**全部不需要知道 RVC 的存在**。
+  //     非法 16 位编码展开失败时给全 0: opcode=0 使 control_unit 判 illegal,
+  //     且寄存器号全 0 (x0) 无任何副作用 —— 与"非法指令严格无副作用"口径一致。
+  //   · if_instr_carry —— **原始编码** (16 位时零扩展), 只随 ID/EX 的 instr
+  //     字段走, 专供 mtval (非法指令异常要记触发指令的原始编码, R-02 口径;
+  //     16 位指令记 16 位零扩展, 与规范 mtval 语义一致)。
+  //   if_instr 保持原始字不变 —— tb_sw 的"取指对齐自检"逐拍比对
+  //   imem_rdata == mem[pc], 这个不变量与 RVC 无关, 原样保留。
+  `ifndef C_DIS
+  wire [15:0] if_half = pc[1] ? imem_rdata[31:16] : imem_rdata[15:0];
+  logic        rvc_valid;
+  logic [31:0] rvc_instr32;
+  rvc_expand u_rvc_expand (
+    .half    (if_half),
+    .valid   (rvc_valid),
+    .instr32 (rvc_instr32)
+  );
+  wire [31:0] id_instr       = if_c16 ? (rvc_valid ? rvc_instr32 : 32'h0) : imem_rdata;
+  wire [31:0] if_instr_carry = if_c16 ? {16'b0, if_half} : imem_rdata;
+  `else
+  // C 扩展关闭 (C_DIS): 全部走 32 位原路径, 行为与 main 分支逐位一致
+  wire [31:0] id_instr       = imem_rdata;
+  wire [31:0] if_instr_carry = imem_rdata;
+  `endif
+
   // 【⚠ 这三个寄存器号**绝不能**用 id_valid 门控 —— 会形成组合环!】
+  //   (原有论证不变, 唯一变化是字段来源从 if_instr 换成 id_instr:
+  //    16 位压缩指令的 rs1'/rs2' 映射已在展开时归位到标准字段位置。)
   //   实测 (Vivado 综合): [DRC LUTLP-1] Combinatorial Loop Alert, 17 个 LUT:
   //     if_id_flush → id_valid → id_rs* → hazard_unit.load_use
   //       → pipe_stall → redirect → any_redir → if_id_flush
@@ -639,12 +709,12 @@ module core
   //   branch/jal/jalr 的 mem_read=0 ⇒ load_use 恒为 0 ⇒ 无影响。
   //   三个号的消费者 (regfile 读口 / ID-EX 入口) 在冲刷那拍都被 ID/EX 的
   //   flush 拦住, 真值流不进 EX。
-  assign id_rs1 = if_instr[19:15];
-  assign id_rs2 = if_instr[24:20];
-  assign id_rd  = if_instr[11:7];
+  assign id_rs1 = id_instr[19:15];
+  assign id_rs2 = id_instr[24:20];
+  assign id_rd  = id_instr[11:7];
 
   control_unit u_ctrl (
-    .instr (if_instr),
+    .instr (id_instr),
     .ctrl  (id_ctrl_raw)
   );
 
@@ -653,7 +723,7 @@ module core
   end
 
   imm_gen u_imm (
-    .instr   (if_instr),
+    .instr   (id_instr),
     .fmt     (id_ctrl.imm_fmt),
     .imm_out (id_imm)
   );
@@ -682,7 +752,7 @@ module core
     .stall       (pipe_stall),
     .bubble      (id_ex_bubble),
     .valid_in    (id_en),
-    .instr_in    (if_instr),
+    .instr_in    (if_instr_carry),   // 原始编码 (16 位压缩指令零扩展), 专供 mtval
     .ctrl_in     (id_ctrl),
     .pc_in       (if_pc),
     .pc_plus4_in (if_pc_plus4),
@@ -764,8 +834,14 @@ module core
   //    AMO 的 off_wb/size_wb 恒为 0/WORD ⇒ 后面的字节提取是恒等操作。)
   //   默认宏 (A_EN 关) 下该支路不可达 → amo_old 恒 0、综合成常量, 前递 mux 上
   //   一个 dmem 负载都没有。
-`ifdef A_EN
-  wire [31:0] amo_wb_value = amo_is_sc ? 32'd1 : amo_old;
+  // 【本分支口径翻转: A 扩展默认打开】
+  // main 分支上 A_EN 默认关 —— 那是竞赛取舍 ("对 CoreMark 三项零贡献, 纯付面积"),
+  // 见 p6-a-extension.md 的实测数据。本分支 (feat/isa-ac) 的主题就是指令集拓展:
+  // LR/SC 预约寄存器已补全, A 扩展默认打开以便学习与测试; 要恢复 main 的
+  // 最小配置, 编译时定义 A_DIS 即可 (全部 AMO 逻辑被综合裁掉, 面积/时序
+  // 与 main 逐位一致)。
+`ifndef A_DIS
+  wire [31:0] amo_wb_value = amo_is_sc ? {31'b0, ~amo_sc_ok} : amo_old;
 `else
   wire [31:0] amo_wb_value = 32'd0;
 `endif
@@ -854,7 +930,11 @@ module core
   wire is_muldiv_eff = is_muldiv && !redir_kill;
   wire md_start      = is_muldiv_eff && !md_served;
   wire md_done       = md_served && !md_busy_raw;   // muldiv 报完成那一拍 (busy 落下的拍)
-  wire [4:0] md_op_eff = md_served ? md_op_r : ALU_ADD;
+  // 【feat/isa-ac】用枚举类型声明 (原来是 wire[4:0]): muldiv 的 op 端口是
+  // alu_op_e —— 枚举与裸 wire[4:0] 的跨类型连接在默认 vopt 下被容忍,
+  // 但 -voptargs=+acc (调试可见性) 下是 vsim-3999 硬错误。功能不变。
+  alu_op_e md_op_eff;
+  assign md_op_eff = md_served ? alu_op_e'(md_op_r) : ALU_ADD;
   assign md_busy     = md_start || (md_served && !md_done);
 
   always_ff @(posedge clk or posedge rst) begin
@@ -1048,12 +1128,20 @@ module core
   //   是 illegal/ecall/ebreak ⇒ 原有行为逐位不变。
   // 【C-15】再加 !redir_kill: 错路指令 X0 即使是 illegal/ecall/ebreak 也不许进陷阱
   //   (否则 mepc 会记到错路 PC 上、精确性被破坏)。
+  // 【本分支新增】RV32A 的 LR/SC/AMO 要求**字对齐**地址 (规范 "A" 章);
+  //   非对齐的原子访问产生地址错异常 (LR -> load misaligned, 其余 -> store
+  //   misaligned), mtval 记出错地址。原先 LSU 会把地址静默向下取整到字 ——
+  //   那会读/写一个软件从没想访问的字, 比异常糟糕得多。
+  wire amo_misalign = id_ex_ctrl.amo_en && (ex_amo_addr[1:0] != 2'b00);
   assign exc_req  = !hold_mem && !redir_kill && (id_ex_ctrl.illegal ||
                                   id_ex_ctrl.sys_op == SYS_ECALL ||
-                                  id_ex_ctrl.sys_op == SYS_EBREAK);
+                                  id_ex_ctrl.sys_op == SYS_EBREAK ||
+                                  amo_misalign);
   assign exc_cause = id_ex_ctrl.illegal            ? CAUSE_ILLEGAL
                    : id_ex_ctrl.sys_op == SYS_ECALL ? CAUSE_ECALL_M
-                   :                                  CAUSE_BREAKPOINT;
+                   : id_ex_ctrl.sys_op == SYS_EBREAK? CAUSE_BREAKPOINT
+                   : (id_ex_ctrl.amo_op == AMO_LR)  ? CAUSE_LOAD_MISALIGN
+                   :                                  CAUSE_STORE_MISALIGN;
   // 中断优先级低于异常 (规范要求), 且不在 MRET 那一拍取中断。
   //
   // 【R-01 修复 2026-10-11】必须再与 `id_ex_valid` 相与 —— "EX 段有真指令"。
@@ -1112,7 +1200,11 @@ module core
   //   (本工程最忌讳的"看起来对、实际错位")。代价: ID/EX 多 32 位寄存器。
   // 【实测证据】修前 sim/prog 里一条 `0x0000007F` 的定向程序: mcause=2 ✓、
   //   mepc=0x80000024 ✓、mtval=0 ✗ ⇒ tohost=103 失败; 修后 mtval=0x0000007F ✓。
-  assign trap_tval = id_ex_ctrl.illegal ? id_ex_instr : 32'd0;
+  //   (16 位压缩非法指令时 id_ex_instr 是 16 位零扩展 —— 见 ID 段的提取注释。)
+  // 【本分支新增】地址错异常 (非对齐 AMO) 时 mtval = 出错地址 (规范 mtval 语义)。
+  assign trap_tval = id_ex_ctrl.illegal ? id_ex_instr
+                   : amo_misalign       ? ex_amo_addr
+                   :                      32'd0;
   // 访存地址错异常 (CAUSE_LOAD/STORE_MISALIGN) 本核按"支持非对齐访存"处理,
   // 故不产生 —— tb_core 的 basic.hex 专门测了非对齐访存, 必须继续通过。
 
@@ -1371,9 +1463,9 @@ module core
   // 当成**隐式 1 位网络**, 接到 32 位端口上只驱动了 1 位 -> 其余位是 Z ->
   // AMO 把 Z 写进内存 (vopt-2241 "connection width does not match" 是唯一提示)。
   // 与 PITFALLS R8 同类: 未声明的名字被隐式推断, 静默出错。
-  logic [31:0] amo_newdata;    // 送给 LSU 的"应写回值" (A_EN 关时恒 0)
-`ifdef A_EN
-  logic [31:0] amo_new_comb;   // AMO 专用 ALU 的组合输出 (仅 A_EN 时有)
+  logic [31:0] amo_newdata;    // 送给 LSU 的"应写回值" (A_DIS 时恒 0)
+`ifndef A_DIS
+  logic [31:0] amo_new_comb;   // AMO 专用 ALU 的组合输出 (A 扩展开启时有)
 `endif
 
   load_store_unit u_lsu (
@@ -1400,7 +1492,9 @@ module core
     .amo_lr            (amo_is_lr),
     .amo_sc            (amo_is_sc),
     .amo_write_phase   (amo_write_phase),
-    .amo_old_out       (amo_old)
+    .amo_old_out       (amo_old),
+    // 【本分支新增】SC.W 的成败 (预约寄存器判定; LSU 在 SC 启动拍锁存)
+    .amo_sc_ok         (amo_sc_ok)
   );
 
   // ------------------------------------------------------------------------
@@ -1418,7 +1512,7 @@ module core
   // rs2 需要随流水送到 MEM 段: 用 ex_mem_reg 之外的一个简单寄存器锁存
   // (id_ex_rs2 在 ID/EX 有效, 到 MEM 段就是上一条了, 所以必须寄存)。
   // ------------------------------------------------------------------------
-`ifdef A_EN
+`ifndef A_DIS
   logic [31:0] amo_rs2;
   logic [31:0] ex_rs2_d;      // 打一拍的 ex_rs2, 用来对齐 amo_rs2 的采样窗口
   logic        amo_en_d;      // 上一位的 amo_en (AMO 在 EX 那一拍为 1)
@@ -1485,21 +1579,29 @@ module core
     .out     (amo_new_comb)
   );
 
-  // 只在该用的时候选它: LR/SC 不写内存 (由 amo_op 决定), 且必须处于写相。
+  // 只在该用的时候选它 (写相):
+  //   · LR              : 绝不写内存 (LR 只读);
+  //   · SC              : 成功 -> 写 rs2 (SC 语义: 把 rs2 存进内存), 失败 -> 不写
+  //                       (写使能由 LSU 的预约判定关闭, 这里只是把写数据选对);
+  //   · 其余 AMO        : 写 ALU 算出的"新值"。
   // 其余时候给 0, 避免把无关数据当写值 (LSU 也只在写相才用 amo_newdata)。
-  assign amo_newdata = (amo_write_phase &&
-                        amo_op_r != AMO_LR &&
-                        amo_op_r != AMO_SC) ? amo_new_comb : 32'd0;
+  assign amo_newdata = !amo_write_phase          ? 32'd0
+                     : amo_is_lr                 ? 32'd0
+                     : amo_is_sc                 ? (amo_sc_ok ? amo_rs2 : 32'd0)
+                     :                             amo_new_comb;
 
   // (诊断打印已移除 —— 结论写进 results/p6-a-extension.md 第 5.8 节)
 `else
-  // 【A_EN 关闭时: 整个 AMO 新值计算单元不综合】
-  // 实测: 它虽然休眠却仍占面积与路径 (fmax 61.2 -> 59.1 MHz, LUT +14)。
-  // 既然默认不开 A 扩展, 就没有理由为它付这个代价 —— 用 `ifdef 让综合器
-  // 把它整体裁掉 (与 GEMM_EN/RAS_EN/BTB_GSHARE 同样的做法)。
+  // 【A_DIS: 整个 AMO 新值计算单元不综合】
+  // 本分支默认打开 A; 定义 A_DIS 可整体关闭 —— 实测 (main 分支): 它虽然
+  // 休眠却仍占面积与路径 (fmax 61.2 -> 59.1 MHz, LUT +14), 关闭后与加 A
+  // 扩展之前逐位相同。
   assign amo_newdata = 32'd0;
   // RV32A 关掉时把 LR/SC 标志钉成常量: LSU 里那两处门控/回读 mux 会被综合裁掉,
   // 默认配置的面积与时序与加 A 扩展之前**逐位相同**。
+  // 【注意 amo_sc_ok 不能在这里赋 0】它是 u_lsu 的输出端口 (无条件连接),
+  // 再 assign 会双重驱动。A_DIS 下 amo_en 恒 0 -> LSU 的 sc_ok_r 恒 0, 端口
+  // 天然给出 0, 无需干预。
   assign amo_is_lr   = 1'b0;
   assign amo_is_sc   = 1'b0;
 `endif
@@ -1645,24 +1747,24 @@ module core
     else if (id_ex_ctrl.illegal && !pipe_stall && !redir_flush && !trap_enter) dbg_illegal <= 1'b1;
   end
 
-  // 跳转目标必须 4 字节对齐。陷阱接管后这条断言覆盖 trap/mret 与分支误判纠正
+  // 跳转目标最低位必须为 0。陷阱接管后这条断言覆盖 trap/mret 与分支误判纠正
   // 两条路径: trap_vector 在 csr_file 里已按 {mtvec[31:2],2'b00} 对齐, mepc 写入
   // 时同样对齐, br_tgt_r 来自 actual_target (ex_pc_target 对 JALR 清最低位、
   // 否则是 pc+4) —— 本来就恒定对齐, 保留断言等于免费多一道保险。
   // 【C-11 口径】判据从 `any_redir && pc_target` 改为 `pc_flush && pc_flush_pc`:
   //   pc_target 现在是"预测目标"(不装 PC), 真正装进 PC 的是 pc_flush_pc。
-  // 【C-14 追加判据】预测目标也必须字对齐 —— C-14 的等价性
-  //   (`D[31:1]==0 ⟺ {sum[31:1],1'b0} == pred_target`) 就建立在 pred_target[1:0]=0 上。
-  //   来源: btb.sv:88 `pred_target = {PC_BASE[31:PC_TOP], tgt[pidx]}`, 而 tgt 只从
-  //   `upd_target[PC_TOP-1:0]` 写入 (upd_target 恒 4 字节对齐) + 复位为 0;
-  //   RAS 分支的 ras_top 来自 id_ex_pc_plus4。**不靠"本来就", 用断言钉住。**
+  // 【C-14 追加判据】预测目标 bit0 也必须为 0 —— C-14 的等价性
+  //   (`D[31:1]==0 ⟺ {sum[31:1],1'b0} == pred_target`) 就建立在 pred_target[0]=0 上。
+  // 【RVC 更新】bit1 不再要求为 0: 压缩分支/跳转的目标是 **2 字节对齐**
+  //   (bit1 可以是 1), 但 bit0 恒 0 (JALR 清位 + 所有偏移量都是偶数)。
+  //   原 `[1:0]!=00` 的判据在 RVC 下会误报, 已收紧为只查 bit0。
   `ifndef SYNTHESIS
   always_ff @(posedge clk) begin
-    if (!rst && pc_flush && (pc_flush_pc[1:0] != 2'b00)) begin
+    if (!rst && pc_flush && (pc_flush_pc[0] != 1'b0)) begin
       $error("instruction address misaligned: target=%h", pc_flush_pc);
     end
-    if (!rst && id_ex_valid && (id_ex_pred_target[1:0] != 2'b00)) begin
-      $error("C-14: predicted target is not word-aligned: %h", id_ex_pred_target);
+    if (!rst && id_ex_valid && (id_ex_pred_target[0] != 1'b0)) begin
+      $error("C-14: predicted target is not halfword-aligned: %h", id_ex_pred_target);
     end
   end
   `endif

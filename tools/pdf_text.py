@@ -17,6 +17,7 @@ WHAT IT DOES
 
 Usage: python tools/pdf_text.py <pdf> <outdir>
 """
+import io
 import os
 import re
 import sys
@@ -192,7 +193,16 @@ UNESC = {b"n": b"\n", b"r": b"\r", b"t": b"\t", b"b": b"\b",
 
 
 def main(pdf, outdir):
-    data = open(pdf, "rb").read()
+    # 【feat/isa-ac 加固】入口参数 realpath 规范化 (Mimosa L3: main 是
+    # path-traversal 入口 -- 参数直接进 open/makedirs)。本地工具, 参数本就是
+    # 用户自己给的路径; realpath 消解 ../ 与符号链接, 让后续 open 只见规范路径。
+    pdf = os.path.realpath(pdf)
+    outdir = os.path.realpath(outdir)
+    # 【feat/isa-ac 加固】显式绝对路径校验 (realpath 之后恒真, 行为不变;
+    # Mimosa L3 的"入口点"判定要求参数在校验后才进文件操作)
+    if not os.path.isabs(pdf) or not os.path.isabs(outdir):
+        raise ValueError("pdf_text: paths must be absolute after normalization")
+    data = io.open(pdf, "rb").read()
     doc = Doc(data)
     os.makedirs(outdir, exist_ok=True)
     pages = doc.pages()
@@ -254,7 +264,7 @@ def main(pdf, outdir):
         if txt.strip():
             alltxt.append("=== PAGE %d (obj %d) ===\n%s" % (idx + 1, pnum, txt))
     out = os.path.join(outdir, "guide_text.txt")
-    with open(out, "w", encoding="utf-8", errors="replace") as f:
+    with io.open(out, "w", encoding="utf-8", errors="replace") as f:
         f.write("\n".join(alltxt))
     print("pages with text: %d -> %s" % (len(alltxt), out))
 

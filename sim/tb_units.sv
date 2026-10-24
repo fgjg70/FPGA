@@ -140,11 +140,14 @@ module tb_units;
 
   logic        pc_rst, pc_stall, pc_flush, pc_src;
   logic [31:0] pc_flush_pc, pc_target, pc_pc, pc_plus4;
+  // 【feat/isa-ac · RVC】顺序下一地址 = pc + 指令长度; pc 单元测试只测 32 位
+  // 顺序流, 直接把 pc_plus4 回馈给 pc_nxi (与"全 32 位程序"的 C 关闭行为一致)。
+  wire [31:0] pc_nxi = pc_plus4;
 
   pc #(.RESET_PC(RESET_PC)) u_pc (
     .clk(clk), .rst(pc_rst),
     .stall(pc_stall), .flush(pc_flush), .flush_pc(pc_flush_pc),
-    .pc_src(pc_src), .pc_target(pc_target),
+    .pc_src(pc_src), .pc_target(pc_target), .pc_nxi(pc_nxi),
     .pc(pc_pc), .pc_plus4(pc_plus4));
 
   // ==========================================================================
@@ -427,7 +430,7 @@ module tb_units;
     // 【关键检查】amo_en 必须置位 —— 它是告诉流水线"本条要走多周期
     // 原子序列"的唯一信号; 漏了它 AMO 会按普通 load/store 走, 静默出错。
     // ------------------------------------------------------------------
-`ifdef A_EN
+`ifndef A_DIS   // A 扩展默认开 (feat/isa-ac); 定义 A_DIS 关闭
     // amoadd.w x1, x2, (x3): 实测编码 0x0021A0AF 的字段组合
     cu_instr = {AMO_ADD, 2'b00, 5'd2, 5'd3, 3'b010, 5'd1, OPC_AMO}; #1;
     chk({31'd0, cu_ctrl.illegal},   32'd0,             "AMOADD 合法");

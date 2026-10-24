@@ -26,8 +26,15 @@ module pc
   input  logic          flush,
   input  logic [XLEN-1:0] flush_pc,
 
-  input  logic          pc_src,      // 0: pc+4, 1: pc_target
+  input  logic          pc_src,      // 0: 顺序下一地址, 1: pc_target
   input  logic [XLEN-1:0] pc_target,
+
+  // 【RVC】顺序下一地址 = pc + 当前指令长度 (16 位指令 +2 / 32 位 +4)。
+  // 由上层 (core.sv) 按"当前 pc 配对的那条取指字"算好送进来; C 扩展关闭
+  // (C_DIS) 时它恒等于 pc_plus4, 行为与加 C 之前逐位一致。
+  // 链接值/分支不跳落点也用同一个"下一条顺序指令地址"(见 core.sv IF 段注释),
+  // 所以这里只需要这一个信号, 不再需要单独的 +4 常量。
+  input  logic [XLEN-1:0] pc_nxi,
 
   output logic [XLEN-1:0] pc,
   output logic [XLEN-1:0] pc_plus4
@@ -43,7 +50,7 @@ module pc
       pc <= flush_pc;
     end
     else if (!stall) begin
-      pc <= pc_src ? pc_target : pc_plus4;
+      pc <= pc_src ? pc_target : pc_nxi;
     end
   end
 

@@ -137,7 +137,7 @@ proc br_timing_gate {rpt tag} {
   return $ok
 }
 
-read_verilog -sv [list "$root/rv32_pkg.sv" "$root/alu.sv" "$root/branch_unit.sv" "$root/control_unit.sv" "$root/imm_gen.sv" "$root/pc.sv" "$root/regfile.sv" "$root/id_ex_reg.sv" "$root/ex_mem_reg.sv" "$root/mem_wb_reg.sv" "$root/hazard_unit.sv" "$root/load_store_unit.sv" "$root/imem.sv" "$root/dmem.sv" "$root/btb.sv" "$root/bht.sv" "$root/ras.sv" "$root/muldiv.sv" "$root/csr_file.sv" "$root/core.sv" "$root/gemm_accel.sv" "$root/fpga/mmio_subsys.sv" "$root/fpga/top_a100t.sv"]
+read_verilog -sv [list "$root/rv32_pkg.sv" "$root/alu.sv" "$root/branch_unit.sv" "$root/control_unit.sv" "$root/imm_gen.sv" "$root/pc.sv" "$root/regfile.sv" "$root/id_ex_reg.sv" "$root/ex_mem_reg.sv" "$root/mem_wb_reg.sv" "$root/hazard_unit.sv" "$root/load_store_unit.sv" "$root/rvc_expand.sv" "$root/imem.sv" "$root/dmem.sv" "$root/btb.sv" "$root/bht.sv" "$root/ras.sv" "$root/muldiv.sv" "$root/csr_file.sv" "$root/core.sv" "$root/gemm_accel.sv" "$root/fpga/mmio_subsys.sv" "$root/fpga/top_a100t.sv"]
 read_xdc "$root/fpga/daVinciPro.xdc"
 
 # ===========================================================================

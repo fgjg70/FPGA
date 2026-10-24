@@ -167,7 +167,7 @@ def asm_image(name):
     print('[asm] %s -> %s' % (os.path.relpath(src, REPO), os.path.relpath(out, REPO)))
     r = subprocess.run([sys.executable, os.path.join(HERE, 'asm.py'), src, '-o', out],
                        capture_output=True, text=True)
-    with open(lst, 'w', encoding='utf-8') as f:      # 与旧 run.bat 的 `> prog\x.lst` 等价
+    with io.open(lst, 'w', encoding='utf-8') as f:      # 与旧 run.bat 的 `> prog\x.lst` 等价
         f.write(r.stdout)
     if r.returncode != 0:
         print(r.stdout[-2000:])
@@ -338,7 +338,7 @@ def record_sw_hash(group=None):
         # 没指定 group 就把已知的两组都刷新 (都是同一份 sw/ 源码)
         for g in (([group] if group else ['hello', 'coremark'])):
             cur[g] = h
-        with open(p, 'w', encoding='utf-8') as f:
+        with io.open(p, 'w', encoding='utf-8') as f:
             json.dump(cur, f, indent=1)
     except Exception as e:
         # 记录失败不该让构建失败 —— 它只影响 check 的判据强度

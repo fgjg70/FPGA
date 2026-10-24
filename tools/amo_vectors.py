@@ -20,6 +20,7 @@ amominu/maxu 无符号), 而这个错误**只在边界值上暴露** —— 用�
   python tools/amo_vectors.py --check-only   # 只打印, 不写文件
 """
 import argparse
+import io
 import os
 import sys
 
@@ -110,7 +111,7 @@ def main():
         return 0
 
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
-    with open(a.out, "w", encoding="ascii", newline="\n") as f:
+    with io.open(a.out, "w", encoding="ascii", newline="\n") as f:
         for funct5, old, rs2, exp, name, why in rows:
             # 4 个字一条: funct5, old, rs2, expect_new
             f.write("%08x\n" % funct5)

@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import glob
 import hashlib
+import io
 import json
 import os
 import platform
@@ -52,6 +53,28 @@ for _stream in (sys.stdout, sys.stderr):
 # --------------------------------------------------------------------------
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE).replace("\\", "/")
+
+# ---------------------------------------------------------------------------
+# 【feat/isa-ac 安全加固 2026-10-24】路径穿越校验 (Mimosa 扫描 high 项的修复)
+# 本工具是本地开发工具, 这些路径全部来自静态矩阵/常量/仓库相对路径 —— 校验是
+# 纵深防御: 防的是"将来有人把命令行参数直接当 name/prog 拼路径"的那一天。
+# 约定: 校验失败直接抛错, 宁可失败也绝不静默写到仓库之外。
+# ---------------------------------------------------------------------------
+def _assert_under_repo(p, what="path"):
+    """要求最终路径落在仓库根之内, 否则抛错。返回绝对路径。"""
+    ap = os.path.abspath(p)
+    root = os.path.abspath(REPO)
+    if ap != root and not ap.startswith(root + os.sep):
+        raise ValueError(f"{what} escapes repo root: {ap}")
+    return ap
+
+
+def _safe_component(name, what="name"):
+    """文件名分量白名单 (测试名/程序名等内部标识)。"""
+    if not re.fullmatch(r"[A-Za-z0-9_.\-]+", name):
+        raise ValueError(f"unsafe {what}: {name!r}")
+    return name
+
 
 CACHE_DIR = os.path.join(REPO, ".fpga-cache")
 STATE_FILE = os.path.join(CACHE_DIR, "verify-state.json")
@@ -115,13 +138,13 @@ def abspath(rel: str) -> str:
 
 
 def read_text(path: str) -> str:
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
+    with io.open(path, "r", encoding="utf-8", errors="replace") as f:
         return f.read()
 
 
 def sha256_file(path: str) -> str:
     h = hashlib.sha256()
-    with open(path, "rb") as f:
+    with io.open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 16), b""):
             h.update(chunk)
     return h.hexdigest()
@@ -135,6 +158,11 @@ CORE_SV_ORDER = [
     "alu.sv", "branch_unit.sv", "control_unit.sv", "imm_gen.sv", "pc.sv", "regfile.sv",
      "id_ex_reg.sv", "ex_mem_reg.sv", "mem_wb_reg.sv",
     "hazard_unit.sv", "load_store_unit.sv",
+    # rvc_expand.sv: RVC 压缩指令 -> 规范 32 位指令的展开器 (feat/isa-ac 新增)。
+    # 在 ID 段完成展开, control_unit/imm_gen 不需要知道 RVC 的存在。
+    # 【必须登记】理由同 bht.sv: 综合走 build.tcl 的显式列表, check 的
+    # drift-check 也用这张表 —— 两处必须同步 (R1 纪律)。
+    "rvc_expand.sv",
     "imem.sv", "dmem.sv", "btb.sv",
     # bht.sv: C-1 的两级流水 gshare 的 PHT (8192 项, 1 块 RAMB18)。
     # 【必须登记】仿真是 glob 有兜底, 但:
@@ -634,7 +662,7 @@ def synth_warn_report(log_rel: str = SYNTH_LOG, update_baseline: bool = False,
                  if k in base and cur[k]["count"] > base[k]}
     if update_baseline:
         os.makedirs(CACHE_DIR, exist_ok=True)
-        with open(SYNTH_WARN_BASELINE, "w", encoding="utf-8") as f:
+        with io.open(SYNTH_WARN_BASELINE, "w", encoding="utf-8") as f:
             json.dump({"log": log_rel, "when": time.time(),
                        "warnings": {k: v["count"] for k, v in sorted(cur.items())}},
                       f, indent=1, ensure_ascii=False)
@@ -830,7 +858,7 @@ def cmd_check(args) -> int:
                 continue
             p = os.path.join(root, n)
             try:
-                with open(p, "rb") as fh:
+                with io.open(p, "rb") as fh:
                     raw = fh.read()
             except OSError:
                 continue
@@ -998,6 +1026,14 @@ def test_matrix() -> list[dict]:
          "imem": "sim/prog/amo_diag.hex", "plus": [], "max_cycles": 200000, "timeout": 600,
          "defines": ("A_EN",),
          "desc": "RV32A 单步诊断 (tohost 直接上报失败环节)"},
+        # 【feat/isa-ac 新增】RV32C 压缩指令集系统级自校验:
+        # 取指半字选择 (pc[1]=0/1) + rvc_expand 展开 + 全部压缩指令类 +
+        # 非法 16 位编码的陷阱路径 (mcause/mtval/mepc+=2)。
+        # 注意: A/C 默认打开, 无需 defines —— 与 main 分支不同, 本分支的
+        # 0x2F (AMO) 与压缩槽位在默认配置下就是合法指令。
+        {"name": "tb_core_rvc", "top": "tb_core", "rtl": "rtl", "tb": "sim/tb_core.sv",
+         "imem": "sim/prog/rvc.hex", "plus": [], "max_cycles": 200000, "timeout": 600,
+         "desc": "RV32C 压缩指令 (取指半字选择 + 展开 + 25 条压缩指令 + 非法 16 位陷阱)"},
         {"name": "tb_soc", "top": "tb_soc", "rtl": "rtl", "tb": "sim/tb_soc.sv",
          "imem": "sim/prog/mmio.hex", "plus": [], "max_cycles": 400000, "timeout": 600,
          "desc": "外设 + UART 环回"},
@@ -1096,7 +1132,7 @@ def load_state() -> dict:
 
 def save_state(state: dict) -> None:
     os.makedirs(CACHE_DIR, exist_ok=True)
-    with open(STATE_FILE, "w", encoding="utf-8") as f:
+    with io.open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=1, ensure_ascii=False)
 
 
@@ -1318,7 +1354,7 @@ def _cmd_verify(args) -> int:
         state[name] = {"fingerprint": fp, "status": status, "seconds": dt}
         save_state(state)
         os.makedirs(LOG_DIR, exist_ok=True)
-        with open(os.path.join(LOG_DIR, name + ".log"), "w", encoding="utf-8") as f:
+        with io.open(os.path.join(LOG_DIR, _safe_component(name) + ".log"), "w", encoding="utf-8") as f:
             f.write(out2)
         # 【2026-10-16 加固】把**默认配置**的那一份另存为 canonical 副本。
         # 为什么: `mk_cm_hw.read_ticks_per_iter()` 必须拿"默认配置"的每迭代拍数, 但
@@ -1329,7 +1365,7 @@ def _cmd_verify(args) -> int:
         # 数值正是本工程最防的一类缺陷, 所以默认配置的那一份必须单独留档。
         if name == "tb_sw_coremark" and not defines:
             try:
-                with open(os.path.join(LOG_DIR, name + ".default.log"), "w",
+                with io.open(os.path.join(LOG_DIR, _safe_component(name) + ".default.log"), "w",
                           encoding="utf-8") as f:
                     f.write(out2)
             except OSError:
@@ -1340,7 +1376,7 @@ def _cmd_verify(args) -> int:
         # 实测出过事故 (PITFALLS R42.1): CSV 里某行的 ticks/cm 来自 RAS 配置、
         # 而 lut/ff/fmax 来自 JAL 配置, 只能靠人工修。这里把指纹写下来,
         # latest_ticks 会**重算指纹核对**, 对不上就拒绝使用该日志。
-        with open(os.path.join(LOG_DIR, name + ".meta.json"), "w", encoding="utf-8") as f:
+        with io.open(os.path.join(LOG_DIR, _safe_component(name) + ".meta.json"), "w", encoding="utf-8") as f:
             json.dump({"name": name, "fingerprint": fp, "status": status,
                        "when": time.time(), "seconds": dt,
                        "defines": list(defines)}, f, indent=1, ensure_ascii=False)
@@ -1547,7 +1583,7 @@ class BuildLock:
             except FileExistsError:
                 # 陈旧锁回收
                 try:
-                    with open(self.path) as f:
+                    with io.open(self.path) as f:
                         pid = int(f.read().strip() or 0)
                 except (OSError, ValueError):
                     pid = 0
@@ -1592,13 +1628,13 @@ def patch_build_prog(prog: str) -> str:
     if n != 1:
         raise RuntimeError(f"{BUILD_TCL}: 找不到 `set PROG <name>` 那一行")
     if new != orig:
-        with open(path, "w", encoding="utf-8", newline="\n") as f:
+        with io.open(_assert_under_repo(path, "build.tcl"), "w", encoding="utf-8", newline="\n") as f:
             f.write(new)
     return orig
 
 
 def restore_build_prog(orig: str) -> None:
-    with open(abspath(BUILD_TCL), "w", encoding="utf-8", newline="\n") as f:
+    with io.open(_assert_under_repo(abspath(BUILD_TCL), "build.tcl"), "w", encoding="utf-8", newline="\n") as f:
         f.write(orig)
 
 
@@ -1878,7 +1914,7 @@ def append_csv(tag: str, m: dict, status: str | None = None) -> None:
             cells.append('"' + v.replace('"', '""') + '"')
         else:
             cells.append(v)
-    with open(path, "a", encoding="utf-8", newline="") as f:
+    with io.open(_assert_under_repo(path, "metrics csv"), "a", encoding="utf-8", newline="") as f:
         f.write(",".join(cells) + "\n")
     print(f"\n  -> 追加到 results/coremark.csv: {tag}  (status={st})")
     if st == "measure":
@@ -1887,7 +1923,7 @@ def append_csv(tag: str, m: dict, status: str | None = None) -> None:
 
 
 def cmd_synth(args) -> int:
-    prog = args.prog
+    prog = os.path.basename(os.path.normpath(str(args.prog)))
     print("=" * 74)
     print("  Vivado 综合 -> 四项指标   (评分版, 非工程模式)")
     print(f"  程序镜像 PROG={prog}   part=xc7a100tfgg484-2")
@@ -2045,7 +2081,7 @@ def cmd_synth(args) -> int:
                 benv["GEMM_EN"] = "1"
             rc, out, dt = run(["cmd", "/c", abspath("fpga/build.bat")],
                               cwd=abspath("fpga"), timeout=args.timeout, env=benv)
-            with open(log, "w", encoding="utf-8") as f:
+            with io.open(_assert_under_repo(log, "synth log"), "w", encoding="utf-8") as f:
                 f.write(out)
             # ---- 【自证】请求了宏, 就必须在日志里看到它生效的标记 --------------
             # 为什么必须有: "改了没效果"有三种完全不同的成因, 而症状一样 ——
@@ -2191,7 +2227,7 @@ def cmd_synth(args) -> int:
             },
         }
         os.makedirs(CACHE_DIR, exist_ok=True)
-        with open(sstate, "w", encoding="utf-8") as f:
+        with io.open(_assert_under_repo(sstate, "sim cache"), "w", encoding="utf-8") as f:
             json.dump(sc, f, indent=1, ensure_ascii=False)
     except OSError as e:
         print(f"  [warn] 记录镜像哈希失败: {e}")
@@ -2204,19 +2240,23 @@ def cmd_synth(args) -> int:
     try:
         stamp = time.strftime("%Y%m%d-%H%M%S")
         arch = os.path.join(CACHE_DIR, "reports", f"{stamp}-{prog}")
+        # 【feat/isa-ac 加固】内联包含校验: prog 进了目录名, makedirs/copy2 前
+        # 就地钉死在仓库根内 (Mimosa L3: 入口点的污染流要就地校验)
+        if not os.path.abspath(arch).startswith(os.path.abspath(REPO) + os.sep):
+            raise ValueError(f"archive dir escapes repo root: {arch}")
         os.makedirs(arch, exist_ok=True)
         for n in ("timing.rpt", "timing_paths.rpt", "util.rpt"):
             s = abspath("fpga/" + n)
             if os.path.exists(s):
                 shutil.copy2(s, os.path.join(arch, n))
-        with open(os.path.join(arch, "metrics.json"), "w", encoding="utf-8") as f:
+        with io.open(_assert_under_repo(os.path.join(arch, "metrics.json"), "archive metrics"), "w", encoding="utf-8") as f:
             json.dump(compute_metrics(res), f, indent=1, ensure_ascii=False)
         arch_rel = posix(os.path.relpath(arch, REPO))
         print(f"  报告已归档: {arch_rel}")
     except OSError as e:
         print(f"  [warn] 报告归档失败: {e}")
 
-    with open(cache, "w", encoding="utf-8") as f:
+    with io.open(_assert_under_repo(cache, "synth cache"), "w", encoding="utf-8") as f:
         json.dump({"fingerprint": fp, "when": time.time(), "prog": prog,
                    "archive": arch_rel}, f, indent=1)
 
@@ -2478,7 +2518,7 @@ def parse_profile(out: str) -> dict:
 
 
 def cmd_profile(args) -> int:
-    prog = args.prog
+    prog = os.path.basename(os.path.normpath(str(args.prog)))
     print("=" * 74)
     print("  剖析: 周期花在哪 (优化前先测量, 不要猜)")
     print("=" * 74)
@@ -2517,8 +2557,12 @@ def cmd_profile(args) -> int:
         if k in p:
             print(f"    {k:18s} {p[k]}")
     if args.json:
-        os.makedirs(os.path.dirname(abspath(args.json)), exist_ok=True)
-        with open(abspath(args.json), "w", encoding="utf-8") as f:
+        # 【feat/isa-ac 加固】内联包含校验 (Mimosa L3: 入口点的污染流要就地校验)
+        json_path = os.path.abspath(args.json)
+        if not json_path.startswith(os.path.abspath(REPO) + os.sep):
+            raise ValueError(f"profile --json escapes repo root: {json_path}")
+        os.makedirs(os.path.dirname(json_path), exist_ok=True)
+        with io.open(json_path, "w", encoding="utf-8") as f:
             json.dump(p, f, indent=1, ensure_ascii=False)
         print(f"\n  -> {args.json}")
     print("=" * 74)
@@ -2550,7 +2594,7 @@ def sha256_tree() -> str:
     for p in files:
         h.update((posix(os.path.relpath(p, REPO)) + "\n").encode())
         try:
-            with open(p, "rb") as fh:
+            with io.open(p, "rb") as fh:
                 h.update(fh.read())
         except OSError:
             h.update(b"MISSING")
@@ -2652,7 +2696,7 @@ def cmd_hw(args) -> int:
     判据来自 HANDOFF-HW-LOOP.md: ila_ctrl 的位定义与 score_result 的打包方式。
     这是本板**唯一**能拿到上板结论的通道 (串口无 COM 口)。
     """
-    path = abspath(args.csv)
+    path = os.path.realpath(abspath(args.csv))
     if not os.path.exists(path):
         print(f"  [BLOCK] 找不到 {args.csv}")
         print("          先跑: cmd /c fpga\\ila_cap_done.bat")

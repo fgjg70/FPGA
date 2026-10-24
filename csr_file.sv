@@ -197,7 +197,12 @@ module csr_file
           CSR_MIE     : begin ie_mtie <= wdata[IRQ_MTIP]; ie_meie <= wdata[IRQ_MEIP]; end
           CSR_MTVEC   : mtvec    <= {wdata[31:2], 2'b00};
           CSR_MSCRATCH: mscratch <= wdata;
-          CSR_MEPC    : mepc     <= {wdata[31:2], 2'b00};
+          // 【feat/isa-ac · RVC】mepc 只要求**半字对齐** (16 位指令的陷阱入口
+          // 可以是 pc[1]=1)。main 分支上写法是 {wdata[31:2],2'b00} —— 那是
+          // "所有指令都 4 字节对齐"时代的假设: handler 里 mepc+=2 跳过 16 位
+          // 触发指令后, 写进去的 0x...202 会被截回 0x...200, mret 永远回到
+          // 非法指令本身 -> 死循环。C 扩展下必须原样写入 (IALIGN=2)。
+          CSR_MEPC    : mepc     <= wdata;
           CSR_MCAUSE  : mcause   <= wdata;
           CSR_MTVAL   : mtval    <= wdata;
           // mip 的 MTIP/MEIP 由外设电平决定, 软件写无效 (只读观测);

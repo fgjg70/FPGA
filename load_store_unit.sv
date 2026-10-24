@@ -45,19 +45,18 @@ module load_store_unit
   // 不必去动 core.sv 的内存路径接线或 ex_mem 流水寄存器的语义
   // (本项目在"改流水寄存器语义"上吃过四轮亏, 见 IMEM_REG_READ)。
   //
-  // amo_newdata: 由 EX 段 ALU 算好的"应写回内存的新值"随流水传下来。
-  //              (ALU 的 ALU_AMO_* 就是算这个; a=旧值要等读回来, 所以这里
-  //               传的是**已算好的结果**, 逻辑上等价于"新值"。)
+  // amo_newdata: 由 MEM 段的 AMO ALU 算好的"应写回内存的新值"
+  //              (ALU 的 ALU_AMO_* 算这个; a=旧值要等读回来, 所以 core 在
+  //               MEM 段算好再送进来; SC 成功时 core 送的是 rs2 本身)。
   input  logic            amo_en,
   input  logic [31:0]     amo_newdata,
-  // LR.W / SC.W 算子标志 (由 core 的 amo_op_r 译出; 只有 A_EN 时可能为 1)
-  // 【为什么需要它们】原来 dmem_we/dmem_wstrb 在 S_AMO 相**只由相位决定、与算子无关**
-  // ⇒ LR.W 到了写相就把刚读到的那个字写成了 0 (实测复现); SC.W 写 0 且 rd 拿旧内存值。
-  // 修法 (都在本模块内, 不需要动 control_unit):
-  //   · dmem_we/dmem_wstrb 在 S_AMO 相再与 !(amo_lr|amo_sc) 相与 —— LR/SC **都不写内存**;
-  //   · SC 的 rd 走 rdata_eff 那一层返回 1 (恒失败) —— 规范**允许** SC 永远失败
-  //     (没有 forward-progress 要求), 单核无 cache 的机器不需要预约寄存器。
-  // 这样 LR.W 等价于一次普通字加载, SC.W 等价于"读一下就报失败"。
+  // LR.W / SC.W 算子标志 (由 core 的 amo_op_r 译出)
+  // 【本分支口径】预约寄存器已实现 (feat/isa-ac), SC.W 不再"恒失败":
+  //   · LR.W 只读 + 建立预约 ({valid, addr} 单地址预约寄存器);
+  //   · SC.W 启动拍判定: 预约有效且地址匹配 -> 成功 (写 rs2, rd=0),
+  //     否则失败 (不写, rd=1); SC 之后预约一律失效。
+  //   · 判定/写使能/rd 值三层都要用成败位: 判定在时序块 (sc_ok_r),
+  //     写使能见 amo_no_write, rd 值见 rdata_eff, 输出给 core 的是 amo_sc_ok。
   input  logic            amo_lr,
   input  logic            amo_sc,
 
@@ -77,7 +76,11 @@ module load_store_unit
   // 必须在写相那拍用 {amo_old, rs2} 算, 其余时候不参与。
   output logic            amo_write_phase,
   // AMO 读回的旧值 (写相那拍有效), 供 core 的 AMO 新值计算单元使用
-  output logic [31:0]     amo_old_out
+  output logic [31:0]     amo_old_out,
+  // 【本分支新增】SC.W 的成败标志 (预约寄存器判定, SC 启动拍锁存、序列内稳定):
+  //   rd = 成功 0 / 失败 1 (规范); 成功才写内存。core 的 WB 前递路径
+  //   (amo_wb_value) 与 LSU 的 rdata_eff 都用它。
+  output logic            amo_sc_ok
 );
 
   // AMO 用两个新相接在拆分访存状态机后面 (编码 2'd3 做 AMO_READ,
@@ -91,6 +94,23 @@ module load_store_unit
   logic [31:0]           amo_old;            // 读回的旧值 (也是 rd 的值)
   logic [31:0]           amo_addr_r;         // AMO 的字地址 (启动拍锁存, 两相都用它)
   logic                  amo_mode_r;         // AMO 已启动 (保持到 WB 拍, 供 load_data 选择)
+
+  // ---- 【本分支新增】LR/SC 预约寄存器 (reservation) ----
+  // 【规范语义 (RV32A "A" 章)】
+  //   · LR.W  : 把 (rd 所访字地址) 记入预约集 -> 本核单核, 预约集就是
+  //             一个 {valid, addr[31:2]} 寄存器 (单地址预约, 规范允许
+  //             "reservation set 可以是一个字");
+  //   · SC.W  : 预约有效且地址匹配 -> 成功: 写 rs2 进内存, rd=0;
+  //             否则失败: 不写, rd=1。
+  //   · 无论成败, SC 之后预约**一律失效**; 新的 LR 覆盖旧预约。
+  //   · 本核单核: 不存在"其他 hart 的 store 清预约"的问题; 同 hart 的
+  //     store 不清预约 (规范允许 —— 那是 "may be cleared", 且单 hart 的
+  //     LR/SC 之间夹 store 本来就是软件自己的事)。
+  //   · mret/异常不清预约 (规范不要求; 软件约定上中断处理里不该跨
+  //     LR/SC 使用 —— 真要做, 中断后 SC 失败一次也是规范内行为)。
+  logic                  res_valid;          // 预约有效位
+  logic [29:0]           res_addr;           // 预约的字地址 (addr[31:2])
+  logic                  sc_ok_r;            // 本次 SC 的成败 (启动拍判定后保持)
 
   logic [1:0]  state;
 
@@ -126,9 +146,8 @@ module load_store_unit
   // 【为什么必须锁存】AMO 序列跨多拍, 而 req_addr 来自 EX/MEM 流水寄存器 ——
   // 冻结期间它虽然不变, 但一旦流水线推进就不对了。实测第一批诊断打印里
   // 写相那拍 addr=00000000, 就是因为没有稳定的 AMO 地址来源。
-  // AMO 相与地址选择: 只在 A_EN 打开时才参与, 否则完全等价于加 A 扩展之前
-  // (实测: 即使休眠, AMO 的 mux/比较逻辑也落在访存路径上, fmax 61.7 -> 59.1)
-`ifdef A_EN
+  // AMO 相与地址选择: A 扩展默认开 (本分支); 定义 A_DIS 恢复 main 的最小配置
+`ifndef A_DIS
   assign dmem_addr  = (state == S_AMO) ? amo_addr_r
                     : (state == S_IDLE) ? head_addr : tail_addr;
 `else
@@ -150,13 +169,13 @@ module load_store_unit
   // ---- 写使能 ----
   // 原逻辑: TAIL 拍不再重复写 (跨字 store 在 IDLE 写头、HEAD 写尾即可)
   // AMO: 读相不写, 写相才写整个字 (4'b1111)
-  // 【LR/SC 必须不写】amo_lr/amo_sc 在 S_AMO 相把写使能整个关掉:
+  // 【LR 绝不写; SC 只在成功时写】(本分支把"SC 恒失败"升级成了真预约):
   //   · LR.W 只读 (原来会把读到的字写成 0 —— 实测复现);
-  //   · SC.W 恒失败 -> 不写内存, rd = 1 (见 rdata_eff)。
+  //   · SC.W 按预约判定: 成功写 rs2 (写数据见 amo_newdata 的选择), 失败不写。
   //   门控放在这里 (而不是 core 的 dmem_we_g) 同时覆盖内部 dmem 与外部 MMIO 两条路:
   //   ext_we = dmem_we && !sel_dmem && ..., 只堵 dmem_we_g 的话, 打到 MMIO 地址的
   //   LR/SC 仍会在写相产生一次 ext_we 脉冲 (对 UART 这类"读清"外设就是副作用)。
-  wire amo_no_write = amo_lr || amo_sc;
+  wire amo_no_write = amo_lr || (amo_sc && !sc_ok_r);
   assign dmem_wstrb = (state == S_AMO)  ? ((amo_wr && !amo_no_write) ? 4'b1111 : 4'b0000)
                     : (req_write && state != S_TAIL)
                       ? ((state == S_IDLE) ? head_strb : tail_strb) : 4'b0000;
@@ -205,6 +224,8 @@ module load_store_unit
 
   // AMO 读回的旧值: 写相那拍 amo_old 已有效, core 用它算新值
   assign amo_old_out = amo_old;
+  // SC.W 的成败: 启动拍判定后锁存 (sc_ok_r), 整个序列与 WB/前递窗口内稳定
+  assign amo_sc_ok   = sc_ok_r;
 
   // (诊断打印已移除 —— 结论写进 results/p6-a-extension.md 第 5.11 节)
 
@@ -228,17 +249,17 @@ module load_store_unit
   //   候选收敛成 1 个 4:1 字节 mux, 同时消掉移位树本身。
   // AMO 的"读回值"走同一条路: 旧值在 amo_old 里, 且 off/size 已按字对齐设好,
   // 所以下面的字节选择与符号扩展对它是恒等操作。
-`ifdef A_EN
+`ifndef A_DIS
   // AMO 的"读回值"走同一条路: 旧值在 amo_old 里 (off/size 已按字对齐设好, 字节选择
   // 与符号扩展对它是恒等操作)。
-  // 【SC.W 的 rd】**规范允许 SC.W 永远失败** (没有 forward-progress 要求), 本核
-  // 单核无 cache、不实现预约寄存器, 所以 SC 恒返回 1 (失败)、绝不写内存。
+  // 【SC.W 的 rd】本分支实现了真预约: 成功 rd=0, 失败 rd=1 (规范)。sc_ok_r 在
+  // SC 启动拍由预约寄存器判定后锁存, 整个多周期序列稳定。
   // 这一层放在 rdata_eff 上, 后面 off_wb=0/size_wb=WORD (启动拍锁存) 会原样透传。
-  wire [31:0] rdata_eff = (amo_mode_r && amo_sc) ? 32'd1
+  wire [31:0] rdata_eff = (amo_mode_r && amo_sc) ? {31'b0, ~sc_ok_r}
                         : amo_mode_r               ? amo_old
                                                    : dmem_rdata;
 `else
-  // A_EN 关闭时 amo_mode_r 恒为 0 (它只可能被 amo_en 置起, 见下面的时序段),
+  // A_DIS 时 amo_mode_r 恒为 0 (它只可能被 amo_en 置起, 见下面的时序段),
   // 所以这个 mux 对数据路是恒等的 —— 直接从数据路上摘掉, 少一级、少一根网。
   wire [31:0] rdata_eff = dmem_rdata;
 `endif
@@ -293,6 +314,10 @@ module load_store_unit
       amo_old    <= 32'd0;
       amo_addr_r <= 32'd0;
       amo_mode_r <= 1'b0;
+      // 【本分支新增】预约寄存器复位
+      res_valid  <= 1'b0;
+      res_addr   <= 30'd0;
+      sc_ok_r    <= 1'b0;
       head_word_r<= 32'd0;
       off_wb     <= 2'd0;
       size_wb    <= MEM_WORD;
@@ -324,6 +349,18 @@ module load_store_unit
         amo_wait   <= 1'b1;             // 先去等数据
         amo_phase  <= 1'b0;
         amo_addr_r <= head_addr;        // 锁存字地址 (字对齐), 全程都用它
+        // ---- 【本分支新增】预约寄存器的置位/判定 (都在启动拍, amo_lr/amo_sc
+        //      由 core 锁存的 amo_op_r 译出, 启动拍已稳定) ----
+        if (amo_lr) begin
+          // LR.W: 建立预约 (覆盖旧预约)
+          res_valid <= 1'b1;
+          res_addr  <= head_addr[31:2];
+        end
+        else if (amo_sc) begin
+          // SC.W: 启动拍判定成败; **无论成败预约一律失效** (规范要求)
+          sc_ok_r   <= res_valid && (res_addr == head_addr[31:2]);
+          res_valid <= 1'b0;
+        end
       end
       else if (state == S_AMO) begin
         if (amo_wait)      begin amo_wait  <= 1'b0; end          // 数据到手

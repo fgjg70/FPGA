@@ -243,25 +243,12 @@ module control_unit
       // ----------------------------------------------------------------
       // RV32A: LR.W / SC.W / AMO*.W  (opcode 7'b0101111) —— 由 A_EN 宏门控
       // ----------------------------------------------------------------
-      // 【为什么默认关闭 —— 实测数据】这段译码会给评分三项带来**纯代价**:
-      //     fmax  61.7 -> 58.8 MHz   (-4.7%)
-      //     LUT   4078 -> 4104       (+26)
-      //     绝对吞吐 145.6 -> 138.9   (-4.6%)
-      //   而收益为**零**: CoreMark 不含任何原子指令 (ticks 一位都不变),
-      //   而且多周期"读-改-写"还没实现, 所以当前 A 指令**还执行不了**。
-      //   funct5 的比较 + ALU 算符 mux 落在了访存地址那条已经很紧的路径上。
-      //   要启用: set A_EN=1, 并先完成多周期控制 (见 results/p6-a-extension.md 第 5 节)。
-      //
-      // 字段布局与 R 型一致, 只是 funct5 = instr[31:27] 选算子:
-      //   [31:27] funct5  [26] aq  [25] rl  [24:20] rs2  [19:15] rs1  [11:7] rd
-      // 编码已用 riscv-none-elf-gcc -march=rv32ia 逐条实测确认
-      // (results/p6-a-extension.md 第 2 节)。
-      //
-      // 【写回来源】所有 A 指令的 rd 都是"从内存读回的**旧值**"(LR 是读到的值,
-      // AMO 是操作前的值, SC 是 0/1 成功标志) —— 所以 wb_src 必须是 WB_MEM。
-      // 【执行方式】AMO 是"读-改-写", 单拍 LSU 做不了; amo_en 告诉流水线控制
-      // 本条要走多周期原子序列 (由 core.sv 的 amo 状态机处理, 见那里的注释)。
-`ifdef A_EN
+  // 【本分支口径翻转: A 扩展默认打开 (feat/isa-ac)】
+  // main 分支上这段译码由 A_EN 门控、默认关闭 —— 那是竞赛取舍 (对 CoreMark
+  // 三项零贡献, 实测 fmax -4.7%), 数据见 results/p6-a-extension.md。
+  // 本分支补全了 LR/SC 预约寄存器 (见 load_store_unit.sv), A 扩展默认打开;
+  // 要恢复 main 的最小配置, 编译时定义 A_DIS 即可。
+`ifndef A_DIS
       OPC_AMO: begin
         ctrl.amo_en    = 1'b1;
         ctrl.amo_op    = instr[31:27];   // funct5
@@ -289,6 +276,11 @@ module control_unit
           // 本核只实现 .W 变体 (RV32); funct3=010。其余 (如 .D/.B) 判非法。
           illegal = 1'b1;
         end
+        else if (ctrl.amo_op == AMO_LR && instr[24:20] != 5'd0) begin
+          // 【本分支新增】LR.W 的 rs2 字段必须为 0 (规范 "A" 章),
+          // rs2=x0 之外的 LR 编码保留、判非法。
+          illegal = 1'b1;
+        end
         else begin
           unique case (ctrl.amo_op)
             // ---- LR / SC: 不给 ALU 算符 (不走 ALU 的"新值"路径) ----
@@ -308,7 +300,7 @@ module control_unit
         end
       end
 `else
-      // A_EN 未定义: 0x2F 保持非法 (与加 A 扩展之前的行为一致)
+      // A_DIS: 0x2F 保持非法 (恢复 main 分支"未加 A 扩展"的行为)
       OPC_AMO: illegal = 1'b1;
 `endif
 

@@ -94,7 +94,8 @@ tick **2,128,330,453**（与 JTAG 烧写那次**逐位相同**）、硬件 CoreM
 | 完整异常/中断（ECALL/EBREAK/非法指令/mtimecmp 定时器中断/MRET）| ✅ |
 | 外设：UART 115200 8N1 收发（`BAUD_DIV = CLK_HZ ÷ 115200` 整数除，**随档位变**：105 MHz→911⇒115,258 baud/+0.05%；131.25 MHz→1139⇒115,233/+0.028%；150 MHz→1302⇒115,207 baud/−0.006%）/ GPIO / 64 位定时器 | ✅ |
 | 应用场景：神经网络 GEMM 推理核心（与独立参考实现逐元素一致）| ✅ |
-| RV32A 原子指令 | ✅ **9 个 AMO + LR.W 完整；SC.W 按规范允许恒失败（rd=1，不写内存）—— 无预约寄存器。** `A_EN` 宏默认关（对 CoreMark 三项零贡献）；见 `results/p6-a-extension.md` §5.13、PITFALLS **R49** |
+| RV32A 原子指令 | ✅ **9 个 AMO + LR/SC 真预约**（本分支: SC 成功写内存 rd=0 / 失败 rd=1，预约寄存器 {valid, addr}，非对齐 AMO 陷阱；`A_DIS` 宏可整体关闭恢复最小配置）；历史口径见 `results/p6-a-extension.md`，本分支改动见 `results/p9-isa-ac.md` |
+| RV32C 压缩指令 | ✅ **全部 25 条**（取指半字选择 + ID 段规范化展开 `rvc_expand.sv`，译码/冒险/访存通路零改动；汇编器支持 c.* 助记符，与 GNU gas 逐位比对一致）；见 `results/p9-isa-ac.md` |
 | AI 加速单元（GEMM） | ⚠ 机制已验证（42.59× 计算加速），因面积与正确性门控关闭 |
 | I/D Cache | ⚖ 经分析判定无收益（存储器已是单周期命中的片上 BRAM）|
 
@@ -112,7 +113,8 @@ tick **2,128,330,453**（与 JTAG 烧写那次**逐位相同**）、硬件 CoreM
 | `rv32_pkg.sv` | — | 编码包 (单一事实来源)：指令/ALU/分支/访存/写回编码、`ctrl_s` 控制束、地址映射、前递枚举、**RV32A 的 AMO 编码** |
 | `alu.sv` | `alu` | RV32I 基础运算 + **RV32A 的 9 个 AMO 算符**（"待写回值"计算）|
 | `branch_unit.sv` | `branch_unit` | 6 种分支判定，利用编码结构只做 3 个比较 |
-| `control_unit.sv` | `control_unit` | RV32IM 全译码 + 三级合法性检查；非法指令严格无副作用；**OPC_AMO 译码由 `A_EN` 门控** |
+| `control_unit.sv` | `control_unit` | RV32IM 全译码 + 三级合法性检查；非法指令严格无副作用；**OPC_AMO 译码由 `A_DIS` 门控（本分支默认开）** |
+| `rvc_expand.sv` | `rvc_expand` | **RV32C → 32 位规范化展开**（ID 段；译码/冒险/访存零改动；见 `results/p9-isa-ac.md`）|
 | `imm_gen.sv` | `imm_gen` | I/S/B/U/J 五种立即数 |
 | `pc.sv` | `pc` | PC 寄存器，带 `stall`/`flush` 钩子 |
 | `regfile.sv` | `regfile` | 2R1W，x0 恒零，**组合读 + 写旁路**，调试读口 |
