@@ -78,6 +78,7 @@ module tb_nn_engine;
   integer op_maxcyc[0:3];
   integer g_mis_a, g_mis_b;
   integer errcases_fail = 0;
+  integer nmis_max = 6;      // +misall 时打印全部 mismatch (调试用)
 
   // ==========================================================================
   // CPU 窗口任务
@@ -176,7 +177,7 @@ module tb_nn_engine;
         cpu_rd32(base + (idx << 3), glo);
         cpu_rd32(base + (idx << 3) + 32'd4, ghi);
         if (({ghi, glo} !== {ehi, elo})) begin
-          if (nmis < 6)
+          if (nmis < nmis_max)
             $display("TB:   MISMATCH %s word@%0d got=%08x_%08x exp=%08x_%08x",
                      tag, idx, ghi, glo, ehi, elo);
           nmis = nmis + 1;
@@ -279,6 +280,7 @@ module tb_nn_engine;
       op_cases[i] = 0; op_fail[i] = 0; op_mis[i] = 0; op_maxcyc[i] = 0;
     end
     g_mis_a = 0; g_mis_b = 0;
+    if ($test$plusargs("misall")) nmis_max = 400;
 
     // 向量目录: +vec=<dir> 优先; 否则按候选相对路径找 manifest.txt
     // (vsim 的 cwd 由你决定, 所以这里做几层兜底, 找不到才 FAIL)

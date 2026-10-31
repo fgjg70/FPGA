@@ -197,8 +197,18 @@ def regression_images(include_hw=False, clk_hz=None):
     # 还没生成前 `build_sw.py --all` 仍可复现交付档 PASS 12 的全部镜像。
     #   yolo_demo  = 仿真用 (-DYOLO_HW_ONLY: 只跑硬件一遍, 省 CPU 的 2 亿拍仿真时间)
     #   yolo_board = 上板用 (软件基线 + 硬件两遍, 输出加速比)
-    if (os.path.exists(os.path.join(SW, 'yolo_plan.h'))
-            and os.path.exists(os.path.join(PROG, 'yolo', 'plan.json'))):
+    _yolo_hdr = os.path.join(SW, 'yolo_plan.h')
+    _yolo_plan = os.path.join(PROG, 'yolo', 'plan.json')
+    if os.path.exists(_yolo_hdr) and os.path.exists(_yolo_plan):
+        # 【R1 纪律】yolo_plan.h 由 tools/nn_gen_sw.py 从 plan.json 生成。
+        # plan.json 比头文件新 => 头文件/镜像过期, 程序里嵌的是旧 checksum/描述符,
+        # 症状是 E2E "exp" 全是旧值、从第一个 op 起全 mismatch (2026-11-01 实际踩到)。
+        # 这里**硬失败**, 不允许静默用旧头文件构建。
+        if os.path.getmtime(_yolo_plan) > os.path.getmtime(_yolo_hdr) + 1.0:
+            print('[FAIL] sw/yolo_plan.h 比 sim/prog/yolo/plan.json 旧：先跑')
+            print('       python tools/nn_gen_sw.py --plan sim/prog/yolo/plan.json -o sw/yolo_plan.h')
+            raise SystemExit(1)
+    if (os.path.exists(_yolo_hdr) and os.path.exists(_yolo_plan)):
         imgs.append(dict(kind='cc', name='yolo_demo',
                          sources=['sw/yolo_demo.c', 'sw/portme.c'], includes=[SW],
                          march='rv32im', opt='-O2', defines=['YOLO_HW_ONLY'],

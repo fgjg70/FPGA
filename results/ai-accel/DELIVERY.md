@@ -21,10 +21,11 @@
 | E1 | 交付档回归（无 NN_EN） | ✅ **PASS 15**（12 项原回归 + 3 项新增 NN 测试）| `python tools\fpga_workflow.py verify --force`；日志 `.fpga-cache/logs/` |
 | E2 | 交付档综合资源/时序不变 | ✅ **LUT 3098 / FF 1447 / BRAM 9 / DSP 8；fmax 150.2 MHz；WNS +0.007**，与交付行 `deliv150-o2ira-final` 逐项相同 | `synth --tag ai-nn-parity`，`results/coremark.csv` 行 `ai-nn-parity`，`.fpga-cache/reports/20261031-*/` |
 | E3 | `nn_mem` 大 BRAM 自检 | ✅ `MEM_TB: PASS`（有合成镜像 47,157 checks / 无镜像 42 checks，mismatch=0, xerr=0）| `verify --only tb_nn_mem`；`results/ai-accel/mem-report.md` |
-| E4 | `nn_conv_engine` 自检 | ✅ `ENGINE_TB: PASS (46 cases, mismatch=0)`；46/46 case 的 cycles 与理论公式**完全相等** | `verify --only tb_nn_engine`；`results/ai-accel/engine-report.md` |
-| E5 | **端到端 YOLO 全模型硬件推理** | ✅ **`RESULT : PASS`（108 个 op，逐 op FNV 与 golden 位精确；input_csum 一致；`hw_bad=0`）**；**NPU 纯计算 `npu_cycles=1,216,578`**（@150 MHz = 8.11 ms/帧，@131.25 = 9.27 ms）| `verify --only tb_sw_nn_yolo`（约 186–210 s）；`logs/tb_sw_nn_yolo.log` 的 `[yolo]` 行；`sw/yolo_demo.c` |
+| E4 | `nn_conv_engine` 自检（v2 流水化版） | ✅ `ENGINE_TB: PASS (46 cases, mismatch=0)`；46/46 case cycles 与公式**完全相等**；OOC 综合 @150MHz **WNS +0.121（MET）**，LUT 17,634 / FF 11,073 / DSP 40 / BRAM 124 | `verify --only tb_nn_engine`；`engine-report.md` §0.5；`proto/engine/synth150_*.rpt` |
+| E5 | **端到端 YOLO 全模型硬件推理**（v2 引擎 + v0.5 cpu_add 计划） | ✅ **`RESULT : PASS`（108 个 op，逐 op FNV 与 golden 位精确；input_csum 一致；`hw_bad=0`）**；**NPU 纯计算 `npu_cycles=1,290,062`**（@150 MHz = **8.60 ms/帧**；@131.25 = 9.83 ms）—— 与引擎"逐 op 公式求和"**完全相等**（`proto/engine/full_model_estimate.md`，0.00% 差）| `verify --only tb_sw_nn_yolo`（约 190–212 s）；`logs/tb_sw_nn_yolo.log` 的 `[yolo]` 行；`sw/yolo_demo.c` |
+| E6b | AI 档全实现（v2 引擎，150MHz） | ⏳ 进行中（见 §6）| `synth --nn --nn-clk-div 7 --prog yolo_board` |
 | E6 | BRAM 可行性 | ✅ Vivado 综合实测 **`Block RAM Tile 124 / 135`**（WQ 92 + 激活 32），加交付档核心约 9.5 ⇒ **133.5/135（余 1~2 块）**；旧尺寸（Q16K/A=B=128K）实测 **296/270 超限**，已封死 | `results/ai-accel/mem-report.md` §4；`results/ai-accel/proto/mem/` |
-| E7 | 引擎资源 | LUT 15,213 / FF 8,029 / DSP48E1 52 / **BRAM 0**（单独 OOC 综合）| `results/ai-accel/proto/engine/synth_engine_util.rpt` |
+| E7 | 引擎资源（v2） | LUT 17,634 / FF 11,073 / DSP 40 / BRAM 0（引擎单独 OOC；含 nn_mem 的 wrapper 是 LUT 17.6K + BRAM 124）| `results/ai-accel/proto/engine/synth150_util.rpt` |
 | E8 | 模型流水线 | 权重 319,792B（≤320K）；golden `mismatch=0`；yolo_wq.hex 94,208 行；MACs@128 = 20.07M | `results/ai-accel/model-report.md` |
 
 > **口径提醒**：E1 的 "PASS 15" 是**本分支**（含 AI 测试）的回归数；交付分支（main）仍是 PASS 12。
@@ -83,7 +84,24 @@ nn_subsys（MMIO 0xA000_0100..，描述符寄存器 + status/cycles/err）
 
 ---
 
-## 6. AI 档实现结果（`synth --nn --prog yolo_board`，2026-10-31 22:19–23:07 实测）
+## 6. AI 档实现结果
+
+### 6.1 v2 引擎 @150MHz 全实现（2026-11-01 00:24–00:56，`--nn-clk-div 7`）
+
+| 项 | 实测 |
+|---|---|
+| 时序 | ❌ **WNS −3.798 ns → 达成 fmax 95.6 MHz**（build.tcl 拒绝写 bitstream）|
+| 资源 | LUT **25,208** / FF **12,945** / BRAM **133** / DSP **48** |
+| 说明 | OOC 综合 +0.121 与全实现 −3.8 差距大：24K LUT + 124 BRAM 的拥塞使 route 占比远高于 OOC 估计 |
+
+### 6.2 bc2 快照（B 控制 one-hot + C requant 48 位 + base0 两级）@150MHz 全实现
+
+- `nn_conv_engine.sv` SHA256 **`27d59a87…b32413`**（44,923 B）；OOC 150MHz **WNS +0.489**，LUT 16,859 / FF 10,840 / DSP 39 / BRAM 124。
+- 周期不变：`npu_cycles` 仍 **1,290,062**（46 case 逐 case cycles 与 v2 完全相同）。
+- **87.5 MHz（`--nn-clk-div 12`）全实现**：⏳ 进行中（按 v2@150 的 10.465ns 路径 + bc2 的 ~+0.5ns 推算，11.43ns 周期应有 ≥+1ns 余量）。
+- 若 87.5 MET → 产出 `fpga/cpu_a100t_nn.bit`（board-ready）；之后再按需往 95.45/105 MHz 迭代（t-accel 还有 bc3 草稿 +0.096 OOC）。
+
+### 6.3 v1 引擎 @150MHz 全实现（历史，2026-10-31 22:19–23:07）
 
 | 项 | 实测 | 与预期 |
 |---|---|---|

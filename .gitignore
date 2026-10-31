@@ -142,4 +142,10 @@ results/ai-accel/proto/**/tb_v*.log
 results/ai-accel/proto/**/dyn*.log
 results/ai-accel/proto/**/*.backup.log
 results/ai-accel/proto/**/eng_only_run.log
-results/ai-accel/proto/**/mem_only_util.rpt
+results/ai-accel/proto/**/mem_only_util.rpt# --- Round-2 追加: 引擎调试/中间 log (可重建, 只保留最终 synth150.* 报告) ---
+results/ai-accel/proto/**/dbg*.log
+results/ai-accel/proto/**/synth*_applied.log# 只保留最终/关键 timing 报告; 各草稿的 paths 报告是重复的大文件
+results/ai-accel/proto/**/draft/synth150_*
+results/ai-accel/proto/**/synth150_*_paths.rpt
+results/ai-accel/proto/**/synth_eng_only_paths.rpt
+results/ai-accel/proto/**/synth_mem_only_*.rpt

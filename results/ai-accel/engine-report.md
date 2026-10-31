@@ -6,17 +6,344 @@
 
 ---
 
-## 0. TL;DR
+## 0. TL;DR（v2 / T-accel-R2 之后的状态）
 
 | 项 | 结果 | 出处 |
 |---|---|---|
-| 功能 | **`ENGINE_TB: PASS (46 cases, mismatch=0)`**，覆盖 conv1x1/3x3/5x5、depthwise、maxpool K=2/3/5/9、copy、2x upsample、residual add；非法描述符也验证报 err | `results/ai-accel/proto/engine/tb_run10.log` |
-| 官方回归 | `python tools\fpga_workflow.py verify --only tb_nn_engine` → **PASS 3.7s** | 该命令输出 |
-| 位精确 | 逐 op mismatch = 0（A/B 缓冲**全区逐字** `!==` 比对，X 也算错） | TB 输出（§4） |
-| 周期公式 | 46 个 case **实测 cycles 与理论公式逐 case 相等**（误差 0） | §3 表 |
-| 资源（Vivado 2018.3，engine 单独 OOC synth） | **LUT 15,213 / FF 8,029 / DSP48E1 52 / BRAM 0** | `proto/engine/synth_engine_util.rpt`，`synth_engine.log` |
-| 全模型周期估算（128 输入，plan.json 108 ops） | **1,216,578 拍 ≈ 9.27 ms @131.25 MHz（≈108 fps 纯 NPU 计算）** | §6，由 §3 公式逐 op 求和 |
-| 已修 bug | 6 个（详见 §7），其中 3 个是会导致整层/整 op 错的关键 bug | §7 |
+| 功能 | **`ENGINE_TB: PASS (46 cases, mismatch=0)`**（conv1x1/3x3/5x5、depthwise、maxpool K=2/3/5/9、copy、2x upsample、add；非法描述符报 err） | `proto/engine/tb_v3_19.log`（v2 最终版） |
+| 官方回归 | `python tools\fpga_workflow.py verify --only tb_nn_engine --force` → **PASS 3.2s** | 该命令输出 |
+| 位精确 | A/B 缓冲**全区逐字** `!==`（X 也算错）；T-model 逐层重放 6 op mismatch=0 | `tb_v3_19.log`、`e2e_v2.log` |
+| 周期公式 | v2 公式与 46 case **逐 case 相等**（误差 0），见 §0.5.6 | `proto/engine/case_table.md`（v2） |
+| **时序（OOC 综合 @150MHz）** | **当前根目录快照（= bc2 拆法）= WNS +0.489 ns（MET）**，LUT 16,859 / FF 10,840 / DSP 39 / BRAM 124；旧 v2 冻结版为 +0.121。（OOC 无布线，仅作相对判据；全实现 150MHz 实测 post-place −4.020 → 150MHz 不可行，Lead 改打 **87.5MHz**） | `proto/engine/synth150_timing.rpt`、`synth150_util.rpt`；`draft/synth150_bc2_*.rpt` |
+| 资源（同一 OOC 综合，engine+nn_mem 全上下文） | **LUT 16,859 / FF 10,840 / DSP48E1 39 / BRAM36 124**（124 = WQ 92 + ACT 32，符合预期） | `proto/engine/synth150_util.rpt` |
+| 全模型周期（128 输入，当前 plan 87 个 HW op；**E2E 实测对齐**） | **1,290,062 拍**（v2 公式逐 op 求和 = 实测，差 **+0**）；**@150MHz = 8.60 ms/帧**；同一 plan 上 v1 公式 = 1,186,704，v2 慢 **8.7%**（流水化代价） | Lead `tb_sw_nn_yolo`（HW-only，PASS，hw_bad=0）；`proto/engine/est_full_model.py` → `full_model_estimate.md` |
+| 与上一轮全实现对比 | v1 全实现 150MHz：WNS −18.416ns（fmax 39.9MHz）→ v2 OOC +0.121ns；关键链由 `d_ks→权重BRAM地址 24.5ns/32级` 拆成多级短链 | 本轮 §0.5.3/0.5.4 |
+| **未达目标** | 目标是 OOC **≥ +2.0 ns**，当前 **+0.121 ns，还差 1.88 ns**；卡点与下一步拆法见 §0.5.5（结论：剩余路径是"短链密集"的控制/状态 CE + nn_mem 地址 mux，OOC 的 route 估计占 60% 也放大了差距） | §0.5.5 |
+| 交付物变更 | `nn_conv_engine.sv` 已重写为 v2（端口/语义不变）；`sim/tb_nn_engine.sv` 增加 `+misall` 调试开关（判据不变）；新增 OOC 150MHz 综合脚本与报告（§0.5.2） | §0.5.2 |
+
+---
+
+## 0.5 T-accel-R2：时序流水化（v2）
+
+> 本轮唯一目标：**把 150MHz 下的时序救回来**，功能/接口/数值语义冻结。以下所有数字
+> 都来自 `results/ai-accel/proto/engine/` 下的综合报告（出处写在每行）。
+
+### 0.5.1 任务与结果
+
+- 起点（Lead 上一轮全实现实测）：150MHz 全实现 **WNS −18.416 ns**，最差路径
+  `u_nn/u_eng/d_ks_reg[1] → u_nn/u_mem/u_wq/mem_a_reg/ADDRARDADDR[12]`，24.5ns / 32 级 /
+  17×CARRY4 + 2×DSP48E1（权重地址生成）；次差为 requant 的 64 位乘/饱和 + acc 行选择。
+- R2 做法（全部在 engine 内部，端口/契约不变）：把"每拍算大公式"改成
+  **"预计算常量 + 递增计数器 + 多级流水"**，见 §0.5.3。
+- R2 结果：**OOC 综合 150MHz WNS = +0.121 ns**（MET，`synth150_timing.rpt`），
+  资源 LUT 17,634 / FF 11,073 / DSP 40 / BRAM 124（`synth150_util.rpt`）；
+  `ENGINE_TB: PASS (46 cases, mismatch=0)`，46 case 周期与 v2 公式逐 case 相等。
+- **注意**：OOC 综合没有布局布线，其 route 估计是"未放置"的乐观/粗略值；本报告只用它
+  做**相对**改进判据（Lead 指定目标）。真实 fmax 要看下一轮全实现（含 P&R）数据。
+
+### 0.5.2 OOC 综合方法与两个坑（必须先修，否则数字全错）
+
+文件：`proto/engine/timing_wrap.sv`（engine + nn_mem 顶层）、`synth150.tcl`、`synth150.bat`；
+产物：`synth150_util.rpt` / `synth150_timing.rpt` / `synth150_paths.rpt` / `synth150.log`。
+
+复现：`cd results\ai-accel\proto\engine && synth150.bat`（Vivado 2018.3，xc7a100tfgg484-2）。
+
+**坑 1（Lead 已指出）**：nn_mem 的 `ifdef SYNTHESIS` 分支里 WQ 阵列靠
+`NN_WQ_INIT_A..D` 宏 `$readmemh` 初始化；宏没传 → 全 0 → 引擎权重/乘法/累加被常量折叠，
+综合只剩 ~500 LUT / 0 BRAM / 0 FF（首版实测就是这样，无意义）。
+修法：`synth_design ... -verilog_define $wqdefs`，其中
+
+```tcl
+set wqdefs "NN_WQ_INIT_A=\"$wq/wq_A.hex\" NN_WQ_INIT_B=\"$wq/wq_B.hex\" NN_WQ_INIT_C=\"$wq/wq_C.hex\" NN_WQ_INIT_D=\"$wq/wq_D.hex\""
+```
+
+- 宏值必须是**带引号的字符串**（直接展开进 `$readmemh`，否则 "syntax error near /"）；
+- 4 个 define 必须在**一个空格分隔字符串**里（给 Tcl list 会给每个 define 加花括号）；
+- split 文件在 `.fpga-cache/nn_wq_split/wq_{A,B,C,D}.hex`（65536/16384/8192/4096 行）。
+
+**坑 2（本轮新发现）**：顶层 wrapper 如果只有 `busy/done/cycles/err_code` 这类控制输出，
+引擎"写回 nn_mem、但没有任何可观测输出"的整条数据通路会被当死代码删掉，同样塌成
+~500 LUT。修法：`timing_wrap.sv` 增加 `a_rdata_o / w_rdata_o / b_wdata_o` 三个观测口
+（打一拍输出，不参与时序判定）。
+
+自证门槛（综合后必须看到）：`BRAM36=124`、`FDRE≈1.0e4`、`DSP≈40`、`LUT≈1.7e4`；
+否则说明宏/观测口没生效。`synth150.log` 里的 `DBG_CELLS_*` 行就是这条自证。
+
+### 0.5.3 v2 拆了什么（按路径类型）
+
+| # | v1 的"一拍大公式" | v2 的拆法 | 直接效果 |
+|---|---|---|---|
+| 1 | 权重地址 `woff + ((tap*IC8+ic)*OC8 + ocb*8)`，每拍 32 位乘加 | 改成**递增计数器** `wa_r += delta`；delta 三种（+OC8 / +OC8*(IC8-7) / +OC8*(1-(K-1)IC8)，见 §0.5.7-bug1），全部在 S_CPREP 预计算成寄存器 | 权重地址链 24.5ns → ~2 级加法 |
+| 2 | 激活读地址 `src + ((y*iw+x)*IC8 + cb*8)` 每拍乘加 | `blk_base/band_base/la` 三个递增基址（S_NEXT/S_LDCAP/S_BI 小步进维护）；band 内 `la += dx*IC8` | 激活地址链 → 计数器 |
+| 3 | 目的写地址 `dst + (lin*OC8 + cb*8)` | `wr_base` 由 S_NEXT 维护 + `wpx += px_bytes` 计数器；写口整体打一拍（`b_we_q/b_addr_q/b_wdata_q`） | 写口 address/enable 链 → 寄存器直出 |
+| 4 | copy/add 地址每拍算 `(iy*iw+ix)*IC8` | `src_la/dst_la` 递增（+8 / 像素步长；upsample 用 OC8+8 / (2iw+1)OC8+8） | 计数器 |
+| 5 | Q 地址 `qoff + ocb*32 + 相位` 组合 | `qa_r` 计数器 + 预计算表头 `qmb_r/qtb_r` | 短加法 |
+| 6 | requant 一拍：acc 行 mux → 32x32 乘 → 64 位右移 → +zp → 饱和 → 打包 → 写 | **5 级流水**：acc/M 选择 → 乘法 → 右移 → +zp → 饱和打包 → 写（8 像素逐拍串行，流水重叠） | requant 链 → 每级 1 个运算 |
+| 7 | MAC：BRAM 输出 → 字节选择 → 8x8 乘 → 累加 | 4 级：issue(capture A) → BRAM 返回寄存(wby_r) → 乘法（a_pipe2 对齐） → 累加（drain 3 拍） | 乘法输入/输出全寄存 |
+| 8 | 描述符校验组合进 state | 2 级：S_INIT 打 flag → S_VCHK 合并；pad/oh/ow/常量预计算在 S_CPREP（6 拍流水） | d_* → state/地址链拆散 |
+| 9 | S_NEXT 一拍做"判断+2 个 24 位加" | 拆 S_NEXT（预加 `row_base_*_n` + 决策）→ S_NEXT2（选择写入） | 每拍 1 个加法器 |
+| 10 | 激活 in-bounds 判定每拍算 `y*iw+x` 再比较 | x 用递增计数器 `x_ld`，y 用递增寄存器 `y_ld` + 每 band 寄存的 `y_ok_r`；a_re/fill 只依赖寄存器 | 判定链 → 2~3 级比较 |
+| 11 | `M_neg = (M_pos*3277+16384)>>>15` 一拍 | S_QLOAD 拆 2 拍（乘法 / 加法移位分开） | 每 OC tile +1 拍 |
+| 12 | `d_ic/d_oc/d_flags` 直接进数据通路 | `pad_r/ic8_r/oc8_r/st2_r/oc_limit_r` 等预计算寄存器；`p1=IC8*OC8` 一次乘法，`w_dgrp/w_sub/d_row_step2` 全用加法/移位导出（避免 DSP 共享把 d_ks 拉进地址链） | 去共享乘法 |
+
+**周期代价（v2 vs v1，已计入 §0.5.6 公式）**：
+- 每个 op 固定 **+7 拍**（S_VCHK 1 + S_CPREP 6；v1 只有 S_INIT 1）；
+- conv/dw 每个 OC tile **+1 拍**（S_QLOAD 2 拍）；
+- conv/dw 每个输出块 **+6 拍**（MAC drain 2→3、S_REQ 9→13、NEXT 1→2）；
+- pool/copy/add 每个输出块/字只多 NEXT +1 与固定 +7（写口延迟 1 拍对 FSM 不可见）。
+
+### 0.5.4 WNS 迭代记录（全部为 `synth150` OOC、150MHz 约束、MET/VIOLATED 如实记录）
+
+| 步 | 改动 | WNS(ns) | LUT | FF | DSP | BRAM |
+|---|---|---|---|---|---|---|
+| 0 | harness 修好（宏 + 观测口），v2 初版 | −6.070 | 17,930 | 8,920 | 41 | 124 |
+| 1 | S_CPREP 6 级（pad/oh/ow/常量流水） | −4.604 | 17,587 | 9,468 | 41 | 124 |
+| 2 | requant 拆 4 级（移位/加zp/饱和打包/写） | −3.511 | 17,587 | 9,468 | — | 124 |
+| 3 | a_re 提前一拍 + fill 标记改用寄存 | −2.475 | 18,844 | 9,434 | — | 124 |
+| 4 | S_NEXT 拆 2 拍 | −1.340 | 17,292 | 9,424 | — | 124 |
+| 5 | 权重返回寄存（wby_r + a_pipe2 对齐） | −1.350 | 18,857 | 10,044 | — | 124 |
+| 6 | 激活 in-bounds 改递增计数 + 权重步长去 DSP | −0.884 | 18,163 | 10,160 | — | 124 |
+| 7 | st2_r 寄存 | −0.770 | 18,194 | 10,165 | — | 124 |
+| 8 | 写口整体打一拍 | −0.524 | 18,860 | 10,293 | — | 124 |
+| 9 | y_ld 递增（去 y 长链） | **+0.112** | 17,164 | 10,285 | 40 | 124 |
+| 10 | requant +zp 再拆一级（5 级） | **+0.224** | 17,218 | 10,774 | 40 | 124 |
+| 11 | S_QLOAD 拆 2 拍 | **+0.273** | 17,493 | 11,043 | 40 | 124 |
+| 12 | oc_limit_r 寄存（收尾） | **+0.121** | 17,634 | 11,073 | 40 | 124 |
+
+（WNS 在最后几步的抖动来自"最差路径换队"：+0.224/+0.273 时最差路径是
+`d_ic→qa CE`/`mpos_q→mneg_q`；第 12 步后最差路径换到 `d_flags→state CE`，6.306ns。
+最终交付数字以最后一次综合为准：**+0.121ns**。所有中间报告未删除，可复查。）
+
+### 0.5.5 还差 1.88ns：卡在哪 + 下一步拆法
+
+最终 OOC 最差路径（`synth150_paths.rpt`）：
+
+| 路径 | slack(ns) | 延迟 | 说明 |
+|---|---|---|---|
+| `d_flags_reg[0] → state_reg[*]/CE` | +0.121 | 6.306ns | 控制：d_flags 参与 init_err/S_VCHK → state 的 CE 锥 |
+| `d_ic_reg[4] → qa_r_reg[*]/CE` | +0.31 | ~6.3ns | Q 地址计数器 CE（已用 oc_limit_r 收窄） |
+| `y64_q → out_word` | +0.39 | ~6.3ns | requant 饱和/打包级（64 位比较） |
+| `dst_la → u_act ADDR*` | +0.55 | ~6.6ns 中 route 4.4ns | nn_mem 输入侧地址 mux（引擎侧已全寄存器化） |
+
+**结论**：R2 后已无"单条 20ns 级"长链；剩下的是**许多条 6.3~6.5ns 的短链同时贴线**
+（OOC 下 route 估计占 50~66%），所以再拆需要"全局再降 1~2 级 + 减少跨模块 mux"。
+下一步（按性价比排序，供 Lead 决定是否做）：
+1. **nn_mem 输入侧加寄存器**（需 T-mem 配合，接口时延契约改 1 拍）：把 `a_addr/b_addr/w_addr`
+   在 nn_mem 内先打一拍再进 BRAM，可去掉 `dst_la→BRAM`、`wa_r→BRAM` 这类跨模块 mux 链
+   （当前这些路径 slack ≈ +0.5，收益 ~0.5ns，但要改接口时延→不建议轻易动）。
+2. **state/CE 控制再拆**：把 `init_err` 的 priority 链改成 one-hot flag 与（或）把
+   `is_conv/is_pool/is_copy/is_add` 做成 4 个 one-hot 寄存器，state 转移用查表；预计 +0.5~0.8ns。
+3. **requant 饱和级**：`y2_q` 的 64 位 fits 判断可先在 48 位（prod64 有效位）上做归约，
+   或用两级比较（高位 OR 树 + 低位比较），预计 +0.3~0.5ns。
+4. **全实现（P&R）优先**：OOC route 估计是未放置的保守值；同一 RTL 在上一轮全实现里
+   有些路径比 OOC 好 2~3ns（也有更差的）。建议下一轮先跑**一次全实现 150MHz** 拿到真实
+   WNS，再决定是否继续拆（很可能全实现已经在 −1~+1ns 区间，比 OOC 更接近真实）。
+
+### 0.5.6 v2 周期公式与 46 case 实测对照
+
+记：`ICB=ceil(IC/8)`，`OCB=ceil(OC/8)`，`OH/OW` 为输出尺寸，
+`NB=OH*ceil(OW/8)`（dense/dw），`BASE=8`（INIT 1 + VCHK 1 + CPREP 6），
+`Q=10`（S_Q 8 + S_QLOAD 2），`DRN=3`（MAC 4 级流水 drain），`REQ=13`（requant 5 级 + 写尾），
+`NEXT=2`（S_NEXT + S_NEXT2）。
+
+```
+conv (dense):
+  count = (K==1) ? 8 : 7*ST+K
+  sub   = (K==1) ? ICB : K*ICB
+  per   = (count+1) + (K==1?0:1) + 8*K      # LD + LDCAP + WI + MAC
+  cyc   = BASE + OCB*Q + OCB*NB*(1 + sub*per + DRN + REQ + NEXT)
+
+depthwise:
+  count = 7*ST+K
+  per   = count + 2 + K                     # LD + LDCAP + WI + K MAC
+  cyc   = BASE + OCB*Q + OCB*NB*(1 + K*per + DRN + REQ + NEXT)
+
+maxpool:
+  NB  = ICB * OH * ceil(OW/8)
+  per = count + 2 + K
+  cyc = BASE + NB*(1 + K*per + 8 + NEXT)
+
+copy/upsample:  cyc = BASE + IH*IW*ICB*(5 if UP2X else 2)
+add:            cyc = BASE + IH*IW*ICB*3
+```
+
+与 v1 的差异（每 op/块）：`+7`（BASE 1→8），conv/dw 每 OC tile `+1`（Q 9→10），
+conv/dw 每输出块 `+6`（DRN 2→3、REQ 9→13、NEXT 1→2）。
+
+**46 case 实测 vs 公式（全部相等；来源 `proto/engine/tb_v3_19.log` + `case_table.md`）**：
+
+| case | op | k/st/pad | in HxW | out HxW | IC->OC | 实测 cyc | 理论 cyc | misA,misB |
+|---|---|---|---|---|---|---|---|---|
+| conv1x1_s1 | conv/dw | 1/1/0 | 8x10 | 8x10 | 8->8 | 594 | 594 | 0,0 |
+| conv1x1_s1_i3o5 | conv/dw | 1/1/0 | 6x7 | 6x7 | 3->5 | 234 | 234 | 0,0 |
+| conv1x1_s2 | conv/dw | 1/2/0 | 12x12 | 6x6 | 8->8 | 234 | 234 | 0,0 |
+| conv1x1_oc24 | conv/dw | 1/1/0 | 5x20 | 5x20 | 8->24 | 1658 | 1658 | 0,0 |
+| conv1x1_i13o13 | conv/dw | 1/1/0 | 6x6 | 6x6 | 13->13 | 664 | 664 | 0,0 |
+| conv3x3_s1p1 | conv/dw | 3/1/1 | 9x10 | 9x10 | 8->8 | 2304 | 2304 | 0,0 |
+| conv3x3_s1p0 | conv/dw | 3/1/0 | 7x5 | 5x3 | 8->8 | 653 | 653 | 0,0 |
+| conv3x3_s2p1 | conv/dw | 3/2/1 | 14x13 | 7x7 | 8->16 | 2100 | 2100 | 0,0 |
+| conv3x3_s2p0 | conv/dw | 3/2/0 | 12x11 | 5x5 | 16->8 | 1403 | 1403 | 0,0 |
+| conv3x3_i13o13 | conv/dw | 3/1/1 | 8x9 | 8x9 | 13->13 | 7548 | 7548 | 0,0 |
+| conv5x5_s1p2 | conv/dw | 5/1/2 | 9x8 | 9x8 | 8->8 | 2619 | 2619 | 0,0 |
+| conv5x5_s2p2 | conv/dw | 5/2/2 | 14x13 | 7x7 | 8->8 | 2286 | 2286 | 0,0 |
+| conv5x5_i16o16 | conv/dw | 5/1/2 | 8x8 | 8x8 | 16->16 | 8972 | 8972 | 0,0 |
+| conv1x1_bigM | conv/dw | 1/1/0 | 5x5 | 5x5 | 8->8 | 198 | 198 | 0,0 |
+| conv1x1_mixM | conv/dw | 1/1/0 | 6x6 | 6x6 | 8->8 | 234 | 234 | 0,0 |
+| conv3x3_shift10 | conv/dw | 3/1/1 | 7x7 | 7x7 | 8->8 | 907 | 907 | 0,0 |
+| conv1x1_srcoff8 | conv/dw | 1/1/0 | 5x6 | 5x6 | 8->8 | 198 | 198 | 0,0 |
+| conv1x1_srcB | conv/dw | 1/1/0 | 6x6 | 6x6 | 8->8 | 234 | 234 | 0,0 |
+| conv3x3_srcB | conv/dw | 3/1/1 | 8x8 | 8x8 | 16->8 | 1898 | 1898 | 0,0 |
+| conv1x1_bigbias | conv/dw | 1/1/0 | 5x5 | 5x5 | 8->8 | 198 | 198 | 0,0 |
+| dw3x3_c8 | conv/dw | 3/1/1 | 9x10 | 9x10 | 8->8 | 1170 | 1170 | 0,0 |
+| dw3x3_c16 | conv/dw | 3/1/1 | 8x8 | 8x8 | 16->16 | 1052 | 1052 | 0,0 |
+| dw3x3_c24 | conv/dw | 3/1/1 | 6x7 | 6x7 | 24->24 | 1190 | 1190 | 0,0 |
+| dw3x3_c13 | conv/dw | 3/1/0 | 7x8 | 5x6 | 13->13 | 668 | 668 | 0,0 |
+| dw3x3_s2 | conv/dw | 3/2/1 | 12x11 | 6x6 | 8->8 | 528 | 528 | 0,0 |
+| dw5x5_c8 | conv/dw | 5/1/2 | 9x8 | 9x8 | 8->8 | 1044 | 1044 | 0,0 |
+| dw5x5_c16 | conv/dw | 5/1/2 | 8x9 | 8x9 | 16->16 | 3676 | 3676 | 0,0 |
+| dw5x5_s2 | conv/dw | 5/2/2 | 14x13 | 7x7 | 8->8 | 1061 | 1061 | 0,0 |
+| pool2_s2p0 | pool | 2/2/0 | 8x8 | 4x4 | 8->8 | 212 | 212 | 0,0 |
+| pool2_s2p1 | pool | 2/2/1 | 8x7 | 5x4 | 8->8 | 263 | 263 | 0,0 |
+| pool3_s1p1 | pool | 3/1/1 | 7x9 | 7x9 | 8->8 | 792 | 792 | 0,0 |
+| pool3_s2p1 | pool | 3/2/1 | 12x13 | 6x7 | 8->8 | 470 | 470 | 0,0 |
+| pool5_s1p2 | pool | 5/1/2 | 8x8 | 8x8 | 16->16 | 1704 | 1704 | 0,0 |
+| pool9_s1p4 | pool | 9/1/4 | 12x11 | 12x11 | 8->8 | 6104 | 6104 | 0,0 |
+| pool9_c13 | pool | 9/1/4 | 10x10 | 10x10 | 13->13 | 10168 | 10168 | 0,0 |
+| pool2_s2_c24 | pool | 2/2/0 | 9x9 | 4x4 | 24->24 | 620 | 620 | 0,0 |
+| pool3_srcB | pool | 3/1/1 | 7x7 | 7x7 | 8->8 | 400 | 400 | 0,0 |
+| copy | copy/up | 1/1/0 | 7x6 | 7x6 | 8->8 | 92 | 92 | 0,0 |
+| copy_c16 | copy/up | 1/1/0 | 5x6 | 5x6 | 16->16 | 128 | 128 | 0,0 |
+| copy_oc16 | copy/up | 1/1/0 | 4x5 | 4x5 | 8->16 | 48 | 48 | 0,0 |
+| ups2x | copy/up | 1/1/0 | 5x4 | 10x8 | 8->8 | 108 | 108 | 0,0 |
+| ups2x_c16 | copy/up | 1/1/0 | 4x5 | 8x10 | 16->16 | 208 | 208 | 0,0 |
+| add | add | - | 6x7 | 6x7 | 8->8 | 134 | 134 | 0,0 |
+| add_c24 | add | - | 5x5 | 5x5 | 24->24 | 233 | 233 | 0,0 |
+| add_srcB | add | - | 6x6 | 6x6 | 8->8 | 116 | 116 | 0,0 |
+| add_same_buf | add | - | 5x6 | 5x6 | 16->16 | 188 | 188 | 0,0 |
+
+> 吞吐对照（v1→v2，同 case，纯 MAC/拍）：conv5x5_i16o16 409,600 MAC/(8867→8972 拍)
+> = 46.2→45.7；全模型估算见 §0.5.8。
+
+### 0.5.7 v2 期间由 TB 抓出并修掉的 bug（全部是"位精确判据"抓到的）
+
+| # | 症状 | 根因 | 修法 |
+|---|---|---|---|
+| 1 | conv/dw K>1 且 ICB>1 时输出大面积错 | 权重子块步长写错：从子块 (ky,icb) 末尾到下一个子块的地址增量不是 `8*OC8`，而是 `OC8*(1-(K-1)*IC8)`（可负） | `w_sub` 用 24 位补码预计算；kx 组边界用 `OC8*(IC8-7)` |
+| 2 | copy 且 oc>ic 时 dst 整体错位 | copy 目的像素步长应是 `OC8-IC8+8`（目的 pixel stride 与源不同） | `cp_dst_pix` 预计算，ix/iy 前进用它 |
+| 3 | requant 输出整块错 1~2 字节 | 加流水后 `a_pipe` 与 `wby_r` 相位差 1 拍 | 增加 `a_pipe2` 对齐（与 wby_r 同拍） |
+| 4 | pool 全部 case 错 | `y_ld`（band y 递增寄存器）在 S_PINIT 没初始化（只有 conv 的 S_BI 有） | pool 首个 band 也置 `y_ld <= y_ky0` |
+| 5 | 所有写口无写（全 0） | 写口打拍后忘记把 `b_we <= b_we_q` 接回端口（b_we 悬空=0） | 补 `assign b_we = b_we_q` |
+| 6 | 首个 band 首字捕获 X → 一个像素错 | 组合 `ld_inb` 在复位后首拍含 X（变量比较/共享逻辑），fill 标记写进 abuf | fill/使能改由"已寄存的合法性"驱动（`a_re_r`）+ fill 用寄存器推导；后续版本直接用递增 x_ld/y_ok_r 彻底消除 |
+
+### 0.5.8 v2 新增文件与复现命令
+
+| 文件 | 作用 |
+|---|---|
+| `proto/engine/timing_wrap.sv` | OOC 顶层：engine + nn_mem + 3 个数据观测口 + CPU 自由计数器（让 WQ RAM 可写） |
+| `proto/engine/synth150.{tcl,bat}` | 150MHz OOC 综合（含 WQ 宏、时钟/IO 约束、report） |
+| `proto/engine/synth150_{util,timing,paths}.rpt`、`synth150.log` | 资源 / WNS / top-20 路径 / 综合日志 |
+| `proto/engine/vec_e2e/`、`make_e2e_case.py`、`run_e2e.bat` | T-model 逐层"单 op 重放"（6 个代表层 mismatch=0，见 §11） |
+| `proto/engine/case_table.md`（v2）、`calc_cycles.py`、`mk_table.py` | 46 行实测 vs 公式表 |
+
+```bat
+rem 1) 功能：TB（46 case）        -> ENGINE_TB: PASS (46 cases, mismatch=0)
+cd results\ai-accel\proto\engine && run_tb.bat
+rem 2) 官方回归
+python tools\fpga_workflow.py verify --only tb_nn_engine --force
+rem 3) 150MHz OOC 综合（先看 DBG_CELLS_* 自证 BRAM=124，再看 WNS）
+cd results\ai-accel\proto\engine && synth150.bat
+rem 4) 周期公式对照（v2）
+python results\ai-accel\proto\engine\calc_cycles.py tb_v3_19.log
+```
+
+### 0.5.9 冻结快照、A 方案（全实现）与 E2E 实测
+
+**（历史）v2 冻结快照**（R41 纪律；已按 Lead 指令于 2026-11-01 00:38 切换为 bc2，见下）：
+`nn_conv_engine.sv` **44,071 B，SHA256 = `099D926118BE2F7368578A45D59F37433994CFF90AEDC310FA9FDED9A38E4171`**
+（2026-11-01 00:11:04；本报告 §0.5.1–0.5.8 的所有 OOC 数字都对应这份文件；备份在
+`proto/engine/draft/nn_conv_engine_v2_frozen.sv`）。
+
+**当前根目录快照（2026-11-01 00:38:50，= bc2 拆法，Lead 的 E2E/全实现按此跑）**：
+`nn_conv_engine.sv` **44,923 B，SHA256 = `27d59a87451c97a1c750d4548ce17da03f476cef1ecabc2cb4f51b44bbd32413`**
+（内容 = `draft/nn_conv_engine_v2bc2.sv`：B 控制 one-hot + C requant 48 位 + base0 两级拆分）。
+自证：vlog 0 error；`run_tb.bat` **PASS 46/46**（`tb_bc2_applied.log`）；
+`verify --only tb_nn_engine --force` **PASS 3.2s**；
+OOC 150MHz 重跑 **WNS +0.489ns**（LUT 16,859 / FF 10,840 / DSP 39 / BRAM 124）；
+**46 case 周期与冻结版逐 case 相同**（bc2 不加流水段/不加周期）→ 全模型 **npu_cycles 仍 = 1,290,062**。
+新最差路径：`c_icb[4] → la_reg[23]`（6.18ns，band 基址选择）——下一拆点（草稿见 §0.5.11）。
+
+**150MHz 全实现实测（Lead）**：post-place estimated WNS **−4.020ns**，route 中间 **−3.614ns**
+（24K LUT + 124 BRAM 拥塞、route 占比高）→ 150MHz 不可行；Lead 改打 **87.5MHz（`--nn-clk-div 12`，
+周期 11.43ns）**做 board-ready bitstream，再向 95.45/105MHz 迭代。OOC(+0.489) 与全实现的差距说明：
+**OOC 综合的 route 是"未放置"估计，不能替代全实现**，本报告的 OOC 数字只用于相对改进。
+
+**A 方案（Lead 执行）**：全量回归（含 E2E）→ 150MHz 全实现
+（`synth --nn --nn-clk-div 7 --prog yolo_board`，带 4 段 WQ 初始化，输出 `fpga/cpu_a100t_nn.bit`）。
+验收口径按 Lead 本轮要求改为"**全实现 WNS ≥ 0（MET） = 任务完成**"（OOC +2.0ns 只是布线余量的代理指标）。
+分支：`WNS≥0` → 150MHz 定稿；`−1.5<WNS<0` → 应用 §0.5.10 的 B/C 再拆 1 轮后重跑；`WNS≤−1.5` → 先
+`--nn-clk-div 8/10`（131.25/105MHz）出版本，同时继续拆。
+
+**E2E 实测（Lead，2026-11-01）——比 OOC 更有说服力**：
+- `tb_sw_nn_yolo`（108 op 全模型，HW-only，含 18 个 `cpu_add`）：**PASS，hw_bad=0**，input_csum OK；
+- **实测 `npu_cycles = 1,290,062` @150MHz = 8.60 ms/帧**；
+- 与本节 §0.5.10 的逐 op v2 公式估算 **完全相等（差 0）**。
+
+### 0.5.10 全模型估算口径修正（R42：报告数字必须能由实测解释）
+
+**结论：1,290,062 拍，v2 公式逐 op 求和精确等于 E2E 实测（差 +0）。**
+脚本：`proto/engine/est_full_model.py`（读当前 `sim/prog/yolo/plan.json`，逐 op 套 §0.5.6 公式）；
+输出：`proto/engine/full_model_estimate.md`（含逐 op 明细表）。
+
+| kind | ops | v2 cycles | v1 cycles | v2−v1 |
+|---|---|---|---|---|
+| conv | 55 | 842,462 | 777,430 | +65,032 |
+| dwconv | 28 | 436,624 | 398,398 | +38,226 |
+| pool | 3 | 10,008 | 9,915 | +93 |
+| upsample | 1 | 968 | 961 | +7 |
+| cpu_conv0 / cpu_concat / cpu_add | 1 / 2 / 18 | 0 | 0 | 0 |
+| **HW 合计** | **87** | **1,290,062** | **1,186,704** | **+103,358（+8.7%）** |
+
+**上一版 1,320,062 错在哪（已删除，不再作为结论）**：那是"v1 估算 1,216,578（**旧 plan**，105 个 HW op，
+含 18 个 HW shortcut-add）+ v2 流水化增量 103,484"得到的。T-model 精度修复后的新 plan 把 18 个
+shortcut-add 改成 **`cpu_add`（CPU 执行，不占 NPU）**，所以：
+- NPU 侧 HW op = conv 55 + dwconv 28 + pool 3 + upsample 1 = **87**（不是 105）；
+- 旧 v1 估算里 18 个 HW add 的周期（v1 公式合计 **29,874 拍**）被当作 NPU 周期带进基准；
+  1,216,578 − 29,874 = 1,186,704（= 当前 plan 的 v1 公式合计），再加上 v2 增量 103,358 → 1,290,062。
+- 差值 ≈ 30,000 拍（−2.3%）就是这 18 个 `cpu_add` 从 NPU 挪走的周期，**不是公式常数偏大**。
+  （46/46 case 的公式本身就是精确的，§0.5.6 的实测对照未受影响。）
+
+### 0.5.11 B/C 拆法草稿（只落盘 `proto/engine/draft/`，**未写根目录 RTL**）
+
+由 `gen_drafts.py` 从冻结版生成，`draft/run_tb_draft.bat <file>` 跑同一套 46 case TB，
+`draft/synth150_<tag>.bat` 跑同口径 OOC 150MHz 综合：
+
+| 草稿 | 改法 | TB（46 case） | OOC WNS @150MHz | LUT / FF / BRAM |
+|---|---|---|---|---|
+| 冻结版 v2（根目录） | — | PASS 46/46 | +0.121 | 17,634 / 11,073 / 124 |
+| `nn_conv_engine_v2b.sv` | **B：控制 one-hot**——`is_conv/is_pool/is_copy/is_add/f_dw/f_up2x` 改 S_IDLE 打 one-hot 寄存器；`ld_count/ld_count−1` 在 S_CPREP 寄存，S_LD 只比较寄存器 | PASS 46/46 | **+0.313** | 16,908 / 11,057 / 124 |
+| `nn_conv_engine_v2c.sv` | **C：requant 窄化**——`|acc*M|<2^46`（int32×int16，右移只减），`y64_q/y2_q` 64→**48 位**，饱和判据 `[63:7]`→`[47:7]` | PASS 46/46 | **+0.313** | 16,517 / 10,773 / 124 |
+| `nn_conv_engine_v2bc.sv` | B+C + base0 用移位/加法替代小乘法 | PASS 46/46 | −0.084（更差，**弃用**） | 16,989 / 10,863 / 124 |
+| `nn_conv_engine_v2bc2.sv` | B+C + **base0_a 两级拆分**（`pad*row_step` 先寄存，下一拍只减法） | PASS 46/46 | **+0.489 → 已应用为当前根目录快照**（`27d59a87…`） | 16,859 / 10,840 / 124 |
+| `nn_conv_engine_v2bc3.sv` | bc2 + `icb_n_r` 寄存 + **band 基址增量提前到 S_LD 末拍**（无新状态/无新流水段，46 周期不变） | PASS 46/46 | **+0.585（可选草稿，未应用）**；新瓶颈 `d_iw[0] → row_base_w_n`（6.08ns） | 16,410 / 10,859 / 124 |
+
+- 每个草稿的 TB 证据：`draft/tb_b.log` / `tb_c.log` / `tb_bc.log` / `tb_bc2.log`；
+- 综合证据：`draft/synth150_{b,c,bc,bc2}_{util,timing}.rpt`；
+- bc2 的最差路径变成 `c_icb[4] → la_reg[23]`（6.18ns，band 基址选择/加法）；bc3 把它拆掉后最差变
+  `d_iw[0] → row_base_w_n`（6.08ns，`row_step_w` 锥）；
+- B 与 C 互不冲突，可叠加；**bc2 比冻结版 +0.37ns**，但离 OOC +2.0 仍差 1.5ns（剩余为 la/band 基址 + nn_mem 地址 mux + OOC 未放置 route 估计）。
+
+复现草稿（不改根目录）：
+```bat
+cd results\ai-accel\proto\engine
+python gen_drafts.py            rem B/C (会打印源 SHA256)
+python gen_draft_bc2.py         rem B+C+base0 两级
+draft\run_tb_draft.bat nn_conv_engine_v2bc2.sv
+draft\synth150_bc2.bat
+```
+
+> **注意 (v1 §1-§11 的历史性)**：§1 起的正文是 v1（R1）交付时写的，其中的周期公式/资源
+> 数字是 v1 的；v2 的最终数字以本节 §0.5 为准。v1 的架构描述（§2）与验证方法（§4）仍然
+> 适用；v2 只改流水/地址生成，端口、Q/权重/激活布局、数值语义未变。
 
 ---
 
@@ -278,7 +605,11 @@ Lead 正在做 E2E（`tb_sw_nn_yolo`，108 ops）。本 TB 结构（manifest + �
 
 ---
 
-## 6. 全模型周期/吞吐估算（128 输入，T-model `sim/prog/yolo/plan.json`）
+## 6. 全模型周期/吞吐估算（v1 数字，**已被 §0.5.10 作废**，仅作历史）
+
+> v1 的 1,216,578 拍是旧 plan（105 HW op，含 18 个 HW add）下的估算；当前 plan 的
+> 准确口径见 §0.5.10：**v2 = 1,290,062 拍 @150MHz = 8.60ms/帧，且与 E2E 实测完全相等**。
+> 下面这段只说明 v1 当时的算法，不再作为交付结论。
 
 按 §3 公式逐 op 求和（`cpu_conv0` / `cpu_concat` 由 CPU 做，不计；pool 的 pad=0 时按
 (K-1)/2 推——plan 里 K=9 pool 显式 pad=4，v0.4 起可直接传）：
