@@ -81,6 +81,22 @@ module core
 
   // 定时器中断请求 (电平, 来自 mmio_subsys 的 mtime>=mtimecmp; -> mip.MTIP)
   input  logic        irq_timer
+`ifdef NN_EN
+  ,
+  // --------------------------------------------------------------------------
+  // NPU 大容量存储窗口 (AI 加速档专用; 契约 results/ai-accel/CONTRACT.md §2)
+  // --------------------------------------------------------------------------
+  // 【口径】与 dmem **完全一致**: 地址在 MEM 拍给出, 数据在 WB 拍有效 (1 拍延迟)。
+  //   所以 WB 的写回 mux 可以直接接它, 不会出现"BRAM 同步读 vs MMIO 组合读差一拍"
+  //   的相位错误 (PITFALLS R32 族)。窗口在 0x9004_0000 起 512KB, 与 DMEM 16KB
+  //   窗口互不重叠; **只在 NN_EN 构建里存在**, 交付档端口列表逐字不变。
+  output logic        nn_we,
+  output logic        nn_re,      // 读选通 (load 的 MEM 拍; 供 nn_mem 更新读数据寄存)
+  output logic [31:0] nn_addr,
+  output logic [31:0] nn_wdata,
+  output logic [3:0]  nn_wstrb,
+  input  logic [31:0] nn_rdata
+`endif
 );
 
   // ==========================================================================
@@ -216,6 +232,11 @@ module core
   logic        dmem_we;
   // 地址译码: 内部 dmem vs 外部 MMIO
   logic        sel_dmem;
+`ifdef NN_EN
+  // NPU 存储窗口的地址译码 (与 dmem 并列的第二个数据窗口)
+  logic        sel_nn;
+  logic        sel_nn_r;      // 与 sel_dmem_r 同拍寄存, 让读数据回选对齐
+`endif
   logic        dmem_we_g;
   logic [31:0] dmem_rdata_g;
   // dmem 改成寄存读之后, MMIO 读数据也必须寄存一拍, 否则两条路径差一拍、
@@ -1513,12 +1534,30 @@ module core
   // ------------------------------------------------------------------------
   assign sel_dmem     = (dmem_addr >= DMEM_BASE) && (dmem_addr < (DMEM_BASE + DMEM_BYTES));
   assign dmem_we_g    = dmem_we && sel_dmem;                                  // 窗口外不写内部 RAM
+`ifdef NN_EN
+  // ---- NPU 大容量存储窗口: 与 DMEM 并列的第二个数据窗口 ----
+  // 写通路与 dmem 完全同口径 (dmem_we 是"本拍是写"的电平, wstrb 给字节使能);
+  // 读通路不设 re: 地址常给, 由 nn_mem 内部寄存一拍输出, 与 dmem 的寄存读一致。
+  assign sel_nn     = (dmem_addr >= NN_BASE) && (dmem_addr < (NN_BASE + NN_BYTES));
+  assign nn_we      = dmem_we && sel_nn;
+  assign nn_re      = ex_mem_ctrl.mem_read && sel_nn;
+  assign nn_addr    = dmem_addr;
+  assign nn_wdata   = dmem_wdata;
+  assign nn_wstrb   = dmem_wstrb;
+`endif
   // 读数据回选: 内部 dmem 与外部 MMIO 都已寄存一拍, 用寄存后的选择信号对齐
   always @(posedge clk) begin
     ext_rdata_r <= ext_rdata;
     sel_dmem_r  <= sel_dmem;
+`ifdef NN_EN
+    sel_nn_r    <= sel_nn;
+`endif
   end
+`ifdef NN_EN
+  assign dmem_rdata_g = sel_dmem_r ? dmem_rdata : (sel_nn_r ? nn_rdata : ext_rdata_r);
+`else
   assign dmem_rdata_g = sel_dmem_r ? dmem_rdata : ext_rdata_r;
+`endif
 
   // ---- 临时诊断: 把读数据这条链一次打印完 (排查完删掉) ----
   // 上一次只打到 LSU 侧, 看到 rdata 恒 0 却分不清是"译码丢了"还是"dmem 没输出"。
@@ -1531,8 +1570,16 @@ module core
   // 选通, 粘滞标志永远清不掉 —— 表现为"第一次轮询正常, 之后每次都立即通过并
   // 读到上一次的数据"(UART RX 实测踩过)。mem_read 只在 load 的 MEM 段有效,
   // 所以它天然是每访问一拍的脉冲, 不像地址会在总线上多停几拍。
+  // 【NN_EN】NPU 窗口的访问不能被当成 MMIO 送出去: 否则 nn_mem 的写会同时写进
+  //   mmio_subsys 的地址空间, 还会让外设的读清标志被误触发。所以 ext_we/ext_re
+  //   都必须显式排除 sel_nn (交付档没有 NN_EN 时这两行与原来逐字相同)。
+`ifdef NN_EN
+  assign ext_we    = dmem_we && !sel_dmem && !sel_nn && (dmem_wstrb != 4'b0000);
+  assign ext_re    = ex_mem_ctrl.mem_read && !sel_dmem && !sel_nn;
+`else
   assign ext_we    = dmem_we && !sel_dmem && (dmem_wstrb != 4'b0000);
   assign ext_re    = ex_mem_ctrl.mem_read && !sel_dmem;
+`endif
   assign ext_addr  = dmem_addr;
   assign ext_wdata = dmem_wdata;
   assign ext_wstrb = dmem_wstrb;

@@ -1,0 +1,34 @@
+[
+ {
+  "op": 0,
+  "label": "cpu_conv0"
+ },
+ {
+  "op": 70,
+  "label": "conv1x1"
+ },
+ {
+  "op": 2,
+  "label": "dwconv3x3"
+ },
+ {
+  "op": 96,
+  "label": "dwconv5x5"
+ },
+ {
+  "op": 93,
+  "label": "pool9"
+ },
+ {
+  "op": 7,
+  "label": "add"
+ },
+ {
+  "op": 100,
+  "label": "head_conv255"
+ },
+ {
+  "op": 101,
+  "label": "upsample"
+ }
+]

@@ -108,3 +108,30 @@ fpga/*_webtalk.*
 
 # ---- 手动备份 (不进仓库) ----
 sim/prog/*.bak
+# ---- AI 加速 (2026-10-31, branch feat/ai-accel) ----------------------------
+# 大体积/可再生产物不入库（与上面的 *.hex / *.bit 同一纪律：脚本可重建）:
+#   tools/yolo/data 下是官方权重与训练/量化中间产物 (约 10MB)
+#   sim/prog/yolo 下是 RTL 仿真用镜像/向量 (yolo_wq.hex 848KB + 逐层向量)
+#   proto/**/vec* 是 TB 的生成向量
+# 小而关键的 JSON/文本 (plan/model/checksums/报告) 仍然入库。
+tools/yolo/data/*.weights
+tools/yolo/data/*.pt
+tools/yolo/data/*.npz
+tools/yolo/data/images/
+tools/yolo/**/__pycache__/
+tools/yolo/*.pyc
+sim/prog/yolo/*.hex
+results/ai-accel/proto/**/vec*/
+results/ai-accel/proto/**/vec_e2e/
+results/ai-accel/proto/**/*.wr
+results/ai-accel/proto/**/__pycache__/
+*.pyc
+__pycache__/# ModelSim/综合在 proto/ 下留下的生成物（体积大、可重建）:
+results/ai-accel/proto/**/work/
+results/ai-accel/proto/**/*.qpg
+results/ai-accel/proto/**/*.qtl
+results/ai-accel/proto/**/*.wlf
+results/ai-accel/proto/**/*.vcd
+results/ai-accel/proto/**/*.vst
+results/ai-accel/proto/**/transcript
+results/ai-accel/proto/**/vsim.wlf

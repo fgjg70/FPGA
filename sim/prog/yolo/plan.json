@@ -1,0 +1,2538 @@
+{
+ "input": {
+  "ih": 128,
+  "iw": 128,
+  "ic": 3,
+  "act_off": 0,
+  "packed": true,
+  "gen": {
+   "kind": "pattern_v1",
+   "seed": 12345
+  },
+  "csum": 3486675397
+ },
+ "wq_bytes": 376832,
+ "w_bytes": 319792,
+ "q_base": 327680,
+ "q_bytes": 49152,
+ "a_base": 393216,
+ "b_base": 491520,
+ "ops": [
+  {
+   "id": 0,
+   "kind": "cpu_conv0",
+   "k": 3,
+   "stride": 2,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 128,
+   "iw": 128,
+   "ic": 3,
+   "oc": 8,
+   "woff": 0,
+   "qoff": 327680,
+   "csum": 625189111,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 49152
+   }
+  },
+  {
+   "id": 1,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 64,
+   "iw": 64,
+   "ic": 8,
+   "oc": 8,
+   "woff": 576,
+   "qoff": 327744,
+   "csum": 4248527647,
+   "src": {
+    "buf": "A",
+    "off": 49152
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 2,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 64,
+   "iw": 64,
+   "ic": 8,
+   "oc": 8,
+   "woff": 640,
+   "qoff": 327808,
+   "csum": 2575636012,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 32768
+   }
+  },
+  {
+   "id": 3,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 64,
+   "iw": 64,
+   "ic": 8,
+   "oc": 4,
+   "woff": 712,
+   "qoff": 327872,
+   "csum": 1736326441,
+   "src": {
+    "buf": "A",
+    "off": 32768
+   },
+   "dst": {
+    "buf": "B",
+    "off": 0
+   }
+  },
+  {
+   "id": 4,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 64,
+   "iw": 64,
+   "ic": 4,
+   "oc": 8,
+   "woff": 776,
+   "qoff": 327936,
+   "csum": 3164485697,
+   "src": {
+    "buf": "B",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 5,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 64,
+   "iw": 64,
+   "ic": 8,
+   "oc": 8,
+   "woff": 840,
+   "qoff": 328000,
+   "csum": 1087688699,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 32768
+   }
+  },
+  {
+   "id": 6,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 64,
+   "iw": 64,
+   "ic": 8,
+   "oc": 4,
+   "woff": 912,
+   "qoff": 328064,
+   "csum": 158810207,
+   "src": {
+    "buf": "A",
+    "off": 32768
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 7,
+   "kind": "add",
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 64,
+   "iw": 64,
+   "ic": 4,
+   "oc": 4,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 563887915,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "B",
+    "off": 0
+   }
+  },
+  {
+   "id": 8,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 64,
+   "iw": 64,
+   "ic": 4,
+   "oc": 24,
+   "woff": 976,
+   "qoff": 328128,
+   "csum": 2212707202,
+   "src": {
+    "buf": "B",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 9,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 2,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 64,
+   "iw": 64,
+   "ic": 24,
+   "oc": 24,
+   "woff": 1168,
+   "qoff": 328288,
+   "csum": 739007469,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "B",
+    "off": 0
+   }
+  },
+  {
+   "id": 10,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 32,
+   "iw": 32,
+   "ic": 24,
+   "oc": 8,
+   "woff": 1384,
+   "qoff": 328448,
+   "csum": 3191235398,
+   "src": {
+    "buf": "B",
+    "off": 0
+   },
+   "dst": {
+    "buf": "B",
+    "off": 24576
+   }
+  },
+  {
+   "id": 11,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 32,
+   "iw": 32,
+   "ic": 8,
+   "oc": 32,
+   "woff": 1576,
+   "qoff": 328512,
+   "csum": 380616109,
+   "src": {
+    "buf": "B",
+    "off": 24576
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 12,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 32,
+   "iw": 32,
+   "ic": 32,
+   "oc": 32,
+   "woff": 1832,
+   "qoff": 328720,
+   "csum": 3674300716,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 32768
+   }
+  },
+  {
+   "id": 13,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 32,
+   "iw": 32,
+   "ic": 32,
+   "oc": 8,
+   "woff": 2120,
+   "qoff": 328928,
+   "csum": 770653194,
+   "src": {
+    "buf": "A",
+    "off": 32768
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 14,
+   "kind": "add",
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 32,
+   "iw": 32,
+   "ic": 8,
+   "oc": 8,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 2445077509,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "B",
+    "off": 24576
+   }
+  },
+  {
+   "id": 15,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 32,
+   "iw": 32,
+   "ic": 8,
+   "oc": 32,
+   "woff": 2376,
+   "qoff": 328992,
+   "csum": 2612607425,
+   "src": {
+    "buf": "B",
+    "off": 24576
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 16,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 32,
+   "iw": 32,
+   "ic": 32,
+   "oc": 32,
+   "woff": 2632,
+   "qoff": 329200,
+   "csum": 1315465846,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 32768
+   }
+  },
+  {
+   "id": 17,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 32,
+   "iw": 32,
+   "ic": 32,
+   "oc": 8,
+   "woff": 2920,
+   "qoff": 329408,
+   "csum": 3831719790,
+   "src": {
+    "buf": "A",
+    "off": 32768
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 18,
+   "kind": "add",
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 32,
+   "iw": 32,
+   "ic": 8,
+   "oc": 8,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 3491131792,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "B",
+    "off": 24576
+   }
+  },
+  {
+   "id": 19,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 32,
+   "iw": 32,
+   "ic": 8,
+   "oc": 32,
+   "woff": 3176,
+   "qoff": 329472,
+   "csum": 3297382977,
+   "src": {
+    "buf": "B",
+    "off": 24576
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 20,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 2,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 32,
+   "iw": 32,
+   "ic": 32,
+   "oc": 32,
+   "woff": 3432,
+   "qoff": 329680,
+   "csum": 954929355,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 32768
+   }
+  },
+  {
+   "id": 21,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 16,
+   "iw": 16,
+   "ic": 32,
+   "oc": 8,
+   "woff": 3720,
+   "qoff": 329888,
+   "csum": 3355394784,
+   "src": {
+    "buf": "A",
+    "off": 32768
+   },
+   "dst": {
+    "buf": "B",
+    "off": 0
+   }
+  },
+  {
+   "id": 22,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 16,
+   "iw": 16,
+   "ic": 8,
+   "oc": 48,
+   "woff": 3976,
+   "qoff": 329952,
+   "csum": 1957835926,
+   "src": {
+    "buf": "B",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 23,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 16,
+   "iw": 16,
+   "ic": 48,
+   "oc": 48,
+   "woff": 4360,
+   "qoff": 330256,
+   "csum": 78516658,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 12288
+   }
+  },
+  {
+   "id": 24,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 16,
+   "iw": 16,
+   "ic": 48,
+   "oc": 8,
+   "woff": 4792,
+   "qoff": 330560,
+   "csum": 1897275412,
+   "src": {
+    "buf": "A",
+    "off": 12288
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 25,
+   "kind": "add",
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 16,
+   "iw": 16,
+   "ic": 8,
+   "oc": 8,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 1688007867,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "B",
+    "off": 0
+   }
+  },
+  {
+   "id": 26,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 16,
+   "iw": 16,
+   "ic": 8,
+   "oc": 48,
+   "woff": 5176,
+   "qoff": 330624,
+   "csum": 4188895917,
+   "src": {
+    "buf": "B",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 27,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 16,
+   "iw": 16,
+   "ic": 48,
+   "oc": 48,
+   "woff": 5560,
+   "qoff": 330928,
+   "csum": 3092602720,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 12288
+   }
+  },
+  {
+   "id": 28,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 16,
+   "iw": 16,
+   "ic": 48,
+   "oc": 8,
+   "woff": 5992,
+   "qoff": 331232,
+   "csum": 401798896,
+   "src": {
+    "buf": "A",
+    "off": 12288
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 29,
+   "kind": "add",
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 16,
+   "iw": 16,
+   "ic": 8,
+   "oc": 8,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 2407129710,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "B",
+    "off": 0
+   }
+  },
+  {
+   "id": 30,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 16,
+   "iw": 16,
+   "ic": 8,
+   "oc": 48,
+   "woff": 6376,
+   "qoff": 331296,
+   "csum": 4207914326,
+   "src": {
+    "buf": "B",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 31,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 16,
+   "iw": 16,
+   "ic": 48,
+   "oc": 48,
+   "woff": 6760,
+   "qoff": 331600,
+   "csum": 2097296219,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 12288
+   }
+  },
+  {
+   "id": 32,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 16,
+   "iw": 16,
+   "ic": 48,
+   "oc": 16,
+   "woff": 7192,
+   "qoff": 331904,
+   "csum": 2976349097,
+   "src": {
+    "buf": "A",
+    "off": 12288
+   },
+   "dst": {
+    "buf": "B",
+    "off": 0
+   }
+  },
+  {
+   "id": 33,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 16,
+   "iw": 16,
+   "ic": 16,
+   "oc": 96,
+   "woff": 7960,
+   "qoff": 332016,
+   "csum": 4222779748,
+   "src": {
+    "buf": "B",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 34,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 16,
+   "iw": 16,
+   "ic": 96,
+   "oc": 96,
+   "woff": 9496,
+   "qoff": 332608,
+   "csum": 1656965905,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 24576
+   }
+  },
+  {
+   "id": 35,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 16,
+   "iw": 16,
+   "ic": 96,
+   "oc": 16,
+   "woff": 10360,
+   "qoff": 333200,
+   "csum": 2909392797,
+   "src": {
+    "buf": "A",
+    "off": 24576
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 36,
+   "kind": "add",
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 16,
+   "iw": 16,
+   "ic": 16,
+   "oc": 16,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 1157004945,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "B",
+    "off": 0
+   }
+  },
+  {
+   "id": 37,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 16,
+   "iw": 16,
+   "ic": 16,
+   "oc": 96,
+   "woff": 11896,
+   "qoff": 333312,
+   "csum": 3162045171,
+   "src": {
+    "buf": "B",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 38,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 16,
+   "iw": 16,
+   "ic": 96,
+   "oc": 96,
+   "woff": 13432,
+   "qoff": 333904,
+   "csum": 1281412370,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 24576
+   }
+  },
+  {
+   "id": 39,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 16,
+   "iw": 16,
+   "ic": 96,
+   "oc": 16,
+   "woff": 14296,
+   "qoff": 334496,
+   "csum": 4098280142,
+   "src": {
+    "buf": "A",
+    "off": 24576
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 40,
+   "kind": "add",
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 16,
+   "iw": 16,
+   "ic": 16,
+   "oc": 16,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 2021819348,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "B",
+    "off": 0
+   }
+  },
+  {
+   "id": 41,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 16,
+   "iw": 16,
+   "ic": 16,
+   "oc": 96,
+   "woff": 15832,
+   "qoff": 334608,
+   "csum": 3176180040,
+   "src": {
+    "buf": "B",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 42,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 16,
+   "iw": 16,
+   "ic": 96,
+   "oc": 96,
+   "woff": 17368,
+   "qoff": 335200,
+   "csum": 2303701910,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 24576
+   }
+  },
+  {
+   "id": 43,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 16,
+   "iw": 16,
+   "ic": 96,
+   "oc": 16,
+   "woff": 18232,
+   "qoff": 335792,
+   "csum": 3574214477,
+   "src": {
+    "buf": "A",
+    "off": 24576
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 44,
+   "kind": "add",
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 16,
+   "iw": 16,
+   "ic": 16,
+   "oc": 16,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 2055380590,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "B",
+    "off": 0
+   }
+  },
+  {
+   "id": 45,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 16,
+   "iw": 16,
+   "ic": 16,
+   "oc": 96,
+   "woff": 19768,
+   "qoff": 335904,
+   "csum": 2726501325,
+   "src": {
+    "buf": "B",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 46,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 16,
+   "iw": 16,
+   "ic": 96,
+   "oc": 96,
+   "woff": 21304,
+   "qoff": 336496,
+   "csum": 691871129,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 24576
+   }
+  },
+  {
+   "id": 47,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 16,
+   "iw": 16,
+   "ic": 96,
+   "oc": 16,
+   "woff": 22168,
+   "qoff": 337088,
+   "csum": 4237233942,
+   "src": {
+    "buf": "A",
+    "off": 24576
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 48,
+   "kind": "add",
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 16,
+   "iw": 16,
+   "ic": 16,
+   "oc": 16,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 3989807839,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "B",
+    "off": 0
+   }
+  },
+  {
+   "id": 49,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 16,
+   "iw": 16,
+   "ic": 16,
+   "oc": 96,
+   "woff": 23704,
+   "qoff": 337200,
+   "csum": 902990750,
+   "src": {
+    "buf": "B",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 50,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 2,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 16,
+   "iw": 16,
+   "ic": 96,
+   "oc": 96,
+   "woff": 25240,
+   "qoff": 337792,
+   "csum": 1548499637,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 24576
+   }
+  },
+  {
+   "id": 51,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 8,
+   "iw": 8,
+   "ic": 96,
+   "oc": 24,
+   "woff": 26104,
+   "qoff": 338384,
+   "csum": 4181681214,
+   "src": {
+    "buf": "A",
+    "off": 24576
+   },
+   "dst": {
+    "buf": "B",
+    "off": 0
+   }
+  },
+  {
+   "id": 52,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 8,
+   "iw": 8,
+   "ic": 24,
+   "oc": 136,
+   "woff": 28408,
+   "qoff": 338544,
+   "csum": 3183203642,
+   "src": {
+    "buf": "B",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 53,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 8,
+   "iw": 8,
+   "ic": 136,
+   "oc": 136,
+   "woff": 31672,
+   "qoff": 339376,
+   "csum": 2045690328,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 8704
+   }
+  },
+  {
+   "id": 54,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 8,
+   "iw": 8,
+   "ic": 136,
+   "oc": 24,
+   "woff": 32896,
+   "qoff": 340208,
+   "csum": 2980132484,
+   "src": {
+    "buf": "A",
+    "off": 8704
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 55,
+   "kind": "add",
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 8,
+   "iw": 8,
+   "ic": 24,
+   "oc": 24,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 18131929,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "B",
+    "off": 0
+   }
+  },
+  {
+   "id": 56,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 8,
+   "iw": 8,
+   "ic": 24,
+   "oc": 136,
+   "woff": 36160,
+   "qoff": 340368,
+   "csum": 1620717436,
+   "src": {
+    "buf": "B",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 57,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 8,
+   "iw": 8,
+   "ic": 136,
+   "oc": 136,
+   "woff": 39424,
+   "qoff": 341200,
+   "csum": 2386758264,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 8704
+   }
+  },
+  {
+   "id": 58,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 8,
+   "iw": 8,
+   "ic": 136,
+   "oc": 24,
+   "woff": 40648,
+   "qoff": 342032,
+   "csum": 395027318,
+   "src": {
+    "buf": "A",
+    "off": 8704
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 59,
+   "kind": "add",
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 8,
+   "iw": 8,
+   "ic": 24,
+   "oc": 24,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 423806888,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "B",
+    "off": 0
+   }
+  },
+  {
+   "id": 60,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 8,
+   "iw": 8,
+   "ic": 24,
+   "oc": 136,
+   "woff": 43912,
+   "qoff": 342192,
+   "csum": 2013729513,
+   "src": {
+    "buf": "B",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 61,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 8,
+   "iw": 8,
+   "ic": 136,
+   "oc": 136,
+   "woff": 47176,
+   "qoff": 343024,
+   "csum": 1246089702,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 8704
+   }
+  },
+  {
+   "id": 62,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 8,
+   "iw": 8,
+   "ic": 136,
+   "oc": 24,
+   "woff": 48400,
+   "qoff": 343856,
+   "csum": 3792201553,
+   "src": {
+    "buf": "A",
+    "off": 8704
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 63,
+   "kind": "add",
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 8,
+   "iw": 8,
+   "ic": 24,
+   "oc": 24,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 759916377,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "B",
+    "off": 0
+   }
+  },
+  {
+   "id": 64,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 8,
+   "iw": 8,
+   "ic": 24,
+   "oc": 136,
+   "woff": 51664,
+   "qoff": 344016,
+   "csum": 2009733701,
+   "src": {
+    "buf": "B",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 65,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 8,
+   "iw": 8,
+   "ic": 136,
+   "oc": 136,
+   "woff": 54928,
+   "qoff": 344848,
+   "csum": 989453098,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 8704
+   }
+  },
+  {
+   "id": 66,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 8,
+   "iw": 8,
+   "ic": 136,
+   "oc": 24,
+   "woff": 56152,
+   "qoff": 345680,
+   "csum": 1500011015,
+   "src": {
+    "buf": "A",
+    "off": 8704
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 67,
+   "kind": "add",
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 8,
+   "iw": 8,
+   "ic": 24,
+   "oc": 24,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 1911508729,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "B",
+    "off": 0
+   }
+  },
+  {
+   "id": 68,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 8,
+   "iw": 8,
+   "ic": 24,
+   "oc": 136,
+   "woff": 59416,
+   "qoff": 345840,
+   "csum": 3690503974,
+   "src": {
+    "buf": "B",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 69,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 2,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 8,
+   "iw": 8,
+   "ic": 136,
+   "oc": 136,
+   "woff": 62680,
+   "qoff": 346672,
+   "csum": 702114916,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 8704
+   }
+  },
+  {
+   "id": 70,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 136,
+   "oc": 48,
+   "woff": 63904,
+   "qoff": 347504,
+   "csum": 433312190,
+   "src": {
+    "buf": "A",
+    "off": 8704
+   },
+   "dst": {
+    "buf": "B",
+    "off": 1536
+   }
+  },
+  {
+   "id": 71,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 4,
+   "iw": 4,
+   "ic": 48,
+   "oc": 224,
+   "woff": 70432,
+   "qoff": 347808,
+   "csum": 2892354941,
+   "src": {
+    "buf": "B",
+    "off": 1536
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 72,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 4,
+   "iw": 4,
+   "ic": 224,
+   "oc": 224,
+   "woff": 81184,
+   "qoff": 349168,
+   "csum": 1670067020,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 3584
+   }
+  },
+  {
+   "id": 73,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 224,
+   "oc": 48,
+   "woff": 83200,
+   "qoff": 350528,
+   "csum": 4243068926,
+   "src": {
+    "buf": "A",
+    "off": 3584
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 74,
+   "kind": "add",
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 48,
+   "oc": 48,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 1559012197,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "B",
+    "off": 1536
+   }
+  },
+  {
+   "id": 75,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 4,
+   "iw": 4,
+   "ic": 48,
+   "oc": 224,
+   "woff": 93952,
+   "qoff": 350832,
+   "csum": 1547828074,
+   "src": {
+    "buf": "B",
+    "off": 1536
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 76,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 4,
+   "iw": 4,
+   "ic": 224,
+   "oc": 224,
+   "woff": 104704,
+   "qoff": 352192,
+   "csum": 462325861,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 3584
+   }
+  },
+  {
+   "id": 77,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 224,
+   "oc": 48,
+   "woff": 106720,
+   "qoff": 353552,
+   "csum": 2966899226,
+   "src": {
+    "buf": "A",
+    "off": 3584
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 78,
+   "kind": "add",
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 48,
+   "oc": 48,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 293094414,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "B",
+    "off": 1536
+   }
+  },
+  {
+   "id": 79,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 4,
+   "iw": 4,
+   "ic": 48,
+   "oc": 224,
+   "woff": 117472,
+   "qoff": 353856,
+   "csum": 1480725255,
+   "src": {
+    "buf": "B",
+    "off": 1536
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 80,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 4,
+   "iw": 4,
+   "ic": 224,
+   "oc": 224,
+   "woff": 128224,
+   "qoff": 355216,
+   "csum": 1008008613,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 3584
+   }
+  },
+  {
+   "id": 81,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 224,
+   "oc": 48,
+   "woff": 130240,
+   "qoff": 356576,
+   "csum": 3635188565,
+   "src": {
+    "buf": "A",
+    "off": 3584
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 82,
+   "kind": "add",
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 48,
+   "oc": 48,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 3234936542,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "B",
+    "off": 1536
+   }
+  },
+  {
+   "id": 83,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 4,
+   "iw": 4,
+   "ic": 48,
+   "oc": 224,
+   "woff": 140992,
+   "qoff": 356880,
+   "csum": 1889034344,
+   "src": {
+    "buf": "B",
+    "off": 1536
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 84,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 4,
+   "iw": 4,
+   "ic": 224,
+   "oc": 224,
+   "woff": 151744,
+   "qoff": 358240,
+   "csum": 431021205,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 3584
+   }
+  },
+  {
+   "id": 85,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 224,
+   "oc": 48,
+   "woff": 153760,
+   "qoff": 359600,
+   "csum": 826094276,
+   "src": {
+    "buf": "A",
+    "off": 3584
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 86,
+   "kind": "add",
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 48,
+   "oc": 48,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 1074470407,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "B",
+    "off": 1536
+   }
+  },
+  {
+   "id": 87,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 4,
+   "iw": 4,
+   "ic": 48,
+   "oc": 224,
+   "woff": 164512,
+   "qoff": 359904,
+   "csum": 1903702403,
+   "src": {
+    "buf": "B",
+    "off": 1536
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 88,
+   "kind": "dwconv",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 1,
+   "ih": 4,
+   "iw": 4,
+   "ic": 224,
+   "oc": 224,
+   "woff": 175264,
+   "qoff": 361264,
+   "csum": 754627427,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 3584
+   }
+  },
+  {
+   "id": 89,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 224,
+   "oc": 48,
+   "woff": 177280,
+   "qoff": 362624,
+   "csum": 2709953147,
+   "src": {
+    "buf": "A",
+    "off": 3584
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 90,
+   "kind": "add",
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 48,
+   "oc": 48,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 2660868251,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "B",
+    "off": 1536
+   }
+  },
+  {
+   "id": 91,
+   "kind": "pool",
+   "k": 3,
+   "stride": 1,
+   "pad": 1,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 48,
+   "oc": 48,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 2326422824,
+   "src": {
+    "buf": "B",
+    "off": 1536
+   },
+   "dst": {
+    "buf": "B",
+    "off": 2304
+   }
+  },
+  {
+   "id": 92,
+   "kind": "pool",
+   "k": 5,
+   "stride": 1,
+   "pad": 2,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 48,
+   "oc": 48,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 3007888993,
+   "src": {
+    "buf": "B",
+    "off": 1536
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 93,
+   "kind": "pool",
+   "k": 9,
+   "stride": 1,
+   "pad": 4,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 48,
+   "oc": 48,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 4280019749,
+   "src": {
+    "buf": "B",
+    "off": 1536
+   },
+   "dst": {
+    "buf": "A",
+    "off": 768
+   }
+  },
+  {
+   "id": 94,
+   "kind": "cpu_concat",
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 48,
+   "oc": 192,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 1209565898,
+   "sources": [
+    {
+     "buf": "A",
+     "off": 768,
+     "c": 48
+    },
+    {
+     "buf": "A",
+     "off": 0,
+     "c": 48
+    },
+    {
+     "buf": "B",
+     "off": 2304,
+     "c": 48
+    },
+    {
+     "buf": "B",
+     "off": 1536,
+     "c": 48
+    }
+   ],
+   "dst": {
+    "buf": "A",
+    "off": 1536
+   },
+   "oc_tensor": 192
+  },
+  {
+   "id": 95,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 1,
+   "ih": 4,
+   "iw": 4,
+   "ic": 192,
+   "oc": 96,
+   "woff": 188032,
+   "qoff": 362928,
+   "csum": 1166676912,
+   "src": {
+    "buf": "A",
+    "off": 1536
+   },
+   "dst": {
+    "buf": "B",
+    "off": 1536
+   }
+  },
+  {
+   "id": 96,
+   "kind": "dwconv",
+   "k": 5,
+   "stride": 1,
+   "pad": 2,
+   "leaky": 1,
+   "ih": 4,
+   "iw": 4,
+   "ic": 96,
+   "oc": 96,
+   "woff": 206464,
+   "qoff": 363520,
+   "csum": 799488883,
+   "src": {
+    "buf": "B",
+    "off": 1536
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 97,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 96,
+   "oc": 96,
+   "woff": 208864,
+   "qoff": 364112,
+   "csum": 488965427,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 1536
+   }
+  },
+  {
+   "id": 98,
+   "kind": "dwconv",
+   "k": 5,
+   "stride": 1,
+   "pad": 2,
+   "leaky": 1,
+   "ih": 4,
+   "iw": 4,
+   "ic": 96,
+   "oc": 96,
+   "woff": 218080,
+   "qoff": 364704,
+   "csum": 4278476415,
+   "src": {
+    "buf": "A",
+    "off": 1536
+   },
+   "dst": {
+    "buf": "A",
+    "off": 0
+   }
+  },
+  {
+   "id": 99,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 96,
+   "oc": 96,
+   "woff": 220480,
+   "qoff": 365296,
+   "csum": 1228090373,
+   "src": {
+    "buf": "A",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 1536
+   }
+  },
+  {
+   "id": 100,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 96,
+   "oc": 255,
+   "woff": 229696,
+   "qoff": 365888,
+   "csum": 1149837137,
+   "src": {
+    "buf": "A",
+    "off": 1536
+   },
+   "dst": {
+    "buf": "A",
+    "off": 3072
+   }
+  },
+  {
+   "id": 101,
+   "kind": "upsample",
+   "k": 2,
+   "stride": 2,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 96,
+   "oc": 96,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 362162509,
+   "src": {
+    "buf": "B",
+    "off": 1536
+   },
+   "dst": {
+    "buf": "A",
+    "off": 7168
+   }
+  },
+  {
+   "id": 102,
+   "kind": "cpu_concat",
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 8,
+   "iw": 8,
+   "ic": 96,
+   "oc": 120,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 434468157,
+   "sources": [
+    {
+     "buf": "A",
+     "off": 7168,
+     "c": 96
+    },
+    {
+     "buf": "B",
+     "off": 0,
+     "c": 24
+    }
+   ],
+   "dst": {
+    "buf": "A",
+    "off": 13312
+   },
+   "oc_tensor": 120
+  },
+  {
+   "id": 103,
+   "kind": "dwconv",
+   "k": 5,
+   "stride": 1,
+   "pad": 2,
+   "leaky": 1,
+   "ih": 8,
+   "iw": 8,
+   "ic": 120,
+   "oc": 120,
+   "woff": 254272,
+   "qoff": 367440,
+   "csum": 2685557999,
+   "src": {
+    "buf": "A",
+    "off": 13312
+   },
+   "dst": {
+    "buf": "A",
+    "off": 20992
+   }
+  },
+  {
+   "id": 104,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 8,
+   "iw": 8,
+   "ic": 120,
+   "oc": 120,
+   "woff": 257272,
+   "qoff": 368176,
+   "csum": 2236792449,
+   "src": {
+    "buf": "A",
+    "off": 20992
+   },
+   "dst": {
+    "buf": "A",
+    "off": 7168
+   }
+  },
+  {
+   "id": 105,
+   "kind": "dwconv",
+   "k": 5,
+   "stride": 1,
+   "pad": 2,
+   "leaky": 1,
+   "ih": 8,
+   "iw": 8,
+   "ic": 120,
+   "oc": 120,
+   "woff": 271672,
+   "qoff": 368912,
+   "csum": 3852661826,
+   "src": {
+    "buf": "A",
+    "off": 7168
+   },
+   "dst": {
+    "buf": "A",
+    "off": 14848
+   }
+  },
+  {
+   "id": 106,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 8,
+   "iw": 8,
+   "ic": 120,
+   "oc": 120,
+   "woff": 274672,
+   "qoff": 369648,
+   "csum": 3365270648,
+   "src": {
+    "buf": "A",
+    "off": 14848
+   },
+   "dst": {
+    "buf": "A",
+    "off": 7168
+   }
+  },
+  {
+   "id": 107,
+   "kind": "conv",
+   "k": 1,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 8,
+   "iw": 8,
+   "ic": 120,
+   "oc": 255,
+   "woff": 289072,
+   "qoff": 370384,
+   "csum": 2295937147,
+   "src": {
+    "buf": "A",
+    "off": 7168
+   },
+   "dst": {
+    "buf": "A",
+    "off": 14848
+   }
+  }
+ ],
+ "final_ops": [
+  100,
+  107
+ ]
+}

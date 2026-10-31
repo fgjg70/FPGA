@@ -312,6 +312,20 @@ package rv32_pkg;
   parameter logic [31:0] DMEM_BASE  = 32'h9000_0000;
   parameter int unsigned DMEM_BYTES = 16384;          // 16 KB 数据
 
+  // --------------------------------------------------------------------------
+  // NPU 大容量存储窗口 (AI 加速专用; 仅 `NN_EN` 构建里参与逻辑)
+  // --------------------------------------------------------------------------
+  // 【为什么单独开窗口, 而不是把 DMEM 扩成 512KB】
+  //   交付档 (150 MHz) 的每一步时序都是逐位锁定过的。把 dmem 扩到 512KB 会改变
+  //   BRAM 的深度级联与输出 mux, 直接动到"dmem 输出 -> WB -> 前递 -> PC"那条
+  //   已经压线的关键路径。这里另开一个 256KB 对齐的窗口, core 里只多一级地址
+  //   比较和一个读数据 mux, 而且**全部包在 `ifdef NN_EN` 里** —— 交付档零改动。
+  //   窗口的读口径与 dmem 完全一致 (地址在 MEM 拍给出、数据在 WB 拍有效), 所以
+  //   不会出现"BRAM 同步读 vs MMIO 组合读差一拍"的相位错误 (PITFALLS R32 族)。
+  //   布局/契约见 results/ai-accel/CONTRACT.md。
+  parameter logic [31:0] NN_BASE  = 32'h9004_0000;    // 256KB 对齐, 避开 DMEM 窗口
+  parameter int unsigned NN_BYTES = 512*1024;         // 512 KB
+
   parameter logic [31:0] INSTR_NOP  = 32'h0000_0013;  // addi x0,x0,0: 流水线气泡
 
   // --------------------------------------------------------------------------
@@ -363,6 +377,30 @@ package rv32_pkg;
   localparam logic [31:0] MMIO_GEMM_DBGV   = 32'hA000_005C;  // R: {b_val, a_val} (各含符号扩展)
   localparam logic [31:0] MMIO_GEMM_DBGW   = 32'hA000_0060;  // R: {写回次数[15:0], 写回下标[15:0]}
   localparam logic [31:0] MMIO_GEMM_DBGK   = 32'hA000_0064;  // R: {r_n, r_k} 运算期间的值
+
+  // --------------------------------------------------------------------------
+  // NPU 控制寄存器 (AI 加速引擎, 见 results/ai-accel/CONTRACT.md §4)
+  //   仅 `NN_EN` 构建里由 nn_subsys 响应; 交付档 (无 NN_EN) 这些地址读 0。
+  // --------------------------------------------------------------------------
+  localparam logic [31:0] MMIO_NN_CTRL   = 32'hA000_0100;  // W: bit0=start bit1=irq_en
+  localparam logic [31:0] MMIO_NN_STATUS = 32'hA000_0104;  // R: bit0=busy bit1=done(读清) bit2=err(读清) bit3=irq
+  localparam logic [31:0] MMIO_NN_CYCLES = 32'hA000_0108;  // R: 上一次 op 的忙周期数
+  localparam logic [31:0] MMIO_NN_OP     = 32'hA000_010C;  // W: bit[1:0] 0=conv 1=pool 2=copy/up 3=add
+  localparam logic [31:0] MMIO_NN_SRC    = 32'hA000_0110;  // W: 源激活缓冲字节偏移
+  localparam logic [31:0] MMIO_NN_DST    = 32'hA000_0114;  // W: 目的激活缓冲字节偏移
+  localparam logic [31:0] MMIO_NN_WOFF   = 32'hA000_0118;  // W: 权重区字节偏移
+  localparam logic [31:0] MMIO_NN_QOFF   = 32'hA000_011C;  // W: 量化参数区字节偏移
+  localparam logic [31:0] MMIO_NN_IH     = 32'hA000_0120;  // W: 输入高
+  localparam logic [31:0] MMIO_NN_IW     = 32'hA000_0124;  // W: 输入宽
+  localparam logic [31:0] MMIO_NN_IC     = 32'hA000_0128;  // W: 输入通道
+  localparam logic [31:0] MMIO_NN_OC     = 32'hA000_012C;  // W: 输出通道
+  localparam logic [31:0] MMIO_NN_KS     = 32'hA000_0130;  // W: 卷积核 1/3/5 (pool: 2/3/5/9)
+  localparam logic [31:0] MMIO_NN_ST     = 32'hA000_0134;  // W: 步长 1/2
+  localparam logic [31:0] MMIO_NN_PAD    = 32'hA000_0138;  // W: 真实 padding 像素数
+  localparam logic [31:0] MMIO_NN_FLAGS  = 32'hA000_013C;  // W: bit0=depthwise bit1=leaky bit2=add bit3=upsample bit4=pool_max
+  localparam logic [31:0] MMIO_NN_DBG0   = 32'hA000_0140;  // R: 引擎状态
+  localparam logic [31:0] MMIO_NN_DBG1   = 32'hA000_0144;  // R: {cur_ic, cur_oc}
+  localparam logic [31:0] MMIO_NN_DBG2   = 32'hA000_0148;  // R: {cycles, err_code}
 
   // --------------------------------------------------------------------------
   // 陷阱原因码

@@ -132,6 +132,9 @@ def sha256_file(path: str) -> str:
 # vlog 报 60 个 "Could not find the package (rv32_pkg)" —— 顺序是语义, 不是格式。
 CORE_SV_ORDER = [
     "rv32_pkg.sv",
+    # nn_pkg.sv: AI 加速子系统的类型/常量包 (契约 results/ai-accel/CONTRACT.md)。
+    # 必须在任何 nn_*.sv 之前编译 (它们 import nn_pkg)。
+    "nn_pkg.sv",
     "alu.sv", "branch_unit.sv", "control_unit.sv", "imm_gen.sv", "pc.sv", "regfile.sv",
      "id_ex_reg.sv", "ex_mem_reg.sv", "mem_wb_reg.sv",
     "hazard_unit.sv", "load_store_unit.sv",
@@ -144,6 +147,8 @@ CORE_SV_ORDER = [
     "bht.sv",
     "ras.sv", "gemm_accel.sv", "muldiv.sv", "csr_file.sv",
     "core.sv",
+    # ---- AI 加速子系统 (仅 NN_EN 构建被例化; 交付档不例化 -> 网表不变) ----
+    "nn_mem.sv", "nn_conv_engine.sv", "nn_subsys.sv",
 ]
 
 
@@ -937,7 +942,7 @@ def cmd_check(args) -> int:
 def test_matrix() -> list[dict]:
     """回归矩阵。rtl 用 'rtl' 表示全集, 'core' 表示仅 CPU 核 (不含 mmio/top)。"""
     core = discover_core_sv()
-    return [
+    tests = [
         # 【W-09】tb_units 的 AMO 译码检查在 `` `ifdef A_EN `` 里, 而原来这里 defines
         # 是空的 => 那 26 条 chk() 是**死代码**(实测检查点 243 -> 268, delta=25,
         # 与源码计数 26-1 完全吻合)。README/CODE-MAP 一直宣称 tb_units 含 AMO 译码检查,
@@ -1026,6 +1031,60 @@ def test_matrix() -> list[dict]:
          "plus": [], "max_cycles": 3000000, "timeout": 900,
          "desc": "应用场景: 神经网络 GEMM 核心"},
     ]
+    # ------------------------------------------------------------------
+    # AI 加速子系统 (NN_EN + YOLO-Fastest) —— 2026-10-31 新增。
+    # 【为什么是条件登记】镜像 (sim/prog/yolo_demo.hex) 与权重镜像
+    #   (sim/prog/yolo/yolo_wq.hex) 由 T-model 的模型流水线生成; 在它们存在之前
+    #   登记这一项会让整条 verify 因"缺镜像"变红, 把 RTL 问题与非 RTL 依赖混在一起。
+    #   条件登记后: 未生成时回归仍是 PASS 12 (交付档口径不变); 生成后自动变成
+    #   PASS 13, 且 tests 数量以运行时打印为准。
+    # ------------------------------------------------------------------
+    yolo_imem = "sim/prog/yolo_demo.hex"
+    yolo_nnwq = "sim/prog/yolo/yolo_wq.hex"
+    if os.path.exists(abspath(yolo_imem)) and os.path.exists(abspath(yolo_nnwq)):
+        tests.append({
+            "name": "tb_sw_nn_yolo", "top": "tb_sw", "rtl": "rtl", "tb": "sim/tb_sw.sv",
+            "defines": ("NN_EN",),
+            "imem": yolo_imem,
+            # 【必须带 dmem 镜像】yolo_demo 的 .data 里是 108 个 op 的描述符表
+            # (6440 B)。漏了它程序会对着一张全 0 的表跑, 表现为"无 UART 输出 + 超时"——
+            # 首版就踩到: 不是 RTL 卡死, 是测试少了输入镜像。
+            "dmem": "sim/prog/yolo_demo.dmem.hex",
+            "nnwq": yolo_nnwq,
+            # 50 MHz 仿真时钟下全模型 HW 推理需要数秒仿真时间 (约 3000 万~1 亿拍);
+            # 默认 500ms 看门狗会误杀 (25M 拍)。这个 plusarg 只放宽时间级看门狗,
+            # 周期级判据 (max_cycles=300M) 不变。
+            "plus": ["+watchdog_ms=6000"],
+            "max_cycles": 300000_000, "timeout": 3600,
+            "desc": "AI 加速: YOLO-Fastest v1.1 int8 全模型硬件推理 (逐 op 位精确 vs golden)",
+        })
+    # ---- 子模块级 TB (T-mem / T-accel 交付) --------------------------------
+    # 它们是独立模块 TB, 不属于 tb_sw/tb_core 家族, 用自己的 pass_marker。
+    # 条件登记: TB 文件不存在时不进矩阵 (不会把 RTL 回归拖红)。
+    if os.path.exists(abspath("sim/tb_nn_mem.sv")):
+        tests.append({
+            "name": "tb_nn_mem", "top": "tb_nn_mem", "rtl": "rtl",
+            "tb": "sim/tb_nn_mem.sv",
+            # 【不要传 yolo_wq.hex】tb_nn_mem 的镜像扫描期望值来自它自己的合成公式
+            # `wq_exp(i) = (i*0x9E3779B9)^0xC0DE0000` (T-mem 的合成镜像), 不是任意权重文件。
+            # 传 T-model 的真实 yolo_wq.hex 会让 47116 项全部"不匹配"——那是测试口径错,
+            # 不是 RTL 错。SoC 级的真实镜像由 tb_sw_nn_yolo 覆盖。
+            "plus": [], "max_cycles": None, "timeout": 900,
+            "pass_marker": "MEM_TB: PASS",
+            "desc": "AI 加速: nn_mem 大 BRAM 存储自检 (WQ 合成镜像/CPU 窗口/激活 128 位读)",
+        })
+    if os.path.exists(abspath("sim/tb_nn_engine.sv")):
+        tests.append({
+            "name": "tb_nn_engine", "top": "tb_nn_engine", "rtl": "rtl",
+            "tb": "sim/tb_nn_engine.sv",
+            # 向量目录由 T-accel 的 gen_vectors.py 生成 (独立 Python 参考实现);
+            # @REPO@ 由 verify 展开成仓库绝对路径 (vsim 的 cwd 是临时 scratch)。
+            "plus": ["+vec=@REPO@/results/ai-accel/proto/engine/vec"],
+            "max_cycles": None, "timeout": 1800,
+            "pass_marker": "ENGINE_TB: PASS",
+            "desc": "AI 加速: nn_conv_engine int8 卷积引擎自检 (逐 op 位精确)",
+        })
+    return tests
 
 
 def _global_defines(args) -> tuple[str, ...]:
@@ -1065,7 +1124,9 @@ def test_fingerprint(t: dict, defines: tuple[str, ...] = ()) -> str:
         p = abspath(f)
         h.update(f.encode())
         h.update(sha256_file(p).encode() if os.path.exists(p) else b"MISSING")
-    for key in ("imem", "dmem"):
+    # nnwq: AI 加速子系统的权重/量化参数镜像 (NN_W_INIT_FILE / +nnwq=)。
+    # 不进指纹 = 换了模型镜像却命中旧仿真缓存, 是 R17/R31 同族的静默失效。
+    for key in ("imem", "dmem", "nnwq"):
         if t.get(key):
             p = abspath(t[key])
             h.update(key.encode())
@@ -1263,7 +1324,7 @@ def _cmd_verify(args) -> int:
             cmd.insert(1, "+define+" + d)
 
         blocked = None
-        for key, plus in (("imem", "+imem="), ("dmem", "+dmem=")):
+        for key, plus in (("imem", "+imem="), ("dmem", "+dmem="), ("nnwq", "+nnwq=")):
             if not t.get(key):
                 continue
             if not os.path.exists(abspath(t[key])):
@@ -1279,7 +1340,10 @@ def _cmd_verify(args) -> int:
             continue
 
         for p in t.get("plus", []):
-            cmd.append(p)
+            # 【@REPO@ 替换】有些 TB 需要仓库内目录的绝对路径 (如 tb_nn_engine 的
+            # +vec=<dir>)。vsim 的工作目录是临时 scratch, 传相对路径必挂。
+            # 统一支持 @REPO@ 占位符 -> 仓库绝对路径 (POSIX 斜杠)。
+            cmd.append(p.replace("@REPO@", REPO))
         if t.get("max_cycles"):
             cmd.append(f"+max_cycles={t['max_cycles']}")
 
@@ -1291,7 +1355,12 @@ def _cmd_verify(args) -> int:
         # ModelSim 用 `quit -f` 结束时无论测试成败都返回 0。四个 tb 在成功时
         # 都会打印 "RESULT : PASS", 所以要求它**显式出现** (白名单, 不是黑名单):
         # 之前用 `"PASS" in out.upper()` 会把编译失败/超时误判成通过。
-        saw_pass = "RESULT : PASS" in out2
+        # 【2026-10-31】新增可选 per-test `pass_marker`: 独立模块 TB (如 tb_nn_mem /
+        #   tb_nn_engine) 不属于 tb_sw/tb_core 家族, 它们打印自己的判据行。
+        #   仍然**黑名单优先** (crashed/timed_out 直接否), 只是通过标记可配置 ——
+        #   默认仍然是严格的 "RESULT : PASS"。
+        saw_pass = ("RESULT : PASS" in out2) or (
+            bool(t.get("pass_marker")) and t["pass_marker"] in out2)
         # 【W-10 配套】判据扩展: CoreMark 的 CRC 不匹配打的是 `ERROR! list crc ...`,
         # 既不是 "** Error" 也不是 "Fatal" —— 原来那种 CRC 失败会**绿灯通过**
         # (PITFALLS 的验收清单明确要求三个 CRC 匹配, 但那条从来没有自动化)。
@@ -1920,6 +1989,15 @@ def cmd_synth(args) -> int:
     h.update(b"ras" if args.ras else b"noras")
     h.update(b"aen" if args.a_ext else b"aoff")
     h.update(b"gemm" if args.gemm else b"gemmoff")
+    # 【NN_EN 与权重镜像内容必须进指纹】否则换模型/换开关会命中旧缓存、拿到旧数字
+    # (与 R31 / R17 同族的静默失效)。
+    if getattr(args, "nn", False):
+        h.update(b"nnen")
+        nnw = getattr(args, "nn_weights", None) or "sim/prog/yolo/yolo_wq.hex"
+        nnw_abs = nnw if os.path.isabs(nnw) else abspath(nnw)
+        h.update(sha256_file(nnw_abs).encode() if os.path.exists(nnw_abs) else b"NNW-MISSING")
+    else:
+        h.update(b"nnoff")
     # 【物理约束也必须进指纹】否则改 Pblock / place 策略会命中旧缓存、
     # 直接拿到上一次的四个数字 —— 和 R31 是同一族静默失效。
     h.update(("place=" + (args.place_directive or "default")).encode())
@@ -2054,6 +2132,37 @@ def cmd_synth(args) -> int:
             if args.gemm:
                 # GEMM 加速单元。默认关闭 (缓冲落成触发器阵列, FF +916%)。
                 benv["GEMM_EN"] = "1"
+            if getattr(args, "nn", False):
+                # AI 加速子系统 (NN_EN)。默认关闭 -> 交付档网表逐位不变。
+                # 【权重初始化必须切成 4 段】nn_mem 的 WQ 阵列被拆成 4 个 2 的幂子阵列
+                #   (65536/16384/8192/4096 个 32 位字)。单文件 $readmemh 会映射成 96 块
+                #   BRAM36 并超出器件 (T-mem 实测: 124 ideal vs 96+32), 所以这里从
+                #   单一 yolo_wq.hex **顺序切分**成 4 个文件, 再通过 NN_WQ_INIT_A..D 传入。
+                #   切分规则与 nn_mem_wq 的 localparam 严格一致 (改了必须同步)。
+                benv["NN_EN"] = "1"
+                nnw = getattr(args, "nn_weights", None) or "sim/prog/yolo/yolo_wq.hex"
+                nnw_abs = nnw if os.path.isabs(nnw) else abspath(nnw)
+                if not os.path.exists(nnw_abs):
+                    print(f"  [FAIL] --nn 需要权重镜像, 但 {nnw_abs} 不存在")
+                    print("         先跑 tools/yolo/make_vectors.py 生成 yolo_wq.hex")
+                    return 1
+                seg_words = [65536, 16384, 8192, 4096]
+                total_words = sum(seg_words)          # 94208 = 368KB/4
+                lines = [ln.strip() for ln in read_text(nnw_abs).splitlines() if ln.strip()]
+                if len(lines) != total_words:
+                    print(f"  [FAIL] --nn 权重镜像行数 {len(lines)} != {total_words} "
+                          f"(期望 = 368KB/4); 不对就说明镜像与 nn_mem 的切分口径不一致")
+                    return 1
+                seg_dir = os.path.join(CACHE_DIR, "nn_wq_split")
+                os.makedirs(seg_dir, exist_ok=True)
+                base = 0
+                for name, words in zip("ABCD", seg_words):
+                    seg_path = os.path.join(seg_dir, f"wq_{name}.hex")
+                    with open(seg_path, "w", encoding="ascii", newline="\n") as f:
+                        f.write("\n".join(lines[base:base + words]) + "\n")
+                    benv[f"NN_WQ_INIT_{name}"] = posix(seg_path)
+                    base += words
+                print(f"  [NN] WQ 镜像切分: 4 段 {seg_words} -> {seg_dir}")
             rc, out, dt = run(["cmd", "/c", abspath("fpga/build.bat")],
                               cwd=abspath("fpga"), timeout=args.timeout, env=benv)
             with open(log, "w", encoding="utf-8") as f:
@@ -2109,6 +2218,13 @@ def cmd_synth(args) -> int:
             if args.ras:           expect.append("BUILD_RAS_EN=1")
             if args.a_ext:         expect.append("BUILD_A_EN=1")
             if args.gemm:          expect.append("BUILD_GEMM_EN=1")
+            if getattr(args, "nn", False):
+                # 宏生效自证 (PITFALLS R31 同族: 参数被解析却没写进 env -> 静默按默认构建)
+                expect.append("BUILD_NN_EN=1")
+                for _s in "ABCD":
+                    expect.append(f"BUILD_NN_WQ_INIT_{_s}=")
+            else:
+                expect.append("BUILD_NN_OFF=1")
             missing = [e for e in expect if e not in out]
             ok = "BUILD_OK" in out
             print(f"  [2/2] vivado rc={rc} {'BUILD_OK' if ok else 'FAILED'}  {dt:.0f}s")
@@ -3118,6 +3234,13 @@ def main() -> int:
                    help="启用返回地址栈 (RAS_EN); 默认关闭 (实测综合指标净亏)")
     p.add_argument("--gemm", action="store_true",
                    help="启用 GEMM 加速单元 (GEMM_EN); 默认关闭 (缓冲落成触发器阵列)")
+    p.add_argument("--nn", action="store_true",
+                   help="启用 AI 加速子系统 (NN_EN): core nn_* 窗口 + nn_subsys + "
+                        "nn_mem + nn_conv_engine。默认关闭 -> 交付档网表逐位不变。"
+                        "权重镜像默认取 sim/prog/yolo/yolo_wq.hex (可用 --nn-weights 改)")
+    p.add_argument("--nn-weights", default="sim/prog/yolo/yolo_wq.hex",
+                   help="NN_W_INIT_FILE: 烧进权重 BRAM 的 $readmemh 镜像 (默认 "
+                        "sim/prog/yolo/yolo_wq.hex)")
     p.add_argument("--a-ext", action="store_true",
                    help="启用 RV32A 原子指令 + 多周期读-改-写 (A_EN); 默认关闭 (评分零收益)")
     p.add_argument("--timeout", type=int, default=3600, help="Vivado 超时秒数")

@@ -191,6 +191,26 @@ def regression_images(include_hw=False, clk_hz=None):
     imgs.append(dict(kind='cc', name='nn_demo',
                      sources=['sw/nn_demo.c', 'sw/portme.c'], includes=[SW],
                      march='rv32im', opt='-O0', out='sim/prog/nn_demo.hex'))
+    # ---- AI 加速 (YOLO-Fastest v1.1 int8) ----------------------------------
+    # 依赖 T-model 的模型流水线产物: sw/yolo_plan.h (由 tools/nn_gen_sw.py 从
+    # sim/prog/yolo/plan.json 生成)。产物不存在时**跳过**而不是报错, 这样在模型
+    # 还没生成前 `build_sw.py --all` 仍可复现交付档 PASS 12 的全部镜像。
+    #   yolo_demo  = 仿真用 (-DYOLO_HW_ONLY: 只跑硬件一遍, 省 CPU 的 2 亿拍仿真时间)
+    #   yolo_board = 上板用 (软件基线 + 硬件两遍, 输出加速比)
+    if (os.path.exists(os.path.join(SW, 'yolo_plan.h'))
+            and os.path.exists(os.path.join(PROG, 'yolo', 'plan.json'))):
+        imgs.append(dict(kind='cc', name='yolo_demo',
+                         sources=['sw/yolo_demo.c', 'sw/portme.c'], includes=[SW],
+                         march='rv32im', opt='-O2', defines=['YOLO_HW_ONLY'],
+                         out='sim/prog/yolo_demo.hex'))
+        if include_hw:
+            imgs.append(dict(kind='cc', name='yolo_board',
+                             sources=['sw/yolo_demo.c', 'sw/portme.c'], includes=[SW],
+                             march='rv32im', opt='-O2',
+                             out='sim/prog/yolo_board.hex'))
+    else:
+        print('[skip] yolo_demo/yolo_board: 缺 sw/yolo_plan.h 或 sim/prog/yolo/plan.json '
+              '(先跑 tools/nn_gen_sw.py)')
     cm_srcs = ['sw/coremark/' + f for f in CM_SRC]
     # 【I-0 / 2026-10-23】CoreMark 优化级别 -Os -> -O2。
     # 实测(本机 ModelSim): ticks 463,364 -> 371,390, CM/MHz 2.158 -> 2.693 (+24.8%),

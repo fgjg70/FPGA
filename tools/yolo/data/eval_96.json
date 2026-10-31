@@ -1,0 +1,282 @@
+{
+ "hw": 96,
+ "npz": "model_int8_96.npz",
+ "iou_thresh": 0.5,
+ "num_cases": 12,
+ "augmented_cases": 9,
+ "float_dets": 18,
+ "int8_dets": 24,
+ "matched": 14,
+ "match_rate": 0.7778,
+ "mean_iou": 0.8248,
+ "per_case": [
+  {
+   "case": "bus.jpg",
+   "float_dets": 1,
+   "int8_dets": 2,
+   "matched": 1,
+   "int8_matched": 1,
+   "mean_iou": 0.8464,
+   "float_classes": [
+    0
+   ],
+   "int8_classes": [
+    0,
+    0
+   ],
+   "float_scores": [
+    0.278
+   ],
+   "int8_scores": [
+    0.324,
+    0.283
+   ]
+  },
+  {
+   "case": "dog.jpg",
+   "float_dets": 0,
+   "int8_dets": 0,
+   "matched": 0,
+   "int8_matched": 0,
+   "mean_iou": 0.0,
+   "float_classes": [],
+   "int8_classes": [],
+   "float_scores": [],
+   "int8_scores": []
+  },
+  {
+   "case": "horses.jpg",
+   "float_dets": 0,
+   "int8_dets": 0,
+   "matched": 0,
+   "int8_matched": 0,
+   "mean_iou": 0.0,
+   "float_classes": [],
+   "int8_classes": [],
+   "float_scores": [],
+   "int8_scores": []
+  },
+  {
+   "case": "bus.jpg#aug1",
+   "float_dets": 3,
+   "int8_dets": 2,
+   "matched": 2,
+   "int8_matched": 2,
+   "mean_iou": 0.8255,
+   "float_classes": [
+    7,
+    0,
+    0
+   ],
+   "int8_classes": [
+    0,
+    0
+   ],
+   "float_scores": [
+    0.261,
+    0.469,
+    0.527
+   ],
+   "int8_scores": [
+    0.546,
+    0.516
+   ]
+  },
+  {
+   "case": "bus.jpg#aug2",
+   "float_dets": 2,
+   "int8_dets": 4,
+   "matched": 1,
+   "int8_matched": 1,
+   "mean_iou": 0.9049,
+   "float_classes": [
+    0,
+    0
+   ],
+   "int8_classes": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "float_scores": [
+    0.285,
+    0.285
+   ],
+   "int8_scores": [
+    0.348,
+    0.346,
+    0.544,
+    0.425
+   ]
+  },
+  {
+   "case": "bus.jpg#aug3",
+   "float_dets": 1,
+   "int8_dets": 1,
+   "matched": 1,
+   "int8_matched": 1,
+   "mean_iou": 0.7857,
+   "float_classes": [
+    0
+   ],
+   "int8_classes": [
+    0
+   ],
+   "float_scores": [
+    0.276
+   ],
+   "int8_scores": [
+    0.279
+   ]
+  },
+  {
+   "case": "bus.jpg#aug4",
+   "float_dets": 2,
+   "int8_dets": 3,
+   "matched": 2,
+   "int8_matched": 2,
+   "mean_iou": 0.7596,
+   "float_classes": [
+    0,
+    0
+   ],
+   "int8_classes": [
+    0,
+    0,
+    0
+   ],
+   "float_scores": [
+    0.531,
+    0.518
+   ],
+   "int8_scores": [
+    0.299,
+    0.408,
+    0.466
+   ]
+  },
+  {
+   "case": "bus.jpg#aug5",
+   "float_dets": 1,
+   "int8_dets": 2,
+   "matched": 1,
+   "int8_matched": 1,
+   "mean_iou": 0.8506,
+   "float_classes": [
+    0
+   ],
+   "int8_classes": [
+    0,
+    0
+   ],
+   "float_scores": [
+    0.322
+   ],
+   "int8_scores": [
+    0.335,
+    0.29
+   ]
+  },
+  {
+   "case": "bus.jpg#aug6",
+   "float_dets": 3,
+   "int8_dets": 2,
+   "matched": 2,
+   "int8_matched": 2,
+   "mean_iou": 0.8255,
+   "float_classes": [
+    7,
+    0,
+    0
+   ],
+   "int8_classes": [
+    0,
+    0
+   ],
+   "float_scores": [
+    0.261,
+    0.469,
+    0.527
+   ],
+   "int8_scores": [
+    0.546,
+    0.516
+   ]
+  },
+  {
+   "case": "bus.jpg#aug7",
+   "float_dets": 2,
+   "int8_dets": 4,
+   "matched": 1,
+   "int8_matched": 1,
+   "mean_iou": 0.9049,
+   "float_classes": [
+    0,
+    0
+   ],
+   "int8_classes": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "float_scores": [
+    0.285,
+    0.285
+   ],
+   "int8_scores": [
+    0.348,
+    0.346,
+    0.544,
+    0.425
+   ]
+  },
+  {
+   "case": "bus.jpg#aug8",
+   "float_dets": 1,
+   "int8_dets": 1,
+   "matched": 1,
+   "int8_matched": 1,
+   "mean_iou": 0.7857,
+   "float_classes": [
+    0
+   ],
+   "int8_classes": [
+    0
+   ],
+   "float_scores": [
+    0.276
+   ],
+   "int8_scores": [
+    0.279
+   ]
+  },
+  {
+   "case": "bus.jpg#aug9",
+   "float_dets": 2,
+   "int8_dets": 3,
+   "matched": 2,
+   "int8_matched": 2,
+   "mean_iou": 0.7596,
+   "float_classes": [
+    0,
+    0
+   ],
+   "int8_classes": [
+    0,
+    0,
+    0
+   ],
+   "float_scores": [
+    0.531,
+    0.518
+   ],
+   "int8_scores": [
+    0.299,
+    0.408,
+    0.466
+   ]
+  }
+ ]
+}

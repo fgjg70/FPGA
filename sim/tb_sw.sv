@@ -80,6 +80,21 @@ module tb_sw;
   // 就变成重复声明 -> vlog-2388 'already declared in this scope'。
   // (实测踩过: 把声明写在例化后面, tb_sw/tb_soc 全部编译失败)
   logic        irq_timer;
+`ifdef NN_EN
+  // ---- AI 加速子系统 (NN_EN; 契约 results/ai-accel/CONTRACT.md) ----
+  // TB 侧按顶层 top_a100t 的接线方式例化 core + mmio_subsys + nn_subsys:
+  //   core 的 nn_* 是"与 dmem 同口径"的数据窗口 -> nn_subsys (内部接 nn_mem/引擎)
+  //   控制寄存器走 ext_* 的 0xA000_0100..0x01FF 段, 由 nn_subsys 组合读回
+  // 【为什么 TB 要重复一遍顶层接线】tb_sw 不能例化 top_a100t (它有 MMCM 原语,
+  //   ModelSim 不加载 unisim 库)。所以 soc 级接线只能在 TB 里复刻; 为防漂移,
+  //   tb_nn_soc 的用例判据覆盖 nn_subsys 的全部寄存器/窗口行为。
+  logic        nn_we, nn_re;
+  logic [31:0] nn_addr, nn_wdata, nn_rdata;
+  logic [3:0]  nn_wstrb;
+  logic        nn_mmio_sel;
+  logic [31:0] mmio_rdata, nn_ctl_rdata;
+  logic        nn_busy, nn_done, nn_err;
+`endif
 
   core u_dut (
     .clk (clk), .rst (rst),
@@ -90,17 +105,43 @@ module tb_sw;
     .ext_we (ext_we), .ext_re (ext_re), .ext_addr (ext_addr), .ext_wdata (ext_wdata),
     .ext_wstrb (ext_wstrb), .ext_rdata (ext_rdata),
     .irq_timer (irq_timer)
+`ifdef NN_EN
+    ,
+    .nn_we (nn_we), .nn_re (nn_re), .nn_addr (nn_addr),
+    .nn_wdata (nn_wdata), .nn_wstrb (nn_wstrb), .nn_rdata (nn_rdata)
+`endif
   );
 
   mmio_subsys #(.CLK_HZ(50_000_000), .BAUD_HZ(115_200)) u_mmio (
     .clk (clk), .rst (rst),
     .we (ext_we), .re (ext_re), .addr (ext_addr), .wdata (ext_wdata), .wstrb (ext_wstrb),
+`ifdef NN_EN
+    .rdata (mmio_rdata),
+`else
     .rdata (ext_rdata),
+`endif
     .gpio_out (gpio_out), .gpio_in (32'h0),
     .uart_txd (uart_txd), .uart_rxd (uart_rxd),
     .tx_byte_count (tx_bytes), .rx_byte_count (rx_bytes),
     .irq_timer (irq_timer)
   );
+
+`ifdef NN_EN
+  // ---- AI 加速子系统: 控制寄存器段回选 + nn_subsys ----
+  assign nn_mmio_sel = (ext_addr[31:8] == 24'hA00001);
+  assign ext_rdata   = nn_mmio_sel ? nn_ctl_rdata : mmio_rdata;
+
+  nn_subsys u_nn (
+    .clk (clk), .rst (rst),
+    .ctl_we (ext_we && nn_mmio_sel), .ctl_re (ext_re && nn_mmio_sel),
+    .ctl_addr (ext_addr), .ctl_wdata (ext_wdata), .ctl_wstrb (ext_wstrb),
+    .ctl_rdata (nn_ctl_rdata),
+    .cpu_re (nn_re), .cpu_we (nn_we), .cpu_addr (nn_addr),
+    .cpu_wdata (nn_wdata), .cpu_wstrb (nn_wstrb), .cpu_rdata (nn_rdata),
+    .busy_o (nn_busy), .done_o (nn_done), .err_o (nn_err),
+    .cycles_o (), .err_code_o ()
+  );
+`endif
 
   wire [31:0] tohost_word = u_dut.u_dmem.mem[TOHOST_IDX];
 
@@ -227,6 +268,16 @@ module tb_sw;
         finished = 1'b1;
         $display("[tb_sw] FAIL: tohost=0x%08x (not 1), id_pc=0x%08x",
                  tohost_word, dbg_id_pc);
+        // 【2026-10-31】FAIL 时也要 dump 程序日志: 否则"为什么失败"只剩 tohost 值,
+        // 而程序自己打印的 mismatch 明细全在 dmem 日志缓冲区里 (PASS 路径早就有 dump)。
+        $write("  --- program output (on fail) ---\n");
+        for (int i = 0; i < LOG_MAX; i++) begin
+          logic [7:0] b;
+          b = u_dut.u_dmem.mem[LOG_IDX + i/4] >> (8 * (i % 4));
+          if (b == 8'h00) break;
+          $write("%c", b);
+        end
+        $display("  --- end of output (on fail) ---");
         $fatal(1);
       end
     end
@@ -716,10 +767,17 @@ module tb_sw;
   end
 
   // ---- 时间级看门狗 ----
+  // 【2026-10-31】支持 +watchdog_ms=<n> 覆盖默认 500ms。
+  // 为什么: YOLO 全模型硬件推理 (tb_sw_nn_yolo) 在 50 MHz 仿真时钟下需要上亿拍
+  // (= 数秒仿真时间), 而 500ms 的默认看门狗会在 2500 万拍处误杀 —— 那不是"卡死",
+  // 是**程序比看门狗长**。默认值保持不变 (其它测试行为逐位一致); 只有显式传参才放宽。
   initial begin : watchdog
-    #(500ms);
-    $display("[tb_sw] FAIL: global timeout at %0t, tohost=0x%08x cycles=%0d",
-             $time, tohost_word, cycles);
+    int unsigned wd_ms;
+    wd_ms = 500;
+    if ($value$plusargs("watchdog_ms=%d", wd_ms) && (wd_ms == 0)) wd_ms = 500;
+    #(wd_ms * 1ms);
+    $display("[tb_sw] FAIL: global timeout at %0t (watchdog_ms=%0d), tohost=0x%08x cycles=%0d",
+             $time, wd_ms, tohost_word, cycles);
     $fatal(1);
   end
 

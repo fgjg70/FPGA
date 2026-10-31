@@ -137,7 +137,7 @@ proc br_timing_gate {rpt tag} {
   return $ok
 }
 
-read_verilog -sv [list "$root/rv32_pkg.sv" "$root/alu.sv" "$root/branch_unit.sv" "$root/control_unit.sv" "$root/imm_gen.sv" "$root/pc.sv" "$root/regfile.sv" "$root/id_ex_reg.sv" "$root/ex_mem_reg.sv" "$root/mem_wb_reg.sv" "$root/hazard_unit.sv" "$root/load_store_unit.sv" "$root/imem.sv" "$root/dmem.sv" "$root/btb.sv" "$root/bht.sv" "$root/ras.sv" "$root/muldiv.sv" "$root/csr_file.sv" "$root/core.sv" "$root/gemm_accel.sv" "$root/fpga/mmio_subsys.sv" "$root/fpga/top_a100t.sv"]
+read_verilog -sv [list "$root/rv32_pkg.sv" "$root/nn_pkg.sv" "$root/alu.sv" "$root/branch_unit.sv" "$root/control_unit.sv" "$root/imm_gen.sv" "$root/pc.sv" "$root/regfile.sv" "$root/id_ex_reg.sv" "$root/ex_mem_reg.sv" "$root/mem_wb_reg.sv" "$root/hazard_unit.sv" "$root/load_store_unit.sv" "$root/imem.sv" "$root/dmem.sv" "$root/btb.sv" "$root/bht.sv" "$root/ras.sv" "$root/muldiv.sv" "$root/csr_file.sv" "$root/core.sv" "$root/gemm_accel.sv" "$root/nn_mem.sv" "$root/nn_conv_engine.sv" "$root/nn_subsys.sv" "$root/fpga/mmio_subsys.sv" "$root/fpga/top_a100t.sv"]
 read_xdc "$root/fpga/daVinciPro.xdc"
 
 # ===========================================================================
@@ -231,6 +231,41 @@ if {[info exists ::env(GEMM_EN)] && $::env(GEMM_EN) ne ""} {
   puts "BUILD_GEMM_EN=1"
 } else {
   puts "BUILD_GEMM_OFF=1"
+}
+# ---------------------------------------------------------------------------
+# NN_EN: AI ACCELERATOR (YOLO-Fastest inference engine). Default OFF.
+#   The whole NPU path (core nn_* window, nn_subsys, nn_mem, nn_conv_engine)
+#   is inside `ifdef NN_EN`, so the delivery netlist is unchanged when this is
+#   unset -- the same discipline as GEMM_EN/RAS_EN/A_EN above.
+#   WEIGHT INITIALISATION (measured constraint, see results/ai-accel/mem-report.md):
+#   nn_mem splits the 368KB WQ array into FOUR power-of-two segments, so the
+#   synthesis flow must provide FOUR images NN_WQ_INIT_A (65536 words) /
+#   _B (16384) / _C (8192) / _D (4096), produced by splitting yolo_wq.hex in
+#   order. A single $readmemh over one 94208-word array maps to 96 BRAM36 and
+#   overflows the device (124 ideal vs 96+32 > 135); the split keeps it at 92.
+#   Forward slashes are used in the macro strings on purpose: a backslash inside
+#   a verilog_define string is an escape character and would eat path characters.
+#   Contract: results/ai-accel/CONTRACT.md
+# ---------------------------------------------------------------------------
+if {[info exists ::env(NN_EN)] && $::env(NN_EN) ne ""} {
+  append IMEM_DEFS " NN_EN=1"
+  puts "BUILD_NN_EN=1"
+  set nn_missing ""
+  foreach s {A B C D} {
+    set ev "NN_WQ_INIT_$s"
+    if {[info exists ::env($ev)] && $::env($ev) ne ""} {
+      set p [string map {\\ /} [file normalize $::env($ev)]]
+      append IMEM_DEFS " NN_WQ_INIT_$s=\"$p\""
+      puts "BUILD_NN_WQ_INIT_$s=$p"
+    } else {
+      append nn_missing $s
+    }
+  }
+  if {$nn_missing ne ""} {
+    puts "BUILD_NN_WARN: missing split weight image(s) $nn_missing -> those segments stay zero"
+  }
+} else {
+  puts "BUILD_NN_OFF=1"
 }
 
 # ---- X-09: single source of truth for the run parameters ------------------

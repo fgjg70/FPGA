@@ -25,9 +25,10 @@ LIC = os.path.join(MSIM, 'LICENSE.TXT')
 GCC_DIR = r'D:\software\tools\riscv-none-elf\xpack-riscv-none-elf-gcc-15.2.0-1\bin'
 PY = sys.executable
 
-RTL = ['rv32_pkg.sv','alu.sv','branch_unit.sv','control_unit.sv','imm_gen.sv','pc.sv','regfile.sv',
+RTL = ['rv32_pkg.sv','nn_pkg.sv','alu.sv','branch_unit.sv','control_unit.sv','imm_gen.sv','pc.sv','regfile.sv',
        'id_ex_reg.sv','ex_mem_reg.sv','mem_wb_reg.sv','hazard_unit.sv',
-       'load_store_unit.sv','imem.sv','dmem.sv','btb.sv','bht.sv','ras.sv','gemm_accel.sv','muldiv.sv','csr_file.sv','core.sv']
+       'load_store_unit.sv','imem.sv','dmem.sv','btb.sv','bht.sv','ras.sv','gemm_accel.sv','muldiv.sv','csr_file.sv','core.sv',
+       'nn_mem.sv','nn_conv_engine.sv','nn_subsys.sv']
 # 【R1 纪律】这份列表必须与 fpga/build.tcl 的 read_verilog、tools/fpga_workflow.py 的
 # CORE_SV_ORDER 保持同步 —— 漏一个模块的后果是 "module X not found" (硬失败) 或更糟:
 # 静默跑另一份设计。C-1 引入 bht.sv (两级流水 gshare 的 PHT) 时这里就漏了,

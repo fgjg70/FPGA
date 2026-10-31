@@ -143,6 +143,19 @@ module top_a100t
   logic        ext_we, ext_re;
   logic [31:0] ext_addr, ext_wdata, ext_rdata;
   logic [3:0]  ext_wstrb;
+  // MMIO 子系统自己的组合读 (可能与 NPU 寄存器段做回选, 见下方)
+  logic [31:0] mmio_rdata;
+`ifdef NN_EN
+  // ---- NPU 大容量存储窗口 (AI 加速档; 契约 results/ai-accel/CONTRACT.md) ----
+  // core 的 nn_* 是"与 dmem 同口径"的数据通路 (1 拍寄存读), 直接接 nn_subsys;
+  // 控制寄存器走 ext_* 的 0xA000_0100..0x01FF 段。
+  logic        nn_we, nn_re;
+  logic [31:0] nn_addr, nn_wdata, nn_rdata;
+  logic [3:0]  nn_wstrb;
+  logic        nn_mmio_sel;
+  logic [31:0] nn_ctl_rdata;
+  logic        nn_busy, nn_done, nn_err;
+`endif
   // 定时器中断: mmio_subsys 产出 -> core 的 csr_file (mip.MTIP)。
   // 声明必须在两个例化之前, 否则具名端口连接会把它隐式声明成 net (vlog-2388)。
   logic        irq_timer;
@@ -168,6 +181,15 @@ module top_a100t
     .ext_wstrb      (ext_wstrb),
     .ext_rdata      (ext_rdata),
     .irq_timer      (irq_timer)
+`ifdef NN_EN
+    ,
+    .nn_we          (nn_we),
+    .nn_re          (nn_re),
+    .nn_addr        (nn_addr),
+    .nn_wdata       (nn_wdata),
+    .nn_wstrb       (nn_wstrb),
+    .nn_rdata       (nn_rdata)
+`endif
   );
 
   // ---- 外设: GPIO / 周期计数器 / UART / 定时器 ----
@@ -185,7 +207,7 @@ module top_a100t
     .addr          (ext_addr),
     .wdata         (ext_wdata),
     .wstrb         (ext_wstrb),
-    .rdata         (ext_rdata),
+    .rdata         (mmio_rdata),
     .gpio_out      (gpio_out),
     .gpio_in       (32'h0),        // 按键/拨码后续接
     .uart_txd      (uart_txd),
@@ -197,6 +219,48 @@ module top_a100t
     .result        (score_result),
     .irq_timer     (irq_timer)
   );
+
+  // --------------------------------------------------------------------------
+  // MMIO 读数据回选 + NPU 子系统 (仅 NN_EN 构建)
+  // --------------------------------------------------------------------------
+  // 交付档 (无 NN_EN) 的 ext_rdata 就是 mmio_rdata —— 与原来**逐字等价**
+  // (原来 mmio_subsys.rdata 直接叫 ext_rdata, 这里只是重命名 + 一个 ifdef)。
+`ifdef NN_EN
+  // NPU 控制寄存器独占 0xA000_0100..0x01FF 一段; 其余地址仍归 mmio_subsys。
+  assign nn_mmio_sel = (ext_addr[31:8] == 24'hA00001);
+  assign ext_rdata   = nn_mmio_sel ? nn_ctl_rdata : mmio_rdata;
+
+  // 观测: NPU 忙/完成/出错状态同时挂到 GPIO 高 3 位? 不 —— 保持 GPIO 语义不变,
+  // 只在 ILA 构建里作为探针 (见下方 USE_ILA 段)。这里留空连接。
+  nn_subsys #(
+    .W_BYTES   (nn_pkg::NN_W_BYTES),
+    .Q_BYTES   (nn_pkg::NN_Q_BYTES),
+    .A_BYTES   (nn_pkg::NN_A_BYTES),
+    .B_BYTES   (nn_pkg::NN_B_BYTES)
+  ) u_nn (
+    .clk        (sys_clk_core),
+    .rst        (rst),
+    .ctl_we     (ext_we && nn_mmio_sel),
+    .ctl_re     (ext_re && nn_mmio_sel),
+    .ctl_addr   (ext_addr),
+    .ctl_wdata  (ext_wdata),
+    .ctl_wstrb  (ext_wstrb),
+    .ctl_rdata  (nn_ctl_rdata),
+    .cpu_re     (nn_re),
+    .cpu_we     (nn_we),
+    .cpu_addr   (nn_addr),
+    .cpu_wdata  (nn_wdata),
+    .cpu_wstrb  (nn_wstrb),
+    .cpu_rdata  (nn_rdata),
+    .busy_o     (nn_busy),
+    .done_o     (nn_done),
+    .err_o      (nn_err),
+    .cycles_o   (),
+    .err_code_o ()
+  );
+`else
+  assign ext_rdata = mmio_rdata;
+`endif
 
   // ---- 结果观测: 监视程序对 tohost 的写入 ----
   logic pass_r, fail_r;
