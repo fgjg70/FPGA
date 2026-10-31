@@ -77,7 +77,7 @@ nn_subsys（MMIO 0xA000_0100..，描述符寄存器 + status/cycles/err）
 | 项 | 现状 | 下一步 |
 |---|---|---|
 | **int8 精度**：逐层 cos ≥0.99 / 端到端框匹配 ≥90% | ❌ **判据本身不可达（已用理想 QDQ 上限证明）**：per-tensor int8 的理论上限 cos 均值 **0.9889**/最小 0.9670（float 累加+理想舍入），交付实测 0.9742/0.9174；端到端框匹配 128=**81.8%**（相对 float 的检测一致性；评测集 5 真实图+9 确定性增广）| Round-2 已实施 `cpu_add`（shortcut 改 CPU+per-tensor 源 requant，golden mismatch=0、apples-to-apples 证明无回归）但仍受方案上限限制。要过 0.99/90% 需改量化粒度（per-channel 激活或关键张量 16-bit）=契约+RTL 改动，**本轮决策：不做**。见 `model-report.md` §0/§6.2/§6.5 |
-| **上板验证** | ⏳ 未做：**2026-11-01 JTAG 探测 `no current hw_target`（板卡不在位）**；步骤已写成可照做的清单 [`BOARD-RUN.md`](BOARD-RUN.md) | 板子接上后：AI 档 `synth --nn --prog yolo_board` → `prog_uart.bat`（`UART_BIT` 指 AI bitstream）→ `uart_capture.py`；判据 `RESULT : PASS` + `sw_cycles/hw_cycles/npu_cycles/speedup` |
+| **上板验证** | ⏳ 只差"烧进去"这一步：**bitstream 已就绪（87.5MHz, WNS +0.135，sha256 `489510b8…`）**，但 **2026-11-01 JTAG 探测仍 `no current hw_target`（板卡不在位）** | 板子接上后照 [`BOARD-RUN.md`](BOARD-RUN.md)：`UART_BIT=...cpu_a100t_nn.bit` → `prog_uart.bat` → `uart_capture.py`；判据 `RESULT : PASS` + `sw_cycles/hw_cycles/npu_cycles/speedup`（板上跑的是 yolo_board 双遍模式，会同时打印软件基线与加速比）|
 | **SW 基线加速比（实测）** | ⏳ 未测（ModelSim 跑全 SW 基线要 ~2 亿拍，太慢）；但 **NPU 纯计算时间已实测**：`npu_cycles = 1,216,578`（@150 MHz = **8.11 ms/帧**，@131.25 MHz = 9.27 ms），与 engine-report 的逐 op 周期公式和 **完全相等**（独立互证）| 板上 `yolo_board` 镜像会同时打印 `sw_cycles` / `hw_cycles` / `npu_cycles` / speedup |
 | 160/320 输入 | 物理放不下（单张量/输入超 A 容量），只做了精度数据 | **用户已确认板上有 2 片 DDR3 + 摄像头（接口待定）** → 这是"更高分辨率/更大模型"的正确外挂存储；演进路线见 PLAN §9（当前 BRAM-only 交付不受影响） |
 | AI 档 fmax | ⏳ 综合中（150 MHz 目标）| 结果补进本文件 §6；若不够则按 131.25 MHz 重测并记录 |
@@ -93,13 +93,22 @@ nn_subsys（MMIO 0xA000_0100..，描述符寄存器 + status/cycles/err）
 | 时序 | ❌ **WNS −3.798 ns → 达成 fmax 95.6 MHz**（build.tcl 拒绝写 bitstream）|
 | 资源 | LUT **25,208** / FF **12,945** / BRAM **133** / DSP **48** |
 | 说明 | OOC 综合 +0.121 与全实现 −3.8 差距大：24K LUT + 124 BRAM 的拥塞使 route 占比远高于 OOC 估计 |
+| 过程 bug | **XDC 里写 if/puts 被 Vivado 2018.3 静默丢弃**（CRITICAL 20-1307）→ 第一版 87.5MHz 构建其实仍按 150MHz 布线。已修：build.tcl 生成"字面量分频"的 XDC 副本 + `BUILD_NN_XDC_GEN=` 自证 + workflow 硬门；见 `skills/fpga-riscv-a100t/PITFALLS.md` R52 |
 
 ### 6.2 bc2 快照（B 控制 one-hot + C requant 48 位 + base0 两级）@150MHz 全实现
 
 - `nn_conv_engine.sv` SHA256 **`27d59a87…b32413`**（44,923 B）；OOC 150MHz **WNS +0.489**，LUT 16,859 / FF 10,840 / DSP 39 / BRAM 124。
 - 周期不变：`npu_cycles` 仍 **1,290,062**（46 case 逐 case cycles 与 v2 完全相同）。
-- **87.5 MHz（`--nn-clk-div 12`）全实现**：⏳ 进行中（按 v2@150 的 10.465ns 路径 + bc2 的 ~+0.5ns 推算，11.43ns 周期应有 ≥+1ns 余量）。
-- 若 87.5 MET → 产出 `fpga/cpu_a100t_nn.bit`（board-ready）；之后再按需往 95.45/105 MHz 迭代（t-accel 还有 bc3 草稿 +0.096 OOC）。
+- **87.5 MHz（`--nn-clk-div 12`）全实现：✅ PASS（2026-11-01 01:35）**：
+  `BUILD_OK` + `BUILD_TIMING=PASS`，**WNS +0.135 ns，fmax 88.5 MHz**；
+  资源 **LUT 25,212 / FF 12,782 / BRAM 133 / DSP 47**；
+  产物 **`fpga/cpu_a100t_nn.bit`**（3,825,894 B，sha256 `489510b8…d91d3c0`）→ **board-ready**。
+  报告归档：`results/ai-accel/impl/ai875_{util,timing}.rpt` + `ai875_metrics.json`。
+- **关键路径已换成集成路径**：`u_core/u_ex_mem/alu_out → u_nn/u_mem/u_wq/mem_a ADDRARDADDR`
+  （10.87ns，其中 **route 占 71.8%**，14 级逻辑）——引擎内部已经让位，下一轮提频的杠杆是
+  **nn_mem 的 CPU→WQ 地址路径 + 布局（pblock/place）**，不是再拆引擎流水。
+- 下一轮提频候选：95.45/105 MHz（需先把上面这条 CPU→WQ 路径或布局优化出 ~1.5ns）；
+  t-accel 还有 bc3 草稿（+0.096 OOC），但它只修引擎内部,对当前瓶颈帮助有限。
 
 ### 6.3 v1 引擎 @150MHz 全实现（历史，2026-10-31 22:19–23:07）
 

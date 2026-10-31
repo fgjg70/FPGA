@@ -923,3 +923,34 @@ CLKOUT0_DIVIDE_F = 15.0 → 14.0       -- 只动这一个抽头
 - [ ] **改过 RTL/软件 → 上板验证跟上了吗?** 在文档/报告里写出"最后一次上板的时间"与
       "此后未上板的改动清单" (两者都要现查, 不要照抄文档)。
 - [ ] .bat 是纯 ASCII?
+
+
+### R52. XDC 里**不能写 if/puts/set 逻辑**：2018.3 会报 CRITICAL 但**静默丢弃**，条件约束全部失效 ✅(2026-11-01 实测踩到)
+
+**症状**：AI 档要把核心时钟从 150MHz 降到 87.5MHz。我把 `if {[info exists ::env(NN_XDC_DIV)]} {...}` 写进
+`daVinciPro.xdc`，构建照常跑完，但 **WNS 反而更差**（−4.2 vs 之前 −4.0），`fmax` 报告仍按 6.667ns 周期算。
+**根因**：Vivado 日志里有两条
+`CRITICAL WARNING: [Designutils 20-1307] Command 'if' is not supported in the xdc constraint file`
+`CRITICAL WARNING: [Designutils 20-1307] Command 'puts' is not supported in the xdc constraint file`
+—— XDC 解析器只接受**约束命令**，`if`/`puts` 被丢弃且**构建不报错**；`set` 虽然能用，但条件永远为假/真不可控。
+于是分频值仍是 7，整个 P&R 都在错误的时钟约束下进行。
+
+**修法**：不要在 .xdc 里做逻辑。**在 build.tcl（完整 Tcl）里读原生 .xdc，按需生成一份"数字写成字面量"的 XDC 副本**，
+再 `read_xdc` 副本；并用日志行自证：
+```
+BUILD_NN_XDC_GEN=.../daVinciPro_ai_12.xdc (create_generated_clock divide_by 12)
+```
+**判据**：任何"从环境变量改 XDC"的机制，都必须在构建日志里打印**生效后的字面量值**，
+并在 `tools/fpga_workflow.py` 里把它设为 expect 硬门（本仓库已加：非 7 分频必须看到 `BUILD_NN_XDC_GEN=`，
+否则判 FAIL）。同时检查日志里**没有** `Designutils 20-1307`。
+
+### R53. OOC 综合的"无观测输出"陷阱：只给初始化宏还不够，数据通路会被 DCE 整条删掉 ✅(2026-11-01 实测)
+
+**症状**：给 `nn_conv_engine + nn_mem` 做 OOC 时序评估（带 4 段 `NN_WQ_INIT_A..D` 宏），结果
+`Slice LUTs 534 / BRAM Tile 0`，看起来"引擎只有 500 LUT"——真实规模是 ~18K LUT / 124 BRAM。
+**根因**：wrapper 顶层只有 `busy/done/cycles/err_code` 输出；引擎"写 nn_mem"的数据通路没有任何可观测出口
+（CPU 口被接 0），Vivado 判定输出不可达 → 把 WQ/ACT 阵列和整条写回通路 DCE 掉 → 剩下的残渣就是 500 LUT。
+**判据**：OOC 综合后先看 `report_utilization` 是否与预期规模一致（本工程：BRAM ≈ WQ 92 + ACT 32 = 124，
+LUT ≈ 1.8e4）。不一致就先怀疑 DCE/常量折叠，而不是"优化效果很好"。
+**修法**：wrapper 顶层把被写存储的数据引出来当观测输出（如 `a_rdata_o/w_rdata_o/b_wdata_o`），
+或保留 CPU 读回口；再看时序。

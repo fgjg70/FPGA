@@ -11,23 +11,29 @@
 |---|---|
 | 板卡 | 正点原子达芬奇Pro XC7A100T，JTAG（FT2232H/Digilent 兼容）可被 Vivado 识别 |
 | 串口 | 板上 **uart_txd=D17 → USB-TTL 的 RXD**，**uart_rxd=E14 ← USB-TTL TXD**，共地；115200 8N1（板载 FT2232H 只有 JTAG，无 COM） |
-| 构建产物 | `fpga/cpu_a100t_nn.bit`（AI 档，默认名，**不会覆盖交付档 `cpu_a100t.bit`**） |
+| 构建产物 | **`fpga/cpu_a100t_nn.bit`（AI 档 87.5MHz，3,825,894 B，sha256 `489510b8…d91d3c0`；不会覆盖交付档 `cpu_a100t.bit`）** —— 已构建 + 时序 PASS（WNS +0.135）|
 | 程序镜像 | 已烧进 bitstream：`sim/prog/yolo_board.hex`（imem）+ `sim/prog/yolo_board.dmem.hex`（dmem）+ `sim/prog/yolo/yolo_wq.hex` 的 4 段切分（权重/Q BRAM 初值） |
 
-## 1. 构建 AI 档 bitstream（若还没有）
+## 1. 构建 AI 档 bitstream（已构建过；要重建时看这里）
+
+> 本次已产出 `fpga/cpu_a100t_nn.bit`（`synth --nn --nn-clk-div 12 --prog yolo_board`，WNS +0.135）。
+> 注意 **AI 档运行在 87.5MHz**（CPU 也是 87.5MHz）：UART 仍 115200 8N1（`CLK_HZ=87.5MHz` 下
+> BAUD_DIV=759，实际 115,283 baud，误差 +0.07%）；周期计数/定时器也按 87.5MHz 换算。
 
 ```powershell
 cd D:\USER\Desktop\FPGA\FPGA
 # 先确认模型产物在: sim/prog/yolo/{plan.json,yolo_wq.hex} + sw/yolo_plan.h
-python tools\fpga_workflow.py synth --nn --prog yolo_board ^
+python tools\fpga_workflow.py synth --nn --nn-clk-div 12 --prog yolo_board ^
     --no-lc --fanout-limit 128 --pblock-range off --contain-routing ^
     --place-directive AltSpreadLogic_high --timeout 7200
-# 判据: 日志里 BUILD_TIMING=PASS (= 150MHz 达标) 且 BUILD_OK
-# 输出: fpga/cpu_a100t_nn.bit  (sha256 记录到 results/ai-accel/impl/)
+# 判据: 日志里 BUILD_TIMING=PASS 且 BUILD_OK; 且看到 BUILD_NN_XDC_GEN=... divide_by 12
+#       (Vivado 2018.3 的 XDC 不支持 if/puts, 条件时钟必须由 build.tcl 生成字面量副本 —— PITFALLS R52)
+# 输出: fpga/cpu_a100t_nn.bit  (sha256 记录到 results/ai-accel/impl/ 与本文档)
 ```
 
-> 当前（Round 2）状态：引擎流水化进行中。若 `BUILD_TIMING=FAIL`，**不要烧**——先把引擎时序修到
-> OOC WNS ≥ +2ns，或按"AI 档降到 95.45/75 MHz"的方案改时钟（三处同源：top MMCM / XDC / CLK_HZ）。
+> 当前状态（2026-11-01）：**87.5MHz 已 MET（WNS +0.135）**。若要提频到 95.45/105MHz，
+> 瓶颈已不是引擎内部，而是 `u_core/u_ex_mem/alu_out → u_nn/u_mem/u_wq/mem_a ADDRARDADDR`
+> 这条 CPU→WQ 地址路径（route 占 71.8%）；需要先做 nn_mem 的 CPU 端口寄存或布局优化。
 
 ## 2. 开串口监听（**必须先起监听，再烧写**）
 

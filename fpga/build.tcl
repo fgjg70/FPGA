@@ -138,7 +138,46 @@ proc br_timing_gate {rpt tag} {
 }
 
 read_verilog -sv [list "$root/rv32_pkg.sv" "$root/nn_pkg.sv" "$root/alu.sv" "$root/branch_unit.sv" "$root/control_unit.sv" "$root/imm_gen.sv" "$root/pc.sv" "$root/regfile.sv" "$root/id_ex_reg.sv" "$root/ex_mem_reg.sv" "$root/mem_wb_reg.sv" "$root/hazard_unit.sv" "$root/load_store_unit.sv" "$root/imem.sv" "$root/dmem.sv" "$root/btb.sv" "$root/bht.sv" "$root/ras.sv" "$root/muldiv.sv" "$root/csr_file.sv" "$root/core.sv" "$root/gemm_accel.sv" "$root/nn_mem.sv" "$root/nn_conv_engine.sv" "$root/nn_subsys.sv" "$root/fpga/mmio_subsys.sv" "$root/fpga/top_a100t.sv"]
-read_xdc "$root/fpga/daVinciPro.xdc"
+# ---------------------------------------------------------------------------
+# AI core clock: materialise an XDC copy with a LITERAL divider.
+# Why not conditional logic inside the .xdc: Vivado 2018.3's XDC parser rejects
+# if/puts ("Command 'if' is not supported in the xdc constraint file",
+# CRITICAL WARNING [Designutils 20-1307]) and silently drops them -- measured
+# 2026-11-01: an AI build intended for 87.5 MHz was still place&routed against
+# the 150 MHz constraint, so the WNS looked mysteriously worse. Generating a
+# literal-numbered copy keeps the .xdc a pure constraint file and makes the
+# divider impossible to miss.
+# Three places stay in sync: top_a100t.sv CLKOUT0_DIVIDE_F + CLK_HZ (macro
+# NN_CLK_DIV), this generated XDC, and the BUILD_NN_XDC_GEN self-check line.
+set XDC_FILE "$root/fpga/daVinciPro.xdc"
+if {[info exists ::env(NN_EN)] && $::env(NN_EN) ne ""} {
+  set _xdc_div 7
+  if {[info exists ::env(NN_CLK_DIV)] && $::env(NN_CLK_DIV) ne ""} {
+    set _xdc_div [expr {int($::env(NN_CLK_DIV))}]
+  }
+  if {$_xdc_div != 7} {
+    set _fh [open $XDC_FILE r]
+    set _xtxt [read $_fh]
+    close $_fh
+    set _xpat "-multiply_by 21 -divide_by 7"
+    set _xrep "-multiply_by 21 -divide_by $_xdc_div"
+    set _xtxt2 [string map [list $_xpat $_xrep] $_xtxt]
+    if {$_xtxt2 eq $_xtxt} {
+      puts "BUILD_ERROR: AI_CLK_XDC_PATCH_FAILED (pattern not found in daVinciPro.xdc)"
+      exit 1
+    }
+    # NOTE: build.tcl has no OUT_DIR variable (that is a workflow-side env); write the
+    # generated copy next to the original .xdc (ignored by .gitignore).
+    set XDC_FILE [file join $root fpga "daVinciPro_ai_$_xdc_div.xdc"]
+    set _fh [open $XDC_FILE w]
+    puts $_fh $_xtxt2
+    close $_fh
+    puts "BUILD_NN_XDC_GEN=$XDC_FILE (create_generated_clock divide_by $_xdc_div)"
+  } else {
+    puts "BUILD_NN_XDC_GEN=default (divide_by 7 = 150MHz)"
+  }
+}
+read_xdc $XDC_FILE
 
 # ===========================================================================
 # Architecture macros
@@ -259,6 +298,9 @@ if {[info exists ::env(NN_EN)] && $::env(NN_EN) ne ""} {
   append IMEM_DEFS " NN_CLK_DIV=$nn_div"
   append IMEM_DEFS " NN_CLKOUT_DIV_F=[expr {double($nn_div)}]"
   puts "BUILD_NN_CLK_DIV=$nn_div (fcore=[expr {1050.0/$nn_div}] MHz)"
+  # 核心时钟分频值的约束落地在 read_xdc 之前生成的 XDC 副本里 (BUILD_NN_XDC_GEN)。
+  # 这里只把同源关系打出来, 便于日志核对。
+  puts "BUILD_NN_CLK_SOURCE=top:NN_CLK_DIV=$nn_div xdc:$XDC_FILE"
   if {![info exists ::env(NN_XDC_DIV)] || $::env(NN_XDC_DIV) ne "$nn_div"} {
     puts "BUILD_NN_WARN: NN_XDC_DIV([expr {[info exists ::env(NN_XDC_DIV)] ? $::env(NN_XDC_DIV) : {unset}}]) != NN_CLK_DIV=$nn_div -> RTL/XDC 时钟不同源!"
   }

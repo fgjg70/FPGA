@@ -212,9 +212,9 @@ Q 区压缩（v0.1 的 16KB/固定 0x1000 层是算术错的：84 层要 344KB�
 | NN_EN SoC 通路 | ✅ tb_sw+NN_EN hello PASS；CPU 窗口/寄存器/中断全通 | `tb_sw.sv` ifdef 段 |
 | YOLO 模型流水线 | ✅ 权重 319,792B；golden mismatch=0；yolo_wq.hex 94,208 行；MACs@128=20.07M | `model-report.md` |
 | **端到端逐 op 位精确** | ✅ **`RESULT : PASS`（108 ops，hw_bad=0）**；**NPU 实测 `npu_cycles=1,216,578`**（@150MHz = 8.11ms/帧），与引擎周期公式**完全相等**（独立互证） | `logs/tb_sw_nn_yolo.log` |
-| AI 档实现 | ✅ 资源达标 / ❌ 时序未收敛：**BRAM 133.5/135（98.89%，与预算逐块吻合）**、LUT 23,874、FF 10,228、DSP 60；**150 MHz 约束 WNS −18.4 → fmax 39.9 MHz**（最差路径=引擎权重地址生成 24.5ns/32 级）| `results/ai-accel/impl/ai150_{util,timing}.rpt`；DELIVERY §6 |
-| int8 精度判据 | ❌ 未达（cos 均值 0.9767 / 框匹配 81.5%）；根因 = shortcut raw-add 共享 scale，**修法已给出**（add op 加 per-tensor R 或 CPU 执行）| `model-report.md` §6 |
-| 上板验证 | ⏳ 未做（需烧 AI 档 bitstream；UART 读 `RESULT : PASS` + 加速比）| 下一轮 |
+| AI 档实现 | ✅ **87.5MHz 全实现 PASS**：`BUILD_TIMING=PASS`，**WNS +0.135 / fmax 88.5MHz**，LUT 25,212 / FF 12,782 / BRAM 133 / DSP 47；bitstream `fpga/cpu_a100t_nn.bit`（sha256 `489510b8…`）。150MHz 全实现实测 fmax 95.6（v2 引擎），瓶颈已变为**集成路径** `u_core/u_ex_mem/alu_out → u_nn/u_mem/u_wq ADDRARDADDR`（10.87ns，route 占 71.8%）| `results/ai-accel/impl/ai875_*.{rpt,json}`；DELIVERY §6 |
+| int8 精度判据 | ❌ **判据本身不可达（已证明）**：per-tensor int8 理想 QDQ 上限 cos 均值 0.9889/最小 0.9670（<0.99）；交付实测 0.9742/0.9174，端到端框匹配 128=81.8%。要过 0.99/90% 需改量化粒度（per-channel 激活/关键张量 16-bit），本轮决策不做 | `model-report.md` §0/§6.2/§6.5 |
+| 上板验证 | ⏳ **只差烧写**：bitstream 已 board-ready（87.5MHz, WNS +0.135），但 2026-11-01 JTAG 探测板卡不在位 | 板子接上后按 BOARD-RUN.md 执行 |
 
 ### 8.4 口径提醒
 

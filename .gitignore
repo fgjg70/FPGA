@@ -148,4 +148,5 @@ results/ai-accel/proto/**/synth*_applied.log# 只保留最终/关键 timing 报�
 results/ai-accel/proto/**/draft/synth150_*
 results/ai-accel/proto/**/synth150_*_paths.rpt
 results/ai-accel/proto/**/synth_eng_only_paths.rpt
-results/ai-accel/proto/**/synth_mem_only_*.rpt
+results/ai-accel/proto/**/synth_mem_only_*.rpt# AI 档构建生成的 XDC 副本 (分频值为字面量, 可重建)
+fpga/daVinciPro_ai_*.xdc

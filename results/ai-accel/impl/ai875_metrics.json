@@ -1,0 +1,30 @@
+{
+ "lut": 25212,
+ "ff": 12782,
+ "bram": 133,
+ "dsp": 47,
+ "wns": 0.135,
+ "fmax": 88.54258898530193,
+ "clk": "sys_clk_core",
+ "period_ns": 11.429,
+ "clk_mhz": 87.49671887304225,
+ "path": {
+  "slack_ns": 0.135,
+  "requirement_ns": 11.429,
+  "clock": "sys_clk_core",
+  "data_path_ns": 10.871,
+  "logic_ns": 3.068,
+  "logic_pct": 28.223,
+  "route_ns": 7.803,
+  "route_pct": 71.777,
+  "logic_levels": 14,
+  "source": "u_core/u_ex_mem/alu_out_reg[2]/C",
+  "destination": "u_nn/u_mem/u_wq/mem_a_reg_0_1_1/ADDRARDADDR[0]"
+ },
+ "prog": "yolo_board",
+ "cm_mhz": 2.706316000281457,
+ "cm_lut": 0.00010734237665720517,
+ "throughput": 239.6242252772673,
+ "ticks": 369506,
+ "iters": 1
+}

@@ -30,17 +30,17 @@ create_clock -period 20.000 -name sys_clk [get_ports sys_clk]
 #     时钟会退回 Vivado 自动推导名 (实测叫 sys_clk_raw), 报告里看不到 sys_clk_75。
 #   改成 [get_ports sys_clk] (与上面 create_clock 的源是同一个对象) 才成立。
 # 该行不得含非 ASCII 字符, 否则 Vivado 2018.3 可能解析失败。
-# AI 构建允许把核心时钟降档（引擎时序收敛需要）：分频值 N 由环境变量 NN_XDC_DIV 给
-#   (VCO=1050MHz, f=1050/N; 必须与 top_a100t.sv 的 CLKOUT0_DIVIDE_F / CLK_HZ 同源)。
-# 交付档不设该环境变量 => N=7 => 150MHz，逐字等价于原来的硬编码。
-set _core_div 7
-if {[info exists ::env(NN_XDC_DIV)] && $::env(NN_XDC_DIV) ne ""} {
-  set _core_div [expr {int($::env(NN_XDC_DIV))}]
-}
-puts "XDC_CORE_DIV=$_core_div (fcore = 1050MHz / N)"
+# 这里**不能**写 if/puts/set 逻辑: Vivado 2018.3 的 XDC 解析器只接受约束命令,
+#   实测报 CRITICAL WARNING [Designutils 20-1307] "Command 'if'/'puts' is not supported
+#   in the xdc constraint file" -> 条件分频**静默不生效**(2026-11-01 实测踩到:
+#   AI 档要 87.5MHz 却仍按 150MHz 约束布局布线, WNS 看起来莫名变差)。
+# 因此本行固定写交付档 21/7=150MHz; AI 档的降频由 fpga/build.tcl 在 read_xdc 前
+#   **生成一份分频值写成字面量的 XDC 副本** (daVinciPro_ai_<N>.xdc) 并读它,
+#   证据是构建日志里的 BUILD_NN_XDC_GEN= 行。
+#   三处同源: top_a100t.sv CLKOUT0_DIVIDE_F/CLK_HZ (宏 NN_CLK_DIV) / 该 XDC 副本 / 日志自证。
 create_generated_clock -name sys_clk_core \
   -source [get_ports sys_clk] \
-  -multiply_by 21 -divide_by $_core_div \
+  -multiply_by 21 -divide_by 7 \
   [get_pins u_bufg_sys/O]
 
 # ---- 引脚 ----

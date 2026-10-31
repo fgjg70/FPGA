@@ -2234,6 +2234,11 @@ def cmd_synth(args) -> int:
                 # 宏生效自证 (PITFALLS R31 同族: 参数被解析却没写进 env -> 静默按默认构建)
                 expect.append("BUILD_NN_EN=1")
                 expect.append("BUILD_NN_CLK_DIV=")
+                # 非 7 分频必须看到 build.tcl 的时钟覆盖证据 (XDC 不支持条件逻辑,
+                # 曾因 if 被 XDC 解析器静默忽略而按错频率布线 —— 这里把它变成硬判据)
+                if _nn_div != 7:
+                    expect.append("BUILD_NN_XDC_GEN=")
+                    expect.append("divide_by %d" % _nn_div)
                 for _s in "ABCD":
                     expect.append(f"BUILD_NN_WQ_INIT_{_s}=")
             else:
