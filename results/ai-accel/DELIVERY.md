@@ -83,13 +83,28 @@ nn_subsys（MMIO 0xA000_0100..，描述符寄存器 + status/cycles/err）
 
 ---
 
-## 6. AI 档综合结果（`synth --nn --prog yolo_board`）
+## 6. AI 档实现结果（`synth --nn --prog yolo_board`，2026-10-31 22:19–23:07 实测）
 
-> 状态：本轮收尾时仍在后台跑（Vivado 全流程 ~7-10 分钟）。结果出来后补在这里，**不要用估算值冒充实测**。
+| 项 | 实测 | 与预期 |
+|---|---|---|
+| **Block RAM Tile** | **133.5 / 135（98.89%）** | 与预算 133/135 **逐块吻合** ⇒ 512KB 大 BRAM 方案**确认放得下** |
+| LUT | 23,874（37.7%）= CPU 3098 + engine 15.2K + 集成胶合 | 符合，未超器件 |
+| FF | 10,228（8.1%） | 符合 |
+| DSP48E1 | 60（25%） | 符合（8 CPU + 52 engine） |
+| **时序（150 MHz 约束）** | ❌ **WNS −18.416 ns → 达成 fmax 39.9 MHz**；21,531 个失败端点 → `BUILD_TIMING=FAIL`，**build.tcl 按纪律拒绝写 bitstream** | 未达标 |
 
-- 命令：`python tools\fpga_workflow.py synth --nn --prog yolo_board --no-lc --fanout-limit 128 --pblock-range off --contain-routing --place-directive AltSpreadLogic_high`
-- 预期：BRAM ≈ 133/135；LUT ≈ 3.1K（CPU）+ 15.2K（engine）+ 集成胶合；FF ≈ 1.4K + 8.0K；DSP ≈ 8 + 52。
-- 判据：`BUILD_TIMING=PASS` 才算 150 MHz 达标；否则记录达成 fmax → 下一轮决定 AI 档用 131.25 MHz（XDC 21/8 档）。
+**最差路径（决定性）**：`u_nn/u_eng/d_ks_reg → u_nn/u_mem/u_wq/mem_a_reg/ADDRARDADDR[12]`，
+**24.5 ns / 32 级逻辑 / 17×CARRY4 + 2×DSP48E1** —— 是引擎的**权重地址生成组合链**
+（`(tap*ic8+ic)*oc8` 等 32 位乘加全挤在一拍）。报告归档：`results/ai-accel/impl/ai150_{util,timing}.rpt`。
+
+**结论与下一轮修法**（不做流水化就不可能上板演示）：
+1. **timing 修复**（推荐）：把引擎的地址生成/描述符译码拆成 2~3 级流水（`d_ks*oc8`、`tap*ic8` 先打一拍；
+   requant 的 64 位乘 + 右移 + 饱和再拆一级），目标先冲 **100~125 MHz**；
+   引擎是模块级 OOC 综合、不依赖 CPU，改流水化不影响交付档。
+2. **临时演示档**：若赶时间，AI 档锁 **35~39 MHz**（MMCM 21/30 = 35 MHz）也能跑通（NPU 1.22M 拍 ⇒ 35 ms/帧），
+   但"150 MHz 交付档不受影响"这条不能破——AI 档本来就是独立构建。
+3. 下一步**才**做上板：`synth --nn`（timing 修复后）→ `prog_uart.bat` → `uart_capture.py`，
+   判据是 `[yolo] RESULT : PASS` + `sw_cycles/hw_cycles/npu_cycles/speedup` 行。
 
 ---
 

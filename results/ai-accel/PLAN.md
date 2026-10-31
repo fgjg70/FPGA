@@ -212,7 +212,7 @@ Q 区压缩（v0.1 的 16KB/固定 0x1000 层是算术错的：84 层要 344KB�
 | NN_EN SoC 通路 | ✅ tb_sw+NN_EN hello PASS；CPU 窗口/寄存器/中断全通 | `tb_sw.sv` ifdef 段 |
 | YOLO 模型流水线 | ✅ 权重 319,792B；golden mismatch=0；yolo_wq.hex 94,208 行；MACs@128=20.07M | `model-report.md` |
 | **端到端逐 op 位精确** | ✅ **`RESULT : PASS`（108 ops，hw_bad=0）**；**NPU 实测 `npu_cycles=1,216,578`**（@150MHz = 8.11ms/帧），与引擎周期公式**完全相等**（独立互证） | `logs/tb_sw_nn_yolo.log` |
-| AI 档综合 | ⏳ 后台进行（`synth --nn --prog yolo_board`）| 结果写 DELIVERY §6 |
+| AI 档实现 | ✅ 资源达标 / ❌ 时序未收敛：**BRAM 133.5/135（98.89%，与预算逐块吻合）**、LUT 23,874、FF 10,228、DSP 60；**150 MHz 约束 WNS −18.4 → fmax 39.9 MHz**（最差路径=引擎权重地址生成 24.5ns/32 级）| `results/ai-accel/impl/ai150_{util,timing}.rpt`；DELIVERY §6 |
 | int8 精度判据 | ❌ 未达（cos 均值 0.9767 / 框匹配 81.5%）；根因 = shortcut raw-add 共享 scale，**修法已给出**（add op 加 per-tensor R 或 CPU 执行）| `model-report.md` §6 |
 | 上板验证 | ⏳ 未做（需烧 AI 档 bitstream；UART 读 `RESULT : PASS` + 加速比）| 下一轮 |
 

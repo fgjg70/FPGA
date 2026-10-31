@@ -279,3 +279,4 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-10-24,deliv150-o2ira,1,369506,2.7063,3099,1459,9,8,147.0,timing_fail,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-24,deliv150-o2,1,369506,2.7063,3099,1459,9,8,147.0,timing_fail,fpga_workflow.py synth (PROG=cm_hw)
 2026-10-24,deliv150-o2ira-final,1,369506,2.7063,3098,1447,9,8,150.2,keep,fpga_workflow.py synth (PROG=cm_hw) 合法配方 -O2 -mbranch-cost=1 -fira-loop-pressure
+2026-10-31,ai-yolo-150,1,369506,2.7063,23874,10228,133,60,39.9,timing_fail,fpga_workflow.py synth (PROG=yolo_board) ; AI 档 (PROG=yolo_board): CoreMark 列对本行无意义, 关键数据=BRAM 133.5/135, fmax 39.9 (WNS-18.416), LUT 23874/FF 10228/DSP 60
