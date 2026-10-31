@@ -78,7 +78,7 @@ nn_subsys（MMIO 0xA000_0100..，描述符寄存器 + status/cycles/err）
 |---|---|---|
 | **int8 精度**：逐层 cos ≥0.99 / 端到端框匹配 ≥90% | ❌ **判据本身不可达（已用理想 QDQ 上限证明）**：per-tensor int8 的理论上限 cos 均值 **0.9889**/最小 0.9670（float 累加+理想舍入），交付实测 0.9742/0.9174；端到端框匹配 128=**81.8%**（相对 float 的检测一致性；评测集 5 真实图+9 确定性增广）| Round-2 已实施 `cpu_add`（shortcut 改 CPU+per-tensor 源 requant，golden mismatch=0、apples-to-apples 证明无回归）但仍受方案上限限制。要过 0.99/90% 需改量化粒度（per-channel 激活或关键张量 16-bit）=契约+RTL 改动，**本轮决策：不做**。见 `model-report.md` §0/§6.2/§6.5 |
 | **上板验证** | ⏳ 只差"烧进去"这一步：**bitstream 已就绪（87.5MHz, WNS +0.135，sha256 `489510b8…`）**，但 **2026-11-01 JTAG 探测仍 `no current hw_target`（板卡不在位）** | 板子接上后照 [`BOARD-RUN.md`](BOARD-RUN.md)：`UART_BIT=...cpu_a100t_nn.bit` → `prog_uart.bat` → `uart_capture.py`；判据 `RESULT : PASS` + `sw_cycles/hw_cycles/npu_cycles/speedup`（板上跑的是 yolo_board 双遍模式，会同时打印软件基线与加速比）|
-| **SW 基线加速比（实测）** | ⏳ 未测（ModelSim 跑全 SW 基线要 ~2 亿拍，太慢）；但 **NPU 纯计算时间已实测**：`npu_cycles = 1,216,578`（@150 MHz = **8.11 ms/帧**，@131.25 MHz = 9.27 ms），与 engine-report 的逐 op 周期公式和 **完全相等**（独立互证）| 板上 `yolo_board` 镜像会同时打印 `sw_cycles` / `hw_cycles` / `npu_cycles` / speedup |
+| **SW 基线加速比（实测）** | ⏳ 未测（ModelSim 跑全 SW 基线要 ~2 亿拍，太慢）；但 **NPU 纯计算时间已实测**：`npu_cycles = 1,290,062`（@87.5 MHz = **14.74 ms/帧**；@150 = 8.60 ms；@131.25 = 9.83 ms），与 engine-report 的逐 op 周期公式**完全相等**（独立互证，0.00% 差）| 板上 `yolo_board` 镜像会同时打印 `sw_cycles` / `hw_cycles` / `npu_cycles` / speedup |
 | 160/320 输入 | 物理放不下（单张量/输入超 A 容量），只做了精度数据 | **用户已确认板上有 2 片 DDR3 + 摄像头（接口待定）** → 这是"更高分辨率/更大模型"的正确外挂存储；演进路线见 PLAN §9（当前 BRAM-only 交付不受影响） |
 | AI 档 fmax | ⏳ 综合中（150 MHz 目标）| 结果补进本文件 §6；若不够则按 131.25 MHz 重测并记录 |
 
