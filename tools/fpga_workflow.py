@@ -2140,6 +2140,18 @@ def cmd_synth(args) -> int:
                 #   单一 yolo_wq.hex **顺序切分**成 4 个文件, 再通过 NN_WQ_INIT_A..D 传入。
                 #   切分规则与 nn_mem_wq 的 localparam 严格一致 (改了必须同步)。
                 benv["NN_EN"] = "1"
+                # AI 档核心时钟 (三者同源: build.tcl -> top CLKOUT0_DIVIDE_F/CLK_HZ, XDC <- NN_XDC_DIV)
+                _nn_div = int(getattr(args, "nn_clk_div", 7) or 7)
+                benv["NN_CLK_DIV"] = str(_nn_div)
+                benv["NN_XDC_DIV"] = str(_nn_div)
+                print(f"  [NN] core clock: VCO 1050MHz / {_nn_div} = {1050.0/_nn_div:.3f} MHz")
+                # 【绝不覆盖交付档 bitstream】build.tcl 默认写 fpga/cpu_a100t.bit，
+                # AI 档另存 cpu_a100t_nn.bit；显式 --bit-name 优先。
+                bn = getattr(args, "bit_name", None)
+                if bn:
+                    benv["BIT_NAME"] = bn
+                elif not (os.environ.get("BIT_NAME") or ""):
+                    benv["BIT_NAME"] = "cpu_a100t_nn.bit"
                 nnw = getattr(args, "nn_weights", None) or "sim/prog/yolo/yolo_wq.hex"
                 nnw_abs = nnw if os.path.isabs(nnw) else abspath(nnw)
                 if not os.path.exists(nnw_abs):
@@ -2221,6 +2233,7 @@ def cmd_synth(args) -> int:
             if getattr(args, "nn", False):
                 # 宏生效自证 (PITFALLS R31 同族: 参数被解析却没写进 env -> 静默按默认构建)
                 expect.append("BUILD_NN_EN=1")
+                expect.append("BUILD_NN_CLK_DIV=")
                 for _s in "ABCD":
                     expect.append(f"BUILD_NN_WQ_INIT_{_s}=")
             else:
@@ -3238,6 +3251,13 @@ def main() -> int:
                    help="启用 AI 加速子系统 (NN_EN): core nn_* 窗口 + nn_subsys + "
                         "nn_mem + nn_conv_engine。默认关闭 -> 交付档网表逐位不变。"
                         "权重镜像默认取 sim/prog/yolo/yolo_wq.hex (可用 --nn-weights 改)")
+    p.add_argument("--bit-name", default=None,
+                   help="输出 bitstream 文件名 (默认用 build.tcl 的 cpu_a100t.bit); "
+                        "--nn 构建默认 cpu_a100t_nn.bit (避免覆盖交付档 bitstream)")
+    p.add_argument("--nn-clk-div", type=int, default=7, choices=[7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 21],
+                   help="AI 档核心时钟分频 N (VCO=1050MHz, f=1050/N MHz)。默认 7=150MHz；"
+                        "引擎时序收敛不了时用它降档（三处同源：top CLKOUT0_DIVIDE_F / XDC -divide_by / CLK_HZ）。"
+                        "标准值: 7=150, 8=131.25, 10=105, 11=95.45, 12=87.5, 14=75, 21=50 MHz")
     p.add_argument("--nn-weights", default="sim/prog/yolo/yolo_wq.hex",
                    help="NN_W_INIT_FILE: 烧进权重 BRAM 的 $readmemh 镜像 (默认 "
                         "sim/prog/yolo/yolo_wq.hex)")

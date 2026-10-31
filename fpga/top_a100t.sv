@@ -28,6 +28,22 @@
 //     -> 131.25(差0.077) -> 128.125(交付) MHz
 // ============================================================================
 
+// --------------------------------------------------------------------------
+// AI 档可配核心时钟（只影响 NN_EN 构建；交付档不定义 NN_EN，等价于原 21/7=150MHz）
+//   VCO 固定 1050 MHz（CLKFBOUT_MULT_F=21, DIVCLK_DIVIDE=1），CLKOUT0 = 1050/N MHz。
+//   标准档: N=7->150, 8->131.25, 10->105, 11->95.45, 12->87.5, 14->75, 16->65.625, 21->50。
+//   三处必须同源: 本文件 CLKOUT0_DIVIDE_F / CLK_HZ / fpga/daVinciPro.xdc 的 -divide_by。
+//   build flow 用 NN_CLK_DIV 宏统一注入（见 fpga/build.tcl 的 NN_EN 段）。
+// --------------------------------------------------------------------------
+`ifdef NN_EN
+  `ifndef NN_CLK_DIV
+    `define NN_CLK_DIV 7
+  `endif
+  `ifndef NN_CLKOUT_DIV_F
+    `define NN_CLKOUT_DIV_F 7.0
+  `endif
+`endif
+
 module top_a100t
   import rv32_pkg::*;
 (
@@ -85,7 +101,11 @@ module top_a100t
     .CLKFBOUT_MULT_F    (21.0),     // VCO = 50MHz * MULT_F / DIVCLK_DIVIDE (见 xdc 同一比值)
     .CLKFBOUT_PHASE     (0.0),
     .CLKIN1_PERIOD      (20.000),   // 板载 50 MHz
+`ifdef NN_EN
+    .CLKOUT0_DIVIDE_F   (`NN_CLKOUT_DIV_F),   // AI 档可配 (默认 7.0 = 150MHz); 与 xdc 的 -divide_by 同源
+`else
     .CLKOUT0_DIVIDE_F   (7.0),      // 核心频率 = VCO / CLKOUT0_DIVIDE_F (与 xdc 的 divide_by 同值)
+`endif
     .CLKOUT0_DUTY_CYCLE (0.5),
     .CLKOUT0_PHASE      (0.0),
     .DIVCLK_DIVIDE      (1),
@@ -197,7 +217,13 @@ module top_a100t
   logic        score_mark, score_done;
 
   mmio_subsys #(
+`ifdef NN_EN
+    // AI 档: 由同一个 NN_CLK_DIV 推出真实主频 (= 1050MHz / N)。
+    // 必须与 MMCM 分频、XDC 生成时钟同源, 否则 UART 波特率/周期计数器全部偏。
+    .CLK_HZ  ((32'd1_050_000_000 / `NN_CLK_DIV)),
+`else
     .CLK_HZ  (150_000_000),        // 必须跟着 MMCM 改: 周期计数器/定时器按它分频
+`endif
     .BAUD_HZ (115_200)
   ) u_mmio (
     .clk           (sys_clk_core),

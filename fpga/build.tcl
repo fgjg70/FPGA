@@ -250,6 +250,18 @@ if {[info exists ::env(GEMM_EN)] && $::env(GEMM_EN) ne ""} {
 if {[info exists ::env(NN_EN)] && $::env(NN_EN) ne ""} {
   append IMEM_DEFS " NN_EN=1"
   puts "BUILD_NN_EN=1"
+  # AI core clock (VCO 1050MHz / N). Default 7 = 150MHz.
+  # Must stay in sync with: top_a100t.sv CLKOUT0_DIVIDE_F + xdc -divide_by (env NN_XDC_DIV).
+  set nn_div 7
+  if {[info exists ::env(NN_CLK_DIV)] && $::env(NN_CLK_DIV) ne ""} {
+    set nn_div [expr {int($::env(NN_CLK_DIV))}]
+  }
+  append IMEM_DEFS " NN_CLK_DIV=$nn_div"
+  append IMEM_DEFS " NN_CLKOUT_DIV_F=[expr {double($nn_div)}]"
+  puts "BUILD_NN_CLK_DIV=$nn_div (fcore=[expr {1050.0/$nn_div}] MHz)"
+  if {![info exists ::env(NN_XDC_DIV)] || $::env(NN_XDC_DIV) ne "$nn_div"} {
+    puts "BUILD_NN_WARN: NN_XDC_DIV([expr {[info exists ::env(NN_XDC_DIV)] ? $::env(NN_XDC_DIV) : {unset}}]) != NN_CLK_DIV=$nn_div -> RTL/XDC 时钟不同源!"
+  }
   set nn_missing ""
   foreach s {A B C D} {
     set ev "NN_WQ_INIT_$s"

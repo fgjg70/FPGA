@@ -191,6 +191,10 @@ def main():
         if op["kind"] == "cpu_concat":
             d["sources"] = [{"t": int(s["t"]), "c": int(s["c"])} for s in op["sources"]]
             d["oc_tensor"] = int(op["oc_tensor"])
+        if op["kind"] == "cpu_add":
+            a = q["adds"][op_id]
+            d.update({"r_scale": int(a["r_scale"]), "k_add": int(a["k_add"]),
+                      "zp_s": int(a["zp_s"])})
         if op["kind"] in ("conv", "dwconv", "cpu_conv0"):
             p = q["ops"][op_id]
             d.update({"shift": int(p["shift"]), "zp_in": int(p["zp_in"]),
@@ -234,6 +238,9 @@ def main():
                     "cos": float(r[3]), "maxerr": float(r[4])} for r in per_op],
         "calib_images": [os.path.basename(f) for f in files],
         "num_groups": len(gq),
+        "cpu_adds": [{"op": int(k), "r_scale": int(v["r_scale"]),
+                      "k_add": int(v["k_add"]), "zp_s": int(v["zp_s"]),
+                      "ratio": float(v["ratio"])} for k, v in q["adds"].items()],
     }
     sj = os.path.join(HERE, "data", "quant_summary_%d.json" % hw)
     with open(sj, "w", encoding="utf-8") as f:

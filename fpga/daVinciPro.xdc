@@ -30,9 +30,17 @@ create_clock -period 20.000 -name sys_clk [get_ports sys_clk]
 #     时钟会退回 Vivado 自动推导名 (实测叫 sys_clk_raw), 报告里看不到 sys_clk_75。
 #   改成 [get_ports sys_clk] (与上面 create_clock 的源是同一个对象) 才成立。
 # 该行不得含非 ASCII 字符, 否则 Vivado 2018.3 可能解析失败。
+# AI 构建允许把核心时钟降档（引擎时序收敛需要）：分频值 N 由环境变量 NN_XDC_DIV 给
+#   (VCO=1050MHz, f=1050/N; 必须与 top_a100t.sv 的 CLKOUT0_DIVIDE_F / CLK_HZ 同源)。
+# 交付档不设该环境变量 => N=7 => 150MHz，逐字等价于原来的硬编码。
+set _core_div 7
+if {[info exists ::env(NN_XDC_DIV)] && $::env(NN_XDC_DIV) ne ""} {
+  set _core_div [expr {int($::env(NN_XDC_DIV))}]
+}
+puts "XDC_CORE_DIV=$_core_div (fcore = 1050MHz / N)"
 create_generated_clock -name sys_clk_core \
   -source [get_ports sys_clk] \
-  -multiply_by 21 -divide_by 7 \
+  -multiply_by 21 -divide_by $_core_div \
   [get_pins u_bufg_sys/O]
 
 # ---- 引脚 ----

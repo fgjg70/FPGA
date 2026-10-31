@@ -21,7 +21,7 @@
  },
  {
   "op": 7,
-  "label": "add"
+  "label": "cpu_add"
  },
  {
   "op": 100,

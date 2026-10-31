@@ -1,0 +1,131 @@
+{
+ "total_macs": {
+  "320": 125437600,
+  "160": 31359400,
+  "128": 20070016,
+  "96": 11289384
+ },
+ "w_bytes": 319792,
+ "q_bytes": 44256,
+ "wq_hex_lines": 94208,
+ "alloc": {
+  "320": {
+   "peak_A": 307200,
+   "peak_B": 0,
+   "peak_total": 307200,
+   "ok": false,
+   "fail": "op 0 tensor 1 (204800 B) does not fit A/B"
+  },
+  "160": {
+   "peak_A": 76800,
+   "peak_B": 0,
+   "peak_total": 76800,
+   "ok": false,
+   "fail": "op 0 tensor 1 (51200 B) does not fit A/B"
+  },
+  "128": {
+   "peak_A": 98304,
+   "peak_B": 32768,
+   "peak_total": 131072,
+   "ok": true,
+   "fail": null
+  },
+  "96": {
+   "peak_A": 69120,
+   "peak_B": 18432,
+   "peak_total": 73728,
+   "ok": true,
+   "fail": null
+  }
+ },
+ "eval": {
+  "320": {
+   "match_rate": 0.8605,
+   "matched": 37,
+   "float_dets": 43,
+   "mean_iou": 0.867
+  },
+  "160": {
+   "match_rate": 0.8448,
+   "matched": 49,
+   "float_dets": 58,
+   "mean_iou": 0.8119
+  },
+  "128": {
+   "match_rate": 0.8148,
+   "matched": 44,
+   "float_dets": 54,
+   "mean_iou": 0.7992
+  },
+  "96": {
+   "match_rate": 0.7778,
+   "matched": 14,
+   "float_dets": 18,
+   "mean_iou": 0.8248
+  }
+ },
+ "per_layer_cos": {
+  "320": {
+   "mean": 0.9336192691998418,
+   "min": 0.7603435454665616,
+   "n_below_0.99": 97,
+   "n_ops": 108
+  },
+  "160": {
+   "mean": 0.9672290208619236,
+   "min": 0.8878858439755063,
+   "n_below_0.99": 93,
+   "n_ops": 108
+  },
+  "128": {
+   "mean": 0.9767182425215329,
+   "min": 0.9186371070130218,
+   "n_below_0.99": 91,
+   "n_ops": 108
+  },
+  "96": {
+   "mean": 0.9724785555218168,
+   "min": 0.8988505675509902,
+   "n_below_0.99": 89,
+   "n_ops": 108
+  }
+ },
+ "input_csum": 3486675397,
+ "final_ops": [
+  100,
+  107
+ ],
+ "artifacts_sha256": {
+  "checksums.txt": "d36c5a15442f2bb927b2e8ba875c8195ff3ea3355098ec24e407e0ce2a7a1786",
+  "l0_in.hex": "096731a6d690aa5434b077c3561b837949d45525d01a5671b70bce1b2b9fefb1",
+  "l0_out.hex": "223fb856676c3e6a6ec7da684b7dcdb873049cfcca570f8462136394453e1eec",
+  "l0_q.hex": "8cad823dd99b8b7c9940c30a2ba45d899090ad6c210f3c7f9d20f6440c465583",
+  "l0_w.hex": "2888a2d23980c5c97a49650c7b6621405132aaf1c20263fc68c24b0cbd803e03",
+  "l100_in.hex": "ac46b2cd923ef26250c024feb30af26f64c0491c772d7ca02085ba05ba58fd8b",
+  "l100_out.hex": "25370445f04cc0f4e511be6add507e4d0cac88db608bf04282fa86ffce0a1904",
+  "l100_q.hex": "a5b6445648b35395f890681d5bb9b5125621541f451100cfab563f6f31ca863e",
+  "l100_w.hex": "36727701512322eba5f23085dfb1120288accd1a4f6f55990ddebe7dc500d25d",
+  "l101_in.hex": "85fd28e0aeffd1805cba60c71092ebbd07ec934257a81839b073851d618a46ee",
+  "l101_out.hex": "f867f3ab0b14f5eaf46ab6fadc5b3055cde188e90368553b5d73c422ee7f637b",
+  "l2_in.hex": "df3e65192d3cc33e4d443f83e9d16ba1c92605b727d621b32235934d886c7fd0",
+  "l2_out.hex": "f76e8a793a870ca86a7406cabdd9d2c311e119fac32084e5fb6b54e004e3c6af",
+  "l2_q.hex": "d54749b7dcfe3df0cdd8b5cd000924437a3345715b474a1e912c41c641c3d9bd",
+  "l2_w.hex": "d034fb9d8c60df4a20457e37d6a10e1b76278ef3bb7fe956f1c5af15d997bc07",
+  "l70_in.hex": "c4246ebf1f64479afd09718def2944e1e365d48a3f87c13fcea6b0d516f2219e",
+  "l70_out.hex": "d708f32d60ca346401b426bfdaee0b0bb49da2e93501a5c55454055562309862",
+  "l70_q.hex": "527677ff5cae782af50d2773943b17f9307503c0e3eba78c7cb271bf23a3bf60",
+  "l70_w.hex": "ee64e4ad14d30315198bdfa3e38023639601622b04dc1c30fbd6fe5a46c1ca6f",
+  "l7_in.hex": "e9428246edfd890544044c3246428bcc982c234d432fe8ffd31f413357856a55",
+  "l7_out.hex": "b361a69eb10138accdbd3b7eebd92c2e16793d665a319bb9b3d443cb02520bda",
+  "l93_in.hex": "eede1ca31043bab38575eb471b38ae8a3a223e2d86ca8e98b9410d0746f22576",
+  "l93_out.hex": "b31b16f21c6cd00d0c186f0d92c19efdc498aab272c5c728c80ea0be1217ae0b",
+  "l96_in.hex": "85fd28e0aeffd1805cba60c71092ebbd07ec934257a81839b073851d618a46ee",
+  "l96_out.hex": "ff53b5340dba1689942f0ceed94a1cd4b34b14930813eed02e8b296af25e4507",
+  "l96_q.hex": "49059d7afdd21f2a10a1c266618b312a0b2aea24720e0585c67a947dc2859227",
+  "l96_w.hex": "77b25b5719f2a5dd51bef426d38eb116efcbc535f5af0de0a588420e3175195c",
+  "model.json": "8e113d1f45b109a77486f0f42fefee209066869b0fe69ef87fc16912b2b35d25",
+  "plan.json": "acd5388218674d3a3544313755868e7c0f0e986eb34cfead8274b92f688a7523",
+  "representative_layers.json": "3e4a55705d1dc56cb37397dcd03e7abd80639221b3e8d6891f8e605378ea27cf",
+  "yolo_wq.hex": "11bef59f9af73b3cb608a6d6170c830bb7e81000336a588477a057152da4b144"
+ }
+}

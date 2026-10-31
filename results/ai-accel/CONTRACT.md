@@ -336,6 +336,11 @@ endpackage
   "final_ops": [<op ids whose output the detector head reads>]
 }
 ```
+- **`cpu_add`（v0.5 新增，kind code = 8）**：shortcut 的 residual add 改 CPU 执行。
+  `plan.json` 字段：`kind, ih, iw, ic, src{dst}, dst{dst}, r_scale, k_add, zp_s, csum`
+  （`r_scale`=int32 源→目标域乘数 R，`k_add`=右移位数，`zp_s`=源张量 zero-point int8）。
+  `tools/nn_gen_sw.py` 把它们映射到 C 结构体的 `aux0/aux1/aux2`；`sw/yolo_demo.c` 的
+  `sw_cpu_add()` 按 §11 公式执行。branch 张量因此可以用自己的 per-tensor s/zp。
 - **`cpu_conv0`（v0.3.1 新增，kind code = 7）**：第 0 层卷积由 **CPU 软件**执行，因为输入图若按
   §8 的 8 通道分块存储会占 `128×128×8 = 131,072 B`（A 缓冲 96KB，仍然放不下整个输入图）。
   输入图改用 **packed 3 字节/像素**（`packed:true`，stride=ic，无 padding）⇒ 49,152 B 放得下。
@@ -373,6 +378,7 @@ endpackage
 |---|---|---|
 | conv / depthwise conv | K=1、3、5；stride 1、2；pad 0~2（`nn_desc_t.pad` 为 **3 位**）；leaky 可选 | 见 §5/§6/§8；**边界外像素填 `zp_in`**（不是 0）；`a_sel/b_sel` 由 `desc.src/dst` 落在哪一段决定 |
 | **cpu_conv0（v0.3.1）** | 只第 0 层，由 **CPU 软件**执行（不走引擎） | 输入 packed 3B/像素、输出紧凑 8ch；量化/requant 同 conv。存在的唯一原因：8 通道分块的输入图 128KB 放不进 A 缓冲 |
+| **cpu_add（v0.5）** | shortcut residual add 由 **CPU 软件**执行（不走引擎） | `out = clamp(q_d + (((q_s - zp_s)*R) >> KADD), -128, 127)`；`R = round(s_s/s_d*2^KADD)`（int32 正数），**不加 zp_d**（q_d 已含目标 zero-point）；int64 中间、floor 右移。plan 字段：`src/dst/ih/iw/ic/r_scale/k_add/zp_s` → C 侧映射到 op 的 `aux0/aux1/aux2`。目的：解除 branch/sum 共享激活 scale（int8 精度根因，见 model-report §6）|
 | maxpool | K=2、3、5、9；stride 1、2；pad = K/2 | 逐 (pixel,channel) 取 int8 有符号最大值；窗口越界视为 `-128`（等价 darknet 的 -inf padding）；**不做 requant**；输出通道数 = 输入通道数，dst 布局同 src |
 | copy / upsample | 2× 最近邻（`flags.UP2X`）；通道偏移拷贝（route/concat 用） | `desc.ic` = **源**张量通道数（算源 pixel stride），`desc.oc` = **目标**张量总通道数（算目标 pixel stride）；`desc.src` 的通道偏移/`desc.dst` 的通道偏移都必须是 **8 的倍数**；拷贝按 8 通道字（64 位）逐字进行；UPS2X 时按 `x2 = 2*x + dx, y2 = 2*y + dy` 写 4 份 |
 | residual add | `dst = clamp(dst + src, -128, 127)`（int8 饱和） | 独立 op（不是 conv 的 add-mode）；两操作数的 scale/zp 必须相同（darknet shortcut 语义）；读 src、读 dst、写 dst |
@@ -421,3 +427,10 @@ endpackage
 3. **`nn_desc_t.pad` 加宽到 3 位**（v0.4）：SPP 头 maxpool K=9 需要 pad=4，2 位装不下。
 4. **输入图**：packed 3B/像素 + 第 0 层由 CPU 执行（`cpu_conv0`），原因见 §10.1。
 5. 权重实测 319,792B（≤320KB）；Q payload 实测 44,256B（≤48KB）；yolo_wq.hex 恒 94,208 行。
+
+**v0.5 变更记录**（Lead 2026-11-01）：
+1. 新增 plan op kind `cpu_add`（code 8）：shortcut residual add 改 CPU 执行，用 per-tensor
+   源 requant 标量 `R/k_add/zp_s`，解除 branch/sum 张量共享激活 scale 的约束（int8 精度修复）。
+   引擎 ADD op 保留但计划不再使用。
+2. AI 档 150MHz 首轮全实现：BRAM 133.5/135 达标，但 WNS −18.416（fmax 39.9MHz）；
+   最差路径 = 引擎权重地址生成组合链 → 引擎流水化进行中（Round 2）。

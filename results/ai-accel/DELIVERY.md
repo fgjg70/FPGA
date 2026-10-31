@@ -75,10 +75,10 @@ nn_subsys（MMIO 0xA000_0100..，描述符寄存器 + status/cycles/err）
 
 | 项 | 现状 | 下一步 |
 |---|---|---|
-| **int8 精度**：逐层 cos ≥0.99 / 端到端框匹配 ≥90% | ❌ 实测 128 输入：cos 均值 0.9767（91/108 层 <0.99）、框匹配 **81.5%**；320=86.1% | 根因已定位（18 个 shortcut 的 raw-add 强制 branch/sum 共享激活 scale，branch 只用 ~20 个量化台阶）。**建议**：给 add op 增加 per-tensor 源 requant 标量 `R`（tail 扩 2B，引擎 add 路径乘 R），或把 shortcut add 改 CPU 执行（不动 RTL）。见 `model-report.md` §6 |
-| **上板验证** | ⏳ 未做（本轮只到综合；上板需烧 AI 档 bitstream + UART 读结果）| 下一步：AI 档 `synth --nn --prog yolo_board` → `prog_uart.bat` → `uart_capture.py`；判据是程序打印的 `RESULT : PASS` + 加速比 |
+| **int8 精度**：逐层 cos ≥0.99 / 端到端框匹配 ≥90% | ❌ **判据本身不可达（已用理想 QDQ 上限证明）**：per-tensor int8 的理论上限 cos 均值 **0.9889**/最小 0.9670（float 累加+理想舍入），交付实测 0.9742/0.9174；端到端框匹配 128=**81.8%**（相对 float 的检测一致性；评测集 5 真实图+9 确定性增广）| Round-2 已实施 `cpu_add`（shortcut 改 CPU+per-tensor 源 requant，golden mismatch=0、apples-to-apples 证明无回归）但仍受方案上限限制。要过 0.99/90% 需改量化粒度（per-channel 激活或关键张量 16-bit）=契约+RTL 改动，**本轮决策：不做**。见 `model-report.md` §0/§6.2/§6.5 |
+| **上板验证** | ⏳ 未做：**2026-11-01 JTAG 探测 `no current hw_target`（板卡不在位）**；步骤已写成可照做的清单 [`BOARD-RUN.md`](BOARD-RUN.md) | 板子接上后：AI 档 `synth --nn --prog yolo_board` → `prog_uart.bat`（`UART_BIT` 指 AI bitstream）→ `uart_capture.py`；判据 `RESULT : PASS` + `sw_cycles/hw_cycles/npu_cycles/speedup` |
 | **SW 基线加速比（实测）** | ⏳ 未测（ModelSim 跑全 SW 基线要 ~2 亿拍，太慢）；但 **NPU 纯计算时间已实测**：`npu_cycles = 1,216,578`（@150 MHz = **8.11 ms/帧**，@131.25 MHz = 9.27 ms），与 engine-report 的逐 op 周期公式和 **完全相等**（独立互证）| 板上 `yolo_board` 镜像会同时打印 `sw_cycles` / `hw_cycles` / `npu_cycles` / speedup |
-| 160/320 输入 | 物理放不下（单张量/输入超 A 容量），只做了精度数据 | 保持 128；如需更高分辨率要外挂存储（另一个系统形态） |
+| 160/320 输入 | 物理放不下（单张量/输入超 A 容量），只做了精度数据 | **用户已确认板上有 2 片 DDR3 + 摄像头（接口待定）** → 这是"更高分辨率/更大模型"的正确外挂存储；演进路线见 PLAN §9（当前 BRAM-only 交付不受影响） |
 | AI 档 fmax | ⏳ 综合中（150 MHz 目标）| 结果补进本文件 §6；若不够则按 131.25 MHz 重测并记录 |
 
 ---
@@ -96,6 +96,11 @@ nn_subsys（MMIO 0xA000_0100..，描述符寄存器 + status/cycles/err）
 **最差路径（决定性）**：`u_nn/u_eng/d_ks_reg → u_nn/u_mem/u_wq/mem_a_reg/ADDRARDADDR[12]`，
 **24.5 ns / 32 级逻辑 / 17×CARRY4 + 2×DSP48E1** —— 是引擎的**权重地址生成组合链**
 （`(tap*ic8+ic)*oc8` 等 32 位乘加全挤在一拍）。报告归档：`results/ai-accel/impl/ai150_{util,timing}.rpt`。
+
+**AI 档可降频（已实现，交付档不受影响）**：AI 核心时钟已参数化 ——
+`--nn-clk-div N`（VCO 1050MHz / N；标准档 7=150、8=131.25、10=105、11=95.45、12=87.5、14=75、21=50 MHz），
+三处同源：`top_a100t.sv` 的 `CLKOUT0_DIVIDE_F`+`CLK_HZ`、`daVinciPro.xdc` 的 `-divide_by`（env `NN_XDC_DIV`）、
+`build.tcl` 的 `NN_CLK_DIV`。所以"引擎最终只能跑到多少"决定 AI 档用哪个频点，**不必再改交付档**。
 
 **结论与下一轮修法**（不做流水化就不可能上板演示）：
 1. **timing 修复**（推荐）：把引擎的地址生成/描述符译码拆成 2~3 级流水（`d_ks*oc8`、`tap*ic8` 先打一拍；

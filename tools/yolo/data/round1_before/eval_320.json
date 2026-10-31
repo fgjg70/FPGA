@@ -1,0 +1,440 @@
+{
+ "hw": 320,
+ "npz": "model_int8_320.npz",
+ "iou_thresh": 0.5,
+ "num_cases": 12,
+ "augmented_cases": 9,
+ "float_dets": 43,
+ "int8_dets": 74,
+ "matched": 37,
+ "match_rate": 0.8605,
+ "mean_iou": 0.867,
+ "per_case": [
+  {
+   "case": "bus.jpg",
+   "float_dets": 3,
+   "int8_dets": 8,
+   "matched": 3,
+   "int8_matched": 3,
+   "mean_iou": 0.8698,
+   "float_classes": [
+    5,
+    0,
+    0
+   ],
+   "int8_classes": [
+    0,
+    2,
+    5,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "float_scores": [
+    0.656,
+    0.914,
+    0.951
+   ],
+   "int8_scores": [
+    0.309,
+    0.265,
+    0.876,
+    0.322,
+    0.493,
+    0.952,
+    0.319,
+    0.977
+   ]
+  },
+  {
+   "case": "dog.jpg",
+   "float_dets": 4,
+   "int8_dets": 10,
+   "matched": 3,
+   "int8_matched": 3,
+   "mean_iou": 0.808,
+   "float_classes": [
+    16,
+    1,
+    2,
+    2
+   ],
+   "int8_classes": [
+    16,
+    1,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2
+   ],
+   "float_scores": [
+    0.625,
+    0.594,
+    0.396,
+    0.499
+   ],
+   "int8_scores": [
+    0.37,
+    0.635,
+    0.345,
+    0.292,
+    0.28,
+    0.276,
+    0.64,
+    0.269,
+    0.377,
+    0.435
+   ]
+  },
+  {
+   "case": "horses.jpg",
+   "float_dets": 3,
+   "int8_dets": 9,
+   "matched": 0,
+   "int8_matched": 0,
+   "mean_iou": 0.0,
+   "float_classes": [
+    19,
+    19,
+    17
+   ],
+   "int8_classes": [
+    18,
+    17,
+    17,
+    18,
+    18,
+    18,
+    18,
+    18,
+    18
+   ],
+   "float_scores": [
+    0.76,
+    0.576,
+    0.599
+   ],
+   "int8_scores": [
+    0.521,
+    0.685,
+    0.345,
+    0.266,
+    0.266,
+    0.435,
+    0.881,
+    0.304,
+    0.657
+   ]
+  },
+  {
+   "case": "bus.jpg#aug1",
+   "float_dets": 4,
+   "int8_dets": 4,
+   "matched": 3,
+   "int8_matched": 3,
+   "mean_iou": 0.9008,
+   "float_classes": [
+    5,
+    0,
+    0,
+    0
+   ],
+   "int8_classes": [
+    5,
+    0,
+    0,
+    0
+   ],
+   "float_scores": [
+    0.525,
+    0.945,
+    0.978,
+    0.347
+   ],
+   "int8_scores": [
+    0.69,
+    0.259,
+    0.963,
+    0.989
+   ]
+  },
+  {
+   "case": "bus.jpg#aug2",
+   "float_dets": 3,
+   "int8_dets": 7,
+   "matched": 3,
+   "int8_matched": 3,
+   "mean_iou": 0.891,
+   "float_classes": [
+    5,
+    0,
+    0
+   ],
+   "int8_classes": [
+    0,
+    7,
+    5,
+    0,
+    0,
+    0,
+    0
+   ],
+   "float_scores": [
+    0.613,
+    0.811,
+    0.979
+   ],
+   "int8_scores": [
+    0.792,
+    0.572,
+    0.665,
+    0.319,
+    0.504,
+    0.398,
+    0.994
+   ]
+  },
+  {
+   "case": "bus.jpg#aug3",
+   "float_dets": 4,
+   "int8_dets": 7,
+   "matched": 4,
+   "int8_matched": 4,
+   "mean_iou": 0.8144,
+   "float_classes": [
+    0,
+    5,
+    0,
+    0
+   ],
+   "int8_classes": [
+    0,
+    2,
+    5,
+    0,
+    0,
+    0,
+    0
+   ],
+   "float_scores": [
+    0.281,
+    0.638,
+    0.922,
+    0.954
+   ],
+   "int8_scores": [
+    0.326,
+    0.264,
+    0.795,
+    0.321,
+    0.91,
+    0.974,
+    0.322
+   ]
+  },
+  {
+   "case": "bus.jpg#aug4",
+   "float_dets": 3,
+   "int8_dets": 3,
+   "matched": 3,
+   "int8_matched": 3,
+   "mean_iou": 0.9224,
+   "float_classes": [
+    0,
+    0,
+    5
+   ],
+   "int8_classes": [
+    0,
+    0,
+    5
+   ],
+   "float_scores": [
+    0.99,
+    0.855,
+    0.617
+   ],
+   "int8_scores": [
+    0.996,
+    0.91,
+    0.559
+   ]
+  },
+  {
+   "case": "bus.jpg#aug5",
+   "float_dets": 5,
+   "int8_dets": 5,
+   "matched": 5,
+   "int8_matched": 5,
+   "mean_iou": 0.8026,
+   "float_classes": [
+    0,
+    5,
+    0,
+    0,
+    0
+   ],
+   "int8_classes": [
+    0,
+    5,
+    0,
+    0,
+    0
+   ],
+   "float_scores": [
+    0.254,
+    0.665,
+    0.277,
+    0.955,
+    0.918
+   ],
+   "int8_scores": [
+    0.357,
+    0.716,
+    0.279,
+    0.972,
+    0.936
+   ]
+  },
+  {
+   "case": "bus.jpg#aug6",
+   "float_dets": 4,
+   "int8_dets": 4,
+   "matched": 3,
+   "int8_matched": 3,
+   "mean_iou": 0.9008,
+   "float_classes": [
+    5,
+    0,
+    0,
+    0
+   ],
+   "int8_classes": [
+    5,
+    0,
+    0,
+    0
+   ],
+   "float_scores": [
+    0.525,
+    0.945,
+    0.978,
+    0.347
+   ],
+   "int8_scores": [
+    0.69,
+    0.259,
+    0.963,
+    0.989
+   ]
+  },
+  {
+   "case": "bus.jpg#aug7",
+   "float_dets": 3,
+   "int8_dets": 7,
+   "matched": 3,
+   "int8_matched": 3,
+   "mean_iou": 0.891,
+   "float_classes": [
+    5,
+    0,
+    0
+   ],
+   "int8_classes": [
+    0,
+    7,
+    5,
+    0,
+    0,
+    0,
+    0
+   ],
+   "float_scores": [
+    0.613,
+    0.811,
+    0.979
+   ],
+   "int8_scores": [
+    0.792,
+    0.572,
+    0.665,
+    0.319,
+    0.504,
+    0.398,
+    0.994
+   ]
+  },
+  {
+   "case": "bus.jpg#aug8",
+   "float_dets": 4,
+   "int8_dets": 7,
+   "matched": 4,
+   "int8_matched": 4,
+   "mean_iou": 0.8144,
+   "float_classes": [
+    0,
+    5,
+    0,
+    0
+   ],
+   "int8_classes": [
+    0,
+    2,
+    5,
+    0,
+    0,
+    0,
+    0
+   ],
+   "float_scores": [
+    0.281,
+    0.638,
+    0.922,
+    0.954
+   ],
+   "int8_scores": [
+    0.326,
+    0.264,
+    0.795,
+    0.321,
+    0.91,
+    0.974,
+    0.322
+   ]
+  },
+  {
+   "case": "bus.jpg#aug9",
+   "float_dets": 3,
+   "int8_dets": 3,
+   "matched": 3,
+   "int8_matched": 3,
+   "mean_iou": 0.9224,
+   "float_classes": [
+    0,
+    0,
+    5
+   ],
+   "int8_classes": [
+    0,
+    0,
+    5
+   ],
+   "float_scores": [
+    0.99,
+    0.855,
+    0.617
+   ],
+   "int8_scores": [
+    0.996,
+    0.91,
+    0.559
+   ]
+  }
+ ]
+}

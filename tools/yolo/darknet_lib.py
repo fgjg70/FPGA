@@ -391,7 +391,10 @@ def plan_ops(net, input_is_A0=True):
         elif typ == "shortcut":
             src = prev_tid(i)
             dst = layer_tensor[L["from_layer"]]
-            op = {"kind": "add", "layer_idx": i, "src": src, "dst": dst,
+            # v0.5: residual add is executed by the CPU (`cpu_add`), which lets
+            # the branch tensor keep its OWN per-tensor (s_a, zp_a) instead of
+            # sharing the sum tensor scale (the old int8 accuracy root cause).
+            op = {"kind": "cpu_add", "layer_idx": i, "src": src, "dst": dst,
                   "k": 0, "stride": 1, "pad": 0, "leaky": 0,
                   "ih": L["ih"], "iw": L["iw"], "ic": L["ic"],
                   "oh": L["oh"], "ow": L["ow"], "oc": L["oc"],
@@ -413,7 +416,7 @@ def plan_ops(net, input_is_A0=True):
         else:
             for s in op["sources"]:
                 tensors[s["t"]].last_use = max(tensors[s["t"]].last_use, k)
-        if op["kind"] == "add":
+        if op["kind"] in ("add", "cpu_add"):
             tensors[op["dst"]].last_use = max(tensors[op["dst"]].last_use, k)
         # dst of non-add ops is written (definition), not read
     # input tensor use
@@ -455,7 +458,7 @@ def allocate(plan, a_size=A_SIZE, b_size=B_SIZE, align=16, mode="longB"):
                 busy[t.region] = [(o, s) for (o, s) in busy[t.region] if not (o == t.off and s == ((t.nbytes + align - 1) // align * align))]
                 t.freed = True
         dst = op["dst"]
-        if op["kind"] != "add" and tensors[dst].off is None:
+        if op["kind"] not in ("add", "cpu_add") and tensors[dst].off is None:
             t = tensors[dst]
             # v0.3.2: place into the SMALLEST region that can hold the tensor
             # (B is 32KB and A 96KB).  This keeps long-lived small tensors such
@@ -487,7 +490,7 @@ def allocate(plan, a_size=A_SIZE, b_size=B_SIZE, align=16, mode="longB"):
             used = sum(s for (o, s) in busy[placed[0]])
             peak[placed[0]] = max(peak[placed[0]], used)
             peak_total = max(peak_total, sum(sum(s for (o, s) in busy[r]) for r in "AB"))
-        if op["kind"] == "add":
+        if op["kind"] in ("add", "cpu_add"):
             used = sum(sum(s for (o, s) in busy[r]) for r in "AB")
             peak_total = max(peak_total, used)
     info = {"ok": alloc_fail is None, "fail": alloc_fail, "peak_A": peak["A"],

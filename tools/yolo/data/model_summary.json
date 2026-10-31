@@ -40,53 +40,53 @@
  },
  "eval": {
   "320": {
-   "match_rate": 0.8605,
-   "matched": 37,
-   "float_dets": 43,
-   "mean_iou": 0.867
+   "match_rate": 0.7308,
+   "matched": 38,
+   "float_dets": 52,
+   "mean_iou": 0.8427
   },
   "160": {
-   "match_rate": 0.8448,
-   "matched": 49,
-   "float_dets": 58,
-   "mean_iou": 0.8119
+   "match_rate": 0.8197,
+   "matched": 50,
+   "float_dets": 61,
+   "mean_iou": 0.7947
   },
   "128": {
-   "match_rate": 0.8148,
-   "matched": 44,
-   "float_dets": 54,
-   "mean_iou": 0.7992
+   "match_rate": 0.8182,
+   "matched": 45,
+   "float_dets": 55,
+   "mean_iou": 0.8107
   },
   "96": {
-   "match_rate": 0.7778,
-   "matched": 14,
+   "match_rate": 0.7222,
+   "matched": 13,
    "float_dets": 18,
-   "mean_iou": 0.8248
+   "mean_iou": 0.8438
   }
  },
  "per_layer_cos": {
   "320": {
-   "mean": 0.9336192691998418,
-   "min": 0.7603435454665616,
-   "n_below_0.99": 97,
+   "mean": 0.9327769693669055,
+   "min": 0.7679693459870874,
+   "n_below_0.99": 96,
    "n_ops": 108
   },
   "160": {
-   "mean": 0.9672290208619236,
-   "min": 0.8878858439755063,
+   "mean": 0.967897164960705,
+   "min": 0.8998667113856531,
    "n_below_0.99": 93,
    "n_ops": 108
   },
   "128": {
-   "mean": 0.9767182425215329,
-   "min": 0.9186371070130218,
-   "n_below_0.99": 91,
+   "mean": 0.9741592506303944,
+   "min": 0.9173961702258436,
+   "n_below_0.99": 92,
    "n_ops": 108
   },
   "96": {
-   "mean": 0.9724785555218168,
-   "min": 0.8988505675509902,
-   "n_below_0.99": 89,
+   "mean": 0.9749017288501799,
+   "min": 0.9140035526572152,
+   "n_below_0.99": 88,
    "n_ops": 108
   }
  },
@@ -96,36 +96,36 @@
   107
  ],
  "artifacts_sha256": {
-  "checksums.txt": "d36c5a15442f2bb927b2e8ba875c8195ff3ea3355098ec24e407e0ce2a7a1786",
+  "checksums.txt": "f30d6b4875e6a3f0c0afe7556c23b0b204363a518cc770fbf79a55a9e1a12d59",
   "l0_in.hex": "096731a6d690aa5434b077c3561b837949d45525d01a5671b70bce1b2b9fefb1",
   "l0_out.hex": "223fb856676c3e6a6ec7da684b7dcdb873049cfcca570f8462136394453e1eec",
   "l0_q.hex": "8cad823dd99b8b7c9940c30a2ba45d899090ad6c210f3c7f9d20f6440c465583",
   "l0_w.hex": "2888a2d23980c5c97a49650c7b6621405132aaf1c20263fc68c24b0cbd803e03",
-  "l100_in.hex": "ac46b2cd923ef26250c024feb30af26f64c0491c772d7ca02085ba05ba58fd8b",
-  "l100_out.hex": "25370445f04cc0f4e511be6add507e4d0cac88db608bf04282fa86ffce0a1904",
+  "l100_in.hex": "16869fc3da058ea7968a3f101ea8e69f073e31065ed88be818433974cbbd113e",
+  "l100_out.hex": "ebd9f37b22895292cca36e57f3bd56ada0d26d94e27a047e89c1d514b8a5394a",
   "l100_q.hex": "a5b6445648b35395f890681d5bb9b5125621541f451100cfab563f6f31ca863e",
   "l100_w.hex": "36727701512322eba5f23085dfb1120288accd1a4f6f55990ddebe7dc500d25d",
-  "l101_in.hex": "85fd28e0aeffd1805cba60c71092ebbd07ec934257a81839b073851d618a46ee",
-  "l101_out.hex": "f867f3ab0b14f5eaf46ab6fadc5b3055cde188e90368553b5d73c422ee7f637b",
-  "l2_in.hex": "df3e65192d3cc33e4d443f83e9d16ba1c92605b727d621b32235934d886c7fd0",
-  "l2_out.hex": "f76e8a793a870ca86a7406cabdd9d2c311e119fac32084e5fb6b54e004e3c6af",
-  "l2_q.hex": "d54749b7dcfe3df0cdd8b5cd000924437a3345715b474a1e912c41c641c3d9bd",
+  "l101_in.hex": "c6cff92dec309f5abb178a225fec74c0c76eb5244e001dd758b26f562981e3c2",
+  "l101_out.hex": "bee4db512cfce4ecc91d2913a10c7d9865d56f5fbfa3e24dd8ea04112b52b6af",
+  "l2_in.hex": "f0b00ab0e64578142e1b28a6fc340618a45ec949f3d1b6b2b77bdfdaa233a991",
+  "l2_out.hex": "61806f49ef2bb2b3017bac6ffffce661e3bc657951d5e46ac49e48e4ab055dd9",
+  "l2_q.hex": "4d461ebe055052be5db9faafa0174ddbf722467057634af88aa3f4dfcc2bf2e6",
   "l2_w.hex": "d034fb9d8c60df4a20457e37d6a10e1b76278ef3bb7fe956f1c5af15d997bc07",
-  "l70_in.hex": "c4246ebf1f64479afd09718def2944e1e365d48a3f87c13fcea6b0d516f2219e",
-  "l70_out.hex": "d708f32d60ca346401b426bfdaee0b0bb49da2e93501a5c55454055562309862",
-  "l70_q.hex": "527677ff5cae782af50d2773943b17f9307503c0e3eba78c7cb271bf23a3bf60",
+  "l70_in.hex": "ebcf6fa2bb1f88c6200164e4f4657982cbe79aaf303ad9c2fe8e2b46239f948b",
+  "l70_out.hex": "936cca097965304aea6f27d3180f7fbc0bffc84c0e976a1af3f9f22486876231",
+  "l70_q.hex": "13b85dd303c95eab9e21ecdb56a649c3d732029b691f365292f73bdf07f81f1c",
   "l70_w.hex": "ee64e4ad14d30315198bdfa3e38023639601622b04dc1c30fbd6fe5a46c1ca6f",
-  "l7_in.hex": "e9428246edfd890544044c3246428bcc982c234d432fe8ffd31f413357856a55",
-  "l7_out.hex": "b361a69eb10138accdbd3b7eebd92c2e16793d665a319bb9b3d443cb02520bda",
-  "l93_in.hex": "eede1ca31043bab38575eb471b38ae8a3a223e2d86ca8e98b9410d0746f22576",
-  "l93_out.hex": "b31b16f21c6cd00d0c186f0d92c19efdc498aab272c5c728c80ea0be1217ae0b",
-  "l96_in.hex": "85fd28e0aeffd1805cba60c71092ebbd07ec934257a81839b073851d618a46ee",
-  "l96_out.hex": "ff53b5340dba1689942f0ceed94a1cd4b34b14930813eed02e8b296af25e4507",
-  "l96_q.hex": "49059d7afdd21f2a10a1c266618b312a0b2aea24720e0585c67a947dc2859227",
+  "l7_in.hex": "ed5f1190c3218e62e0a957cdbfd0fc5ba4090e6cc22ae645a477bb177dbf9086",
+  "l7_out.hex": "9e63466d2d8bf73719d512567b37644290dfa5b9da252833743b752a1a57e47f",
+  "l93_in.hex": "05be464dcf7bc9906ac83ee1cf1570e0ed9f5c8d3830504b33ad28cad355e744",
+  "l93_out.hex": "29d90d0543f984f2a0a525ce120476c3be964bf8a281b69acd25c3478636562e",
+  "l96_in.hex": "c6cff92dec309f5abb178a225fec74c0c76eb5244e001dd758b26f562981e3c2",
+  "l96_out.hex": "b19dbec6f2e401a3e53c0f8d9cf1bb234973b34b5bfd43291988719e96d91578",
+  "l96_q.hex": "2b5db161041860a7d2b81cb54687ce0e72b54bd593e56998e54f00511f931cad",
   "l96_w.hex": "77b25b5719f2a5dd51bef426d38eb116efcbc535f5af0de0a588420e3175195c",
-  "model.json": "8e113d1f45b109a77486f0f42fefee209066869b0fe69ef87fc16912b2b35d25",
-  "plan.json": "acd5388218674d3a3544313755868e7c0f0e986eb34cfead8274b92f688a7523",
-  "representative_layers.json": "3e4a55705d1dc56cb37397dcd03e7abd80639221b3e8d6891f8e605378ea27cf",
-  "yolo_wq.hex": "11bef59f9af73b3cb608a6d6170c830bb7e81000336a588477a057152da4b144"
+  "model.json": "0acef62e53089d865a5f58f04345d2c25eb2c6e7a06fcf55c8ea1218334ff6d5",
+  "plan.json": "5874fc4117cad64223448127fc1196f28d32ba422ced75e3e4e4f26c079a3c82",
+  "representative_layers.json": "e6c53970e043218cba231c2ebc2d0d835b36b7d92dcb54ddf505810373bd0822",
+  "yolo_wq.hex": "8f8f802722f727a5d63f39abd0c5ce8be65e66525eeae9d9d8ee35be51718096"
  }
 }

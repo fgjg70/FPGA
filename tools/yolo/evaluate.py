@@ -137,7 +137,13 @@ def main():
     q = {"ops": {}, "gq": {int(r): (float(s), int(zp)) for (r, s, zp) in meta["gq"]},
          "roots": meta["roots"], "groups": {"roots": meta["roots"],
                                             "add_roots": set(meta["add_roots"])}}
+    q["adds"] = {}
     for op_id, op in enumerate(plan["ops"]):
+        if op["kind"] == "cpu_add":
+            m = meta["ops"][op_id]
+            q["adds"][op_id] = {"r_scale": int(m["r_scale"]),
+                                "k_add": int(m["k_add"]),
+                                "zp_s": int(m["zp_s"])}
         if op["kind"] in ("conv", "dwconv", "cpu_conv0"):
             wq = z["op%d_wq" % op_id].astype(np.int8)
             m = meta["ops"][op_id]

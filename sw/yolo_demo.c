@@ -243,6 +243,39 @@ static void sw_add(const yolo_op_t *o) {
     }
 }
 
+/* ==========================================================================
+ * v0.5: shortcut residual add 改由 **CPU** 执行（per-tensor 源 requant）
+ * --------------------------------------------------------------------------
+ * 为什么不在引擎里做: raw-add 要求 branch 张量与 sum 张量共享同一组 (s_a, zp_a)，
+ * 而 branch 的值域 ±1.5 远小于 sum 的 ±19 → branch 只用 ~20 个量化台阶，这是
+ * int8 逐层 cos 上不去的根因（model-report §6）。把 add 放到 CPU、并用 per-tensor
+ * 源域→目标域的 requant 标量，branch 就能用自己的 scale，精度问题解除；
+ * 引擎的 ADD op 保留但不再被计划使用（未来若要回硬件，需要给 add 增加同类标量）。
+ *
+ * 整数公式（CONTRACT §11 v0.5；golden/C 必须逐位一致，int64 中间）：
+ *   R = round(s_src/s_dst * 2^KADD);  out = clamp(q_d + (((q_s - zp_s)*R) >> KADD), -128, 127)
+ *   ⚠ 不加 zp_d —— q_d 本身已含目标 zero-point；增量是"源域差值"映射到目标域。
+ * 字段来源: aux0=R, aux1=KADD, aux2=zp_s(符号扩展存放), 尺寸 ih/iw/ic。
+ * ==========================================================================*/
+static void sw_cpu_add(const yolo_op_t *o) {
+    const s32 R   = (s32)o->aux0;
+    const s32 K   = (s32)o->aux1;
+    const s32 zps = (s32)o->aux2;
+    const u32 c = o->ic, ih = o->ih, iw = o->iw;
+    const u32 c8 = (c + 7u) & ~7u;
+    for (u32 y = 0; y < ih; y++)
+        for (u32 x = 0; x < iw; x++) {
+            u32 so  = o->src + (y * iw + x) * c8;
+            u32 dof = o->dst + (y * iw + x) * c8;
+            for (u32 ch = 0; ch < c; ch++) {
+                s32 qs = (s32)(s8)rd8(so + ch);
+                s32 qd = (s32)(s8)rd8(dof + ch);
+                s32 d  = ((qs - zps) * R) >> K;     /* 算术右移 = floor */
+                wr8(dof + ch, (u8)(s8)clamp8(qd + d));
+            }
+        }
+}
+
 /* cpu_concat / cpu_copy: 把若干紧凑张量按通道拼到目标紧凑张量 */
 static void sw_cat(const yolo_op_t *o) {
     const yolo_cat_t *ct = &YOLO_CATS[o->src];     /* op.src = 表索引 */
@@ -332,6 +365,7 @@ static void op_out_shape(const yolo_op_t *o, u32 *h, u32 *w, u32 *c) {
             *c = o->ic; break;
         case YK_UPSAMPLE: *h = o->ih * 2u; *w = o->iw * 2u; *c = o->ic; break;
         case YK_ADD:      *h = o->ih;      *w = o->iw;      *c = o->ic; break;
+        case YK_CPU_ADD:  *h = o->ih;      *w = o->iw;      *c = o->ic; break;
         default:          *h = o->ih;      *w = o->iw;      *c = o->oc; break;  /* cat/copy: 目标张量 */
     }
 }
@@ -354,6 +388,9 @@ static u32 run_plan(int hw, u64 *cycles_out, u32 *first_bad) {
                 case YK_CPU_CONV0:
                     sw_conv(o);             /* v0.3.1: 第 0 层没有引擎路径, 永远 CPU */
                     break;
+                case YK_CPU_ADD:
+                    sw_cpu_add(o);          /* v0.5: shortcut add 由 CPU 做 (精度修复) */
+                    break;
                 default:
                     sw_cat(o);              /* cpu_concat / cpu_copy 仍由 CPU 做 */
                     break;
@@ -364,6 +401,7 @@ static u32 run_plan(int hw, u64 *cycles_out, u32 *first_bad) {
                 case YK_POOL: sw_pool(o); break;
                 case YK_UPSAMPLE: sw_upsample(o); break;
                 case YK_ADD: sw_add(o); break;
+                case YK_CPU_ADD: sw_cpu_add(o); break;
                 default: sw_cat(o); break;
             }
         }

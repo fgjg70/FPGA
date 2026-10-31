@@ -46,10 +46,12 @@ NN_A_BASE = dl.A_BASE                 # 0x60000
 NN_B_BASE = dl.B_BASE                 # 0x78000
 
 # op numeric codes for model.json (engine op + CPU ops)
-OP_CONV, OP_POOL, OP_COPY, OP_ADD, OP_CPU_CONV0, OP_CPU_CONCAT, OP_CPU_COPY = 0, 1, 2, 3, 7, 8, 9
-KIND_TO_CODE = {"conv": OP_CONV, "dwconv": OP_CONV, "pool": OP_POOL,
-                "upsample": OP_COPY, "add": OP_ADD, "cpu_conv0": OP_CPU_CONV0,
-                "cpu_concat": OP_CPU_CONCAT, "cpu_copy": OP_CPU_COPY}
+OP_CONV, OP_DWCONV, OP_POOL, OP_COPY, OP_ADD = 0, 1, 2, 3, 4
+OP_CPU_CONCAT, OP_CPU_COPY, OP_CPU_CONV0, OP_CPU_ADD = 5, 6, 7, 8
+KIND_TO_CODE = {"conv": OP_CONV, "dwconv": OP_DWCONV, "pool": OP_POOL,
+                "upsample": OP_COPY, "add": OP_ADD, "cpu_concat": OP_CPU_CONCAT,
+                "cpu_copy": OP_CPU_COPY, "cpu_conv0": OP_CPU_CONV0,
+                "cpu_add": OP_CPU_ADD}
 
 
 def load_int8_model(hw):
@@ -66,7 +68,13 @@ def load_int8_model(hw):
     q = {"ops": {}, "gq": {int(r): (float(s), int(zp)) for (r, s, zp) in meta["gq"]},
          "roots": meta["roots"], "groups": {"roots": meta["roots"],
                                             "add_roots": set(meta["add_roots"])}}
+    q["adds"] = {}
     for op_id, op in enumerate(plan["ops"]):
+        if op["kind"] == "cpu_add":
+            m = meta["ops"][op_id]
+            q["adds"][op_id] = {"r_scale": int(m["r_scale"]),
+                                "k_add": int(m["k_add"]),
+                                "zp_s": int(m["zp_s"])}
         if op["kind"] in ("conv", "dwconv", "cpu_conv0"):
             wq = z["op%d_wq" % op_id].astype(np.int8)
             m = meta["ops"][op_id]
@@ -108,6 +116,11 @@ def build_plan_json(meta, net, plan, q, op_csum, input_csum):
              "ic": int(op["ic"]), "oc": int(op["oc"]),
              "woff": int(op["w_off"]), "qoff": int(op["q_off"]),
              "csum": int(op_csum[op_id])}
+        if op["kind"] == "cpu_add":
+            a = q["adds"][op_id]
+            d["r_scale"] = int(a["r_scale"])
+            d["k_add"] = int(a["k_add"])
+            d["zp_s"] = int(a["zp_s"])
         if op["kind"] == "cpu_concat":
             srcs = []
             for s in op["sources"]:
@@ -215,7 +228,7 @@ def select_representatives(plan):
     first(lambda o: o["kind"] == "dwconv" and o["k"] == 3, "dwconv3x3")
     first(lambda o: o["kind"] == "dwconv" and o["k"] == 5, "dwconv5x5")
     first(lambda o: o["kind"] == "pool" and o["k"] == 9, "pool9")
-    first(lambda o: o["kind"] == "add", "add")
+    first(lambda o: o["kind"] == "cpu_add", "cpu_add")
     first(lambda o: o["kind"] == "conv" and o["oc"] == 255, "head_conv255")
     first(lambda o: o["kind"] == "upsample", "upsample")
     return reps

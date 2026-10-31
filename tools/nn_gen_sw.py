@@ -71,6 +71,9 @@ def eval_verilog_int(expr):
 KIND = {
     'conv': 0, 'dwconv': 1, 'pool': 2, 'upsample': 3, 'add': 4,
     'cpu_concat': 5, 'cpu_copy': 6, 'cpu_conv0': 7,
+    # v0.5: shortcut residual-add 改由 CPU 执行 (per-tensor 源 requant)。
+    # 目的: 解除 branch/sum 张量被迫共享激活 scale 的约束 (int8 精度根因, 见 model-report §6)。
+    'cpu_add': 8,
 }
 HW_KINDS = {0, 1, 2, 3, 4}      # 7 = cpu_conv0 由 CPU 执行, 不走引擎
 
@@ -217,11 +220,18 @@ def main():
     w('#define YF_UP2X      0x08u')
     w('#define YF_POOLMAX   0x10u')
     w('')
+    # 【紧凑结构体】dmem 的 .data/.bss 预算只有 8KB (link.ld ASSERT ≤0x2000)。
+    # 108 个 op × 全 u32 (68B) 会到 9KB+ 而链接失败; 把 kind/尺寸字段压成 u16 后
+    # 每项 52B ⇒ 约 5.6KB。字段顺序必须与下面的初始化列表逐项一致。
     w('typedef struct {')
-    w('    unsigned int kind, flags, k, stride, pad;')
-    w('    unsigned int ih, iw, ic, oc;')
+    w('    unsigned short kind, flags, k, stride, pad;')
+    w('    unsigned short ih, iw, ic, oc;')
     w('    unsigned int src, dst;      /* NN 窗口绝对偏移 */')
     w('    unsigned int woff, qoff;    /* 权重/量化参数偏移 */')
+    w('    /* v0.5: cpu_add 用 aux0=R(源域->目标域的 per-tensor 乘数),')
+    w('     *       aux1=KADD(右移位数), aux2=zp_s(源张量 zero-point, 符号扩展存 u32);')
+    w('     *       其它 kind 全 0。C 侧公式见 CONTRACT §11。 */')
+    w('    unsigned int aux0, aux1, aux2;')
     w('    unsigned int csum;          /* golden FNV-1a */')
     w('} yolo_op_t;')
     w('')
@@ -298,12 +308,22 @@ def main():
         k = max(k, 0); stride = max(stride, 0); pad = max(pad, 0)
         ih = max(ih, 0); iw = max(iw, 0); ic = max(ic, 0); oc = max(oc, 0)
         woff = max(woff, 0); qoff = max(qoff, 0)
+        if kind == 8:
+            aux0 = int(op.get('r_scale', 0)) & 0xFFFFFFFF
+            aux1 = int(op.get('k_add', 0)) & 0xFFFFFFFF
+            aux2 = int(op.get('zp_s', 0)) & 0xFFFFFFFF
+            ic = op.get('ic', 0)
+            oc = op.get('ic', 0)      # cpu_add 输出通道数 = 输入通道数 (原地写回 dst)
+        else:
+            aux0 = aux1 = aux2 = 0
         w('    {%du, 0x%02xu, %du, %du, %du,  %du, %du, %du, %du,'
           % (kind, flags, k, stride, pad, ih, iw, ic, oc))
-        w('     0x%08xu, 0x%08xu, 0x%08xu, 0x%08xu, 0x%08xu},'
-          % (src_abs, dst_abs, woff, qoff, op['csum'] & 0xFFFFFFFF))
+        w('     0x%08xu, 0x%08xu, 0x%08xu, 0x%08xu,'
+          % (src_abs, dst_abs, woff, qoff))
+        w('     0x%08xu, 0x%08xu, 0x%08xu, 0x%08xu},'
+          % (aux0, aux1, aux2, op['csum'] & 0xFFFFFFFF))
     if not ops:
-        w('    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},')
+        w('    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},')
     w('};')
     w('')
     w('#endif /* YOLO_PLAN_H */')

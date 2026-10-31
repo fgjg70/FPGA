@@ -61,14 +61,17 @@ def build_groups(plan):
         k = op["kind"]
         if k in ("pool", "upsample"):
             union(op["src"], op["dst"])
-        elif k == "add":
-            union(op["src"], op["dst"])
+        elif k == "cpu_add":
+            # v0.5: CPU add; src/dst keep their OWN per-tensor scale/zp
+            # (a per-tensor source requant scalar R maps src domain -> dst).
             add_pairs.append((op["src"], op["dst"]))
         elif k == "cpu_concat":
             for s in op["sources"]:
                 union(s["t"], op["dst"])
     roots = [find(t) for t in range(n)]
-    add_roots = set(find(a) for (a, b) in add_pairs)
+    # v0.5: cpu_add maps src->dst with a per-tensor requant scalar, so the two
+    # operands do NOT need a shared/symmetric quantisation domain anymore.
+    add_roots = set()
     groups = {}
     for t in range(n):
         groups.setdefault(roots[t], []).append(t)
@@ -272,6 +275,34 @@ def quantize_model(net, folded, plan, cal, gq, verbose=True, w_clip_pct=100.0):
             "k": op["k"], "stride": op["stride"], "pad": op["pad"],
             "depthwise": op["depthwise"], "payload": np.frombuffer(payload, dtype=np.uint8).copy(),
         }
+
+    # ---- v0.5 cpu_add: per-tensor source-requant scalar R = round(s_s/s_d*2^K) --
+    adds = {}
+    for op_id, op in enumerate(plan["ops"]):
+        if op["kind"] != "cpu_add":
+            continue
+        src, dst = op["src"], op["dst"]
+        s_s, zp_s = gq[roots[src]]
+        s_d, zp_d = gq[roots[dst]]
+        ratio = s_s / s_d
+        k = 15
+        while k < 24 and int(rnd(ratio * (1 << k))) < 256:
+            k += 1
+        while k > 8 and int(rnd(ratio * (1 << k))) > (1 << 20):
+            k -= 1
+        r = int(rnd(ratio * (1 << k)))
+        if r < 1:
+            raise ValueError("cpu_add op %d: R rounds to 0 (ratio %.3g)" % (op_id, ratio))
+        if r > (1 << 20):
+            raise ValueError("cpu_add op %d: R %d > 2^20" % (op_id, r))
+        adds[op_id] = {"r_scale": r, "k_add": int(k), "zp_s": int(zp_s),
+                       "zp_d": int(zp_d), "s_s": float(s_s), "s_d": float(s_d),
+                       "ratio": float(ratio)}
+        stats.setdefault("adds", []).append((op_id, r, int(k), int(zp_s)))
+        if verbose:
+            print("  cpu_add op%-3d R=%-7d K=%-2d zp_s=%-4d  s_s=%.6g s_d=%.6g"
+                  % (op_id, r, k, zp_s, s_s, s_d))
+
     if verbose:
         print("quantize_model: %d conv ops, SHIFT histogram %s, M_pos max %d, "
               "min nonzero %d, bias|max| %d"
@@ -279,7 +310,8 @@ def quantize_model(net, folded, plan, cal, gq, verbose=True, w_clip_pct=100.0):
                  stats["mpos_min_nonzero"], stats["bias_max"]))
         if stats["mzero"]:
             print("  WARNING: %d M_pos values rounded to 0" % stats["mzero"])
-    return {"ops": out_ops, "groups": g, "gq": gq, "stats": stats}
+    return {"ops": out_ops, "adds": adds, "groups": g, "gq": gq,
+            "stats": stats}
 
 
 # ----------------------------------------------------------------------------
@@ -389,6 +421,17 @@ def int8_forward(plan, q, x_packed):
                 c = s["c"]
                 out[:, :, coff:coff + c] = store[s["t"]][:, :, :c]
                 coff += c
+        elif kind == "cpu_add":
+            # CONTRACT v0.5 §11: out = clamp(q_d + (((q_s-zp_s)*R) >> KADD))
+            a = q["adds"][op_id]
+            cur = store[op["dst"]]
+            src = store[op["src"]]
+            out = cur.copy()
+            c = op["ic"]
+            qi = src[:, :, :c].astype(np.int64) - int(a["zp_s"])
+            d = np.right_shift(qi * int(a["r_scale"]), int(a["k_add"]))
+            out[:, :, :c] = np.clip(cur[:, :, :c].astype(np.int64) + d,
+                                    -128, 127).astype(np.int8)
         elif kind == "add":
             dst_t = tensors[op["dst"]]
             src = store[op["src"]]
@@ -499,6 +542,20 @@ def golden_forward(plan, q, x_packed):
             for s in op["sources"]:
                 out[:, :, coff:coff + s["c"]] = store[s["t"]][:, :, :s["c"]]
                 coff += s["c"]
+        elif kind == "cpu_add":
+            a = q["adds"][op_id]
+            cur = store[op["dst"]]
+            src = store[op["src"]]
+            out = cur.copy()
+            R = int(a["r_scale"])
+            K = int(a["k_add"])
+            zps = int(a["zp_s"])
+            den = 1 << K
+            for c in range(op["ic"]):
+                qi = src[:, :, c].astype(np.int64) - zps
+                d = np.floor_divide(qi * R, den)        # independent of >> path
+                out[:, :, c] = np.clip(cur[:, :, c].astype(np.int64) + d,
+                                       -128, 127).astype(np.int8)
         elif kind == "add":
             dst_t = tensors[op["dst"]]
             src = store[op["src"]]
@@ -530,7 +587,7 @@ def op_real_shape(op, tensor):
         return (op["oh"], op["ow"], op["ic"])
     if k == "upsample":
         return (op["oh"], op["ow"], op["ic"])
-    if k == "add":
+    if k in ("add", "cpu_add"):
         return (op["ih"], op["iw"], op["ic"])
     if k in ("cpu_concat", "cpu_copy"):
         return (op["ih"], op["iw"], op.get("oc_tensor", op["oc"]))

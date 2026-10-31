@@ -134,4 +134,12 @@ results/ai-accel/proto/**/*.wlf
 results/ai-accel/proto/**/*.vcd
 results/ai-accel/proto/**/*.vst
 results/ai-accel/proto/**/transcript
-results/ai-accel/proto/**/vsim.wlf
+results/ai-accel/proto/**/vsim.wlf# --- Round-2 追加 (2026-11-01): Vivado 临时目录与大体量诊断 log (可重建) ---
+results/ai-accel/proto/**/.Xil/
+results/ai-accel/proto/**/*_run.log
+results/ai-accel/proto/**/probe*.log
+results/ai-accel/proto/**/tb_v*.log
+results/ai-accel/proto/**/dyn*.log
+results/ai-accel/proto/**/*.backup.log
+results/ai-accel/proto/**/eng_only_run.log
+results/ai-accel/proto/**/mem_only_util.rpt

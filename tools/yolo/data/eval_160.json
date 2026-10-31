@@ -2,21 +2,21 @@
  "hw": 160,
  "npz": "model_int8_160.npz",
  "iou_thresh": 0.5,
- "num_cases": 12,
+ "num_cases": 14,
  "augmented_cases": 9,
- "float_dets": 58,
- "int8_dets": 70,
- "matched": 49,
- "match_rate": 0.8448,
- "mean_iou": 0.8119,
+ "float_dets": 61,
+ "int8_dets": 76,
+ "matched": 50,
+ "match_rate": 0.8197,
+ "mean_iou": 0.7947,
  "per_case": [
   {
    "case": "bus.jpg",
    "float_dets": 4,
-   "int8_dets": 6,
-   "matched": 3,
-   "int8_matched": 3,
-   "mean_iou": 0.8081,
+   "int8_dets": 5,
+   "matched": 2,
+   "int8_matched": 2,
+   "mean_iou": 0.7421,
    "float_classes": [
     0,
     0,
@@ -24,7 +24,6 @@
     7
    ],
    "int8_classes": [
-    7,
     0,
     0,
     0,
@@ -38,12 +37,11 @@
     0.45
    ],
    "int8_scores": [
-    0.311,
-    0.443,
-    0.83,
-    0.903,
-    0.428,
-    0.662
+    0.466,
+    0.905,
+    0.802,
+    0.345,
+    0.659
    ]
   },
   {
@@ -52,16 +50,16 @@
    "int8_dets": 3,
    "matched": 3,
    "int8_matched": 3,
-   "mean_iou": 0.8487,
+   "mean_iou": 0.8268,
    "float_classes": [
     1,
     2,
     2
    ],
    "int8_classes": [
+    1,
     2,
-    2,
-    1
+    2
    ],
    "float_scores": [
     0.641,
@@ -69,18 +67,64 @@
     0.336
    ],
    "int8_scores": [
-    0.387,
-    0.316,
-    0.668
+    0.705,
+    0.368,
+    0.32
+   ]
+  },
+  {
+   "case": "fruits.jpg",
+   "float_dets": 3,
+   "int8_dets": 4,
+   "matched": 3,
+   "int8_matched": 3,
+   "mean_iou": 0.806,
+   "float_classes": [
+    49,
+    49,
+    49
+   ],
+   "int8_classes": [
+    49,
+    49,
+    49,
+    49
+   ],
+   "float_scores": [
+    0.666,
+    0.285,
+    0.619
+   ],
+   "int8_scores": [
+    0.403,
+    0.345,
+    0.753,
+    0.743
+   ]
+  },
+  {
+   "case": "home.jpg",
+   "float_dets": 0,
+   "int8_dets": 1,
+   "matched": 0,
+   "int8_matched": 0,
+   "mean_iou": 0.0,
+   "float_classes": [],
+   "int8_classes": [
+    14
+   ],
+   "float_scores": [],
+   "int8_scores": [
+    0.267
    ]
   },
   {
    "case": "horses.jpg",
    "float_dets": 4,
-   "int8_dets": 10,
-   "matched": 2,
-   "int8_matched": 2,
-   "mean_iou": 0.5756,
+   "int8_dets": 8,
+   "matched": 1,
+   "int8_matched": 1,
+   "mean_iou": 0.5223,
    "float_classes": [
     19,
     19,
@@ -88,12 +132,10 @@
     19
    ],
    "int8_classes": [
-    19,
-    19,
     18,
     19,
-    19,
-    19,
+    18,
+    18,
     19,
     17,
     17,
@@ -106,25 +148,23 @@
     0.534
    ],
    "int8_scores": [
-    0.286,
-    0.391,
-    0.358,
-    0.566,
-    0.356,
-    0.356,
-    0.351,
-    0.463,
-    0.345,
-    0.527
+    0.279,
+    0.338,
+    0.306,
+    0.283,
+    0.254,
+    0.431,
+    0.332,
+    0.558
    ]
   },
   {
    "case": "bus.jpg#aug1",
    "float_dets": 5,
-   "int8_dets": 6,
+   "int8_dets": 7,
    "matched": 5,
    "int8_matched": 5,
-   "mean_iou": 0.8603,
+   "mean_iou": 0.8243,
    "float_classes": [
     7,
     0,
@@ -134,6 +174,7 @@
    ],
    "int8_classes": [
     7,
+    0,
     0,
     0,
     0,
@@ -148,21 +189,22 @@
     0.332
    ],
    "int8_scores": [
-    0.428,
-    0.844,
-    0.376,
-    0.76,
-    0.628,
-    0.581
+    0.439,
+    0.348,
+    0.856,
+    0.326,
+    0.81,
+    0.591,
+    0.6
    ]
   },
   {
    "case": "bus.jpg#aug2",
    "float_dets": 5,
-   "int8_dets": 6,
+   "int8_dets": 7,
    "matched": 5,
    "int8_matched": 5,
-   "mean_iou": 0.7727,
+   "mean_iou": 0.7817,
    "float_classes": [
     5,
     0,
@@ -171,6 +213,7 @@
     0
    ],
    "int8_classes": [
+    0,
     7,
     0,
     0,
@@ -186,12 +229,13 @@
     0.699
    ],
    "int8_scores": [
-    0.356,
-    0.364,
-    0.959,
+    0.346,
+    0.359,
+    0.39,
+    0.947,
     0.81,
-    0.319,
-    0.675
+    0.253,
+    0.706
    ]
   },
   {
@@ -200,7 +244,7 @@
    "int8_dets": 5,
    "matched": 3,
    "int8_matched": 3,
-   "mean_iou": 0.8432,
+   "mean_iou": 0.8428,
    "float_classes": [
     5,
     0,
@@ -223,11 +267,11 @@
     0.447
    ],
    "int8_scores": [
-    0.455,
-    0.83,
-    0.886,
-    0.371,
-    0.569
+    0.466,
+    0.815,
+    0.873,
+    0.297,
+    0.584
    ]
   },
   {
@@ -236,7 +280,7 @@
    "int8_dets": 6,
    "matched": 6,
    "int8_matched": 6,
-   "mean_iou": 0.8767,
+   "mean_iou": 0.8832,
    "float_classes": [
     0,
     0,
@@ -262,12 +306,12 @@
     0.764
    ],
    "int8_scores": [
-    0.417,
-    0.651,
-    0.992,
-    0.624,
-    0.906,
-    0.898
+    0.33,
+    0.653,
+    0.99,
+    0.541,
+    0.896,
+    0.866
    ]
   },
   {
@@ -276,7 +320,7 @@
    "int8_dets": 5,
    "matched": 3,
    "int8_matched": 3,
-   "mean_iou": 0.8048,
+   "mean_iou": 0.7698,
    "float_classes": [
     5,
     0,
@@ -299,20 +343,20 @@
     0.444
    ],
    "int8_scores": [
-    0.464,
-    0.915,
-    0.799,
-    0.428,
+    0.509,
+    0.796,
+    0.908,
+    0.399,
     0.562
    ]
   },
   {
    "case": "bus.jpg#aug6",
    "float_dets": 5,
-   "int8_dets": 6,
+   "int8_dets": 7,
    "matched": 5,
    "int8_matched": 5,
-   "mean_iou": 0.8603,
+   "mean_iou": 0.8243,
    "float_classes": [
     7,
     0,
@@ -322,6 +366,7 @@
    ],
    "int8_classes": [
     7,
+    0,
     0,
     0,
     0,
@@ -336,21 +381,22 @@
     0.332
    ],
    "int8_scores": [
-    0.428,
-    0.844,
-    0.376,
-    0.76,
-    0.628,
-    0.581
+    0.439,
+    0.348,
+    0.856,
+    0.326,
+    0.81,
+    0.591,
+    0.6
    ]
   },
   {
    "case": "bus.jpg#aug7",
    "float_dets": 5,
-   "int8_dets": 6,
+   "int8_dets": 7,
    "matched": 5,
    "int8_matched": 5,
-   "mean_iou": 0.7727,
+   "mean_iou": 0.7817,
    "float_classes": [
     5,
     0,
@@ -359,6 +405,7 @@
     0
    ],
    "int8_classes": [
+    0,
     7,
     0,
     0,
@@ -374,12 +421,13 @@
     0.699
    ],
    "int8_scores": [
-    0.356,
-    0.364,
-    0.959,
+    0.346,
+    0.359,
+    0.39,
+    0.947,
     0.81,
-    0.319,
-    0.675
+    0.253,
+    0.706
    ]
   },
   {
@@ -388,7 +436,7 @@
    "int8_dets": 5,
    "matched": 3,
    "int8_matched": 3,
-   "mean_iou": 0.8432,
+   "mean_iou": 0.8428,
    "float_classes": [
     5,
     0,
@@ -411,11 +459,11 @@
     0.447
    ],
    "int8_scores": [
-    0.455,
-    0.83,
-    0.886,
-    0.371,
-    0.569
+    0.466,
+    0.815,
+    0.873,
+    0.297,
+    0.584
    ]
   },
   {
@@ -424,7 +472,7 @@
    "int8_dets": 6,
    "matched": 6,
    "int8_matched": 6,
-   "mean_iou": 0.8767,
+   "mean_iou": 0.8832,
    "float_classes": [
     0,
     0,
@@ -450,12 +498,12 @@
     0.764
    ],
    "int8_scores": [
-    0.417,
-    0.651,
-    0.992,
-    0.624,
-    0.906,
-    0.898
+    0.33,
+    0.653,
+    0.99,
+    0.541,
+    0.896,
+    0.866
    ]
   }
  ]
