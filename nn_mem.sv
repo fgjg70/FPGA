@@ -167,10 +167,15 @@ module nn_mem
   //   又会落 54K LUT); 64-bit 宽 + 满宽双读最干净: 80 tiles (4KB/BRAM)。
   //   段: A=16384 个 64b 字 (128KB), B/C/D=8192 (64KB), 共 40960 = 320KB。
   // ==========================================================================
-  logic [63:0] w_mem_a [0:WSEG_A-1];
-  logic [63:0] w_mem_b [0:WSEG_B-1];
-  logic [63:0] w_mem_c [0:WSEG_C-1];
-  logic [63:0] w_mem_d [0:WSEG_D-1];
+  // [2026-11-01 build fix] W 共 320KB=2.62Mbit 的常量 ROM, 必须显式声明为 Block RAM ROM:
+  // 默认 auto 推断在整机 in-context 综合里会先被展开成 ~5.2M 个未映射寄存器
+  // (RTL partition 5,248,702 instances -> cross-boundary 32min + XDC 34min + timing opt 68min),
+  // 直到 Technology Mapping 才落 BRAM, 整个综合被拖到 3 小时。显式 rom_style=block 后秒过。
+  // BRAM 预算: W80 + Q12 + A/B32 + 核心 ~9.5 = 133.5/135 (仍然放得下)。
+  (* rom_style = "block" *) logic [63:0] w_mem_a [0:WSEG_A-1];
+  (* rom_style = "block" *) logic [63:0] w_mem_b [0:WSEG_B-1];
+  (* rom_style = "block" *) logic [63:0] w_mem_c [0:WSEG_C-1];
+  (* rom_style = "block" *) logic [63:0] w_mem_d [0:WSEG_D-1];
 
   // 读地址: w_addr[18:4]=128b 字索引, w_addr[3]=8B 相位
   logic [14:0] w_idx;
