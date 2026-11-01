@@ -134,9 +134,13 @@ module nn_subsys
   logic [31:0] mem_cpu_rdata;
   logic [31:0] cpu_off;
 
+  // 【v0.7 集成 bug 修复 2026-11-01】done/err 必须是**粘滞**的寄存器状态,
+  // 不能直接接 seq_done/seq_err 单拍脉冲: CPU 轮询 STATUS 是"每 2~4 拍读一次",
+  // 单拍脉冲会被漏掉 -> 程序永远等不到 done (MODE_AUTO 实测: ROM 跑完 idx=112 但 CPU 卡死)。
+  // MODE_CPU 一直是 done_r (粘滞) 所以没暴露; 这里让两种模式共用 done_r/err_r。
   assign busy_o     = auto_r ? seq_busy : eng_busy;
-  assign done_o     = auto_r ? seq_done : done_r;
-  assign err_o      = auto_r ? seq_err  : err_r;
+  assign done_o     = done_r;
+  assign err_o      = err_r;
   assign cycles_o   = auto_r ? seq_cycles : cycles_r;
   assign err_code_o = auto_r ? seq_err_code : err_code_r;
 
