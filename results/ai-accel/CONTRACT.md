@@ -492,6 +492,9 @@ byte[5:15] = 0
 
 ### 12.6 引擎 v3 端口
 `w_rdata[127:0]`、`b_wdata[127:0] + b_wstrb[15:0]`、独立 `q_re/q_addr[12:0]/q_rdata[63:0]`；`desc` 语义不变。
+**W 读对齐（2026-11-01 集成修正）**：`w_addr` 是 **8B 粒度字节地址（低 3 位忽略）**，nn_mem 返回
+"从该 8B 边界开始的 16B 窗口"：`w_rdata = w_addr[3] ? {mem[w_idx+1][63:0], mem[w_idx][127:64]} : mem[w_idx]`，
+`w_idx = w_addr[18:4]`，延迟 1 拍、BRAM 不增（双口读）。引擎保持 v0.6 的 8B 粒度寻址，无需改。
 硬件 128 MAC/拍（16 OC lanes × 8 px）；数值公式（requant/leaky/padding/饱和）与 v2 完全一致。
 
 - **B 写口（2026-11-01 钉死）**：`b_wdata[127:0]` + **`b_wstrb[15:0]`**（字节掩码）。理由：copy/concat（8 通道=8B 写）、`oc_pad=8` 层、`OC_pad%16==8` 层的第二次 8B 写都必须能只写半字，

@@ -3,9 +3,12 @@ REM ==========================================================================
 REM run_synth.bat -- nn_mem v0.7 resource/mapping proof (Vivado 2018.3)
 REM --------------------------------------------------------------------------
 REM ASCII only. One non-project synthesis:
-REM   W=320K(128b read) / Q=48K(LUTRAM 64b read) / A=96K+B=32K (128b read/write)
-REM   expected: W ~75.5 BRAM36, Q ~7,000 LUT + 0 BRAM, A/B 32 BRAM36
-REM            nn_mem total ~107.5 tiles (<=121.5 incl. core ~9.5 -> ~117/135)
+REM   W=320K(128b read) / Q=48K(LUTRAM/分布式 64b read) / A=96K+B=32K (128b)
+REM   镜像用 --seed 伪随机内容: 真实权重/量化参数不可压缩; 测试样图是线性结构,
+REM   Vivado 会把它优化成压缩实现, 导致 W/Q 资源数字被低估 (实测会低 ~15-30%)。
+REM   expected (random content):
+REM     W ~74 RAMB36 + 3 RAMB18 = 75.5 tiles; A/B 32 RAMB36; Q 0 BRAM + ~7K LUT
+REM     nn_mem total ~107.5 tiles (<=121.5 incl. core ~9.5 -> ~117/135)
 REM Reports land in %TEMP%\nn_mem_v07_synth\v07_*.rpt
 REM ==========================================================================
 setlocal
@@ -17,7 +20,7 @@ set "WORK=%TEMP%\nn_mem_v07_synth"
 if not exist "%WORK%" mkdir "%WORK%"
 echo [run_synth] work dir: %WORK%
 
-"%PY%" "%SCRIPT_DIR%gen_wq_image.py" --split-prefix "%WORK%\yolo"
+"%PY%" "%SCRIPT_DIR%gen_wq_image.py" --split-prefix "%WORK%\yolo" --seed 20261101
 if errorlevel 1 goto :fail
 
 cd /d "%WORK%"

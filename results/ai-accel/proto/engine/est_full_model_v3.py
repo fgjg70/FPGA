@@ -9,11 +9,28 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from calc_cycles_v3 import cycles_of, BASE  # noqa: E402
 
 PLAN = "../../../../sim/prog/yolo/plan.json"
+NN_A_OFF = 0x60000
+NN_B_OFF = 0x78000
+
+
+def dst_abs(o):
+    d = o.get("dst")
+    if isinstance(d, dict):
+        return (NN_A_OFF if d.get("buf") == "A" else NN_B_OFF) + d.get("off", 0)
+    return 0
 plan = json.load(open(PLAN, encoding="utf-8"))
 ops = plan["ops"] if isinstance(plan, dict) else plan
 
 
 def to_engine_op(o):
+    kind = o["kind"]
+    dabs = dst_abs(o)
+    ret = _to_engine_op(o)
+    ret["dst"] = dabs
+    return ret
+
+
+def _to_engine_op(o):
     kind = o["kind"]
     k = max(1, o["k"])
     if kind == "conv":

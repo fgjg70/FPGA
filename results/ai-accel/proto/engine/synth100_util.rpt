@@ -1,7 +1,7 @@
 Copyright 1986-2018 Xilinx, Inc. All Rights Reserved.
 --------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2018.3 (win64) Build 2405991 Thu Dec  6 23:38:27 MST 2018
-| Date         : Sun Nov  1 13:11:49 2026
+| Date         : Sun Nov  1 13:33:06 2026
 | Host         : fgjg running 64-bit major release  (build 9200)
 | Command      : report_utilization -file D:/USER/Desktop/FPGA/FPGA/results/ai-accel/proto/engine/synth100_util.rpt
 | Design       : nn_eng_timing_wrap_v3
@@ -27,20 +27,18 @@ Table of Contents
 1. Slice Logic
 --------------
 
-+----------------------------+-------+-------+-----------+-------+
-|          Site Type         |  Used | Fixed | Available | Util% |
-+----------------------------+-------+-------+-----------+-------+
-| Slice LUTs*                | 43823 |     0 |     63400 | 69.12 |
-|   LUT as Logic             | 31535 |     0 |     63400 | 49.74 |
-|   LUT as Memory            | 12288 |     0 |     19000 | 64.67 |
-|     LUT as Distributed RAM | 12288 |     0 |           |       |
-|     LUT as Shift Register  |     0 |     0 |           |       |
-| Slice Registers            | 14591 |     0 |    126800 | 11.51 |
-|   Register as Flip Flop    | 14591 |     0 |    126800 | 11.51 |
-|   Register as Latch        |     0 |     0 |    126800 |  0.00 |
-| F7 Muxes                   |  7416 |     0 |     31700 | 23.39 |
-| F8 Muxes                   |   280 |     0 |     15850 |  1.77 |
-+----------------------------+-------+-------+-----------+-------+
++-------------------------+-------+-------+-----------+-------+
+|        Site Type        |  Used | Fixed | Available | Util% |
++-------------------------+-------+-------+-----------+-------+
+| Slice LUTs*             | 31691 |     0 |     63400 | 49.99 |
+|   LUT as Logic          | 31691 |     0 |     63400 | 49.99 |
+|   LUT as Memory         |     0 |     0 |     19000 |  0.00 |
+| Slice Registers         | 14237 |     0 |    126800 | 11.23 |
+|   Register as Flip Flop | 14237 |     0 |    126800 | 11.23 |
+|   Register as Latch     |     0 |     0 |    126800 |  0.00 |
+| F7 Muxes                |  3679 |     0 |     31700 | 11.61 |
+| F8 Muxes                |  1371 |     0 |     15850 |  8.65 |
++-------------------------+-------+-------+-----------+-------+
 * Warning! The Final LUT count, after physical optimizations and full implementation, is typically lower. Run opt_design after synthesis, if not already completed, for a more realistic count.
 
 
@@ -58,22 +56,23 @@ Table of Contents
 | 0     |          Yes |           - |            - |
 | 0     |          Yes |           - |          Set |
 | 0     |          Yes |           - |        Reset |
-| 66    |          Yes |         Set |            - |
-| 14525 |          Yes |       Reset |            - |
+| 67    |          Yes |         Set |            - |
+| 14170 |          Yes |       Reset |            - |
 +-------+--------------+-------------+--------------+
 
 
 2. Memory
 ---------
 
-+-------------------+------+-------+-----------+-------+
-|     Site Type     | Used | Fixed | Available | Util% |
-+-------------------+------+-------+-----------+-------+
-| Block RAM Tile    |  112 |     0 |       135 | 82.96 |
-|   RAMB36/FIFO*    |  112 |     0 |       135 | 82.96 |
-|     RAMB36E1 only |  112 |       |           |       |
-|   RAMB18          |    0 |     0 |       270 |  0.00 |
-+-------------------+------+-------+-----------+-------+
++-------------------+-------+-------+-----------+-------+
+|     Site Type     |  Used | Fixed | Available | Util% |
++-------------------+-------+-------+-----------+-------+
+| Block RAM Tile    | 107.5 |     0 |       135 | 79.63 |
+|   RAMB36/FIFO*    |   106 |     0 |       135 | 78.52 |
+|     RAMB36E1 only |   106 |       |           |       |
+|   RAMB18          |     3 |     0 |       270 |  1.11 |
+|     RAMB18E1 only |     3 |       |           |       |
++-------------------+-------+-------+-----------+-------+
 * Note: Each Block RAM Tile only has one FIFO logic available and therefore can accommodate only one FIFO36E1 or one FIFO18E1. However, if a FIFO18E1 occupies a Block RAM Tile, that tile can still accommodate a RAMB18E1
 
 
@@ -83,8 +82,8 @@ Table of Contents
 +----------------+------+-------+-----------+-------+
 |    Site Type   | Used | Fixed | Available | Util% |
 +----------------+------+-------+-----------+-------+
-| DSPs           |  208 |     0 |       240 | 86.67 |
-|   DSP48E1 only |  208 |       |           |       |
+| DSPs           |  185 |     0 |       240 | 77.08 |
+|   DSP48E1 only |  185 |       |           |       |
 +----------------+------+-------+-----------+-------+
 
 
@@ -153,20 +152,20 @@ Table of Contents
 +----------+-------+---------------------+
 | Ref Name |  Used | Functional Category |
 +----------+-------+---------------------+
-| FDRE     | 14525 |        Flop & Latch |
-| LUT6     | 13456 |                 LUT |
-| RAMD64E  | 12288 |  Distributed Memory |
-| LUT2     |  9650 |                 LUT |
-| MUXF7    |  7416 |               MuxFx |
-| LUT3     |  6520 |                 LUT |
-| LUT4     |  3941 |                 LUT |
-| LUT5     |  3213 |                 LUT |
-| CARRY4   |  2954 |          CarryLogic |
-| LUT1     |   371 |                 LUT |
-| MUXF8    |   280 |               MuxFx |
-| DSP48E1  |   208 |    Block Arithmetic |
-| RAMB36E1 |   112 |        Block Memory |
-| FDSE     |    66 |        Flop & Latch |
+| LUT6     | 14789 |                 LUT |
+| FDRE     | 14170 |        Flop & Latch |
+| LUT2     |  9148 |                 LUT |
+| LUT3     |  7750 |                 LUT |
+| MUXF7    |  3679 |               MuxFx |
+| LUT4     |  2886 |                 LUT |
+| LUT5     |  2751 |                 LUT |
+| CARRY4   |  2725 |          CarryLogic |
+| MUXF8    |  1371 |               MuxFx |
+| LUT1     |   378 |                 LUT |
+| DSP48E1  |   185 |    Block Arithmetic |
+| RAMB36E1 |   106 |        Block Memory |
+| FDSE     |    67 |        Flop & Latch |
+| RAMB18E1 |     3 |        Block Memory |
 +----------+-------+---------------------+
 
 

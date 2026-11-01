@@ -17,15 +17,21 @@
 #     <pre>_d.hex : 4096 行 x 128-bit (W 段 D: 65536..81919)
 #     <pre>_q.hex : 6144 行 x  64-bit (Q 区; 行 k = Q32[2k] | Q32[2k+1]<<32)
 #
-# 模式 (必须与 sim/tb_nn_mem.sv 的 wpat32()/qpat32() 完全一致):
-#   wpat32(i) = (i * 0x9E3779B9) ^ 0xC0DE0000
-#   qpat32(i) = (i * 0x85EBCA6B) ^ 0x5A5A1234
+# 内容模式:
+#   默认 (不给 --seed): 测试样图, 与 sim/tb_nn_mem.sv 的 wpat32()/qpat32() 一致:
+#     wpat32(i) = (i * 0x9E3779B9) ^ 0xC0DE0000
+#     qpat32(i) = (i * 0x85EBCA6B) ^ 0x5A5A1234
+#   --seed N: 用伪随机内容 (每 32-bit 字都不同), 用于综合取证 —— 真实权重/量化
+#     参数不可压缩, 而测试样图是线性结构, Vivado 会把它优化成 LUT 压缩实现,
+#     导致综合资源数字偏小 (W/Q 都会被低估)。TB 期望值仍用测试样图。
 #
 # Usage:
-#   python gen_wq_image.py --wq-out C:/tmp/yolo_wq.hex --split-prefix C:/tmp/yolo
+#   python gen_wq_image.py --wq-out C:/tmp/yolo_wq.hex                      (TB)
+#   python gen_wq_image.py --split-prefix C:/tmp/yolo --seed 20261101      (synthesis)
 # ============================================================================
 import argparse
 import os
+import random
 
 W_WORDS = 320 * 1024 // 4      # 81,920
 Q_WORDS = 48 * 1024 // 4       # 12,288
@@ -56,13 +62,23 @@ def main() -> int:
     ap.add_argument("--q-out", default=None, help="12288-line 32-bit Q image")
     ap.add_argument("--split-prefix", default=None,
                     help="prefix for packed synthesis images (_a/_b/_c/_d/_q)")
+    ap.add_argument("--seed", type=int, default=None,
+                    help="use pseudo-random content (for realistic synthesis proof)")
     args = ap.parse_args()
 
     if not any([args.wq_out, args.w_out, args.q_out, args.split_prefix]):
         ap.error("give at least one output option")
 
-    W = [wpat32(i) for i in range(W_WORDS)]
-    Q = [qpat32(i) for i in range(Q_WORDS)]
+    if args.seed is not None:
+        rnd = random.Random(args.seed)
+        W = [rnd.getrandbits(32) for _ in range(W_WORDS)]
+        Q = [rnd.getrandbits(32) for _ in range(Q_WORDS)]
+        print("gen_wq_image: pseudo-random content (seed=%d) for synthesis proof"
+              % args.seed)
+    else:
+        W = [wpat32(i) for i in range(W_WORDS)]
+        Q = [qpat32(i) for i in range(Q_WORDS)]
+        print("gen_wq_image: test-pattern content (matches tb_nn_mem wpat32/qpat32)")
 
     if args.wq_out:
         write_lines(args.wq_out, ["%08x\n" % w for w in W] + ["%08x\n" % q for q in Q])
