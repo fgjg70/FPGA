@@ -65,7 +65,7 @@ module nn_conv_engine
   typedef enum logic [4:0] {
     S_IDLE, S_INIT, S_VCHK, S_CPREP, S_Q, S_QLOAD, S_BI, S_LD, S_LDCAP,
     S_WI, S_MAC, S_DRN, S_REQ, S_NEXT, S_NEXT2, S_PINIT, S_PMAX, S_PPACK,
-    S_CP_RD, S_CP_WR, S_AD_Q, S_AD_R1, S_AD_R2, S_AD_WR, S_FIN
+    S_CP_RD, S_CP_WR, S_AD_Q, S_AD_R1, S_AD_R2, S_AD_WR, S_AD_WR2, S_FIN
   } state_e;
 
   state_e state;
@@ -205,7 +205,7 @@ module nn_conv_engine
 
   logic signed [31:0] bias_q [0:OCL-1];
   logic signed [15:0] mpos_q [0:OCL-1];
-  logic signed [31:0] mneg_q [0:OCL-1];
+  logic signed [15:0] mneg_q [0:OCL-1];
   logic signed [31:0] mpos32 [0:OCL-1];
   logic signed [31:0] mtmp   [0:OCL-1];
   logic signed [7:0]  zp_out, zp_in;
@@ -218,8 +218,12 @@ module nn_conv_engine
   logic signed [7:0]  mx [0:PX-1][0:OCL-1];
 
   logic signed [31:0] acc_sel [0:OCL-1];
-  logic signed [31:0] m_sel   [0:OCL-1];
-  logic signed [63:0] prod64  [0:OCL-1];
+  logic signed [15:0] m_sel   [0:OCL-1];
+  logic signed [16:0] acc_hi  [0:OCL-1];
+  logic signed [16:0] acc_lo  [0:OCL-1];
+  (* use_dsp = "yes" *) logic signed [31:0] prod_hi [0:OCL-1];
+  (* use_dsp = "yes" *) logic signed [31:0] prod_lo [0:OCL-1];
+  logic signed [47:0] prod64  [0:OCL-1];
   logic signed [47:0] y64_q   [0:OCL-1];
   logic signed [47:0] y2_q    [0:OCL-1];
   logic [63:0]        out_lo [0:PX-1];   // 每像素 requant 低 8B (lane 0..7)
@@ -232,6 +236,9 @@ module nn_conv_engine
   // 预计算常量
   // ==========================================================================
   logic [15:0] ic8_r, oc8_r, ocw_r, oc_limit_r, icb_n_r;
+  logic [4:0]  q_tot_r, qb_w_r, qm_w_r;     // Q 装载拍数/字数 (寄存器)
+  logic [15:0] rem_ch;                      // 当前 tile 之后剩余通道数 (增量)
+  logic [12:0] q_bias_w, q_mpos_w, q_tail_w; // Q 三段 64b 字索引 (寄存器)
   logic [23:0] row_step_a, oy_step_a, ox_step_a, band_step_a, band_ky_step, base0_a;
   logic [23:0] row_step_w, ox_step_w, px_bytes;
   logic [23:0] w_p2, w_dgrp, w_sub;
@@ -261,6 +268,8 @@ module nn_conv_engine
   // 组合端口
   // ==========================================================================
   logic        w_re_c, q_re_c, a_re_c, b_we_c;
+  logic        q_re_q;
+  logic [12:0] q_addr_q;
   logic [23:0] w_addr_c, a_addr_c, b_addr_c;
   logic [12:0] q_addr_c;
   logic [127:0] b_wdata_c;
@@ -282,17 +291,23 @@ module nn_conv_engine
                      ? (((oc8_r - c_ocb * ocw_r) >= ocw_r) ? ocw_r
                                                            : (oc8_r - c_ocb * ocw_r))
                      : 16'd0;
-  wire [15:0] qb_w  = act_l >> 1;               // bias 64b 字数 (2 lane/字)
-  wire [15:0] qm_w  = act_l >> 2;               // mpos 64b 字数 (4 lane/字)
-  wire [15:0] q_tot = qb_w + qm_w + 16'd1;      // + tail 1 字
+  wire [15:0] qb_w  = {11'd0, qb_w_r};          // bias 64b 字数 (2 lane/字)
+  wire [15:0] qm_w  = {11'd0, qm_w_r};          // mpos 64b 字数 (4 lane/字)
+  wire [15:0] q_tot = {11'd0, q_tot_r};         // 总字数
   // dense 16-lane tile: 每像素 2 个 8B 写 beat; 其余 1 beat
-  wire [15:0] req_beats = (dense && (act_l == 16'd16)) ? 16'd16 : 16'd8;
-  wire [15:0] reqn_w    = 16'd5 + req_beats + 16'd2;   // 5 拍流水 + beats + NEXT
+  wire single16 = (dense && (act_l == 16'd16) && (oc8_r[3:0] == 4'd0) &&
+                   (d_dst[3:0] == 4'd0));
+  wire wr_dense16 = dense && (act_l == 16'd16);
+  wire [15:0] req_beats = wr_dense16 ? (single16 ? 16'd8 : 16'd16) : 16'd8;
+  // S_DRN 打拍的控制 (避免 ocw_r -> b_wdata mux 长路径)
+  logic        wr16_r, wrs16_r;
+  logic [15:0] wrbeats_r;
+  wire [15:0] reqn_w    = 16'd6 + wrbeats_r + 16'd2;   // 6 拍流水 + beats + NEXT
 
-  // Q 三段的 64b 字索引
-  wire [12:0] q_bias_base = 13'((d_qoff + c_ocb * ocw_r * 4) >> 3);
-  wire [12:0] q_mpos_base = 13'((d_qoff + 4 * oc8_r + c_ocb * ocw_r * 2) >> 3);
-  wire [12:0] q_tail_base = 13'((d_qoff + 6 * oc8_r) >> 3);
+  // Q 三段的 64b 字索引 (寄存器)
+  wire [12:0] q_bias_base = q_bias_w;
+  wire [12:0] q_mpos_base = q_mpos_w;
+  wire [12:0] q_tail_base = q_tail_w;
 
   // band in-bounds
   wire ld_inb = y_ok_r && (x_ld >= 0) && (x_ld < $signed(d_iw));
@@ -338,6 +353,9 @@ module nn_conv_engine
   // ---------------------------------------------------------------- ADD 打包
   wire [63:0] ad_dst_word = rd_half_d ? a_rdata[127:64] : a_rdata[63:0];
   logic [63:0] ad_pack;
+  logic [63:0] ad_pack_q;
+  logic signed [8:0] ad_delta [0:7];
+  logic [63:0] ad_dst_q;
   always_comb begin
     logic signed [8:0]  s;
     logic signed [31:0] p;
@@ -376,6 +394,20 @@ module nn_conv_engine
         win_sel[px] = st2_r ? bshift[2*px] : bshift[px];
     end
   end
+  logic [63:0] ad_pack2;
+  always_comb begin
+    logic signed [9:0] s2;
+    logic signed [7:0] qd2;
+    ad_pack2 = 64'd0;
+    for (int l = 0; l < 8; l++) begin
+      qd2 = $signed(ad_dst_q[l*8 +: 8]);
+      s2  = $signed({qd2[7], qd2}) + $signed(ad_delta[l]);
+      if (s2 > 10'sd127)       ad_pack2[l*8 +: 8] = 8'h7F;
+      else if (s2 < -10'sd128) ad_pack2[l*8 +: 8] = 8'h80;
+      else                     ad_pack2[l*8 +: 8] = s2[7:0];
+    end
+  end
+
   wire [5:0] sel_byte_base = {c_m[2:0], 3'b000};
   wire [3:0] cur_kx = dense ? c_m[7:3] : c_m[3:0];
   wire win_adv = (state == S_MAC)
@@ -447,8 +479,8 @@ module nn_conv_engine
           logic        half;
           logic [63:0] pay;
           logic [3:0]  sh;
-          beat = c_p - 16'd5;
-          if (dense && (act_l == 16'd16)) begin
+          beat = c_p - 16'd6;
+          if (wr16_r && !wrs16_r) begin
             px   = beat >> 1;
             half = beat[0];
           end
@@ -456,13 +488,19 @@ module nn_conv_engine
             px   = beat;
             half = 1'b0;
           end
-          if ((c_p >= 16'd5) && (c_p <= (16'd4 + req_beats)) && ((ox0 + px) < ow_w)) begin
+          if ((c_p >= 16'd6) && (c_p <= (16'd5 + wrbeats_r)) && ((ox0 + px) < ow_w)) begin
             pay = half ? out_hi[px[2:0]] : out_lo[px[2:0]];
             sh  = wpx[3:0];
             b_we_c    = 1'b1;
             b_addr_c  = {wpx[23:4], 4'h0};
-            b_wdata_c = (sh == 4'd8) ? {pay, 64'd0} : {64'd0, pay};
-            b_wstrb_c = (sh == 4'd8) ? 16'hFF00 : 16'h00FF;
+            if (wrs16_r) begin
+              b_wdata_c = {out_hi[px[2:0]], out_lo[px[2:0]]};
+              b_wstrb_c = 16'hFFFF;
+            end
+            else begin
+              b_wdata_c = (sh == 4'd8) ? {pay, 64'd0} : {64'd0, pay};
+              b_wstrb_c = (sh == 4'd8) ? 16'hFF00 : 16'h00FF;
+            end
           end
         end
       end
@@ -502,13 +540,13 @@ module nn_conv_engine
           b_wstrb_c = (sh == 4'd8) ? 16'hFF00 : 16'h00FF;
         end
       end
-      S_AD_WR: begin
+      S_AD_WR2: begin
         begin : ad_wr
           logic [3:0] sh;
           sh = dst_la[3:0];
           b_we_c    = 1'b1;
           b_addr_c  = {dst_la[23:4], 4'h0};
-          b_wdata_c = (sh == 4'd8) ? {ad_pack, 64'd0} : {64'd0, ad_pack};
+          b_wdata_c = (sh == 4'd8) ? {ad_pack2, 64'd0} : {64'd0, ad_pack2};
           b_wstrb_c = (sh == 4'd8) ? 16'hFF00 : 16'h00FF;
         end
       end
@@ -518,8 +556,8 @@ module nn_conv_engine
 
   assign a_addr    = a_addr_c;
   assign w_addr    = w_addr_c;
-  assign q_addr    = q_addr_c;
-  assign q_re      = q_re_c;
+  assign q_addr    = q_addr_q;
+  assign q_re      = q_re_q;
   assign b_we      = b_we_q;
   assign b_addr    = b_addr_q;
   assign b_sel     = sel_b_dst ? 2'd1 : 2'd0;
@@ -537,6 +575,7 @@ module nn_conv_engine
       done_r   <= 1'b0;
       ld_ret_v <= 1'b0;
       b_we_q   <= 1'b0; b_addr_q <= 24'd0; b_wdata_q <= 128'd0; b_wstrb_q <= 16'd0;
+      q_re_q   <= 1'b0; q_addr_q <= 13'd0;
       x_ld <= 16'sd0; x0_ld <= 16'sd0; dx_r <= 16'd1; y_ok_r <= 1'b0;
       y_ld <= 16'sd0;
       p3_ph <= 2'd0; p3w0 <= 128'd0; p3w1 <= 128'd0;
@@ -557,6 +596,8 @@ module nn_conv_engine
       row_base_a_n <= 24'd0; row_base_w_n <= 24'd0; nxt_sel <= 2'd0;
       sel_a_src <= 1'b0; sel_b_dst <= 1'b0;
       ic8_r <= 16'd0; oc8_r <= 16'd0; ocw_r <= 16'd8; oc_limit_r <= 16'd0;
+      q_tot_r <= 5'd0; qb_w_r <= 5'd0; qm_w_r <= 5'd0;
+      q_bias_w <= 13'd0; q_mpos_w <= 13'd0; q_tail_w <= 13'd0; rem_ch <= 16'd0;
       icb_n_r <= 16'd0; ld_count_r <= 16'd0; ld_m1_r <= 16'd0;
       row_step_a <= 24'd0; oy_step_a <= 24'd0; ox_step_a <= 24'd0;
       band_step_a <= 24'd0; band_ky_step <= 24'd0; base0_a <= 24'd0;
@@ -570,14 +611,19 @@ module nn_conv_engine
       pad_r <= 3'd0; oh_w <= 16'd0; ow_w <= 16'd0; st2_r <= 1'b0;
       zp_out <= 8'sd0; zp_in <= 8'sd0; shift_q <= 8'd0; leaky_q <= 1'b0;
       zp_s_r <= 8'sd0; zp_d_r <= 8'sd0; add_r_r <= 16'd0; kadd_r <= 8'd0;
+      ad_pack_q <= 64'd0; ad_dst_q <= 64'd0;
+      for (int l = 0; l < 8; l++) ad_delta[l] <= 9'sd0;
+      wr16_r <= 1'b0; wrs16_r <= 1'b0; wrbeats_r <= 16'd8;
       for (int px = 0; px < PX; px++) begin
         out_lo[px] <= 64'sd0; out_hi[px] <= 64'sd0;
       end
       for (int l = 0; l < OCL; l++) begin
         y64_q[l] <= 48'sd0; y2_q[l] <= 48'sd0; bias_q[l] <= 32'sd0;
-        mpos_q[l] <= 16'sd0; mneg_q[l] <= 32'sd0; mpos32[l] <= 32'sd0;
-        mtmp[l] <= 32'sd0; acc_sel[l] <= 32'sd0; m_sel[l] <= 32'sd0;
-        prod64[l] <= 64'sd0; wby_r[l] <= 16'sd0;
+        mpos_q[l] <= 16'sd0; mneg_q[l] <= 16'sd0; mpos32[l] <= 32'sd0;
+        mtmp[l] <= 32'sd0; acc_sel[l] <= 32'sd0; m_sel[l] <= 16'sd0;
+        acc_hi[l] <= 17'sd0; acc_lo[l] <= 17'sd0;
+        prod_hi[l] <= 32'sd0; prod_lo[l] <= 32'sd0;
+        prod64[l] <= 48'sd0; wby_r[l] <= 16'sd0;
         for (int px = 0; px < PX; px++) begin
           acc[px][l] <= 32'sd0; a_pipe[px][l] <= 8'sd0;
           a_pipe2[px][l] <= 8'sd0; prod[px][l] <= 16'sd0; mx[px][l] <= -8'sd128;
@@ -599,16 +645,18 @@ module nn_conv_engine
       b_addr_q  <= b_addr_c;
       b_wdata_q <= b_wdata_c;
       b_wstrb_q <= b_wstrb_c;
+      q_re_q    <= q_re_c;
+      q_addr_q  <= q_addr_c;
 
       // ---------------- 地址/基址递增 ----------------
       if (state == S_LD && !f_p3) la <= la + band_step_a;
       if (state == S_MAC) wa_r <= wa_r + w_delta;
 
       if (state == S_REQ) begin
-        if (c_p == 16'd4) wpx <= wr_base;
-        else if ((c_p >= 16'd5) && (c_p < (16'd5 + req_beats))) begin
-          if (dense && (act_l == 16'd16))
-            wpx <= wpx + (c_p[0] ? 24'd8 : (px_bytes - 24'd8));
+        if (c_p == 16'd5) wpx <= wr_base;
+        else if ((c_p >= 16'd6) && (c_p < (16'd6 + wrbeats_r))) begin
+          if (wr16_r && !wrs16_r)
+            wpx <= wpx + (c_p[0] ? (px_bytes - 24'd8) : 24'd8);
           else
             wpx <= wpx + px_bytes;
         end
@@ -663,23 +711,37 @@ module nn_conv_engine
         if (c_p <= 16'd7) begin
           for (int l = 0; l < OCL; l++) begin
             acc_sel[l] <= acc[c_p[2:0]][l];
-            m_sel[l]   <= (acc[c_p[2:0]][l] < 0) ? mneg_q[l]
-                                                 : {{16{mpos_q[l][15]}}, mpos_q[l]};
+            m_sel[l]   <= (acc[c_p[2:0]][l] < 0) ? mneg_q[l] : mpos_q[l];
           end
         end
         if ((c_p >= 16'd1) && (c_p <= 16'd8)) begin
-          for (int l = 0; l < OCL; l++)
-            prod64[l] <= $signed(acc_sel[l]) * $signed(m_sel[l]);
+          for (int l = 0; l < OCL; l++) begin
+            acc_hi[l] <= $signed(acc_sel[l][31:16]);
+            acc_lo[l] <= $signed({1'b0, acc_sel[l][15:0]});
+            prod_hi[l] <= $signed(acc_sel[l][31:16]) * $signed(m_sel[l]);
+            prod_lo[l] <= $signed({1'b0, acc_sel[l][15:0]}) * $signed(m_sel[l]);
+          end
         end
         if ((c_p >= 16'd2) && (c_p <= 16'd9)) begin
-          for (int l = 0; l < OCL; l++) y64_q[l] <= prod64[l] >>> shift_q;
+          logic signed [47:0] ph;
+          for (int l = 0; l < OCL; l++) begin
+            ph = $signed({{16{prod_hi[l][31]}}, prod_hi[l]}) <<< 16;
+            prod64[l] <= ph + $signed({{16{prod_lo[l][31]}}, prod_lo[l]});
+          end
         end
         if ((c_p >= 16'd3) && (c_p <= 16'd10)) begin
-          for (int l = 0; l < OCL; l++) y2_q[l] <= y64_q[l] + {{40{zp_out[7]}}, zp_out};
+          for (int l = 0; l < OCL; l++)
+            if (shift_q >= 8'd16)
+              y64_q[l] <= (prod64[l] >>> 16) >>> shift_q[3:0];
+            else
+              y64_q[l] <= prod64[l] >>> shift_q[3:0];
         end
         if ((c_p >= 16'd4) && (c_p <= 16'd11)) begin
-          out_lo[c_p[2:0] - 3'd4] <= rq_pack[63:0];
-          out_hi[c_p[2:0] - 3'd4] <= rq_pack[127:64];
+          for (int l = 0; l < OCL; l++) y2_q[l] <= y64_q[l] + {{40{zp_out[7]}}, zp_out};
+        end
+        if ((c_p >= 16'd5) && (c_p <= 16'd12)) begin
+          out_lo[c_p[2:0] - 3'd5] <= rq_pack[63:0];
+          out_hi[c_p[2:0] - 3'd5] <= rq_pack[127:64];
         end
       end
 
@@ -803,6 +865,18 @@ module nn_conv_engine
               p3_ox       <= st2_r ? (p3_row << 4) : (p3_row << 3);
             end
             16'd5: begin
+              // 首个 OC tile (c_ocb=0) 的 Q 参数打拍
+              begin : qc0
+                logic [15:0] a0;
+                a0 = (oc8_r >= ocw_r) ? ocw_r : oc8_r;
+                qb_w_r   <= 5'(a0 >> 1);
+                qm_w_r   <= 5'(a0 >> 2);
+                q_tot_r  <= 5'((a0 >> 1) + (a0 >> 2) + 16'd1);
+                q_bias_w <= 13'(d_qoff[15:0] >> 3);
+                q_mpos_w <= 13'((d_qoff[15:0] + (oc8_r << 2)) >> 3);
+                q_tail_w <= 13'((d_qoff[15:0] + (oc8_r << 2) + (oc8_r << 1)) >> 3);
+                rem_ch   <= (oc8_r > ocw_r) ? (oc8_r - ocw_r) : 16'd0;
+              end
               w_sub       <= {8'd0, oc8_r}
                              - ((d_ks == 4'd1) ? 24'd0 :
                                 (d_ks == 4'd2) ? p1 :
@@ -840,17 +914,18 @@ module nn_conv_engine
               mpos_q[l] <= 16'sd0;
             end
           end
-          if (16'(q_iss) < q_tot) q_iss <= q_iss + 5'd1;
-          if ((q_iss >= 5'd1) && (16'(q_iss) <= q_tot)) begin
-            if ((q_iss - 5'd1) < qb_w) begin
-              bias_q[2*q_iss - 2] <= $signed(q_rdata[31:0]);
-              bias_q[2*q_iss - 1] <= $signed(q_rdata[63:32]);
+          if (16'(q_iss) < (q_tot + 16'd2)) q_iss <= q_iss + 5'd1;
+          // q_addr 打拍后: 引擎侧 Q 数据在发出后第 2 拍有效 -> idx = q_iss-2
+          if ((q_iss >= 5'd2) && (q_iss <= (q_tot + 16'd1))) begin
+            if ((q_iss - 5'd2) < qb_w) begin
+              bias_q[2*(q_iss-5'd2)]     <= $signed(q_rdata[31:0]);
+              bias_q[2*(q_iss-5'd2) + 1] <= $signed(q_rdata[63:32]);
             end
-            else if ((q_iss - 5'd1) < (qb_w + qm_w)) begin
-              mpos_q[4*(q_iss-1-qb_w) + 0] <= $signed(q_rdata[15:0]);
-              mpos_q[4*(q_iss-1-qb_w) + 1] <= $signed(q_rdata[31:16]);
-              mpos_q[4*(q_iss-1-qb_w) + 2] <= $signed(q_rdata[47:32]);
-              mpos_q[4*(q_iss-1-qb_w) + 3] <= $signed(q_rdata[63:48]);
+            else if ((q_iss - 5'd2) < (qb_w + qm_w)) begin
+              mpos_q[4*(q_iss-2-qb_w) + 0] <= $signed(q_rdata[15:0]);
+              mpos_q[4*(q_iss-2-qb_w) + 1] <= $signed(q_rdata[31:16]);
+              mpos_q[4*(q_iss-2-qb_w) + 2] <= $signed(q_rdata[47:32]);
+              mpos_q[4*(q_iss-2-qb_w) + 3] <= $signed(q_rdata[63:48]);
             end
             else begin
               zp_out  <= q_rdata[7:0];
@@ -859,7 +934,7 @@ module nn_conv_engine
               shift_q <= q_rdata[31:24];
             end
           end
-          if (16'(q_iss) == q_tot) state <= S_QLOAD;
+          if (16'(q_iss) == (q_tot + 16'd1)) state <= S_QLOAD;
         end
         S_QLOAD: begin
           if (!c_ql) begin
@@ -871,7 +946,7 @@ module nn_conv_engine
           end
           else begin
             for (int l = 0; l < OCL; l++)
-              mneg_q[l] <= leaky_q ? ((mtmp[l] + 32'sd16384) >>> 15) : mpos32[l];
+              mneg_q[l] <= leaky_q ? 16'((mtmp[l] + 32'sd16384) >>> 15) : mpos_q[l];
             c_ql  <= 1'b0;
             state <= S_BI;
           end
@@ -1034,6 +1109,11 @@ module nn_conv_engine
           end
         end
         S_DRN: begin
+          if (c_drn == 16'd0) begin
+            wr16_r    <= wr_dense16;
+            wrs16_r   <= single16;
+            wrbeats_r <= req_beats;
+          end
           if (c_drn == (DRNN - 1)) begin
             c_drn <= 3'd0;
             c_p   <= 16'd0;
@@ -1085,6 +1165,17 @@ module nn_conv_engine
                                    : base0_a;
                 row_base_w <= d_dst[23:0] + ((c_ocb + 16'd1) * ocw_r);
                 wr_base    <= d_dst[23:0] + ((c_ocb + 16'd1) * ocw_r);
+                begin : qc1
+                  logic [15:0] rem_n, a_n;
+                  a_n   = (rem_ch >= ocw_r) ? ocw_r : rem_ch;
+                  rem_n = (rem_ch > a_n) ? (rem_ch - a_n) : 16'd0;
+                  rem_ch   <= rem_n;
+                  qb_w_r   <= 5'(a_n >> 1);
+                  qm_w_r   <= 5'(a_n >> 2);
+                  q_tot_r  <= 5'((a_n >> 1) + (a_n >> 2) + 16'd1);
+                  q_bias_w <= q_bias_w + 13'(ocw_r >> 1);
+                  q_mpos_w <= q_mpos_w + 13'(ocw_r >> 2);
+                end
                 if (is_pool) state <= S_PINIT;
                 else begin
                   q_iss <= 5'd0;
@@ -1185,20 +1276,42 @@ module nn_conv_engine
         end
         S_AD_R1: begin
           rd_half_s <= src_la[3];
+          state <= S_AD_R2;
+        end
+        S_AD_R2: begin
+          rd_half_d  <= dst_la[3];
+          src_word_q <= rd_half_s ? a_rdata[127:64] : a_rdata[63:0];
+          // q 口打拍后: S_AD_Q 发出 -> 第 2 拍(本拍)数据有效
           if (f_add_r && (c_iy == 16'd0) && (c_ix == 16'd0) && (c_cb == 16'd0)) begin
             zp_s_r  <= q_rdata[7:0];
             zp_d_r  <= q_rdata[15:8];
             add_r_r <= {q_rdata[31:24], q_rdata[23:16]};
             kadd_r  <= q_rdata[39:32];
           end
-          state <= S_AD_R2;
-        end
-        S_AD_R2: begin
-          rd_half_d  <= dst_la[3];
-          src_word_q <= rd_half_s ? a_rdata[127:64] : a_rdata[63:0];
           state      <= S_AD_WR;
         end
         S_AD_WR: begin
+          begin : ad_delta_calc
+            logic signed [7:0]  qs;
+            logic signed [31:0] p;
+            logic [63:0]        dword;
+            dword = rd_half_d ? a_rdata[127:64] : a_rdata[63:0];
+            ad_dst_q <= dword;
+            for (int l = 0; l < 8; l++) begin
+              qs = $signed(src_word_q[l*8 +: 8]);
+              if (f_add_r) begin
+                p = ($signed(qs) - $signed(zp_s_r)) * $signed({1'b0, add_r_r});
+                p = p >>> kadd_r;
+                ad_delta[l] <= 9'(p[8:0]);
+              end
+              else begin
+                ad_delta[l] <= {qs[7], qs};
+              end
+            end
+          end
+          state <= S_AD_WR2;
+        end
+        S_AD_WR2: begin
           if (c_cb + 16'd1 < icb_n_r) begin
             c_cb   <= c_cb + 16'd1;
             src_la <= src_la + 24'd8;

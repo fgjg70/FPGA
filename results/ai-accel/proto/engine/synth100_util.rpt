@@ -1,7 +1,7 @@
 Copyright 1986-2018 Xilinx, Inc. All Rights Reserved.
 --------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2018.3 (win64) Build 2405991 Thu Dec  6 23:38:27 MST 2018
-| Date         : Sun Nov  1 13:33:06 2026
+| Date         : Sun Nov  1 13:47:18 2026
 | Host         : fgjg running 64-bit major release  (build 9200)
 | Command      : report_utilization -file D:/USER/Desktop/FPGA/FPGA/results/ai-accel/proto/engine/synth100_util.rpt
 | Design       : nn_eng_timing_wrap_v3
@@ -30,14 +30,14 @@ Table of Contents
 +-------------------------+-------+-------+-----------+-------+
 |        Site Type        |  Used | Fixed | Available | Util% |
 +-------------------------+-------+-------+-----------+-------+
-| Slice LUTs*             | 31691 |     0 |     63400 | 49.99 |
-|   LUT as Logic          | 31691 |     0 |     63400 | 49.99 |
+| Slice LUTs*             | 33730 |     0 |     63400 | 53.20 |
+|   LUT as Logic          | 33730 |     0 |     63400 | 53.20 |
 |   LUT as Memory         |     0 |     0 |     19000 |  0.00 |
-| Slice Registers         | 14237 |     0 |    126800 | 11.23 |
-|   Register as Flip Flop | 14237 |     0 |    126800 | 11.23 |
+| Slice Registers         | 13810 |     0 |    126800 | 10.89 |
+|   Register as Flip Flop | 13810 |     0 |    126800 | 10.89 |
 |   Register as Latch     |     0 |     0 |    126800 |  0.00 |
-| F7 Muxes                |  3679 |     0 |     31700 | 11.61 |
-| F8 Muxes                |  1371 |     0 |     15850 |  8.65 |
+| F7 Muxes                |  3616 |     0 |     31700 | 11.41 |
+| F8 Muxes                |  1348 |     0 |     15850 |  8.50 |
 +-------------------------+-------+-------+-----------+-------+
 * Warning! The Final LUT count, after physical optimizations and full implementation, is typically lower. Run opt_design after synthesis, if not already completed, for a more realistic count.
 
@@ -57,7 +57,7 @@ Table of Contents
 | 0     |          Yes |           - |          Set |
 | 0     |          Yes |           - |        Reset |
 | 67    |          Yes |         Set |            - |
-| 14170 |          Yes |       Reset |            - |
+| 13743 |          Yes |       Reset |            - |
 +-------+--------------+-------------+--------------+
 
 
@@ -82,8 +82,8 @@ Table of Contents
 +----------------+------+-------+-----------+-------+
 |    Site Type   | Used | Fixed | Available | Util% |
 +----------------+------+-------+-----------+-------+
-| DSPs           |  185 |     0 |       240 | 77.08 |
-|   DSP48E1 only |  185 |       |           |       |
+| DSPs           |  200 |     0 |       240 | 83.33 |
+|   DSP48E1 only |  200 |       |           |       |
 +----------------+------+-------+-----------+-------+
 
 
@@ -152,17 +152,17 @@ Table of Contents
 +----------+-------+---------------------+
 | Ref Name |  Used | Functional Category |
 +----------+-------+---------------------+
-| LUT6     | 14789 |                 LUT |
-| FDRE     | 14170 |        Flop & Latch |
-| LUT2     |  9148 |                 LUT |
-| LUT3     |  7750 |                 LUT |
-| MUXF7    |  3679 |               MuxFx |
-| LUT4     |  2886 |                 LUT |
-| LUT5     |  2751 |                 LUT |
-| CARRY4   |  2725 |          CarryLogic |
-| MUXF8    |  1371 |               MuxFx |
-| LUT1     |   378 |                 LUT |
-| DSP48E1  |   185 |    Block Arithmetic |
+| LUT6     | 17507 |                 LUT |
+| FDRE     | 13743 |        Flop & Latch |
+| LUT2     |  8652 |                 LUT |
+| LUT3     |  7293 |                 LUT |
+| MUXF7    |  3616 |               MuxFx |
+| LUT5     |  2664 |                 LUT |
+| CARRY4   |  2519 |          CarryLogic |
+| LUT4     |  2449 |                 LUT |
+| MUXF8    |  1348 |               MuxFx |
+| LUT1     |   371 |                 LUT |
+| DSP48E1  |   200 |    Block Arithmetic |
 | RAMB36E1 |   106 |        Block Memory |
 | FDSE     |    67 |        Flop & Latch |
 | RAMB18E1 |     3 |        Block Memory |

@@ -14,7 +14,8 @@
 //      16 lane 写回; copy/concat 的 8 字节半字写只写 half word, **不做 RMW**)。
 //   4. CPU 窗口只映射 A(0x60000)/B(0x78000): 其余窗口地址读 0/写忽略 (1 拍寄存读)。
 //   5. 新增 dbg 装载口 (dbg_we/dbg_space/dbg_addr[16:0]/dbg_wdata[31:0]): module
-//      级 TB 用它初始化 W/Q; SoC 里恒 0 → 写口被常量传播剪掉, W/Q 落 ROM。
+//      级 TB 用它初始化 W/Q; 写口**只存在于仿真** (综合由 ifndef SYNTHESIS 去掉),
+//      SoC 里 W/Q 是纯 ROM, 两个 W 读口才能落 BRAM36 真双口 (0 额外 BRAM)。
 //
 // 【地址口径 (NN 窗口内字节偏移)】
 //   W:  0x00000..0x4FFFF  (320KB)
@@ -24,7 +25,8 @@
 //   B:  0x78000..0x7FFFF  (32KB)   —— A/B 连续, 共用一块 128-bit 宽物理阵列
 //
 // 【读口语义 (均 1 拍寄存读: 地址第 N 拍、数据 N+1 拍有效)】
-//   w_re  + w_addr[23:0] (W 区字节偏移, 16B 对齐, 低 4 位忽略)
+//   w_re  + w_addr[23:0] (W 区字节偏移, **8B 对齐、低 3 位忽略**; 读 16B 窗口,
+//           w_addr[3]=1 时窗口跨 128b 字边界 -> {下一字低 8B, 当前字高 8B})
 //         -> w_rdata[127:0] = 16 字节小端 (低地址字节在 [7:0]); 越界 -> 0。
 //   q_re  + q_addr[12:0] (64-bit Q 字索引 0..6143)
 //         -> q_rdata[63:0] = {Q32[2k+1], Q32[2k]} (低地址 32 位字在 [31:0]);
@@ -35,7 +37,9 @@
 //         b_wstrb 按字节使能 (copy 的 8B 写只置 [7:0] 或 [15:8])。
 //
 // 【物理组织与 BRAM 账 (v0.7 综合实测)】
-//   W  : 4 段 128-bit 宽阵列 (8192/4096/4096/4096 个 128-bit 字):
+//   W  : 4 段 128-bit 宽阵列 (8192/4096/4096/4096 个 128-bit 字), 每段 2 个读口
+//        (cur/next, 复用 BRAM36 真双口, 0 额外 BRAM —— 实测 1 读口 vs 2 读口
+//        同为 32 BRAM36 @8192x128);
 //        段 A=128KB, B/C/D=64KB; 综合 -> 74 RAMB36 + 3 RAMB18 = 75.5 tiles
 //        (随机数据实测; 见 mem-report.md)。为什么必须拆 4 段: 128-bit 宽 ROM
 //        深度 >16384 时 Vivado 按 32768 取整 (单块 20480 深 -> 128 块)。
@@ -146,15 +150,6 @@ module nn_mem
   assign w_dbg_we = dbg_we && (dbg_space == 1'b0) && (32'(dbg_addr) < 32'(W_WORDS));
   assign q_dbg_we = dbg_we && (dbg_space == 1'b1) && (32'(dbg_addr) < 32'(Q_WORDS));
 
-  logic w_dbg_we_eff, q_dbg_we_eff;
-`ifdef SYNTHESIS
-  assign w_dbg_we_eff = 1'b0;
-  assign q_dbg_we_eff = 1'b0;
-`else
-  assign w_dbg_we_eff = w_dbg_we;
-  assign q_dbg_we_eff = q_dbg_we;
-`endif
-
   // ==========================================================================
   // W 区: 4 段 128-bit 宽阵列, 每拍 4 段并行读, 输出按段选择
   // ==========================================================================
@@ -163,10 +158,17 @@ module nn_mem
   logic [127:0] w_mem_c [0:WSEG_C-1];
   logic [127:0] w_mem_d [0:WSEG_D-1];
 
-  // 读地址: w_addr[18:4] = 128-bit 字索引 (低 4 位忽略)
+  // 读地址: w_addr[18:4] = 128-bit 字索引 (低 4 位忽略; w_addr[3] 见下)
+  //   v0.7 fix: 引擎按 **8B 粒度** 发 w_addr (8-lane tile 的 row + ic*8, 奇数 ic 时
+  //   w_addr[3]=1)。所以 W 读口必须支持 8B 对齐的 16B 窗口: 低 3 位忽略,
+  //   返回字节 [w_addr, w_addr+15] (小端)。实现: 每段两个读口 (BRAM36 真双口,
+  //   0 额外 BRAM), cur = mem[idx] (A 口), next = mem[idx+1] (B 口),
+  //   w_rdata = w_addr[3] ? {next[63:0], cur[127:64]} : cur。
   logic [14:0] w_idx;
   logic [1:0]  w_seg;
+  logic        w_odd;
   assign w_idx = w_addr[18:4];
+  assign w_odd = w_addr[3];
   always_comb begin
     w_seg = 2'd3;
     if (w_idx < 15'd8192)       w_seg = 2'd0;
@@ -186,78 +188,139 @@ module nn_mem
     else if (w_wr_idx < 15'd16384) w_wr_seg = 2'd2;
   end
 
-  logic [127:0] w_rd_a, w_rd_b, w_rd_c, w_rd_d;
+  // next 读地址 (B 口):
+  //   · 本段内: cur 局部索引 +1 (末字回绕, 该拍不使用);
+  //   · 段边界 (A/B/C 末字): 让**下一段**的 B 口读它的第 0 个字, 供跨段窗口用;
+  //   · 其余段不被选中, 地址给 0 即可 (数据不使用)。
+  logic [12:0] w_nxt_ia;
+  logic [11:0] w_nxt_ib, w_nxt_ic, w_nxt_id;
+  assign w_nxt_ia = (w_idx < 15'd8192)                               ? (w_idx[12:0] + 13'd1) : 13'd0;
+  assign w_nxt_ib = ((w_idx >= 15'd8192) && (w_idx < 15'd12288))     ? (w_idx[11:0] + 12'd1) : 12'd0;
+  assign w_nxt_ic = ((w_idx >= 15'd12288) && (w_idx < 15'd16384))    ? (w_idx[11:0] + 12'd1) : 12'd0;
+  assign w_nxt_id = (w_idx >= 15'd16384)                             ? (w_idx[11:0] + 12'd1) : 12'd0;
+
+  logic [127:0] w_cur_a, w_cur_b, w_cur_c, w_cur_d;
+  // 第二读口 (next) 的寄存器必须加 keep 保持 128-bit 数据宽度:
+  //   功能上 odd 读只用 next[63:0], 若被综合裁成 64-bit, Vivado 会额外复制一份
+  //   64-bit 存储 (实测 W 从 75.5 tiles 涨到 147.5 tiles, 超 135 预算)。
+  //   keep 后两个 128-bit 读口共用 BRAM36 真双口, W 保持 75.5 tiles (实测见报告)。
+  (* keep = "true" *) logic [127:0] w_nxt_a;
+  (* keep = "true" *) logic [127:0] w_nxt_b;
+  (* keep = "true" *) logic [127:0] w_nxt_c;
+  (* keep = "true" *) logic [127:0] w_nxt_d;
+  logic [14:0]  w_idx_r;
   logic [1:0]   w_seg_r;
+  logic         w_odd_r;
   logic         w_rd_valid_r;
 
   always @(posedge clk) begin
-    w_rd_a <= w_mem_a[w_idx[12:0]];
+    w_cur_a <= w_mem_a[w_idx[12:0]];
+    w_nxt_a <= w_mem_a[w_nxt_ia];
   end
+`ifndef SYNTHESIS
+  // dbg 装载写口只存在于仿真: 综合时写口整体不存在 -> W 阵列是纯 ROM,
+  // 两个读口才能映射成 BRAM36 真双口 (SoC 里 dbg 本来就 tie 0)。
   always @(posedge clk) begin
-    if (w_dbg_we_eff && (w_wr_seg == 2'd0)) begin
+    if (w_dbg_we && (w_wr_seg == 2'd0)) begin
       if (w_wr_lane == 2'd0) w_mem_a[w_wr_idx[12:0]][31:0]   <= dbg_wdata;
       if (w_wr_lane == 2'd1) w_mem_a[w_wr_idx[12:0]][63:32]  <= dbg_wdata;
       if (w_wr_lane == 2'd2) w_mem_a[w_wr_idx[12:0]][95:64]  <= dbg_wdata;
       if (w_wr_lane == 2'd3) w_mem_a[w_wr_idx[12:0]][127:96] <= dbg_wdata;
     end
   end
+`endif
 
   always @(posedge clk) begin
-    w_rd_b <= w_mem_b[w_idx[11:0]];
+    w_cur_b <= w_mem_b[w_idx[11:0]];
+    w_nxt_b <= w_mem_b[w_nxt_ib];
   end
+`ifndef SYNTHESIS
   always @(posedge clk) begin
-    if (w_dbg_we_eff && (w_wr_seg == 2'd1)) begin
+    if (w_dbg_we && (w_wr_seg == 2'd1)) begin
       if (w_wr_lane == 2'd0) w_mem_b[w_wr_idx[11:0]][31:0]   <= dbg_wdata;
       if (w_wr_lane == 2'd1) w_mem_b[w_wr_idx[11:0]][63:32]  <= dbg_wdata;
       if (w_wr_lane == 2'd2) w_mem_b[w_wr_idx[11:0]][95:64]  <= dbg_wdata;
       if (w_wr_lane == 2'd3) w_mem_b[w_wr_idx[11:0]][127:96] <= dbg_wdata;
     end
   end
+`endif
 
   always @(posedge clk) begin
-    w_rd_c <= w_mem_c[w_idx[11:0]];
+    w_cur_c <= w_mem_c[w_idx[11:0]];
+    w_nxt_c <= w_mem_c[w_nxt_ic];
   end
+`ifndef SYNTHESIS
   always @(posedge clk) begin
-    if (w_dbg_we_eff && (w_wr_seg == 2'd2)) begin
+    if (w_dbg_we && (w_wr_seg == 2'd2)) begin
       if (w_wr_lane == 2'd0) w_mem_c[w_wr_idx[11:0]][31:0]   <= dbg_wdata;
       if (w_wr_lane == 2'd1) w_mem_c[w_wr_idx[11:0]][63:32]  <= dbg_wdata;
       if (w_wr_lane == 2'd2) w_mem_c[w_wr_idx[11:0]][95:64]  <= dbg_wdata;
       if (w_wr_lane == 2'd3) w_mem_c[w_wr_idx[11:0]][127:96] <= dbg_wdata;
     end
   end
+`endif
 
   always @(posedge clk) begin
-    w_rd_d <= w_mem_d[w_idx[11:0]];
+    w_cur_d <= w_mem_d[w_idx[11:0]];
+    w_nxt_d <= w_mem_d[w_nxt_id];
   end
+`ifndef SYNTHESIS
   always @(posedge clk) begin
-    if (w_dbg_we_eff && (w_wr_seg == 2'd3)) begin
+    if (w_dbg_we && (w_wr_seg == 2'd3)) begin
       if (w_wr_lane == 2'd0) w_mem_d[w_wr_idx[11:0]][31:0]   <= dbg_wdata;
       if (w_wr_lane == 2'd1) w_mem_d[w_wr_idx[11:0]][63:32]  <= dbg_wdata;
       if (w_wr_lane == 2'd2) w_mem_d[w_wr_idx[11:0]][95:64]  <= dbg_wdata;
       if (w_wr_lane == 2'd3) w_mem_d[w_wr_idx[11:0]][127:96] <= dbg_wdata;
     end
   end
+`endif
 
   always @(posedge clk) begin
     if (rst) begin
+      w_idx_r      <= 15'd0;
       w_seg_r      <= 2'd0;
+      w_odd_r      <= 1'b0;
       w_rd_valid_r <= 1'b0;
     end else begin
+      w_idx_r      <= w_idx;
       w_seg_r      <= w_seg;
+      w_odd_r      <= w_odd;
       w_rd_valid_r <= w_re && (32'(w_addr) < 32'(W_BYTES));
     end
   end
 
-  logic [127:0] w_rd_mux_r;
+  logic [127:0] w_cur_r, w_nxt_r;
   always_comb begin
     case (w_seg_r)
-      2'd0:    w_rd_mux_r = w_rd_a;
-      2'd1:    w_rd_mux_r = w_rd_b;
-      2'd2:    w_rd_mux_r = w_rd_c;
-      default: w_rd_mux_r = w_rd_d;
+      2'd0:    w_cur_r = w_cur_a;
+      2'd1:    w_cur_r = w_cur_b;
+      2'd2:    w_cur_r = w_cur_c;
+      default: w_cur_r = w_cur_d;
     endcase
   end
-  assign w_rdata = w_rd_valid_r ? w_rd_mux_r : 128'b0;
+
+  // next 字: 正常用本段 B 口; 段边界用下一段 B 口读到的第 0 个字; W 末字越界给 0
+  always_comb begin
+    if (w_idx_r == 15'd8191)
+      w_nxt_r = w_nxt_b;             // A 末字 -> B[0]
+    else if (w_idx_r == 15'd12287)
+      w_nxt_r = w_nxt_c;             // B 末字 -> C[0]
+    else if (w_idx_r == 15'd16383)
+      w_nxt_r = w_nxt_d;             // C 末字 -> D[0]
+    else if (w_idx_r == 15'd20479)
+      w_nxt_r = 128'b0;              // W 末字, 窗口后半越界 -> 0
+    else case (w_seg_r)
+      2'd0:    w_nxt_r = w_nxt_a;
+      2'd1:    w_nxt_r = w_nxt_b;
+      2'd2:    w_nxt_r = w_nxt_c;
+      default: w_nxt_r = w_nxt_d;
+    endcase
+  end
+
+  // 8B 对齐的 16B 窗口: w_addr[3]=1 时取 {下一 128b 字的低 64b, 当前 128b 字的高 64b}
+  logic [127:0] w_win_r;
+  assign w_win_r = w_odd_r ? {w_nxt_r[63:0], w_cur_r[127:64]} : w_cur_r;
+  assign w_rdata = w_rd_valid_r ? w_win_r : 128'b0;
 
   // ==========================================================================
   // Q 区: 64-bit 宽、6144 深 -> 分布式 RAM/ROM (LUTRAM, 0 BRAM)
@@ -268,15 +331,16 @@ module nn_mem
 
   logic [63:0] q_rd;
   logic        q_rd_valid_r;
-  // 写口与读口放在**两个** always 块里: SoC 中 dbg_we 恒 0 时写块被常量传播整体
-  // 剪掉, Q 才能推断成分布式 ROM (单 always 合并会保留分布式 RAM 写口, 实测
-  // LUT 从 6,976 涨到 12,288)。module 级 TB 中写口仍可正常使用。
+  // dbg 装载写口只存在于仿真: 综合时写块整体不存在 -> Q 推断成分布式 ROM
+  // (若综合里保留写口, Vivado 落 12,288 LUTRAM, 比 ROM 的 6,981 LUT 多 76%)。
+`ifndef SYNTHESIS
   always @(posedge clk) begin
-    if (q_dbg_we_eff) begin
+    if (q_dbg_we) begin
       if (dbg_addr[0]) q_mem[dbg_addr[13:1]][63:32] <= dbg_wdata;
       else             q_mem[dbg_addr[13:1]][31:0]  <= dbg_wdata;
     end
   end
+`endif
   always @(posedge clk) begin
     q_rd <= q_mem[q_addr];
   end

@@ -80,9 +80,10 @@ module proto_nn_mem_v07 #(
     cpu_wdata = {cyc[7:0], cyc[7:0], cyc[15:0]};
     cpu_wstrb = cyc[9:6];
 
-    // W: 128-bit 读, 覆盖 0..0x4FFFF (越界读回 0); 16B 对齐
+    // W: 128-bit 读, 覆盖 0..0x4FFFF (越界读回 0); 8B 对齐 (bit3 也动态 ->
+    //    强制综合出 cur/next 两个读口, 验证 2 读口不额外占 BRAM)
     w_re      = cyc[2];
-    w_addr    = {5'h0, slow[1:0], cyc[15:3], 4'h0};
+    w_addr    = {5'h0, slow[1:0], cyc[12:0], cyc[15], 3'h0};
 
     // Q: 64-bit 读, 13 位索引全域可达 (越界读回 0)
     q_re      = cyc[3];

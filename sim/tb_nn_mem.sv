@@ -6,7 +6,8 @@
 // 判据: MEM_TB: PASS/FAIL + mismatch/xerr 计数; 所有比较用 !== (X 必报)。
 //
 // 覆盖:
-//   ① W 128b 读: 全量 20,480 次扫描 (需 +nnw= 或 +nnwq= 镜像), 逐字比对 + FNV
+//   ① W 128b 读: 2 × 20,480 次全量扫描 —— 16B 对齐 + **8B 对齐窗口 (跨 128b 字边界)**,
+//      与打包前 32-bit 字序列比对 + FNV (需 +nnw= 或 +nnwq= 镜像)
 //   ② Q 64b 读: 全量 6,144 次扫描 (需 +nnq= 或 +nnwq=), 逐字比对 + FNV
 //   ③ dbg 装载口: 写 W(128b 字内 lane)/Q(64b 字内半字) 后经 NPU 口回读
 //   ④ A/B: 128b 写 + b_wstrb 字节使能 (含半字写不做 RMW)、128b 读、两区不串扰、
@@ -183,6 +184,20 @@ module tb_nn_mem #(
     if (has_img) w_exp = {wpat32(4*k128+3), wpat32(4*k128+2), wpat32(4*k128+1), wpat32(4*k128)};
     else         w_exp = 128'b0;
   endfunction
+  // 8B 对齐的 16B 窗口 (w_addr = 16k+8): 32-bit 字序列 [4k+2 .. 4k+5],
+  // 末字 k=20479 时高 8B 越出 W 区 -> 0。
+  function automatic logic [127:0] w_exp_odd(input bit has_img, input logic [31:0] k128);
+    logic [31:0] w0, w1, w2, w3;
+    if (!has_img) begin
+      w0 = 32'h0; w1 = 32'h0; w2 = 32'h0; w3 = 32'h0;
+    end else begin
+      w0 = (4*k128+2 < 32'(W_WORDS)) ? wpat32(4*k128+2) : 32'h0;
+      w1 = (4*k128+3 < 32'(W_WORDS)) ? wpat32(4*k128+3) : 32'h0;
+      w2 = (4*k128+4 < 32'(W_WORDS)) ? wpat32(4*k128+4) : 32'h0;
+      w3 = (4*k128+5 < 32'(W_WORDS)) ? wpat32(4*k128+5) : 32'h0;
+    end
+    w_exp_odd = {w3, w2, w1, w0};
+  endfunction
   function automatic logic [63:0] q_exp(input bit has_img, input logic [31:0] k64);
     if (has_img) q_exp = {qpat32(2*k64+1), qpat32(2*k64)};
     else         q_exp = 64'b0;
@@ -224,9 +239,10 @@ module tb_nn_mem #(
     chk128(w_rdata, 128'h0, "post-reset: w_rdata");
     chk64(q_rdata, 64'h0, "post-reset: q_rdata");
 
-    // ---------- ① W 128b 全量扫描 (20,480 次) ----------
+    // ---------- ① W 128b 全量扫描 (2 × 20,480 次: 16B 对齐 + 8B 对齐跨字) ----------
     if (has_wimg) begin : w_sweep
-      $display("[MEM_TB] W sweep start: %0d x 128b (%0d x 32b words)", W128, W_WORDS);
+      $display("[MEM_TB] W sweep start: %0d x 128b aligned + %0d x 128b 8B-window (%0d x 32b words)",
+               W128, W128, W_WORDS);
       for (int k = 0; k < W128; k++) begin
         w_read(24'(k * 16), rd128);
         exp128 = w_exp(1'b1, k);
@@ -243,9 +259,26 @@ module tb_nn_mem #(
           fnv_we = fnv1a_byte(fnv_we, exp128[8*bi +: 8]);
         end
       end
+      // 8B 对齐窗口 (w_addr[3]=1, 跨 128b 字边界; 引擎 v3 的 8-lane tile 会发这种地址)
+      for (int k = 0; k < W128; k++) begin
+        w_read(24'(k * 16 + 8), rd128);
+        exp128 = w_exp_odd(1'b1, k);
+        n_w_sweep++;
+        n_checks++;
+        if ((^rd128) === 1'bx) begin
+          n_xerr++; if (n_xerr <= 10) $display("[MEM_TB] X-ERR Wodd[%0d]", k);
+        end else if (rd128 !== exp128) begin
+          n_mismatch++; if (n_mismatch <= 20)
+            $display("[MEM_TB] MISMATCH Wodd[%0d] act=0x%032x exp=0x%032x", k, rd128, exp128);
+        end
+        for (int bi = 0; bi < 16; bi++) begin
+          fnv_wr = fnv1a_byte(fnv_wr, rd128[8*bi +: 8]);
+          fnv_we = fnv1a_byte(fnv_we, exp128[8*bi +: 8]);
+        end
+      end
       $display("[MEM_TB] W sweep done: %0d reads, fnv=0x%08x/0x%08x",
                n_w_sweep, fnv_wr, fnv_we);
-      chk32(fnv_wr, fnv_we, "W full-sweep FNV");
+      chk32(fnv_wr, fnv_we, "W full-sweep (aligned+odd) FNV");
     end else begin
       $display("[MEM_TB] SKIP W sweep (no +nnw/+nnwq image)");
     end
