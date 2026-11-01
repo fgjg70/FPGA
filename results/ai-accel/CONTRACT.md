@@ -434,3 +434,53 @@ endpackage
    引擎 ADD op 保留但计划不再使用。
 2. AI 档 150MHz 首轮全实现：BRAM 133.5/135 达标，但 WNS −18.416（fmax 39.9MHz）；
    最差路径 = 引擎权重地址生成组合链 → 引擎流水化进行中（Round 2）。
+
+
+---
+
+## 12. v0.7 特化契约（2026-11-01，用户 D1–D5 拍板）
+
+> 详细规格见 [`SPEC-SPECIALIZED.md`](SPEC-SPECIALIZED.md)；模型/权重冻结见 [`MODEL-FREEZE.md`](MODEL-FREEZE.md)。
+> 本节只列**对外契约变化**；交付档（无 `NN_EN`）不受任何影响。
+
+### 12.1 存储与可见性
+| 区 | v0.5 | v0.7 |
+|---|---|---|
+| W 320KB | 与 Q 合并为 368KB 连续阵列 | **独立 320KB（80×BRAM36）**，NPU 128-bit 读口，CPU **不可访问** |
+| Q 48KB | WQ 高位区，CPU 可读 | **独立 LUTRAM（12,288×32b）+ 独立 64-bit 读口**，CPU **不可访问** |
+| A 96KB / B 32KB | CPU 窗口可读写 | **CPU 窗口只映射 A/B**；其它窗口地址读 0、写忽略 |
+| 窗口基址/大小 | `0x9004_0000` / 512KB | **不变**（CPU 只用到 A/B 两段） |
+
+### 12.2 flags 扩展（`nn_desc_t.flags` 5→7 位）
+| 位 | 名称 | 语义 |
+|---|---|---|
+| 5 | `PACKED3` | 输入激活按 3B/像素 packed 寻址（`addr = y*iw*3 + x*3 + c`，c<3；c≥3 的 lane 填 `zp_in`）。仅 conv0 使用。 |
+| 6 | `ADD_R` | add 使用 per-tensor 源 requant：`out = clamp(q_d + (((q_s - zp_s)*R) >> KADD), -128, 127)`（不变量：`q_d` 已含目标 zero-point）。 |
+
+### 12.3 ADD_R 的 Q 块布局（16 字节）
+```
+偏移 0: zp_d (int8)     偏移 1: zp_s (int8)
+偏移 2..3: 0
+偏移 4..7: R (int32 little-endian, 0 < R ≤ 65535)
+偏移 8: KADD (u8, ≤ 15) 偏移 9..15: 0
+```
+
+### 12.4 微码 ROM（`nn_seq` 用，`nn_pkg::nn_rom_t`，深度 128）
+字段：`kind(4) flags(7) ks(4) pad(3) stride(2) ic(10) oc(10) ih(9) iw(9) src(17) dst(17) woff(19) qoff(16) aux0(16) aux1(16) csum(32)`。
+- `kind`：0=conv, 1=dwconv, 2=pool, 3=upsample, 4=add, 5=copy；`nn_seq` 映射为 `desc.op`+`flags`；
+- `src/dst` 是 A/B 窗口内字节偏移；`woff` 相对 W 基址、`qoff` 相对 Q 基址；
+- `aux0/aux1`：add 的 R / KADD（其它 kind 为 0）；
+- 由 `tools/nn_gen_rom.py` 从 `plan.json` 生成 `nn_rom.svh`；ROM 内容变化必须重跑 E2E。
+- 该 ROM 占 ~3KB（LUTRAM），**不占 BRAM**。
+
+### 12.5 双执行模式（同一硬件）
+| 模式 | 触发 | 行为 |
+|---|---|---|
+| `MODE_CPU`（v0.5 兼容） | `NN_CTRL.start=1`，CPU 逐 op 写描述符 | 与 v0.5 完全一致（回归基准） |
+| `MODE_AUTO`（v0.7） | `NN_CTRL.start=1` + `NN_CTRL.auto=1` | `nn_seq` 自主按 ROM 跑完；CPU 只读 `STATUS/CYCLES`，完成后置 IRQ/status |
+
+**验收**：同一 128 plan 两种模式逐 op checksum 必须完全相同；`MODE_AUTO` 对 golden `hw_bad=0`。
+
+### 12.6 引擎 v3 端口
+`w_rdata[127:0]`、`b_wdata[127:0]`、独立 `q_re/q_addr[12:0]/q_rdata[63:0]`；`desc` 语义不变。
+硬件 128 MAC/拍（16 OC lanes × 8 px）；数值公式（requant/leaky/padding/饱和）与 v2 完全一致。
