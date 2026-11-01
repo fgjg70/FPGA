@@ -457,13 +457,16 @@ endpackage
 | 5 | `PACKED3` | 输入激活按 3B/像素 packed 寻址（`addr = y*iw*3 + x*3 + c`，c<3；c≥3 的 lane 填 `zp_in`）。仅 conv0 使用。 |
 | 6 | `ADD_R` | add 使用 per-tensor 源 requant：`out = clamp(q_d + (((q_s - zp_s)*R) >> KADD), -128, 127)`（不变量：`q_d` 已含目标 zero-point）。 |
 
-### 12.3 ADD_R 的 Q 块布局（16 字节）
+### 12.3 ADD_R 的 Q 块布局（16 字节，2026-11-01 与 T-accel 钉死）
 ```
-偏移 0: zp_d (int8)     偏移 1: zp_s (int8)
-偏移 2..3: 0
-偏移 4..7: R (int32 little-endian, 0 < R ≤ 65535)
-偏移 8: KADD (u8, ≤ 15) 偏移 9..15: 0
+byte[0]    = zp_s (int8)      # 源张量 zero-point（公式使用）
+byte[1]    = zp_d (int8)      # 目标 zero-point（仅 debug/记录；公式不加）
+byte[2:3]  = R (u16 little-endian, 0 < R ≤ 65535)
+byte[4]    = KADD (u8, ≤ 15)
+byte[5:15] = 0
 ```
+公式：`out = clamp(q_d + (((q_s - zp_s) * R) >> KADD), -128, 127)`；`q_d` 已含目标 zero-point。
+**R 为 per-tensor**（冻结模型实测 R ∈ [4249, 41736] ≤ 65535，见 MODEL-FREEZE）；不要求 per-OC。
 
 ### 12.4 微码 ROM（`nn_seq` 用，`nn_pkg::nn_rom_t`，深度 128）
 字段：`kind(4) flags(7) ks(4) pad(3) stride(2) ic(10) oc(10) ih(9) iw(9) src(17) dst(17) woff(19) qoff(16) aux0(16) aux1(16) csum(32)`。
@@ -482,5 +485,11 @@ endpackage
 **验收**：同一 128 plan 两种模式逐 op checksum 必须完全相同；`MODE_AUTO` 对 golden `hw_bad=0`。
 
 ### 12.6 引擎 v3 端口
-`w_rdata[127:0]`、`b_wdata[127:0]`、独立 `q_re/q_addr[12:0]/q_rdata[63:0]`；`desc` 语义不变。
+`w_rdata[127:0]`、`b_wdata[127:0] + b_wstrb[15:0]`、独立 `q_re/q_addr[12:0]/q_rdata[63:0]`；`desc` 语义不变。
 硬件 128 MAC/拍（16 OC lanes × 8 px）；数值公式（requant/leaky/padding/饱和）与 v2 完全一致。
+
+- **B 写口（2026-11-01 钉死）**：`b_wdata[127:0]` + **`b_wstrb[15:0]`**（字节掩码）。理由：copy/concat（8 通道=8B 写）、`oc_pad=8` 层、`OC_pad%16==8` 层的第二次 8B 写都必须能只写半字，
+  否则会覆盖相邻像素。**不允许** read-modify-write 方案（会把 copy 变慢且公式复杂）。
+- **Q 口地址**：`q_addr[12:0]` = **64-bit Q 字索引**（Q 区 6144 个 64b 字；= qoff[15:3] + 序号）；`qoff` 是 Q 区相对字节偏移（8 字节对齐）。
+- **A 读口语义不变**：`a_addr` 是字节地址、读 16B 对齐窗口（低 4 位忽略）；PACKED3 由引擎内部二级窗缓冲提取 3B/像素。
+- **DSP 预算修订**：引擎 **≤160 DSP**（器件 240 为硬上限；LUT 尽量让给逻辑）。MODEL-FREEZE 里"≤110"作废（128 MAC 下不现实）。

@@ -118,14 +118,15 @@ package nn_pkg;
     logic [9:0]  oc;         // 真实输出通道
     logic [8:0]  ih;         // 输入高 (≤511)
     logic [8:0]  iw;         // 输入宽
-    logic [16:0] src;        // A/B 窗口内字节偏移 (<128KB)
-    logic [16:0] dst;
+    logic [18:0] src;        // A/B 窗口内字节偏移 (A=0x60000/B=0x78000, <0x80000 ⇒ 19 位)
+    logic [18:0] dst;
     logic [18:0] woff;       // W 区字节偏移 (<320KB)
     logic [15:0] qoff;       // Q 区字节偏移 (<48KB)
     logic [15:0] aux0;       // add: R
     logic [15:0] aux1;       // add: KADD
     logic [31:0] csum;       // golden FNV (debug)
-  } nn_rom_t;                // 4+7+4+3+2+10+10+9+9+17+17+19+16+16+16+32 = 191 bit (打包 192)
+    logic [4:0]  rsvd;       // 对齐到 200 bit (25B/项, 128 项 = 3.2KB LUTRAM)
+  } nn_rom_t;                // 4+7+4+3+2+10+10+9+9+19+19+19+16+16+16+32+5 = 200 bit
 
   // --------------------------------------------------------------------------
   // ROM 项 → 引擎描述符 (纯组合; nn_seq 用)

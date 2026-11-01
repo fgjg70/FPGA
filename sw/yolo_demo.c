@@ -144,7 +144,10 @@ static void sw_conv(const yolo_op_t *o) {
     const u32 ih = o->ih, iw = o->iw;
     const u32 oh = out_dim(ih, k, st, pad), ow = out_dim(iw, k, st, pad);
     const u32 ic8 = (ic + 7u) & ~7u, oc8 = (oc + 7u) & ~7u;
-    const u32 a_stride = (o->kind == YK_CPU_CONV0) ? ic : ic8;   /* v0.3.1 */
+    /* v0.7: conv0 走引擎 PACKED3 模式；软件基线的 conv0 用 kind==YK_CPU_CONV0
+     * 或 flags.PACKED3 两者都表示"输入 packed 3B/像素"。 */
+    const int packed3 = (o->kind == YK_CPU_CONV0) || ((o->flags & YF_PACKED3) != 0);
+    const u32 a_stride = packed3 ? ic : ic8;
     const u32 qoff = o->qoff, woff = o->woff, src = o->src, dst = o->dst;
     const s32 zpi = (s32)(s8)rd8(qoff + 6u * oc8 + 1u);
     const s32 zpo = (s32)(s8)rd8(qoff + 6u * oc8 + 0u);
@@ -297,6 +300,20 @@ static void sw_cat(const yolo_op_t *o) {
     }
 }
 
+/* copy (v0.7: route/concat 展开后的硬件 op): 从源张量拷 sc 通道到目标张量
+ *   src/dst 指针已含通道偏移 (8 通道粒度); src pixel stride = pad8(ic),
+ *   dst pixel stride = pad8(oc). 与引擎 NN_OP_COPY 语义一致。 */
+static void sw_copy(const yolo_op_t *o) {
+    const u32 sc = o->ic, oc = o->oc, ih = o->ih, iw = o->iw;
+    const u32 sc8 = (sc + 7u) & ~7u, oc8 = (oc + 7u) & ~7u;
+    for (u32 y = 0; y < ih; y++)
+        for (u32 x = 0; x < iw; x++) {
+            u32 so = o->src + (y * iw + x) * sc8;
+            u32 dof = o->dst + (y * iw + x) * oc8;
+            for (u32 ch = 0; ch < sc; ch++) wr8(dof + ch, rd8(so + ch));
+        }
+}
+
 /* ==========================================================================
  * 硬件路径: 写描述符 -> start -> 轮询 -> 读 CYCLES
  * ==========================================================================*/
@@ -313,7 +330,8 @@ static u32 hw_op_code(const yolo_op_t *o) {
         case YK_DWCONV:   return 0u;   /* NN_OP_CONV (+ flags.DEPTHWISE) */
         case YK_POOL:     return 1u;   /* NN_OP_POOL  */
         case YK_UPSAMPLE: return 2u;   /* NN_OP_COPY  */
-        default:          return 3u;   /* YK_ADD -> NN_OP_ADD */
+        case YK_COPY:     return 2u;   /* v0.7: route/concat 展开的 copy */
+        default:          return 3u;   /* YK_ADD / YK_CPU_ADD -> NN_OP_ADD */
     }
 }
 
@@ -364,6 +382,7 @@ static void op_out_shape(const yolo_op_t *o, u32 *h, u32 *w, u32 *c) {
             *w = out_dim(o->iw, o->k, o->stride, o->pad);
             *c = o->ic; break;
         case YK_UPSAMPLE: *h = o->ih * 2u; *w = o->iw * 2u; *c = o->ic; break;
+        case YK_COPY:     *h = o->ih;      *w = o->iw;      *c = o->oc; break;
         case YK_ADD:      *h = o->ih;      *w = o->iw;      *c = o->ic; break;
         case YK_CPU_ADD:  *h = o->ih;      *w = o->iw;      *c = o->ic; break;
         default:          *h = o->ih;      *w = o->iw;      *c = o->oc; break;  /* cat/copy: 目标张量 */
@@ -391,6 +410,9 @@ static u32 run_plan(int hw, u64 *cycles_out, u32 *first_bad) {
                 case YK_CPU_ADD:
                     sw_cpu_add(o);          /* v0.5: shortcut add 由 CPU 做 (精度修复) */
                     break;
+                case YK_COPY:
+                    (void)hw_run(o);        /* v0.7: route/concat 展开的硬件 copy */
+                    break;
                 default:
                     sw_cat(o);              /* cpu_concat / cpu_copy 仍由 CPU 做 */
                     break;
@@ -402,6 +424,7 @@ static u32 run_plan(int hw, u64 *cycles_out, u32 *first_bad) {
                 case YK_UPSAMPLE: sw_upsample(o); break;
                 case YK_ADD: sw_add(o); break;
                 case YK_CPU_ADD: sw_cpu_add(o); break;
+                case YK_COPY: sw_copy(o); break;
                 default: sw_cat(o); break;
             }
         }
@@ -438,6 +461,43 @@ static u32 run_plan(int hw, u64 *cycles_out, u32 *first_bad) {
         }
     }
     *cycles_out = rd_cycles() - t0;
+    return bad;
+}
+
+/* ==========================================================================
+ * v0.7 MODE_AUTO: 一次启动, NPU 按微码 ROM 自主跑完整个计划
+ *   - CPU 不做 per-op 操作 (只写一次 CTRL=0b11, 然后轮询);
+ *   - 完成后校验最终输出张量 (YOLO_FINALS);
+ *   - cycles = 序列器累计的引擎周期 (NPU 纯计算, 与 per-op 口径一致)。
+ * ==========================================================================*/
+static u64 g_auto_npu = 0;
+static u32 run_auto(u64 *wall_out) {
+    u32 bad = 0;
+    u64 t0 = rd_cycles();
+    (void)REG(MMIO_NN_STATUS);                  /* 读清 done/err */
+    REG(MMIO_NN_CTRL) = 3u;                     /* bit0=start, bit1=auto */
+    u32 guard = 0;
+    for (;;) {
+        u32 st = REG(MMIO_NN_STATUS);
+        if (st & 4u) { puts_("  [auto] ERR status="); puthex(st); uart_send_char('\n');
+                       bad = 0xFFFFFFFFu; break; }
+        if (st & 2u) break;
+        if (++guard > 200000000u) { puts_("  [auto] TIMEOUT\n"); bad = 0xFFFFFFFEu; break; }
+    }
+    u32 cyc = REG(MMIO_NN_CYCLES);
+    g_auto_npu = cyc;
+    *wall_out = rd_cycles() - t0;
+    for (u32 i = 0; i < YOLO_FINAL_N && bad == 0; i++) {
+        u32 got = fnv_tensor(YOLO_FINALS[i].abs, YOLO_FINALS[i].h,
+                             YOLO_FINALS[i].w, YOLO_FINALS[i].c);
+        if (got != YOLO_FINALS[i].csum) {
+            puts_("  [auto] bad final="); putu(i);
+            puts_(" got="); puthex(got);
+            puts_(" exp="); puthex(YOLO_FINALS[i].csum);
+            uart_send_char('\n');
+            bad++;
+        }
+    }
     return bad;
 }
 
@@ -480,6 +540,22 @@ int main(void) {
     if (hw_bad) { puts_(" first_bad_op="); putu(first_bad); }
     uart_send_char('\n');
 
+    /* ---- 3. MODE_AUTO: NPU 自主跑完 (v0.7 特化路径) ---- */
+    u64 auto_wall = 0;
+    u32 auto_bad = 0xFFFFFFFFu;
+#if YOLO_AUTO_OK
+    if (YOLO_FINAL_N > 0) {
+        (void)gen_input();                       /* 恢复初始图 */
+        auto_bad = run_auto(&auto_wall);
+        puts_("[yolo] auto_bad="); putu(auto_bad);
+        puts_(" auto_cycles="); putu((u32)auto_wall);
+        puts_(" auto_npu_cycles="); putu((u32)g_auto_npu);
+        uart_send_char('\n');
+    }
+#else
+    puts_("[yolo] auto skipped (YOLO_AUTO_OK=0: 过渡期 plan/ROM)\n");
+#endif
+
 #ifndef YOLO_HW_ONLY
     if (sw_cycles > 0) {
         u32 x100 = (u32)((sw_cycles * 100ull) / (hw_cycles ? hw_cycles : 1ull));
@@ -493,9 +569,11 @@ int main(void) {
             puts_("x, sw vs NPU-only)\n");
         }
     }
-    int ok = (ic_sum == YOLO_INPUT_CSUM) && (sw_bad == 0) && (hw_bad == 0);
+    int ok = (ic_sum == YOLO_INPUT_CSUM) && (sw_bad == 0) && (hw_bad == 0)
+             && ((YOLO_FINAL_N == 0) || (auto_bad == 0));
 #else
-    int ok = (ic_sum == YOLO_INPUT_CSUM) && (hw_bad == 0);
+    int ok = (ic_sum == YOLO_INPUT_CSUM) && (hw_bad == 0)
+             && ((YOLO_FINAL_N == 0) || (auto_bad == 0));
 #endif
     puts_(ok ? "[yolo] RESULT : PASS\n" : "[yolo] RESULT : FAIL\n");
     if (ok) report_done(); else report_fail();

@@ -139,7 +139,7 @@ def main():
                                             "add_roots": set(meta["add_roots"])}}
     q["adds"] = {}
     for op_id, op in enumerate(plan["ops"]):
-        if op["kind"] == "cpu_add":
+        if op["kind"] in ("add", "cpu_add"):
             m = meta["ops"][op_id]
             q["adds"][op_id] = {"r_scale": int(m["r_scale"]),
                                 "k_add": int(m["k_add"]),

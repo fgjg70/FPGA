@@ -71,6 +71,8 @@ def eval_verilog_int(expr):
 KIND = {
     'conv': 0, 'dwconv': 1, 'pool': 2, 'upsample': 3, 'add': 4,
     'cpu_concat': 5, 'cpu_copy': 6, 'cpu_conv0': 7,
+    # v0.6/v0.7: route/concat 展开后的硬件 copy op (走引擎 NN_OP_COPY)
+    'copy': 9,
     # v0.5: shortcut residual-add 改由 CPU 执行 (per-tensor 源 requant)。
     # 目的: 解除 branch/sum 张量被迫共享激活 scale 的约束 (int8 精度根因, 见 model-report §6)。
     'cpu_add': 8,
@@ -219,6 +221,8 @@ def main():
     w('#define YF_ADD       0x04u')
     w('#define YF_UP2X      0x08u')
     w('#define YF_POOLMAX   0x10u')
+    w('#define YF_PACKED3   0x20u   /* v0.7: conv0 输入 3B/像素 packed */')
+    w('#define YF_ADD_R     0x40u   /* v0.7: add 用 per-tensor 源 requant */')
     w('')
     # 【紧凑结构体】dmem 的 .data/.bss 预算只有 8KB (link.ld ASSERT ≤0x2000)。
     # 108 个 op × 全 u32 (68B) 会到 9KB+ 而链接失败; 把 kind/尺寸字段压成 u16 后
@@ -271,14 +275,20 @@ def main():
     for op in ops:
         kind = KIND[op['kind']]
         flags = 0
-        if kind == 1:
-            flags |= 0x01
+        if kind == 1 or op.get('depthwise'):
+            flags |= 0x01                 # NN_F_DEPTHWISE
         if op.get('leaky'):
-            flags |= 0x02
+            flags |= 0x02                 # NN_F_LEAKY
         if op['kind'] == 'upsample':
-            flags |= 0x08
+            flags |= 0x08                 # NN_F_UP2X
         if kind == 2:
-            flags |= 0x10
+            flags |= 0x10                 # NN_F_POOLMAX
+        if op.get('packed3') or op['kind'] == 'cpu_conv0':
+            flags |= 0x20                 # NN_F_PACKED3 (conv0: 3B/像素 packed 输入)
+        if op['kind'] == 'add' and ('r_scale' in op or 'R' in op):
+            flags |= 0x40                 # NN_F_ADD_R (per-tensor 源 requant)
+        if op['kind'] == 'add' and not (flags & 0x40):
+            flags |= 0x04                 # NN_F_ADD (纯 add)
         if kind in (5, 6):
             src_abs = cat_index
             cat_index += 1
@@ -324,6 +334,36 @@ def main():
           % (aux0, aux1, aux2, op['csum'] & 0xFFFFFFFF))
     if not ops:
         w('    {0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u},')
+    w('};')
+    w('')
+    # ---- 最终输出张量表 (MODE_AUTO 完成后校验用) ----
+    fin_ops = plan.get('final_ops', [])
+
+    def out_dim(d, k, s, p):
+        k = max(int(k), 1); s = max(int(s), 1); p = int(p)
+        return (int(d) + 2 * p - k) // s + 1
+
+    finals = []
+    for fi in fin_ops:
+        op = ops[int(fi)]
+        oh = out_dim(op.get('ih', 0), op.get('k', 1), op.get('stride', 1), op.get('pad', 0))
+        ow = out_dim(op.get('iw', 0), op.get('k', 1), op.get('stride', 1), op.get('pad', 0))
+        oc = int(op.get('oc', 0))
+        finals.append((abs_off(op['dst']['buf'], op['dst']['off'], nn),
+                       oh, ow, oc, int(op.get('csum', 0)) & 0xFFFFFFFF))
+    w('')
+    legacy = [op.get('kind') for op in ops if str(op.get('kind', '')).startswith('cpu_')]
+    w('')
+    w('/* MODE_AUTO 可用性: 1 = plan 全硬件 op (v0.6+) 且 ROM 已生成；0 = 过渡期/空 ROM */')
+    w('#define YOLO_AUTO_OK %du' % (0 if legacy else 1))
+    w('/* ---- 最终输出张量 (MODE_AUTO 校验) ---- */')
+    w('typedef struct { unsigned int abs, h, w, c, csum; } yolo_final_t;')
+    w('#define YOLO_FINAL_N %du' % len(finals))
+    w('static const yolo_final_t YOLO_FINALS[YOLO_FINAL_N > 0 ? YOLO_FINAL_N : 1] = {')
+    for (ab, oh, ow, oc, cs) in finals:
+        w('    {0x%08xu, %du, %du, %du, 0x%08xu},' % (ab, oh, ow, oc, cs))
+    if not finals:
+        w('    {0u, 0u, 0u, 0u, 0u},')
     w('};')
     w('')
     w('#endif /* YOLO_PLAN_H */')

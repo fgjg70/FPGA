@@ -297,11 +297,23 @@ class Tensor:
         self.freed = False
 
 
-def plan_ops(net, input_is_A0=True):
-    """Build the primitive-level op list and tensor graph.
 
-    Ops: conv | dwconv | pool | upsample | add | cpu_concat | cpu_copy
-    (no yolo op: yolo head decode is CPU; heads are recorded in final_ops)
+def plan_ops(net, input_is_A0=True):
+    """Build the primitive-level op list and tensor graph (plan v0.6, all hardware).
+
+    Ops: conv | dwconv | pool | upsample | add | copy   (**no CPU-executed op**)
+
+      * conv0: kind "conv" + flags bit2 (PACKED3) reads the 3B/px packed input
+        tensor; weights stay dense (IC_pad=8, the 5 extra IC weights are 0);
+      * shortcut: kind "add" + flags bit3 (ADD_R) = engine per-tensor residual
+        add: out = clamp(q_d + (((q_s-zp_s)*R)>>KADD), -128,127); Q block 16 B
+        (numerically identical to the v0.5 CPU `cpu_add`);
+      * route/concat: expanded into one `copy` op per source tensor.  Engine
+        copy semantics: ic = source channels, oc = target total channels; the
+        src/dst **byte** offsets already include the 8-channel block offset.
+
+    flags (4 bit, mirrors SPEC-SPECIALIZED.md §1):
+      bit0 depthwise, bit1 leaky, bit2 PACKED3, bit3 ADD_R.
     """
     tensors = []
     layer_tensor = {}
@@ -314,9 +326,6 @@ def plan_ops(net, input_is_A0=True):
         return t.id
 
     in_h, in_w, in_c = net["input"]
-    # v0.3.1: the input image is stored PACKED (ic bytes/pixel, no C8 padding)
-    # and is consumed by a CPU-executed conv0 (kind cpu_conv0); all other
-    # tensors are compact NHWC (pixel stride = ceil(C/8)*8).
     in_tid = new_tensor(in_h, in_w, in_c, packed=True)
     tensors[in_tid].region = "A"
     tensors[in_tid].off = 0
@@ -333,15 +342,17 @@ def plan_ops(net, input_is_A0=True):
             src = prev_tid(i)
             dst = new_tensor(L["oh"], L["ow"], L["oc"])
             kind = "dwconv" if L["depthwise"] else "conv"
-            if i == 0:
-                kind = "cpu_conv0"     # v0.3.1: CPU runs conv0 off the packed input
-            op = {"kind": kind,
-                  "layer_idx": i, "src": src, "dst": dst,
+            packed3 = (i == 0)
+            flags = (1 if L["depthwise"] else 0) | \
+                    (2 if L["activation"] == "leaky" else 0) | \
+                    (4 if packed3 else 0)
+            op = {"kind": kind, "layer_idx": i, "src": src, "dst": dst,
                   "k": L["k"], "stride": L["stride"], "pad": L["pad"],
                   "leaky": 1 if L["activation"] == "leaky" else 0,
                   "ih": L["ih"], "iw": L["iw"], "ic": L["ic"],
                   "oh": L["oh"], "ow": L["ow"], "oc": L["oc"],
-                  "depthwise": L["depthwise"]}
+                  "depthwise": bool(L["depthwise"]), "flags": flags,
+                  "packed3": bool(packed3)}
             ops.append(op)
             tensors[dst].def_op = len(ops) - 1
             layer_tensor[i] = dst
@@ -352,7 +363,7 @@ def plan_ops(net, input_is_A0=True):
                   "k": L["k"], "stride": L["stride"], "pad": L["pad"],
                   "leaky": 0, "ih": L["ih"], "iw": L["iw"], "ic": L["ic"],
                   "oh": L["oh"], "ow": L["ow"], "oc": L["oc"],
-                  "depthwise": False}
+                  "depthwise": False, "flags": 0}
             ops.append(op)
             tensors[dst].def_op = len(ops) - 1
             layer_tensor[i] = dst
@@ -363,44 +374,44 @@ def plan_ops(net, input_is_A0=True):
                   "k": 2, "stride": 2, "pad": 0, "leaky": 0,
                   "ih": L["ih"], "iw": L["iw"], "ic": L["ic"],
                   "oh": L["oh"], "ow": L["ow"], "oc": L["oc"],
-                  "depthwise": False}
+                  "depthwise": False, "flags": 0}
             ops.append(op)
             tensors[dst].def_op = len(ops) - 1
             layer_tensor[i] = dst
         elif typ == "route":
             refs = [layer_tensor[j] for j in L["input_layers"]]
             if len(refs) == 1:
-                # pure alias: route with a single source layer; no data movement
+                # single-source route: pure alias, no data movement
                 layer_tensor[i] = refs[0]
             else:
+                # v0.6: concat = one hardware `copy` op per source tensor
                 dst = new_tensor(L["oh"], L["ow"], L["oc"])
-                sources = []
-                coff = 0
+                c_dst = 0
+                first = True
                 for j in L["input_layers"]:
                     tid = layer_tensor[j]
-                    sources.append({"t": tid, "c": tensors[tid].C, "coff": coff})
-                    coff += tensors[tid].C
-                op = {"kind": "cpu_concat", "layer_idx": i, "src": None, "dst": dst,
-                      "k": 0, "stride": 1, "pad": 0, "leaky": 0,
-                      "ih": L["ih"], "iw": L["iw"], "ic": L["ic"],
-                      "oh": L["oh"], "ow": L["ow"], "oc": L["oc"],
-                      "depthwise": False, "sources": sources, "oc_tensor": L["oc"]}
-                ops.append(op)
-                tensors[dst].def_op = len(ops) - 1
+                    c = tensors[tid].C
+                    op = {"kind": "copy", "layer_idx": i, "src": tid, "dst": dst,
+                          "c_src": 0, "c_dst": c_dst,
+                          "k": 0, "stride": 1, "pad": 0, "leaky": 0,
+                          "ih": L["ih"], "iw": L["iw"], "ic": c,
+                          "oh": L["oh"], "ow": L["ow"], "oc": L["oc"],
+                          "depthwise": False, "flags": 0}
+                    ops.append(op)
+                    if first:
+                        tensors[dst].def_op = len(ops) - 1
+                        first = False
+                    c_dst += c
                 layer_tensor[i] = dst
         elif typ == "shortcut":
             src = prev_tid(i)
             dst = layer_tensor[L["from_layer"]]
-            # v0.5: residual add is executed by the CPU (`cpu_add`), which lets
-            # the branch tensor keep its OWN per-tensor (s_a, zp_a) instead of
-            # sharing the sum tensor scale (the old int8 accuracy root cause).
-            op = {"kind": "cpu_add", "layer_idx": i, "src": src, "dst": dst,
+            op = {"kind": "add", "layer_idx": i, "src": src, "dst": dst,
                   "k": 0, "stride": 1, "pad": 0, "leaky": 0,
                   "ih": L["ih"], "iw": L["iw"], "ic": L["ic"],
                   "oh": L["oh"], "ow": L["ow"], "oc": L["oc"],
-                  "depthwise": False}
+                  "depthwise": False, "flags": 8}
             ops.append(op)
-            # dst tensor keeps its original def_op (it already holds the identity)
             layer_tensor[i] = dst
         elif typ == "dropout":
             layer_tensor[i] = prev_tid(i)
@@ -411,15 +422,13 @@ def plan_ops(net, input_is_A0=True):
         else:
             raise ValueError(typ)
     for k, op in enumerate(ops):
-        if op["src"] is not None:
+        if op.get("src") is not None:
             tensors[op["src"]].last_use = max(tensors[op["src"]].last_use, k)
         else:
-            for s in op["sources"]:
+            for s in op.get("sources", []):
                 tensors[s["t"]].last_use = max(tensors[s["t"]].last_use, k)
         if op["kind"] in ("add", "cpu_add"):
             tensors[op["dst"]].last_use = max(tensors[op["dst"]].last_use, k)
-        # dst of non-add ops is written (definition), not read
-    # input tensor use
     tensors[input_tensor].last_use = max(tensors[input_tensor].last_use, 0)
     return {"tensors": tensors, "ops": ops, "input_tensor": input_tensor,
             "final_ops": final_ops, "input": net["input"]}
@@ -498,15 +507,21 @@ def allocate(plan, a_size=A_SIZE, b_size=B_SIZE, align=16, mode="longB"):
     return info
 
 
-def assign_wq_offsets(plan, q_base=Q_BASE):
-    """Assign W byte offsets (CONTRACT §6) and Q slot offsets (CONTRACT §7).
 
-    qoff = q_base + q_index*0x1000 (absolute NN-window offset).
+def assign_wq_offsets(plan, q_base=Q_BASE):
+    """Assign W byte offsets (CONTRACT §6) and v0.6 Q offsets.
+
+    Q layout v0.6 = pass 1 conv blocks (identical order/sizes to v0.5, so all
+    conv qoff values and the whole W region are unchanged), then pass 2 one
+    16 B ADD_R block per add op:
+        [0]=zp_d, [1]=zp_s, [4:7]=R int32 LE, [8]=KADD, [9:15]=0
     """
-    tensors = plan["tensors"]
     ops = plan["ops"]
     w_off = 0
-    q_cur = q_base
+    # v0.7: qoff is **Q-region relative** (Q lives in its own LUTRAM); the
+    # caller may pass q_base=Q_BASE only to assemble the historical flat WQ
+    # archive image.  Default is a pure relative Q offset.
+    q_cur = 0
     q_index = 0
     for k, op in enumerate(ops):
         if op["kind"] in ("conv", "dwconv", "cpu_conv0"):
@@ -517,31 +532,42 @@ def assign_wq_offsets(plan, q_base=Q_BASE):
             op["w_off"] = w_off
             op["w_bytes"] = nbytes
             w_off += nbytes
-            # v0.3.1 packed Q payload: bias_adj int32[OC_pad], M_pos int16[OC_pad],
-            # tail 16 B {zp_out, zp_in, leaky_en, SHIFT, 12'b0} = 6*OC_pad+16 B
             payload = 6 * oc_pad + 16
             op["q_off"] = q_cur
             op["q_index"] = q_index
             op["q_payload"] = payload
-            op["q_layout"] = {
-                "oc_pad": oc_pad,
-                "bias": 0,
-                "mpos": 4 * oc_pad,
-                "tail": 6 * oc_pad,
-                "bytes": payload,
-            }
+            op["q_layout"] = {"oc_pad": oc_pad, "bias": 0,
+                              "mpos": 4 * oc_pad, "tail": 6 * oc_pad,
+                              "bytes": payload}
             q_cur = ((q_cur + payload + 15) // 16) * 16
             q_index += 1
+    q_conv_end = q_cur
+    n_conv = q_index
+    n_add = 0
+    for k, op in enumerate(ops):
+        kind = op["kind"]
+        if kind in ("conv", "dwconv", "cpu_conv0"):
+            continue
+        op["w_off"] = -1
+        op["w_bytes"] = 0
+        if kind in ("add", "cpu_add"):
+            op["q_off"] = q_cur
+            op["q_payload"] = 16
+            op["q_index"] = -1
+            q_cur = ((q_cur + 16 + 15) // 16) * 16
+            n_add += 1
         else:
-            op["w_off"] = -1
-            op["w_bytes"] = 0
             op["q_off"] = -1
+            op["q_payload"] = 0
             op["q_index"] = -1
     plan["w_total"] = w_off
-    plan["n_conv"] = q_index
+    plan["n_conv"] = n_conv
+    plan["n_add"] = n_add
     plan["q_base"] = q_base
-    plan["q_total_payload"] = q_cur - q_base
-    plan["q_index"] = q_index
+    plan["q_conv_end"] = q_conv_end
+    plan["q_total_payload"] = q_cur
+    plan["q_index"] = n_conv
+    plan["q_region_bytes"] = Q_BYTES
     return plan
 
 

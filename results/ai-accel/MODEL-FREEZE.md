@@ -63,7 +63,7 @@ C320 的 Q 参数需**按 320 重新校准**（`quantize.py --hw 320` → 新 Q 
 | 320 帧率 | **≥30 fps** = 每帧 ≤33.3 ms | 125.44M MACs × 30fps = 3.76 GMAC/s；128 MAC/拍 @100MHz 峰值 12.8 GMAC/s，需 30% 效率 |
 | NPU 主频（全实现） | **≥100MHz**（硬下限 50MHz，若触发须记录原因）| D4 |
 | 引擎流水 | 128 MAC/拍（16 OC lanes × 8 像素），输出 128-bit/拍写回 | D3 |
-| 资源 | 引擎 ≤ 25K LUT / ≤110 DSP / BRAM 0；整机 BRAM ≤ 121.5/135（Q 迁 LUTRAM 后）| 现有 25.2K LUT 全机预算 + 视频链路 |
+| 资源 | 引擎 ≤ 45K LUT / **≤160 DSP** / BRAM 0；整机 BRAM ≤ 121.5/135（Q 迁 LUTRAM 后）| 128 MAC 下 DSP 与 LUT 可互让；器件硬上限 240 DSP / 63.4K LUT |
 
 ## 6. 验证策略（不可省）
 

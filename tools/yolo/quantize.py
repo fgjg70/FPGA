@@ -182,6 +182,7 @@ def main():
     }
     for op_id, op in enumerate(plan["ops"]):
         d = {"id": op_id, "kind": op["kind"], "layer_idx": op["layer_idx"],
+             "flags": int(op.get("flags", 0)),
              "k": op["k"], "stride": op["stride"], "pad": op["pad"],
              "leaky": int(op["leaky"]), "ic": op["ic"], "oc": op["oc"],
              "ih": op["ih"], "iw": op["iw"], "oh": op["oh"], "ow": op["ow"],
@@ -191,10 +192,13 @@ def main():
         if op["kind"] == "cpu_concat":
             d["sources"] = [{"t": int(s["t"]), "c": int(s["c"])} for s in op["sources"]]
             d["oc_tensor"] = int(op["oc_tensor"])
-        if op["kind"] == "cpu_add":
+        if op["kind"] in ("add", "cpu_add"):
             a = q["adds"][op_id]
             d.update({"r_scale": int(a["r_scale"]), "k_add": int(a["k_add"]),
-                      "zp_s": int(a["zp_s"])})
+                      "zp_s": int(a["zp_s"]), "zp_d": int(a["zp_d"])})
+        if op["kind"] == "copy":
+            d.update({"c_src": int(op.get("c_src", 0)),
+                      "c_dst": int(op.get("c_dst", 0))})
         if op["kind"] in ("conv", "dwconv", "cpu_conv0"):
             p = q["ops"][op_id]
             d.update({"shift": int(p["shift"]), "zp_in": int(p["zp_in"]),
@@ -238,7 +242,11 @@ def main():
                     "cos": float(r[3]), "maxerr": float(r[4])} for r in per_op],
         "calib_images": [os.path.basename(f) for f in files],
         "num_groups": len(gq),
-        "cpu_adds": [{"op": int(k), "r_scale": int(v["r_scale"]),
+        "kinds": {k: sum(1 for x in plan["ops"] if x["kind"] == k)
+                  for k in sorted(set(x["kind"] for x in plan["ops"]))},
+        "q_conv_end": int(plan["q_conv_end"]),
+        "q_region_bytes": int(plan.get("q_region_bytes", 48 * 1024)),
+        "adds": [{"op": int(k), "r_scale": int(v["r_scale"]),
                       "k_add": int(v["k_add"]), "zp_s": int(v["zp_s"]),
                       "ratio": float(v["ratio"])} for k, v in q["adds"].items()],
     }

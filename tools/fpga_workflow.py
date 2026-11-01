@@ -135,6 +135,7 @@ CORE_SV_ORDER = [
     # nn_pkg.sv: AI 加速子系统的类型/常量包 (契约 results/ai-accel/CONTRACT.md)。
     # 必须在任何 nn_*.sv 之前编译 (它们 import nn_pkg)。
     "nn_pkg.sv",
+    "nn_rom_pkg.sv",
     "alu.sv", "branch_unit.sv", "control_unit.sv", "imm_gen.sv", "pc.sv", "regfile.sv",
      "id_ex_reg.sv", "ex_mem_reg.sv", "mem_wb_reg.sv",
     "hazard_unit.sv", "load_store_unit.sv",
@@ -148,7 +149,7 @@ CORE_SV_ORDER = [
     "ras.sv", "gemm_accel.sv", "muldiv.sv", "csr_file.sv",
     "core.sv",
     # ---- AI 加速子系统 (仅 NN_EN 构建被例化; 交付档不例化 -> 网表不变) ----
-    "nn_mem.sv", "nn_conv_engine.sv", "nn_subsys.sv",
+    "nn_mem.sv", "nn_conv_engine.sv", "nn_seq.sv", "nn_subsys.sv",
 ]
 
 
@@ -2152,14 +2153,14 @@ def cmd_synth(args) -> int:
                     benv["BIT_NAME"] = bn
                 elif not (os.environ.get("BIT_NAME") or ""):
                     benv["BIT_NAME"] = "cpu_a100t_nn.bit"
-                nnw = getattr(args, "nn_weights", None) or "sim/prog/yolo/yolo_wq.hex"
+                nnw = getattr(args, "nn_weights", None) or "sim/prog/yolo/yolo_w.hex"
                 nnw_abs = nnw if os.path.isabs(nnw) else abspath(nnw)
                 if not os.path.exists(nnw_abs):
                     print(f"  [FAIL] --nn 需要权重镜像, 但 {nnw_abs} 不存在")
                     print("         先跑 tools/yolo/make_vectors.py 生成 yolo_wq.hex")
                     return 1
-                seg_words = [65536, 16384, 8192, 4096]
-                total_words = sum(seg_words)          # 94208 = 368KB/4
+                seg_words = [32768, 16384, 16384, 16384]
+                total_words = sum(seg_words)          # 81920 = 320KB/4 (v0.7: W 独立)
                 lines = [ln.strip() for ln in read_text(nnw_abs).splitlines() if ln.strip()]
                 if len(lines) != total_words:
                     print(f"  [FAIL] --nn 权重镜像行数 {len(lines)} != {total_words} "
@@ -2174,7 +2175,19 @@ def cmd_synth(args) -> int:
                         f.write("\n".join(lines[base:base + words]) + "\n")
                     benv[f"NN_WQ_INIT_{name}"] = posix(seg_path)
                     base += words
-                print(f"  [NN] WQ 镜像切分: 4 段 {seg_words} -> {seg_dir}")
+                # Q 镜像 (v0.7: 独立 LUTRAM 初始化)
+                nnq = getattr(args, "nn_q", None) or "sim/prog/yolo/yolo_q.hex"
+                nnq_abs = nnq if os.path.isabs(nnq) else abspath(nnq)
+                if not os.path.exists(nnq_abs):
+                    print(f"  [FAIL] --nn 需要 Q 镜像 {nnq_abs}（v0.7 拆成 W/Q 两个文件）")
+                    return 1
+                q_lines = [ln.strip() for ln in read_text(nnq_abs).splitlines() if ln.strip()]
+                q_words = 48 * 1024 // 4
+                if len(q_lines) != q_words:
+                    print(f"  [FAIL] Q 镜像行数 {len(q_lines)} != {q_words}")
+                    return 1
+                benv["NN_Q_INIT_FILE"] = nnq_abs
+                print(f"  [NN] W 镜像切分: 4 段 {seg_words} -> {seg_dir}; Q={q_words} 词 -> LUTRAM")
             rc, out, dt = run(["cmd", "/c", abspath("fpga/build.bat")],
                               cwd=abspath("fpga"), timeout=args.timeout, env=benv)
             with open(log, "w", encoding="utf-8") as f:
@@ -2241,6 +2254,7 @@ def cmd_synth(args) -> int:
                     expect.append("divide_by %d" % _nn_div)
                 for _s in "ABCD":
                     expect.append(f"BUILD_NN_WQ_INIT_{_s}=")
+                expect.append("BUILD_NN_Q_INIT=")
             else:
                 expect.append("BUILD_NN_OFF=1")
             missing = [e for e in expect if e not in out]
@@ -3263,7 +3277,9 @@ def main() -> int:
                    help="AI 档核心时钟分频 N (VCO=1050MHz, f=1050/N MHz)。默认 7=150MHz；"
                         "引擎时序收敛不了时用它降档（三处同源：top CLKOUT0_DIVIDE_F / XDC -divide_by / CLK_HZ）。"
                         "标准值: 7=150, 8=131.25, 10=105, 11=95.45, 12=87.5, 14=75, 21=50 MHz")
-    p.add_argument("--nn-weights", default="sim/prog/yolo/yolo_wq.hex",
+    p.add_argument("--nn-q", default=None,
+                   help="Q 区 (LUTRAM) 初始化镜像; 默认 sim/prog/yolo/yolo_q.hex")
+    p.add_argument("--nn-weights", default="sim/prog/yolo/yolo_w.hex",
                    help="NN_W_INIT_FILE: 烧进权重 BRAM 的 $readmemh 镜像 (默认 "
                         "sim/prog/yolo/yolo_wq.hex)")
     p.add_argument("--a-ext", action="store_true",

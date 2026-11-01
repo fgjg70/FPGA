@@ -59,11 +59,12 @@ def build_groups(plan):
     add_pairs = []
     for op in plan["ops"]:
         k = op["kind"]
-        if k in ("pool", "upsample"):
+        if k in ("pool", "upsample", "copy"):
+            # exact int8 transfer / max => both sides must share (s_a, zp_a)
             union(op["src"], op["dst"])
-        elif k == "cpu_add":
-            # v0.5: CPU add; src/dst keep their OWN per-tensor scale/zp
-            # (a per-tensor source requant scalar R maps src domain -> dst).
+        elif k in ("add", "cpu_add"):
+            # v0.6 ADD_R: src/dst keep their OWN per-tensor scale/zp; the
+            # per-tensor source requant scalar R maps src domain -> dst.
             add_pairs.append((op["src"], op["dst"]))
         elif k == "cpu_concat":
             for s in op["sources"]:
@@ -276,10 +277,10 @@ def quantize_model(net, folded, plan, cal, gq, verbose=True, w_clip_pct=100.0):
             "depthwise": op["depthwise"], "payload": np.frombuffer(payload, dtype=np.uint8).copy(),
         }
 
-    # ---- v0.5 cpu_add: per-tensor source-requant scalar R = round(s_s/s_d*2^K) --
+    # ---- v0.6 ADD_R: per-tensor source-requant scalar R = round(s_s/s_d*2^K) --
     adds = {}
     for op_id, op in enumerate(plan["ops"]):
-        if op["kind"] != "cpu_add":
+        if op["kind"] not in ("add", "cpu_add"):
             continue
         src, dst = op["src"], op["dst"]
         s_s, zp_s = gq[roots[src]]
@@ -295,13 +296,23 @@ def quantize_model(net, folded, plan, cal, gq, verbose=True, w_clip_pct=100.0):
             raise ValueError("cpu_add op %d: R rounds to 0 (ratio %.3g)" % (op_id, ratio))
         if r > (1 << 20):
             raise ValueError("cpu_add op %d: R %d > 2^20" % (op_id, r))
+        # v0.7 ADD_R Q block (16 B, CONTRACT §12.3):
+        #   [0]=zp_s [1]=zp_d(debug) [2:3]=R u16 LE [4]=KADD [5:15]=0
+        if r > 0xFFFF:
+            raise ValueError("add op %d: R=%d does not fit u16" % (op_id, r))
+        payload = np.zeros(16, dtype=np.uint8)
+        payload[0] = int(zp_s) & 0xFF
+        payload[1] = int(zp_d) & 0xFF
+        payload[2:4] = np.frombuffer(np.uint16(r).tobytes(), dtype=np.uint8)
+        payload[4] = int(k) & 0xFF
         adds[op_id] = {"r_scale": r, "k_add": int(k), "zp_s": int(zp_s),
                        "zp_d": int(zp_d), "s_s": float(s_s), "s_d": float(s_d),
-                       "ratio": float(ratio)}
-        stats.setdefault("adds", []).append((op_id, r, int(k), int(zp_s)))
+                       "ratio": float(ratio), "payload": payload}
+        stats.setdefault("adds", []).append((op_id, r, int(k), int(zp_s),
+                                             int(zp_d)))
         if verbose:
-            print("  cpu_add op%-3d R=%-7d K=%-2d zp_s=%-4d  s_s=%.6g s_d=%.6g"
-                  % (op_id, r, k, zp_s, s_s, s_d))
+            print("  add op%-3d R=%-7d K=%-2d zp_s=%-4d zp_d=%-4d s_s=%.6g s_d=%.6g"
+                  % (op_id, r, k, zp_s, zp_d, s_s, s_d))
 
     if verbose:
         print("quantize_model: %d conv ops, SHIFT histogram %s, M_pos max %d, "
@@ -374,12 +385,14 @@ def _pool_vec(x, op, zp):
     return out
 
 
-def int8_forward(plan, q, x_packed):
-    """Vectorised integer forward over the plan.
 
-    x_packed: (H,W,ic) int8 input image (3 bytes/pixel, no padding).
-    Returns (store, op_out) where store[tid] = padded int8 tensor and
-    op_out[op_id] = real-channel view (H,W,C) of that op's output.
+def int8_forward(plan, q, x_packed):
+    """Vectorised integer forward over a plan v0.6.
+
+    x_packed: (H,W,ic) int8 input image (3 bytes/pixel, packed; conv0=PACKED3).
+    Returns (store, op_out): store[tid] = padded int8 tensor, op_out[op_id] =
+    real-channel output of that op (H,W,C); for `copy` ops it is the written
+    channel slice (H,W,ic).
     """
     tensors = plan["tensors"]
     ops = plan["ops"]
@@ -391,10 +404,12 @@ def int8_forward(plan, q, x_packed):
     gq = q["gq"]
     for op_id, op in enumerate(ops):
         kind = op["kind"]
+        flags = int(op.get("flags", 0))
         if kind in ("conv", "dwconv", "cpu_conv0"):
             p = q["ops"][op_id]
             src = store[op["src"]]
-            if kind == "cpu_conv0":
+            packed = (kind == "cpu_conv0") or (flags & 4) or bool(op.get("packed3"))
+            if packed:
                 H, W, ic = src.shape
                 ic_pad = (ic + 7) // 8 * 8
                 x = np.full((H, W, ic_pad), p["zp_in"], dtype=np.int8)
@@ -412,17 +427,8 @@ def int8_forward(plan, q, x_packed):
         elif kind == "upsample":
             s = store[op["src"]]
             out = np.repeat(np.repeat(s, 2, axis=0), 2, axis=1)
-        elif kind == "cpu_concat":
-            dst_t = tensors[op["dst"]]
-            out = np.full((dst_t.H, dst_t.W, dst_t.C8),
-                          gq[roots[op["dst"]]][1], dtype=np.int8)
-            coff = 0
-            for s in op["sources"]:
-                c = s["c"]
-                out[:, :, coff:coff + c] = store[s["t"]][:, :, :c]
-                coff += c
-        elif kind == "cpu_add":
-            # CONTRACT v0.5 §11: out = clamp(q_d + (((q_s-zp_s)*R) >> KADD))
+        elif kind in ("add", "cpu_add"):
+            # ADD_R: out = clamp(q_d + (((q_s-zp_s)*R) >> KADD), -128, 127)
             a = q["adds"][op_id]
             cur = store[op["dst"]]
             src = store[op["src"]]
@@ -432,68 +438,37 @@ def int8_forward(plan, q, x_packed):
             d = np.right_shift(qi * int(a["r_scale"]), int(a["k_add"]))
             out[:, :, :c] = np.clip(cur[:, :, :c].astype(np.int64) + d,
                                     -128, 127).astype(np.int8)
-        elif kind == "add":
-            dst_t = tensors[op["dst"]]
+        elif kind == "copy":
             src = store[op["src"]]
-            cur = store[op["dst"]]
-            out = cur.copy()
+            dst_t = tensors[op["dst"]]
+            if op["dst"] in store:
+                out = store[op["dst"]].copy()
+            else:
+                out = np.full((dst_t.H, dst_t.W, dst_t.C8),
+                              gq[roots[op["dst"]]][1], dtype=np.int8)
+            cs = int(op.get("c_src", 0))
+            cd = int(op.get("c_dst", 0))
             c = op["ic"]
-            out[:, :, :c] = np.clip(cur[:, :, :c].astype(np.int16)
-                                    + src[:, :, :c].astype(np.int16), -128, 127).astype(np.int8)
+            out[:, :, cd:cd + c] = src[:, :, cs:cs + c]
+        elif kind == "cpu_concat":
+            dst_t = tensors[op["dst"]]
+            out = np.full((dst_t.H, dst_t.W, dst_t.C8),
+                          gq[roots[op["dst"]]][1], dtype=np.int8)
+            coff = 0
+            for s in op["sources"]:
+                c = s["c"]
+                out[:, :, coff:coff + c] = store[s["t"]][:, :, :c]
+                coff += c
         else:
             raise ValueError(kind)
         store[op["dst"]] = out
-        op_out[op_id] = out[:, :, :tensors[op["dst"]].C]
+        if kind == "copy":
+            cd = int(op.get("c_dst", 0))
+            c = op["ic"]
+            op_out[op_id] = out[:, :, cd:cd + c]
+        else:
+            op_out[op_id] = out[:, :, :tensors[op["dst"]].C]
     return store, op_out
-
-
-# ----------------------------------------------------------------------------
-# independently coded integer golden (per-ic / per-channel loops, floor_div)
-# ----------------------------------------------------------------------------
-def _conv_golden(x, p, zp_in):
-    k, s, pad = p["k"], p["stride"], p["pad"]
-    k2 = k * k
-    H, W, ic_pad = x.shape
-    oc_pad = p["oc_pad"]
-    oc = p["oc"]
-    ic = p["ic"]
-    xp = np.full((H + 2 * pad, W + 2 * pad, ic_pad), zp_in, dtype=np.int8)
-    xp[pad:pad + H, pad:pad + W, :] = x
-    oh = (H + 2 * pad - k) // s + 1
-    ow = (W + 2 * pad - k) // s + 1
-    acc = np.zeros((oh, ow, oc_pad), dtype=np.int64)
-    if p["depthwise"]:
-        for tap in range(k2):
-            ky, kx = divmod(tap, k)
-            patch = xp[ky:ky + (oh - 1) * s + 1:s, kx:kx + (ow - 1) * s + 1:s, :]
-            w_tap = p["wq"][tap]
-            for c in range(oc_pad):
-                acc[:, :, c] += patch[:, :, c].astype(np.int64) * int(w_tap[c])
-    else:
-        for tap in range(k2):
-            ky, kx = divmod(tap, k)
-            patch = xp[ky:ky + (oh - 1) * s + 1:s, kx:kx + (ow - 1) * s + 1:s, :]
-            w_tap = p["wq"][tap]
-            for icc in range(ic_pad):
-                col = patch[:, :, icc].reshape(oh, ow, 1).astype(np.int64)
-                acc += col * w_tap[icc][None, None, :].astype(np.int64)
-    for c in range(oc_pad):
-        acc[:, :, c] += int(p["bias_adj"][c])
-    mpos = p["mpos"]
-    mneg = ((p["mpos"] * 3277 + 16384) >> 15) if p["leaky"] else p["mpos"]
-    y = np.empty((oh, ow, oc_pad), dtype=np.int64)
-    den = 1 << p["shift"]
-    for c in range(oc_pad):
-        prod_pos = acc[:, :, c] * int(mpos[c])
-        prod_neg = acc[:, :, c] * int(mneg[c])
-        y[:, :, c] = np.where(acc[:, :, c] >= 0,
-                              np.floor_divide(prod_pos, den),
-                              np.floor_divide(prod_neg, den))
-    y += int(p["zp_out"])
-    y = np.clip(y, -128, 127).astype(np.int8)
-    out = np.full((oh, ow, oc_pad), p["zp_out"], dtype=np.int8)
-    out[:, :, :oc] = y[:, :, :oc]
-    return out
 
 
 def _pool_golden(x, op):
@@ -511,17 +486,27 @@ def _pool_golden(x, op):
     return out
 
 
+
 def golden_forward(plan, q, x_packed):
+    """Independent integer golden forward (plan v0.6: PACKED3 / ADD_R / copy).
+
+    Deliberately coded differently from int8_forward (per-channel loops +
+    np.floor_divide for ADD_R; explicit numpy copyto for copy).
+    """
     tensors = plan["tensors"]
     ops = plan["ops"]
     store = {plan["input_tensor"]: x_packed}
     op_out = {}
+    roots = q["groups"]["roots"]
+    gq = q["gq"]
     for op_id, op in enumerate(ops):
         kind = op["kind"]
+        flags = int(op.get("flags", 0))
         if kind in ("conv", "dwconv", "cpu_conv0"):
             p = q["ops"][op_id]
             src = store[op["src"]]
-            if kind == "cpu_conv0":
+            packed = (kind == "cpu_conv0") or (flags & 4) or bool(op.get("packed3"))
+            if packed:
                 H, W, ic = src.shape
                 ic_pad = (ic + 7) // 8 * 8
                 x = np.full((H, W, ic_pad), p["zp_in"], dtype=np.int8)
@@ -534,15 +519,7 @@ def golden_forward(plan, q, x_packed):
         elif kind == "upsample":
             s = store[op["src"]]
             out = np.repeat(np.repeat(s, 2, axis=0), 2, axis=1)
-        elif kind == "cpu_concat":
-            dst_t = tensors[op["dst"]]
-            out = np.full((dst_t.H, dst_t.W, dst_t.C8),
-                          q["gq"][q["groups"]["roots"][op["dst"]]][1], dtype=np.int8)
-            coff = 0
-            for s in op["sources"]:
-                out[:, :, coff:coff + s["c"]] = store[s["t"]][:, :, :s["c"]]
-                coff += s["c"]
-        elif kind == "cpu_add":
+        elif kind in ("add", "cpu_add"):
             a = q["adds"][op_id]
             cur = store[op["dst"]]
             src = store[op["src"]]
@@ -553,33 +530,46 @@ def golden_forward(plan, q, x_packed):
             den = 1 << K
             for c in range(op["ic"]):
                 qi = src[:, :, c].astype(np.int64) - zps
-                d = np.floor_divide(qi * R, den)        # independent of >> path
+                d = np.floor_divide(qi * R, den)   # independent of the >> path
                 out[:, :, c] = np.clip(cur[:, :, c].astype(np.int64) + d,
                                        -128, 127).astype(np.int8)
-        elif kind == "add":
-            dst_t = tensors[op["dst"]]
+        elif kind == "copy":
             src = store[op["src"]]
-            cur = store[op["dst"]]
-            out = cur.copy()
-            for c in range(op["ic"]):
-                out[:, :, c] = np.clip(cur[:, :, c].astype(np.int16)
-                                       + src[:, :, c].astype(np.int16), -128, 127).astype(np.int8)
+            dst_t = tensors[op["dst"]]
+            if op["dst"] in store:
+                out = store[op["dst"]].copy()
+            else:
+                out = np.full((dst_t.H, dst_t.W, dst_t.C8),
+                              gq[roots[op["dst"]]][1], dtype=np.int8)
+            cs = int(op.get("c_src", 0))
+            cd = int(op.get("c_dst", 0))
+            c = op["ic"]
+            for ch in range(c):
+                np.copyto(out[:, :, cd + ch], src[:, :, cs + ch])
+        elif kind == "cpu_concat":
+            dst_t = tensors[op["dst"]]
+            out = np.full((dst_t.H, dst_t.W, dst_t.C8),
+                          gq[roots[op["dst"]]][1], dtype=np.int8)
+            coff = 0
+            for s in op["sources"]:
+                for ch in range(s["c"]):
+                    np.copyto(out[:, :, coff + ch], store[s["t"]][:, :, ch])
+                coff += s["c"]
         else:
             raise ValueError(kind)
         store[op["dst"]] = out
-        op_out[op_id] = out[:, :, :tensors[op["dst"]].C]
+        if kind == "copy":
+            cd = int(op.get("c_dst", 0))
+            c = op["ic"]
+            op_out[op_id] = out[:, :, cd:cd + c]
+        else:
+            op_out[op_id] = out[:, :, :tensors[op["dst"]].C]
     return store, op_out
 
 
-# ----------------------------------------------------------------------------
-# dequantisation / helpers
-# ----------------------------------------------------------------------------
-def dequantize(q_arr, s, zp):
-    return s * (q_arr.astype(np.float64) - float(zp))
-
 
 def op_real_shape(op, tensor):
-    """Real (H,W,C) shape of an op's output per CONTRACT §10.1 op_out_shape."""
+    """Real (H,W,C) shape of an op's output (copy = the written channel slice)."""
     k = op["kind"]
     if k in ("conv", "dwconv", "cpu_conv0"):
         return (op["oh"], op["ow"], op["oc"])
@@ -588,6 +578,8 @@ def op_real_shape(op, tensor):
     if k == "upsample":
         return (op["oh"], op["ow"], op["ic"])
     if k in ("add", "cpu_add"):
+        return (op["ih"], op["iw"], op["ic"])
+    if k == "copy":
         return (op["ih"], op["iw"], op["ic"])
     if k in ("cpu_concat", "cpu_copy"):
         return (op["ih"], op["iw"], op.get("oc_tensor", op["oc"]))

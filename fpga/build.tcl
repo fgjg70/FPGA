@@ -137,7 +137,7 @@ proc br_timing_gate {rpt tag} {
   return $ok
 }
 
-read_verilog -sv [list "$root/rv32_pkg.sv" "$root/nn_pkg.sv" "$root/alu.sv" "$root/branch_unit.sv" "$root/control_unit.sv" "$root/imm_gen.sv" "$root/pc.sv" "$root/regfile.sv" "$root/id_ex_reg.sv" "$root/ex_mem_reg.sv" "$root/mem_wb_reg.sv" "$root/hazard_unit.sv" "$root/load_store_unit.sv" "$root/imem.sv" "$root/dmem.sv" "$root/btb.sv" "$root/bht.sv" "$root/ras.sv" "$root/muldiv.sv" "$root/csr_file.sv" "$root/core.sv" "$root/gemm_accel.sv" "$root/nn_mem.sv" "$root/nn_conv_engine.sv" "$root/nn_subsys.sv" "$root/fpga/mmio_subsys.sv" "$root/fpga/top_a100t.sv"]
+read_verilog -sv [list "$root/rv32_pkg.sv" "$root/nn_pkg.sv" "$root/nn_rom_pkg.sv" "$root/alu.sv" "$root/branch_unit.sv" "$root/control_unit.sv" "$root/imm_gen.sv" "$root/pc.sv" "$root/regfile.sv" "$root/id_ex_reg.sv" "$root/ex_mem_reg.sv" "$root/mem_wb_reg.sv" "$root/hazard_unit.sv" "$root/load_store_unit.sv" "$root/imem.sv" "$root/dmem.sv" "$root/btb.sv" "$root/bht.sv" "$root/ras.sv" "$root/muldiv.sv" "$root/csr_file.sv" "$root/core.sv" "$root/gemm_accel.sv" "$root/nn_mem.sv" "$root/nn_conv_engine.sv" "$root/nn_seq.sv" "$root/nn_subsys.sv" "$root/fpga/mmio_subsys.sv" "$root/fpga/top_a100t.sv"]
 # ---------------------------------------------------------------------------
 # AI core clock: materialise an XDC copy with a LITERAL divider.
 # Why not conditional logic inside the .xdc: Vivado 2018.3's XDC parser rejects
@@ -277,11 +277,11 @@ if {[info exists ::env(GEMM_EN)] && $::env(GEMM_EN) ne ""} {
 #   is inside `ifdef NN_EN`, so the delivery netlist is unchanged when this is
 #   unset -- the same discipline as GEMM_EN/RAS_EN/A_EN above.
 #   WEIGHT INITIALISATION (measured constraint, see results/ai-accel/mem-report.md):
-#   nn_mem splits the 368KB WQ array into FOUR power-of-two segments, so the
-#   synthesis flow must provide FOUR images NN_WQ_INIT_A (65536 words) /
-#   _B (16384) / _C (8192) / _D (4096), produced by splitting yolo_wq.hex in
-#   order. A single $readmemh over one 94208-word array maps to 96 BRAM36 and
-#   overflows the device (124 ideal vs 96+32 > 135); the split keeps it at 92.
+#   v0.7: W (320KB) is a standalone array split into FOUR power-of-two segments:
+#   NN_WQ_INIT_A (32768 x 32-bit words) / _B (16384) / _C (16384) / _D (16384),
+#   produced by splitting yolo_w.hex in order (81,920 words total).
+#   Q (48KB) lives in DISTRIBUTED RAM (LUTRAM) and is initialised from the separate
+#   NN_Q_INIT_FILE (12,288 x 32-bit words); it costs no BRAM.
 #   Forward slashes are used in the macro strings on purpose: a backslash inside
 #   a verilog_define string is an escape character and would eat path characters.
 #   Contract: results/ai-accel/CONTRACT.md
@@ -303,6 +303,14 @@ if {[info exists ::env(NN_EN)] && $::env(NN_EN) ne ""} {
   puts "BUILD_NN_CLK_SOURCE=top:NN_CLK_DIV=$nn_div xdc:$XDC_FILE"
   if {![info exists ::env(NN_XDC_DIV)] || $::env(NN_XDC_DIV) ne "$nn_div"} {
     puts "BUILD_NN_WARN: NN_XDC_DIV([expr {[info exists ::env(NN_XDC_DIV)] ? $::env(NN_XDC_DIV) : {unset}}]) != NN_CLK_DIV=$nn_div -> RTL/XDC 时钟不同源!"
+  }
+  # v0.7: W 独立 320KB, 切成 32768/16384/16384/16384 个 32-bit 字; Q 独立 LUTRAM 镜像。
+  if {[info exists ::env(NN_Q_INIT_FILE)] && $::env(NN_Q_INIT_FILE) ne ""} {
+    set qp [string map {\\ /} [file normalize $::env(NN_Q_INIT_FILE)]]
+    append IMEM_DEFS " NN_Q_INIT_FILE=\"$qp\""
+    puts "BUILD_NN_Q_INIT=$qp"
+  } else {
+    puts "BUILD_NN_WARN: NN_Q_INIT_FILE unset -> Q (LUTRAM) 初始化为 0"
   }
   set nn_missing ""
   foreach s {A B C D} {
