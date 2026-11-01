@@ -809,7 +809,8 @@ module nn_conv_engine
                                 (d_ks == 4'd3) ? p1_2 :
                                 (d_ks == 4'd4) ? p1_3 : p1_4);
               // PACKED3: 把 band 步长/行步长切到 packed 口径; base0 = src - pad*(row+3)
-              row_base_a  <= f_p3 ? 24'd0 : base0_a;
+              row_base_a  <= f_p3 ? (d_src[23:0] - ({21'd0, pad_r} * (p3_row + 24'd3)))
+                                  : base0_a;
               blk_base    <= f_p3 ? (d_src[23:0] - ({21'd0, pad_r} * (p3_row + 24'd3)))
                                   : base0_a;
               row_base_w  <= d_dst[23:0];
@@ -921,8 +922,8 @@ module nn_conv_engine
                   for (int k = 0; k < 8; k++) begin
                     w32[k]      = p3w0[k*8 +: 8];
                     w32[k + 8]  = p3w0[(k+8)*8 +: 8];
-                    w32[k + 16] = p3w1[k*8 +: 8];
-                    w32[k + 24] = p3w1[(k+8)*8 +: 8];
+                    w32[k + 16] = a_rdata[k*8 +: 8];        // A1 = 本拍读回
+                    w32[k + 24] = a_rdata[(k+8)*8 +: 8];
                   end
                   o5 = {1'b0, la[3:0]};
                   b0 = w32[o5];
@@ -1049,7 +1050,7 @@ module nn_conv_engine
         end
         // ---- 输出块推进 ----
         S_NEXT: begin
-          row_base_a_n <= row_base_a + oy_step_a;
+          row_base_a_n <= row_base_a + (f_p3 ? p3_oy : oy_step_a);
           row_base_w_n <= row_base_w + row_step_w;
           if ((ox0 + 16'd8) < ow_w)                nxt_sel <= 2'd0;
           else if ((c_oy + 16'd1) < oh_w)          nxt_sel <= 2'd1;
@@ -1184,10 +1185,10 @@ module nn_conv_engine
         end
         S_AD_R1: begin
           rd_half_s <= src_la[3];
-          if (f_add_r) begin
+          if (f_add_r && (c_iy == 16'd0) && (c_ix == 16'd0) && (c_cb == 16'd0)) begin
             zp_s_r  <= q_rdata[7:0];
             zp_d_r  <= q_rdata[15:8];
-            add_r_r <= {q_rdata[23:16], q_rdata[31:24]};
+            add_r_r <= {q_rdata[31:24], q_rdata[23:16]};
             kadd_r  <= q_rdata[39:32];
           end
           state <= S_AD_R2;

@@ -148,9 +148,11 @@ module tb_nn_engine;
 
   task automatic load_wq(input string nm, output integer nw);
     integer fh, rc;
+    integer n_w, n_q;
     logic [31:0] off, wd;
     begin
       nw = 0;
+      n_w = 0; n_q = 0;
       fh = $fopen({vecdir, "/", nm, ".wq.wr"}, "r");
       if (fh == 0) begin
         $display("TB: [FAIL] cannot open %s.wq.wr", nm);
@@ -158,14 +160,20 @@ module tb_nn_engine;
       end
       rc = $fscanf(fh, "%h %h", off, wd);
       while (rc == 2) begin
-        if (off >= NN_Q_OFF)
+        if (off >= NN_Q_OFF) begin
           dbg_wr(1'b1, 17'((off - NN_Q_OFF) >> 2), wd);
-        else
+          n_q = n_q + 1;
+        end
+        else begin
           dbg_wr(1'b0, 17'(off >> 2), wd);
+          n_w = n_w + 1;
+        end
         nw = nw + 1;
         rc = $fscanf(fh, "%h %h", off, wd);
       end
       $fclose(fh);
+      if ($test$plusargs("dbgv"))
+        $display("TBLOAD %s W=%0d Q=%0d", nm, n_w, n_q);
     end
   endtask
 
@@ -248,11 +256,72 @@ module tb_nn_engine;
   // case 执行
   // ==========================================================================
   logic [31:0] dbgv0, dbgv1, dbgv2, dbgv3;
+  integer      p3_ld_cyc, are_cnt, ldret_cnt;
+  integer      p3_emit_seen;
+  integer mac_cyc, win_nz, wre_cnt, prod_nz, wby_nz, ap2_nz, mac_seen;
+  always @(posedge clk) begin
+    if ((u_eng.state == u_eng.S_MAC) && (mac_seen < 2) && $test$plusargs("dbgv")) begin
+      mac_seen <= mac_seen + 1;
+      $display("TBMAC addr=%06x wre=%b wdata_now=%032x wmem1000=%08x",
+               w_addr, w_re, w_rdata, u_mem.w_mem[17'h1000]);
+    end
+  end
+  always @(posedge clk) begin
+    if (u_eng.mac_v2 && (u_eng.wby_r[0] != 16'sd0)) wby_nz <= wby_nz + 1;
+    if (u_eng.mac_v2 && (u_eng.a_pipe2[1][0] != 8'sd0)) ap2_nz <= ap2_nz + 1;
+    if (w_re) wre_cnt <= wre_cnt + 1;
+    if (u_eng.state == u_eng.S_REQ && (u_eng.prod[0][0] != 16'sd0)) prod_nz <= prod_nz + 1;
+  end
+  always @(posedge clk) begin
+    if (u_eng.state == u_eng.S_MAC) mac_cyc <= mac_cyc + 1;
+    if (u_eng.mac_issue && (u_eng.win_sel[1] != 64'd0)) win_nz <= win_nz + 1;
+  end
+  integer band_cnt;
+  always @(posedge clk) begin
+    if ((u_eng.state == u_eng.S_LD) && u_eng.f_p3 && (u_eng.p3_ph == 2'd2) &&
+        (u_eng.c_ld == 16'd16) && $test$plusargs("dbgv")) begin
+      $display("TBBAND[%0d] abuf0=%016x abuf1=%016x abuf8=%016x abuf16=%016x la=%06x",
+               band_cnt, u_eng.abuf[0], u_eng.abuf[1], u_eng.abuf[8], u_eng.abuf[16], u_eng.la);
+      band_cnt <= band_cnt + 1;
+    end
+    if ((u_eng.state == u_eng.S_LD) && u_eng.f_p3 && (u_eng.p3_ph == 2'd2) &&
+        u_eng.ld_inb && (p3_emit_seen == 0) && $test$plusargs("dbgv")) begin
+      p3_emit_seen <= 1;
+      $display("TBP3 emit la=%06x p3w0=%032x a_rdata=%032x abuf1_next=%016x",
+               u_eng.la, u_eng.p3w0, a_rdata, u_eng.abuf[1]);
+    end
+  end
+  always @(posedge clk) begin
+    if ((u_eng.state == u_eng.S_LD) && u_eng.f_p3) p3_ld_cyc <= p3_ld_cyc + 1;
+    if (a_re) are_cnt <= are_cnt + 1;
+    if (u_eng.ld_ret_v) ldret_cnt <= ldret_cnt + 1;
+  end
+
+  integer      qre_cnt;
+  logic [63:0] qre_first;
+  integer      sq_cnt;
+  always @(posedge clk) begin
+    if (q_re) begin
+      qre_cnt <= qre_cnt + 1;
+      if (qre_cnt == 0) qre_first <= q_rdata;
+      if ((qre_cnt < 2) && $test$plusargs("dbgv"))
+        $display("TBQRE addr=%0d mem63=%08x mem64=%08x mem65=%08x mem66=%08x",
+                 q_addr, u_mem.q_mem[63], u_mem.q_mem[64], u_mem.q_mem[65], u_mem.q_mem[66]);
+    end
+    if (u_eng.state == u_eng.S_Q) sq_cnt <= sq_cnt + 1;
+  end
+
   logic        cap_seen;
   logic [23:0] cap_addr;  logic [1:0] cap_sel;  logic [15:0] cap_strb;
   logic [12:0] cap_idx;   logic [127:0] cap_data;
 
+  integer wr_cnt;
   always @(posedge clk) begin
+    if (b_we) begin
+      if ($test$plusargs("dbgv") && (wr_cnt < 6))
+        $display("TBWR[%0d] addr=%06x strb=%04x data=%032x", wr_cnt, b_addr, b_wstrb, b_wdata);
+      wr_cnt <= wr_cnt + 1;
+    end
     if (b_we && !cap_seen) begin
       cap_seen <= 1'b1;
       cap_addr <= b_addr;
@@ -309,6 +378,23 @@ module tb_nn_engine;
         cpu_rd32(NN_B_OFF + 32'd0,  dbgv2);
         cpu_rd32(NN_B_OFF + 32'd4,  dbgv3);
         $display("TBDBG %s post B+0x40=%08x_%08x B+0=%08x_%08x", nm, dbgv1, dbgv0, dbgv3, dbgv2);
+        $display("TBDBG3 %s qre=%0d sq=%0d qfirst=%016x", nm, qre_cnt, sq_cnt, qre_first);
+        $display("TBDBG6 %s p3_ld=%0d are=%0d ldret=%0d flags=%02x mac=%0d win_nz=%0d",
+                 nm, p3_ld_cyc, are_cnt, ldret_cnt, u_eng.d_flags, mac_cyc, win_nz);
+        $display("TBDBG8 %s wby0=%0d wby1=%0d ap2_10=%0d prod_10=%0d wre=%0d prodnz=%0d",
+                 nm, u_eng.wby_r[0], u_eng.wby_r[1], u_eng.a_pipe2[1][0], u_eng.prod[1][0],
+                 wre_cnt, prod_nz, wby_nz, ap2_nz);
+        $display("TBDBG9 %s wby_nz=%0d ap2_nz=%0d", nm, wby_nz, ap2_nz);
+        $display("TBDBG7 %s acc[0][0]=%0d acc[1][0]=%0d acc[2][0]=%0d acc[3][0]=%0d ap[1][0]=%0d ap[1][1]=%0d",
+                 nm, u_eng.acc[0][0], u_eng.acc[1][0], u_eng.acc[2][0], u_eng.acc[3][0],
+                 u_eng.a_pipe[1][0], u_eng.a_pipe[1][1]);
+        $display("TBDBG4 %s lo0=%016x lo1=%016x lo2=%016x lo3=%016x",
+                 nm, u_eng.out_lo[0], u_eng.out_lo[1], u_eng.out_lo[2], u_eng.out_lo[3]);
+        $display("TBDBG5 %s abuf0=%016x abuf1=%016x abuf2=%016x abuf3=%016x bs0=%016x",
+                 nm, u_eng.abuf[0], u_eng.abuf[1], u_eng.abuf[2], u_eng.abuf[3], u_eng.bshift[0]);
+        $display("TBDBG2 %s zp_out=%0d zp_in=%0d mpos0=%0d bias0=%0d mneg0=%0d shift=%0d out_lo0=%016x out_hi0=%016x",
+                 nm, u_eng.zp_out, u_eng.zp_in, u_eng.mpos_q[0], u_eng.bias_q[0],
+                 u_eng.mneg_q[0], u_eng.shift_q, u_eng.out_lo[0], u_eng.out_hi[0]);
       end
       // 3) 读回比较
       check_buf(nm, "a", NN_A_OFF, mis_a);
@@ -343,6 +429,9 @@ module tb_nn_engine;
       op_cases[i] = 0; op_fail[i] = 0; op_mis[i] = 0; op_maxcyc[i] = 0;
     end
     g_mis_a = 0; g_mis_b = 0;
+    qre_cnt = 0; qre_first = 64'd0; sq_cnt = 0; wr_cnt = 0;
+    p3_ld_cyc = 0; are_cnt = 0; ldret_cnt = 0; p3_emit_seen = 0; band_cnt = 0;
+    mac_cyc = 0; win_nz = 0; wre_cnt = 0; prod_nz = 0; wby_nz = 0; ap2_nz = 0; mac_seen = 0;
     cap_seen = 1'b0; cap_addr = 24'd0; cap_sel = 2'd0; cap_strb = 16'd0; cap_idx = 13'd0; cap_data = 128'd0;
     cap_idx = 13'd0; cap_data = 128'd0;
     if ($test$plusargs("misall")) nmis_max = 400;

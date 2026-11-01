@@ -51,7 +51,7 @@ CPU ───▶│ CPU 窗口: A/B only (1拍读)   MMIO: JOB_START / STATUS / 
 |---|---|---|
 | 权重读 | `w_rdata[63:0]` 1 拍 | **`w_rdata[127:0]`**（每拍 2×64b，供 16 OC lanes）|
 | 激活写 | `b_wdata[63:0]` | **`b_wdata[127:0]` + `b_wstrb[15:0]`**（16 lanes 写回；8 通道层/copy 只用半字掩码）|
-| Q 读 | 复用 w 口（Q 在 WQ 统一阵列）| **独立 `q_re/q_addr[12:0]/q_rdata[63:0]`**（q_addr = 64b 字索引）|
+| Q 读 | 复用 w 口（Q 在 WQ 统一阵列）| **独立 `q_re/q_addr[12:0]/q_rdata[63:0]`**（q_addr = 64b 字索引）；nn_mem 侧 1 拍，**引擎侧寄存 `q_addr` 后有效时延 2 拍**（为 100MHz 时序，2026-11-01）|
 | desc | 通用描述符 | **不变**（nn_seq 填；引擎语义不变，便于双模对照）|
 
 - 语义/数值公式**完全不变**（requant、floor、leaky、padding 填 zp_in、饱和）；
