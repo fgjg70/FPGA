@@ -407,8 +407,21 @@ static void op_out_shape(const yolo_op_t *o, u32 *h, u32 *w, u32 *c) {
 static u32 run_plan(int hw, u64 *cycles_out, u32 *first_bad) {
     u32 bad = 0;
     u64 t0 = rd_cycles();
+#ifdef YOLO_SW_PROBE
+    /* 软件基线成本测量: 只跑前 YOLO_SW_PROBE_K 个 op, 逐 op 打印周期 (可复现) */
+    u64 tprev = t0;
+#endif
     for (u32 i = 0; i < YOLO_NUM_OPS; i++) {
         const yolo_op_t *o = &YOLO_OPS[i];
+#ifdef YOLO_SW_PROBE
+        if (i > 0) {
+            u64 tnow = rd_cycles();
+            puts_("[swprobe] op="); putu(i - 1); puts_(" cyc=");
+            putu((u32)(tnow - tprev)); puts_("\n");
+            tprev = tnow;
+        }
+        if (i >= (u32)YOLO_SW_PROBE_K) break;
+#endif
         if (hw) {
             switch (o->kind) {
                 case YK_CONV:
@@ -478,6 +491,13 @@ static u32 run_plan(int hw, u64 *cycles_out, u32 *first_bad) {
             }
         }
     }
+#ifdef YOLO_SW_PROBE
+    {
+        u64 tnow = rd_cycles();
+        puts_("[swprobe] op="); putu(YOLO_SW_PROBE_K - 1); puts_(" cyc=");
+        putu((u32)(tnow - tprev)); puts_("\n");
+    }
+#endif
     *cycles_out = rd_cycles() - t0;
     return bad;
 }
@@ -542,6 +562,10 @@ int main(void) {
     /* ---- 1. 软件基线 (CPU 逐 MAC) ---- */
     (void)gen_input();                       /* 恢复初始图 (上一轮可能被写过) */
     sw_bad = run_plan(0, &sw_cycles, &first_bad);
+#ifdef YOLO_SW_PROBE
+    puts_("[swprobe] total_sw_cycles="); putu((u32)sw_cycles); puts_("\n");
+    return 0;
+#endif
     puts_("[yolo] sw_bad="); putu(sw_bad);
     puts_(" sw_cycles="); putu((u32)sw_cycles); uart_send_char('\n');
     (void)gen_input();                       /* 恢复初始图, 准备硬件遍 */

@@ -214,18 +214,21 @@ python tools/fpga_workflow.py synth --nn --prog yolo_board --no-lc --fanout-limi
 
 | 文件 | 说明 |
 |---|---|
-| `fpga/cpu_a100t_nn.bit` | **v0.7 AI 档 bitstream，100MHz**，3,825,894 B，sha256 `6ab25b9bdf76c6cf3cd21396aee25a6312bf16786bd2989b6c79baddec22f0ee`（2026-11-01 20:26 写入）|
-| `results/ai-accel/impl/ai100/cpu_a100t_nn_100mhz.bit` | 同上，归档副本 |
+| `fpga/cpu_a100t_nn.bit` | **v0.7 AI 档 bitstream，100MHz（ExtraTimingOpt 版）**，3,825,894 B，sha256 `537af245723f9846c97eb7c2be883922541ac20cdb61d9a2c1434ed5bc1de422`（2026-11-01 21:23 写入；WNS **+0.136**，fmax 101.4）|
+| `results/ai-accel/impl/ai100/cpu_a100t_nn_100mhz_et.bit` | 同上，归档副本 |
+| `results/ai-accel/impl/ai100/cpu_a100t_nn_100mhz.bit` | 100MHz 首版（AltSpreadLogic_high，WNS +0.049，sha `6ab25b9b…`），归档对照 |
 | `results/ai-accel/impl/ai80/cpu_a100t_nn_80mhz.bit` | 80MHz 版本（WNS +0.380，sha256 `dea6a1ee47a771ba300a9dd9221e6d13279460a2a0b101785afb307a7a75b6cb`），备选 |
 | `results/ai-accel/impl/nn_mem_ooc/` | nn_mem OOC DCP（黑盒链接用）、8 个时钟变体、no-clock DCP、复现脚本/报告 |
 
 ### 9.2 全实现实测（100MHz）
 
+最终交付版（`--place-directive ExtraTimingOpt`）：
 ```
-BUILD_TIMING=PASS  WNS +0.049ns  WHS +0.051ns   fmax 100.5MHz
+BUILD_TIMING=PASS  WNS +0.136ns  WHS +0.051ns   fmax 101.4MHz
 LUT 36,985 / FF 16,381 / BRAM 132 / DSP 168
 CoreMark/MHz 2.7063（交付档 CPU 未受影响）
 ```
+首版（`AltSpreadLogic_high`）：WNS +0.049 / fmax 100.5，同样 PASS（归档对照）。
 - 最差路径：`u_nn/u_eng/wa_r[*] → u_nn/u_mem/w_cur_*`（**route 8.881ns，logic 0 级**，纯物理距离）；
 - 时钟：`sys_clk_core` 125→100MHz（`--nn-freq-mhz 100`，MMCM 12/6，XDC/CLK_HZ 三处同源自证）。
 
@@ -272,4 +275,20 @@ CoreMark/MHz 2.7063 (369,506 ticks)
 **板卡不在位（2026-11-01 多轮 JTAG 探测均为 `no current hw_target`，无 USB-TTL 串口）**：
 - bitstream 已就绪，接板即可按 `BOARD-RUN.md` 烧写；
 - 上板判据（`yolo_board` 两遍镜像）：`sw_bad=0`、`hw_bad=0`、`RESULT : PASS`、`sw_cycles/hw_cycles/npu_cycles/speedup`；
-- 无板替代证据：ModelSim 两遍仿真（软件基线+NPU）正在产出 `sw_cycles/speedup`；CPU 软件基线 vs 加速器逐层位精确比对已由 112-op E2E 的 per-op checksum（`hw_bad=0`）+ golden 向量证明。
+- 无板替代证据：
+  - CPU 软件基线 vs 加速器**逐层位精确**比对：112-op E2E per-op checksum（`hw_bad=0`）+ golden 向量；MODE_CPU/MODE_AUTO NPU 周期均为 **1,177,320**；
+  - **软件基线成本实测**（`-D YOLO_SW_PROBE` 探针，ModelSim，前 8 个代表 op 逐 op 计时）：
+    | op | kind | 形状/参数 | MACs | 实测周期 |
+    |---:|---|---|---:|---:|
+    | 0 | conv0(PACKED3,CPU) | 128→64, ic3 oc8 k3 s2 | 884,736 | 24,492,286 |
+    | 1 | conv1x1 | 64, ic8 oc8 k1 | 262,144 | 7,689,685 |
+    | 2 | dwconv3x3 | 64, ic8 oc8 | 294,912 | 11,954,684 |
+    | 3 | conv1x1 | 64, ic8 oc4 | 131,072 | 3,937,714 |
+    | 4 | conv1x1 | 64, ic4 oc8 | 131,072 | 5,854,576 |
+    | 5 | dwconv3x3 | 64, ic8 oc8 | 294,912 | 11,891,020 |
+    | 6 | conv1x1 | 64, ic8 oc4 | 131,072 | 3,937,686 |
+    | 7 | add(ADD_R) | 64, ic4 oc4 | 16,384 | 645,678 |
+    **前 8 op 合计 70.40M 周期**；
+  - 由实测点拟合（conv: `140·elems + 12.5·MACs`，dw: `365·elems`，add: `40·elems`，conv0 用实测值）→ **全模型软件基线 ≈ 448.3M 周期**（conv 304.8M / dw 138.2M / add 2.8M / misc 2.5M，拟合残差 <7%）；
+  - **加速比**：`sw/npu = 448.3M / 1,177,320 ≈ **380.8×**`（NPU 纯计算口径）；`sw/hw_cycles ≈ 448.3M / 10.5M ≈ 42.7×`（含 CPU 侧 op 开销的保守口径）；
+  - 全 SW+HW 两遍仿真（精确 `sw_cycles`）仍在后台跑（预计 ~30-45 分钟），结果出来后替换为实测值。
