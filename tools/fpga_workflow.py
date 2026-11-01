@@ -2169,6 +2169,10 @@ def cmd_synth(args) -> int:
                     print(f"  [FAIL] --nn 需要权重镜像, 但 {nnw_abs} 不存在")
                     print("         先跑 tools/yolo/make_vectors.py 生成 yolo_wq.hex")
                     return 1
+                # v0.7: W 是 128-bit 读口的物理阵列 -> 综合初始化的每行必须写 128 bit
+                # (4 个 32-bit 字)。段大小按 32-bit 字数 32768/16384/16384/16384,
+                # 打包后每段行数 = 8192/4096/4096/4096。T-mem 实测: 128-bit 深 8192 段
+                # = RAMB36 74 + RAMB18 3 = 75.5 tiles (<=80)。
                 seg_words = [32768, 16384, 16384, 16384]
                 total_words = sum(seg_words)          # 81920 = 320KB/4 (v0.7: W 独立)
                 lines = [ln.strip() for ln in read_text(nnw_abs).splitlines() if ln.strip()]
@@ -2180,11 +2184,20 @@ def cmd_synth(args) -> int:
                 os.makedirs(seg_dir, exist_ok=True)
                 base = 0
                 for name, words in zip("ABCD", seg_words):
-                    seg_path = os.path.join(seg_dir, f"wq_{name}.hex")
+                    seg_path = os.path.join(seg_dir, f"w_{name}.hex")
+                    seg = lines[base:base + words]
+                    # 4 个 32-bit 字打包成 1 个 128-bit 行 (高字在前: lane3..lane0)
+                    packed = []
+                    for k in range(0, words, 4):
+                        v = (int(seg[k + 3], 16) << 96) | (int(seg[k + 2], 16) << 64) \
+                            | (int(seg[k + 1], 16) << 32) | int(seg[k], 16)
+                        packed.append("%032x" % v)
                     with open(seg_path, "w", encoding="ascii", newline="\n") as f:
-                        f.write("\n".join(lines[base:base + words]) + "\n")
+                        f.write("\n".join(packed) + "\n")
                     benv[f"NN_WQ_INIT_{name}"] = posix(seg_path)
                     base += words
+                print(f"  [NN] W 段打包: {seg_words} 个 32-bit 字 -> "
+                      f"{[w // 4 for w in seg_words]} 行 x 128-bit")
                 # Q 镜像 (v0.7: 独立 LUTRAM 初始化)
                 nnq = getattr(args, "nn_q", None) or "sim/prog/yolo/yolo_q.hex"
                 nnq_abs = nnq if os.path.isabs(nnq) else abspath(nnq)
@@ -2196,8 +2209,16 @@ def cmd_synth(args) -> int:
                 if len(q_lines) != q_words:
                     print(f"  [FAIL] Q 镜像行数 {len(q_lines)} != {q_words}")
                     return 1
-                benv["NN_Q_INIT_FILE"] = nnq_abs
-                print(f"  [NN] W 镜像切分: 4 段 {seg_words} -> {seg_dir}; Q={q_words} 词 -> LUTRAM")
+                q_packed = []
+                for k in range(0, q_words, 2):
+                    v = (int(q_lines[k + 1], 16) << 32) | int(q_lines[k], 16)
+                    q_packed.append("%016x" % v)
+                q_path = os.path.join(seg_dir, "q_packed.hex")
+                with open(q_path, "w", encoding="ascii", newline="\n") as f:
+                    f.write("\n".join(q_packed) + "\n")
+                benv["NN_Q_INIT_FILE"] = posix(q_path)
+                print(f"  [NN] W 段 {seg_words} ({seg_dir}); Q {q_words} 词 -> "
+                      f"{len(q_packed)} 行 x 64-bit (LUTRAM)")
             rc, out, dt = run(["cmd", "/c", abspath("fpga/build.bat")],
                               cwd=abspath("fpga"), timeout=args.timeout, env=benv)
             with open(log, "w", encoding="utf-8") as f:

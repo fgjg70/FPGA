@@ -71,8 +71,7 @@ module nn_mem_v07_stub
   // a/b: 窗口内偏移 -> A/B 连续阵列的 128b 字索引; 越界返回 0 / 写忽略
   function automatic logic [12:0] act_idx(input logic [1:0] sel,
                                           input logic [23:0] addr,
-                                          input logic [12:0] awords,
-                                          input logic [12:0] total_words);
+                                          input int unsigned total_words);
     logic [31:0] off;
     off = (sel == 2'd1) ? (32'(addr) - NN_B_OFF) : (32'(addr) - NN_A_OFF);
     if (sel == 2'd1) begin
@@ -84,11 +83,31 @@ module nn_mem_v07_stub
     end
     if ((off >> 4) >= total_words) return 13'd0;
     act_idx = 13'(off >> 4);
-    awords = awords;  // unused
   endfunction
 
-  wire [12:0] a_idx = act_idx(a_sel, a_addr, 13'(A_BYTES >> 4), 13'(ACT_WORDS));
-  wire [12:0] b_idx = act_idx(b_sel, b_addr, 13'(A_BYTES >> 4), 13'(ACT_WORDS));
+  // A/B 窗口内平坦字节偏移 (A/B 连续阵列)
+  function automatic logic [31:0] act_flat(input logic [1:0] sel, input logic [23:0] addr);
+    begin
+      if (sel == 2'd1) act_flat = 32'(addr) - NN_B_OFF + A_BYTES;
+      else             act_flat = 32'(addr) - NN_A_OFF;
+    end
+  endfunction
+
+  function automatic logic act_ok(input logic [1:0] sel, input logic [23:0] addr);
+    begin
+      act_ok = (sel == 2'd1)
+               ? ((32'(addr) >= NN_B_OFF) && (32'(addr) < NN_B_OFF + B_BYTES))
+               : ((32'(addr) >= NN_A_OFF) && (32'(addr) < NN_A_OFF + A_BYTES));
+    end
+  endfunction
+
+  wire [31:0] a_flat = act_flat(a_sel, a_addr);
+  wire [31:0] b_flat = act_flat(b_sel, b_addr);
+  wire        a_ok   = act_ok(a_sel, a_addr);
+  wire        b_ok   = act_ok(b_sel, b_addr);
+  wire [12:0] a_idx  = 13'(a_flat >> 4);
+  wire [12:0] b_idx  = 13'(b_flat >> 4);
+  wire [3:0]  b_boff = 4'(b_flat[3:0]);
 
   // ---------------------------------------------------------------- CPU 窗口
   wire cpu_in_a = (cpu_addr >= NN_A_OFF) && (cpu_addr < NN_A_OFF + A_BYTES);
@@ -135,16 +154,17 @@ module nn_mem_v07_stub
   // ---------------------------------------------------------------- A 读
   logic [127:0] a_rdata_r;
   always @(posedge clk) begin
-    if (!a_re) a_rdata_r <= 128'd0;
-    else       a_rdata_r <= act_mem[a_idx];
+    if (!a_re || !a_ok) a_rdata_r <= 128'd0;
+    else                a_rdata_r <= act_mem[a_idx];
   end
   assign a_rdata = a_rdata_r;
 
   // ---------------------------------------------------------------- B 写 + 预装
   always @(posedge clk) begin
-    if (b_we) begin
+    if (b_we && b_ok) begin
       for (int i = 0; i < 16; i++) begin
-        if (b_wstrb[i]) act_mem[b_idx][i*8 +: 8] <= b_wdata[i*8 +: 8];
+        if (b_wstrb[i] && ((16'(b_boff) + 16'(i)) < 16))
+          act_mem[b_idx][(b_boff + i[3:0])*8 +: 8] <= b_wdata[i*8 +: 8];
       end
     end
     if (cpu_we && cpu_ok) begin

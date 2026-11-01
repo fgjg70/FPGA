@@ -248,6 +248,20 @@ module tb_nn_engine;
   // case 执行
   // ==========================================================================
   logic [31:0] dbgv0, dbgv1, dbgv2, dbgv3;
+  logic        cap_seen;
+  logic [23:0] cap_addr;  logic [1:0] cap_sel;  logic [15:0] cap_strb;
+  logic [12:0] cap_idx;   logic [127:0] cap_data;
+
+  always @(posedge clk) begin
+    if (b_we && !cap_seen) begin
+      cap_seen <= 1'b1;
+      cap_addr <= b_addr;
+      cap_sel  <= b_sel;
+      cap_strb <= b_wstrb;
+      cap_idx  <= u_mem.b_idx;
+      cap_data <= b_wdata;
+    end
+  end
 
   task automatic run_case(input string nm, input int op, input int flags,
                           input int ks, input int st, input int pad,
@@ -288,6 +302,8 @@ module tb_nn_engine;
       end
       run_op(cyc, ecode, ok);
       if ($test$plusargs("dbgv")) begin
+        $display("TBDBG %s WR1 seen=%b addr=%06x sel=%b idx=%0d strb=%04x data=%032x",
+                 nm, cap_seen, cap_addr, cap_sel, cap_idx, cap_strb, cap_data);
         cpu_rd32(NN_B_OFF + 32'd64, dbgv0);
         cpu_rd32(NN_B_OFF + 32'd68, dbgv1);
         cpu_rd32(NN_B_OFF + 32'd0,  dbgv2);
@@ -327,6 +343,8 @@ module tb_nn_engine;
       op_cases[i] = 0; op_fail[i] = 0; op_mis[i] = 0; op_maxcyc[i] = 0;
     end
     g_mis_a = 0; g_mis_b = 0;
+    cap_seen = 1'b0; cap_addr = 24'd0; cap_sel = 2'd0; cap_strb = 16'd0; cap_idx = 13'd0; cap_data = 128'd0;
+    cap_idx = 13'd0; cap_data = 128'd0;
     if ($test$plusargs("misall")) nmis_max = 400;
 
     // 向量目录: +vec=<dir> 优先; 否则按候选相对路径找 manifest.txt

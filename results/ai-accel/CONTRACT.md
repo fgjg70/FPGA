@@ -451,6 +451,12 @@ endpackage
 | A 96KB / B 32KB | CPU 窗口可读写 | **CPU 窗口只映射 A/B**；其它窗口地址读 0、写忽略 |
 | 窗口基址/大小 | `0x9004_0000` / 512KB | **不变**（CPU 只用到 A/B 两段） |
 
+**初始化镜像（v0.7）**：综合时 W 由 `NN_WQ_INIT_A..D` 四段加载（每行 **128-bit**，行数 8192/4096/4096/4096，
+由 workflow 从 `yolo_w.hex` 81,920 行 32-bit 打包）；Q 由 `NN_Q_INIT_FILE` 加载（每行 **64-bit**，6144 行，
+从 `yolo_q.hex` 打包）。仿真侧 `nn_mem` 同时支持 `+nnw=<yolo_w.hex>` / `+nnq=<yolo_q.hex>` 与旧
+`+nnwq=<yolo_wq.hex>`（= W 81,920 行 + Q 12,288 行顺序拼接）。另有 `dbg_we/dbg_space/dbg_addr[16:0]/dbg_wdata`
+调试装载口（SoC 中 tie 0，module TB 用它初始化/回读）。
+
 ### 12.2 flags 扩展（`nn_desc_t.flags` 5→7 位）
 | 位 | 名称 | 语义 |
 |---|---|---|
