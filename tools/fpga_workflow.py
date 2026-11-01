@@ -1085,6 +1085,16 @@ def test_matrix() -> list[dict]:
             "pass_marker": "ENGINE_TB: PASS",
             "desc": "AI 加速: nn_conv_engine int8 卷积引擎自检 (逐 op 位精确)",
         })
+    if os.path.exists(abspath("sim/tb_nn_seq.sv")):
+        tests.append({
+            "name": "tb_nn_seq", "top": "tb_nn_seq", "rtl": "rtl",
+            "tb": "sim/tb_nn_seq.sv",
+            # 不依赖真实 ROM 内容: 空 ROM 也要立即 done; 真实 plan 生成 ROM 后自动变成
+            # "按 ROM 顺序发 N 次 start + cycles 累加" 的完整序列器测试 (v0.7)。
+            "plus": [], "max_cycles": None, "timeout": 600,
+            "pass_marker": "NN_SEQ_TB: PASS",
+            "desc": "AI 加速: nn_seq 微码序列器自检 (ROM 顺序/周期累加/错误注入)",
+        })
     return tests
 
 

@@ -63,7 +63,7 @@ module nn_seq
   nn_rom_t      rom;
   nn_desc_t     desc_r;
 
-  wire last_entry = (idx == 8'(NN_ROM_LEN - 1));
+  wire last_entry = (NN_ROM_LEN == 0) || (idx == 8'(NN_ROM_LEN - 1));
 
   // ROM 同步读 (LUTRAM/distributed ROM)
   always_ff @(posedge clk) begin
@@ -107,7 +107,7 @@ module nn_seq
   always_comb begin
     st_n = st;
     unique case (st)
-      S_IDLE:  if (start) st_n = S_FETCH;
+      S_IDLE:  if (start) st_n = (NN_ROM_LEN == 0) ? S_DONE : S_FETCH;
       S_FETCH: st_n = S_ISSUE;
       S_ISSUE: st_n = S_WAIT;
       S_WAIT: begin
