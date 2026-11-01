@@ -165,6 +165,12 @@ Block RAM: act_mem_reg 8Kx128 ... RAMB36 = 32     <- A/B 32 块
 | + 交付档核心 | ~9.5 tiles | 交付档 `fpga/util.rpt`：RAMB36=8 + RAMB18=3 |
 | **整机估算** | **~121.5/135** | ≤121.5 目标 ✓（余 13.5 tiles 给视频链路/320 tile 缓存） |
 
+**独立交叉验证（T-accel 的 engine+mem OOC @100MHz，2026-11-01 R3）**：
+`proto/engine/synth100_v3.bat` 用本 nn_mem + engine v3 重跑 →
+**BRAM = 112 tiles**（与本报告一致）、LUT 31,066（Q ROM ≈6,976 + 引擎逻辑 ≈24.1K）、
+FF 13,779、**WNS +0.807 ns MET**（DSP 200 待压）。日志：`proto/engine/v3r_all47.log`
+与 T-accel 的 OOC 报告；说明"112 tiles / 121.5 整机"不是本报告单侧口径。
+
 ### 3.4 重要方法学（证据有效性）
 
 1. **R3 修复的取舍（实测三方案）**：8B 对齐窗口需要每拍读"两个相邻 128b 字"。
@@ -267,6 +273,15 @@ vsim -c -do "run -all; quit -f" work.tb_nn_mem                            # 无�
 日志：`%TEMP%\nn_joint3\{protoR46,protoR4,rootR46,rootR4}\run.log`。
 ⇒ 真 nn_mem 与 stub 在引擎全部用例上**逐位一致**（含 PACKED3 conv0、dwconv、
 copy/up2x、ADD/ADD_R）；根目录集成快照的 engine 也能跑通 47/47+4/4。
+
+### 5.4 SoC 剩余"多-tile 步进错位"的归属（已闭环）
+
+Lead 的 SoC 探针观察到"前 8 像素对、第 9 像素起错"；联合 TB 的单 op/全尺寸 l0 replay
+在 mem 侧全部位精确 ⇒ **不是 mem**。T-accel 随后定位为引擎 PACKED3 的 x-tile 步长
+（`p3_ox` 误写为 `(iw*3)<<4`，应为 `8*st*3` = 48/24），修复后 64×64 输出（每行 8 tile）
+的 l0 全尺寸 replay 在 stub 与真 nn_mem 上均 **mismatch=0**（`replay_l0_stub.log` /
+`replay_l0_real.log`，cyc=129,555）。根目录 engine 已同步为修复版
+（52,578B，sha256 `661fd509…b1a198`）。**mem 侧无遗留问题，v0.7 R3 定稿。**
 
 ---
 

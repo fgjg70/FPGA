@@ -99,7 +99,7 @@ def cycles_of(o):
         return BASE + words * (5 if f_up2x else 2)
     # add
     words = o['ih'] * o['iw'] * ICB
-    return BASE + (1 if f_add_r else 0) + words * 4
+    return BASE + (1 if f_add_r else 0) + words * 5
 
 
 def parse_manifest(path):

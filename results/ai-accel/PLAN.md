@@ -265,3 +265,14 @@ Q 区压缩（v0.1 的 16KB/固定 0x1000 层是算术错的：84 层要 344KB�
 3. **P2（权重流式）**：NPU 权重从 BRAM 改为 DDR3 + BRAM 权重缓存（双缓冲），跑同一模型做**逐位对比**，确认只换存储不换结果
 4. **P3（大模型/高分辨率）**：把 320×320 或 YOLOv3-tiny 端到端跑起来（此时 BRAM 是 cache，DDR3 是容量）
 5. **P4（摄像头）**：DVP/MIPI → 帧缓冲 → resize/量化 → NPU → 检测框叠加（需要板上有视频输出或 UART/ILA 读数）
+
+
+---
+
+## 10. v0.7 特化进度（2026-11-01 晚）
+
+- **112-op 双模 E2E PASS**：MODE_CPU `hw_bad=0`、MODE_AUTO `auto_bad=0`，两者 NPU 周期 = 1,167,368。
+- 引擎 v3（128 MAC/拍）47 case + 4 模式 PASS（真 nn_mem）；nn_mem v0.7 R3 = W80 + A/B32 = 112 BRAM（+核心 ≈121.5/135）；Q 0 BRAM/6,981 LUT。
+- OOC @100MHz WNS +0.807（MET，目标 ≥+1.0）；DSP 200（目标 ≤160）。
+- 剩余：时序/DSP 收敛 → dw16 + conv0 loader → C320（DDR3 中间激活）→ 全实现 bitstream。
+- 协作：GitHub issue #6（https://github.com/fgjg70/FPGA/issues/6）跟踪 NPU；视频/显示由其他同学负责。

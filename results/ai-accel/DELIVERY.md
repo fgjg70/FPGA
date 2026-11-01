@@ -160,3 +160,47 @@ python tools/fpga_workflow.py verify --force          # 期望 PASS 15
 python tools/fpga_workflow.py synth --prog cm_hw --tag ai-nn-parity --no-lc --fanout-limit 128 --pblock-range off --contain-routing --place-directive AltSpreadLogic_high
 python tools/fpga_workflow.py synth --nn --prog yolo_board --no-lc --fanout-limit 128 --pblock-range off --contain-routing --place-directive AltSpreadLogic_high
 ```
+
+
+---
+
+## 8. v0.7 特化里程碑（2026-11-01 晚，**112-op 双模 E2E 全绿**）
+
+> 目标：固定模型（`MODEL-FREEZE.md`）+ 128 MAC/拍 + LUTRAM 存储 + 微码 ROM 自主执行。
+> 视频/显示由其他同学负责，本节只覆盖 NPU。
+
+### 8.1 E2E（`verify --only tb_sw_nn_yolo`，PASS 65.5s）
+
+```
+[yolo] ops=112 in=128x128x3
+[yolo] input_csum=0xcfd271c5 exp=0xcfd271c5 OK
+[yolo] hw_bad=0      hw_cycles=10445588  npu_cycles=1167368     ← MODE_CPU：CPU 逐 op 下发 + 逐 op checksum
+[yolo] auto_bad=0    auto_cycles=1167968 auto_npu_cycles=1167368 ← MODE_AUTO：nn_seq 按微码 ROM 自主跑完
+[yolo] RESULT : PASS
+```
+- 两种模式 **NPU 周期完全相等（1,167,368）** ⇒ 双模等价性成立；
+- 全模型 112 op 中 **0 个 CPU 执行 op**（conv0 由引擎 PACKED3、18 个 shortcut add 由引擎 ADD_R、6 个 copy 由引擎 COPY）。
+
+### 8.2 组成与资源（实测）
+
+| 项 | 结果 |
+|---|---|
+| 引擎 v3（128 MAC/拍） | 47/47 单测（含全尺寸 l0 conv0 replay）+ 4/4 扩展模式，真 nn_mem 下 mismatch=0 |
+| nn_seq 微码序列器 | ROM 112 项；单测 PASS（112 次启动/desc 映射/周期累加/错误注入）|
+| nn_mem v0.7 R3 | W 80 BRAM36（4 段 64-bit 宽、双读口支持 8B 对齐 16B 窗口）、Q 0 BRAM/6,981 LUT、A/B 32 ⇒ **112 tiles**；tb_nn_mem 3 模式 47,146 checks PASS |
+| 整机 BRAM | 112 + 核心 ~9.5 ≈ **121.5/135**（满足 ≤121.5 目标）|
+| OOC @100MHz（engine+mem）| **WNS +0.807（MET）**；LUT 31,066（含 Q ROM 6,976 ⇒ 引擎逻辑 ≈24.1K）；FF 13,779；DSP 200 |
+| C128 全模型周期 | **1,167,368 拍**（@100MHz 11.67ms ≈85.7fps 上限）|
+
+### 8.3 本轮修掉的集成 bug
+
+1. **W 读口对齐**：nn_mem 按 16B 粒度、引擎按 8B 粒度发 `w_addr` → 74/84 个 conv/dw 读错权重；修法：nn_mem 4 段 64-bit 双读口 + 1 位窗口 mux（1 拍、W 80 BRAM）。
+2. **PACKED3 x-tile 步长**：`p3_ox` 误写 `(iw*3)<<4`，应为 `8*st*3`（48/24B）→ 每行第 2 个 tile 起全错（SoC op0 前 8 像素对、byte64 起错，27155/32768 字节）；已修并新增全尺寸 l0 replay。
+3. **MODE_AUTO done/err 非粘滞**：`seq_done` 单拍脉冲直连 STATUS，CPU 轮询漏掉 → ROM 跑完 idx=112 但 CPU 卡死；改为 done_r/err_r 粘滞（MODE_CPU 一直如此，所以此前未暴露）。
+
+### 8.4 剩余（NPU 优化主线）
+
+1. 时序：WNS ≥ +1.0（当前 +0.807）、DSP ≤160（当前 200）、引擎逻辑 LUT ≤25K（当前 24.1K ✓）；
+2. dw 16-lane（C128 阶段 dwconv 占 38.6% 周期）、conv0 loader 优化（129,555 → 目标 ~60k）；
+3. C320 集成（DDR3 中间激活，P3）+ 30fps 路线决策（PX16 评估见 `PX16-STUDY.md`）；
+4. 全实现 `synth --nn` ≥100MHz + bitstream（board-ready，板卡当前不在位）。
