@@ -2151,11 +2151,41 @@ def cmd_synth(args) -> int:
                 #   单一 yolo_wq.hex **顺序切分**成 4 个文件, 再通过 NN_WQ_INIT_A..D 传入。
                 #   切分规则与 nn_mem_wq 的 localparam 严格一致 (改了必须同步)。
                 benv["NN_EN"] = "1"
-                # AI 档核心时钟 (三者同源: build.tcl -> top CLKOUT0_DIVIDE_F/CLK_HZ, XDC <- NN_XDC_DIV)
-                _nn_div = int(getattr(args, "nn_clk_div", 7) or 7)
-                benv["NN_CLK_DIV"] = str(_nn_div)
-                benv["NN_XDC_DIV"] = str(_nn_div)
-                print(f"  [NN] core clock: VCO 1050MHz / {_nn_div} = {1050.0/_nn_div:.3f} MHz")
+                # AI 档核心时钟: f = 50MHz * M / N (MMCM)，三处同源:
+                #   top_a100t.sv CLKFBOUT_MULT_F/CLKOUT0_DIVIDE_F/CLK_HZ、XDC 生成时钟、build.tcl 日志自证。
+                _freq = getattr(args, "nn_freq_mhz", None)
+                if _freq:
+                    # 在 VCO=50*M ∈ [600,1200] 内枚举整数 N，取频率误差最小者（同误差偏小 N）
+                    best = None
+                    for _m in range(12, 25):
+                        _vco = 50.0 * _m
+                        if not (600.0 <= _vco <= 1200.0):
+                            continue
+                        for _n in range(2, 33):
+                            _f = _vco / _n
+                            err = abs(_f - _freq)
+                            key = (round(err, 6), _n, _m)
+                            if best is None or key < best[0]:
+                                best = (key, _m, _n, _f)
+                    if best is None:
+                        print("  [FAIL] --nn-freq-mhz 无可行 MMCM 组合")
+                        return 1
+                    _, _mult, _div, _fac = best
+                    benv["NN_CLK_MULT"] = str(_mult)
+                    benv["NN_CLK_DIV"] = str(_div)
+                    benv["NN_XDC_MULT"] = str(_mult)
+                    benv["NN_XDC_DIV"] = str(_div)
+                    _hz = int(round(50_000_000.0 * _mult / _div))
+                    print(f"  [NN] core clock: 50MHz x {_mult}/{_div} = {_fac:.3f} MHz "
+                          f"(VCO {50*_mult} MHz, CLK_HZ {_hz})")
+                else:
+                    # 兼容旧参数 --nn-clk-div: 沿用 VCO=1050MHz (=50*21)
+                    _nn_div = int(getattr(args, "nn_clk_div", 7) or 7)
+                    benv["NN_CLK_MULT"] = "21"
+                    benv["NN_CLK_DIV"] = str(_nn_div)
+                    benv["NN_XDC_MULT"] = "21"
+                    benv["NN_XDC_DIV"] = str(_nn_div)
+                    print(f"  [NN] core clock: VCO 1050MHz / {_nn_div} = {1050.0/_nn_div:.3f} MHz")
                 # 【绝不覆盖交付档 bitstream】build.tcl 默认写 fpga/cpu_a100t.bit，
                 # AI 档另存 cpu_a100t_nn.bit；显式 --bit-name 优先。
                 bn = getattr(args, "bit_name", None)
@@ -2277,7 +2307,7 @@ def cmd_synth(args) -> int:
             if getattr(args, "nn", False):
                 # 宏生效自证 (PITFALLS R31 同族: 参数被解析却没写进 env -> 静默按默认构建)
                 expect.append("BUILD_NN_EN=1")
-                expect.append("BUILD_NN_CLK_DIV=")
+                expect.append("BUILD_NN_CLK=")
                 # 非 7 分频必须看到 build.tcl 的时钟覆盖证据 (XDC 不支持条件逻辑,
                 # 曾因 if 被 XDC 解析器静默忽略而按错频率布线 —— 这里把它变成硬判据)
                 if _nn_div != 7:
@@ -3304,6 +3334,10 @@ def main() -> int:
     p.add_argument("--bit-name", default=None,
                    help="输出 bitstream 文件名 (默认用 build.tcl 的 cpu_a100t.bit); "
                         "--nn 构建默认 cpu_a100t_nn.bit (避免覆盖交付档 bitstream)")
+    p.add_argument("--nn-freq-mhz", type=float, default=None,
+                   help="AI 档目标核心频率 (MHz)。自动选 MMCM (MULT, DIVIDE)：f = 50*M/N，"
+                        "VCO=50*M 限定在 600~1200MHz。例: 125 -> M=20,N=8 (VCO 1000)。"
+                        "给定时优先于 --nn-clk-div。")
     p.add_argument("--nn-clk-div", type=int, default=7, choices=[7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 20, 21],
                    help="AI 档核心时钟分频 N (VCO=1050MHz, f=1050/N MHz)。默认 7=150MHz；"
                         "引擎时序收敛不了时用它降档（三处同源：top CLKOUT0_DIVIDE_F / XDC -divide_by / CLK_HZ）。"

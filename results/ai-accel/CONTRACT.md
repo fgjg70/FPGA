@@ -503,3 +503,7 @@ byte[5:15] = 0
   nn_mem 的 Q 读仍是 1 拍；**引擎侧为时序把 q_addr 寄存一拍，故引擎视角 Q 有效时延 = 2 拍**（2026-11-01，为 100MHz 收敛）。
 - **A 读口语义不变**：`a_addr` 是字节地址、读 16B 对齐窗口（低 4 位忽略）；PACKED3 由引擎内部二级窗缓冲提取 3B/像素。
 - **DSP 预算修订**：引擎 **≤160 DSP**（器件 240 为硬上限；LUT 尽量让给逻辑）。MODEL-FREEZE 里"≤110"作废（128 MAC 下不现实）。
+- **AI 档核心时钟（2026-11-01 通用化）**：`f = 50 MHz × MULT / DIV`（MMCM），workflow `--nn-freq-mhz F`
+  自动枚举 VCO=50×MULT∈[600,1200]MHz 的整数 DIV 组合并取误差最小者；三处同源：
+  `top_a100t.sv` 的 `CLKFBOUT_MULT_F/CLKOUT0_DIVIDE_F/CLK_HZ`、生成的 XDC（`-multiply_by/-divide_by`）、
+  日志 `BUILD_NN_CLK=MULT=/DIV=` 自证。标准档：100→12/6、105→21/10、125→15/6、131.25→21/8、150→21/7。

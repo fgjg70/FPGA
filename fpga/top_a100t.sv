@@ -36,8 +36,16 @@
 //   build flow 用 NN_CLK_DIV 宏统一注入（见 fpga/build.tcl 的 NN_EN 段）。
 // --------------------------------------------------------------------------
 `ifdef NN_EN
+  // AI 档核心时钟: f = 50MHz * MULT / DIV (MMCM)。默认 21/7 = 150MHz。
+  // 与 build.tcl / 生成的 XDC 三处同源 (BUILD_NN_CLK 日志自证)。
+  `ifndef NN_CLK_MULT
+    `define NN_CLK_MULT 21
+  `endif
   `ifndef NN_CLK_DIV
     `define NN_CLK_DIV 7
+  `endif
+  `ifndef NN_CLKFBOUT_MULT_F
+    `define NN_CLKFBOUT_MULT_F 21.0
   `endif
   `ifndef NN_CLKOUT_DIV_F
     `define NN_CLKOUT_DIV_F 7.0
@@ -98,14 +106,15 @@ module top_a100t
 
   MMCME2_BASE #(
     .BANDWIDTH          ("OPTIMIZED"),
-    .CLKFBOUT_MULT_F    (21.0),     // VCO = 50MHz * MULT_F / DIVCLK_DIVIDE (见 xdc 同一比值)
-    .CLKFBOUT_PHASE     (0.0),
-    .CLKIN1_PERIOD      (20.000),   // 板载 50 MHz
 `ifdef NN_EN
-    .CLKOUT0_DIVIDE_F   (`NN_CLKOUT_DIV_F),   // AI 档可配 (默认 7.0 = 150MHz); 与 xdc 的 -divide_by 同源
+    .CLKFBOUT_MULT_F    (`NN_CLKFBOUT_MULT_F),  // AI 档可配 (默认 21.0; VCO = 50MHz * MULT)
+    .CLKOUT0_DIVIDE_F   (`NN_CLKOUT_DIV_F),     // f = 50*MULT/DIV; 与 xdc 的 -multiply_by/-divide_by 同源
 `else
+    .CLKFBOUT_MULT_F    (21.0),     // VCO = 50MHz * MULT_F / DIVCLK_DIVIDE (见 xdc 同一比值)
     .CLKOUT0_DIVIDE_F   (7.0),      // 核心频率 = VCO / CLKOUT0_DIVIDE_F (与 xdc 的 divide_by 同值)
 `endif
+    .CLKFBOUT_PHASE     (0.0),
+    .CLKIN1_PERIOD      (20.000),   // 板载 50 MHz
     .CLKOUT0_DUTY_CYCLE (0.5),
     .CLKOUT0_PHASE      (0.0),
     .DIVCLK_DIVIDE      (1),
@@ -218,9 +227,9 @@ module top_a100t
 
   mmio_subsys #(
 `ifdef NN_EN
-    // AI 档: 由同一个 NN_CLK_DIV 推出真实主频 (= 1050MHz / N)。
+    // AI 档: 由同一个 (MULT, DIV) 推出真实主频 (= 50MHz * MULT / DIV)。
     // 必须与 MMCM 分频、XDC 生成时钟同源, 否则 UART 波特率/周期计数器全部偏。
-    .CLK_HZ  ((32'd1_050_000_000 / `NN_CLK_DIV)),
+    .CLK_HZ  ((32'd50_000_000 * `NN_CLK_MULT) / `NN_CLK_DIV),
 `else
     .CLK_HZ  (150_000_000),        // 必须跟着 MMCM 改: 周期计数器/定时器按它分频
 `endif

@@ -151,16 +151,21 @@ read_verilog -sv [list "$root/rv32_pkg.sv" "$root/nn_pkg.sv" "$root/nn_rom_pkg.s
 # NN_CLK_DIV), this generated XDC, and the BUILD_NN_XDC_GEN self-check line.
 set XDC_FILE "$root/fpga/daVinciPro.xdc"
 if {[info exists ::env(NN_EN)] && $::env(NN_EN) ne ""} {
+  # AI 档时钟: f = 50MHz * MULT / DIV (MMCM)。默认 21/7 = 150MHz。
+  set _xdc_mult 21
   set _xdc_div 7
-  if {[info exists ::env(NN_CLK_DIV)] && $::env(NN_CLK_DIV) ne ""} {
-    set _xdc_div [expr {int($::env(NN_CLK_DIV))}]
+  if {[info exists ::env(NN_XDC_MULT)] && $::env(NN_XDC_MULT) ne ""} {
+    set _xdc_mult [expr {int($::env(NN_XDC_MULT))}]
   }
-  if {$_xdc_div != 7} {
+  if {[info exists ::env(NN_XDC_DIV)] && $::env(NN_XDC_DIV) ne ""} {
+    set _xdc_div [expr {int($::env(NN_XDC_DIV))}]
+  }
+  if {($_xdc_mult != 21) || ($_xdc_div != 7)} {
     set _fh [open $XDC_FILE r]
     set _xtxt [read $_fh]
     close $_fh
     set _xpat "-multiply_by 21 -divide_by 7"
-    set _xrep "-multiply_by 21 -divide_by $_xdc_div"
+    set _xrep "-multiply_by $_xdc_mult -divide_by $_xdc_div"
     set _xtxt2 [string map [list $_xpat $_xrep] $_xtxt]
     if {$_xtxt2 eq $_xtxt} {
       puts "BUILD_ERROR: AI_CLK_XDC_PATCH_FAILED (pattern not found in daVinciPro.xdc)"
@@ -168,13 +173,13 @@ if {[info exists ::env(NN_EN)] && $::env(NN_EN) ne ""} {
     }
     # NOTE: build.tcl has no OUT_DIR variable (that is a workflow-side env); write the
     # generated copy next to the original .xdc (ignored by .gitignore).
-    set XDC_FILE [file join $root fpga "daVinciPro_ai_$_xdc_div.xdc"]
+    set XDC_FILE [file join $root fpga "daVinciPro_ai_${_xdc_mult}_${_xdc_div}.xdc"]
     set _fh [open $XDC_FILE w]
     puts $_fh $_xtxt2
     close $_fh
-    puts "BUILD_NN_XDC_GEN=$XDC_FILE (create_generated_clock divide_by $_xdc_div)"
+    puts "BUILD_NN_XDC_GEN=$XDC_FILE (create_generated_clock multiply_by $_xdc_mult divide_by $_xdc_div)"
   } else {
-    puts "BUILD_NN_XDC_GEN=default (divide_by 7 = 150MHz)"
+    puts "BUILD_NN_XDC_GEN=default (21/7 = 150MHz)"
   }
 }
 read_xdc $XDC_FILE
@@ -291,20 +296,25 @@ if {[info exists ::env(GEMM_EN)] && $::env(GEMM_EN) ne ""} {
 if {[info exists ::env(NN_EN)] && $::env(NN_EN) ne ""} {
   append IMEM_DEFS " NN_EN=1"
   puts "BUILD_NN_EN=1"
-  # AI core clock (VCO 1050MHz / N). Default 7 = 150MHz.
-  # Must stay in sync with: top_a100t.sv CLKOUT0_DIVIDE_F + xdc -divide_by (env NN_XDC_DIV).
+  # AI core clock: f = 50MHz * MULT / DIV. 默认 21/7 = 150MHz。
+  # 与 top_a100t.sv 的 CLKFBOUT_MULT_F/CLKOUT0_DIVIDE_F/CLK_HZ、生成的 XDC 三处同源。
+  set nn_mult 21
   set nn_div 7
+  if {[info exists ::env(NN_CLK_MULT)] && $::env(NN_CLK_MULT) ne ""} {
+    set nn_mult [expr {int($::env(NN_CLK_MULT))}]
+  }
   if {[info exists ::env(NN_CLK_DIV)] && $::env(NN_CLK_DIV) ne ""} {
     set nn_div [expr {int($::env(NN_CLK_DIV))}]
   }
+  append IMEM_DEFS " NN_CLK_MULT=$nn_mult"
   append IMEM_DEFS " NN_CLK_DIV=$nn_div"
+  append IMEM_DEFS " NN_CLKFBOUT_MULT_F=[expr {double($nn_mult)}]"
   append IMEM_DEFS " NN_CLKOUT_DIV_F=[expr {double($nn_div)}]"
-  puts "BUILD_NN_CLK_DIV=$nn_div (fcore=[expr {1050.0/$nn_div}] MHz)"
-  # 核心时钟分频值的约束落地在 read_xdc 之前生成的 XDC 副本里 (BUILD_NN_XDC_GEN)。
-  # 这里只把同源关系打出来, 便于日志核对。
-  puts "BUILD_NN_CLK_SOURCE=top:NN_CLK_DIV=$nn_div xdc:$XDC_FILE"
-  if {![info exists ::env(NN_XDC_DIV)] || $::env(NN_XDC_DIV) ne "$nn_div"} {
-    puts "BUILD_NN_WARN: NN_XDC_DIV([expr {[info exists ::env(NN_XDC_DIV)] ? $::env(NN_XDC_DIV) : {unset}}]) != NN_CLK_DIV=$nn_div -> RTL/XDC 时钟不同源!"
+  puts "BUILD_NN_CLK=MULT=$nn_mult/DIV=$nn_div (fcore=[expr {50.0*$nn_mult/$nn_div}] MHz, VCO=[expr {50*$nn_mult}] MHz)"
+  puts "BUILD_NN_CLK_SOURCE=top:MULT=$nn_mult/DIV=$nn_div xdc:$XDC_FILE"
+  if {![info exists ::env(NN_XDC_DIV)] || $::env(NN_XDC_DIV) ne "$nn_div" ||\
+      ![info exists ::env(NN_XDC_MULT)] || $::env(NN_XDC_MULT) ne "$nn_mult"} {
+    puts "BUILD_NN_WARN: NN_XDC([expr {[info exists ::env(NN_XDC_MULT)] ? $::env(NN_XDC_MULT) : {unset}}]/[expr {[info exists ::env(NN_XDC_DIV)] ? $::env(NN_XDC_DIV) : {unset}}]) != RTL $nn_mult/$nn_div -> 时钟不同源!"
   }
   # v0.7: W 独立 320KB, 切成 32768/16384/16384/16384 个 32-bit 字; Q 独立 LUTRAM 镜像。
   if {[info exists ::env(NN_Q_INIT_FILE)] && $::env(NN_Q_INIT_FILE) ne ""} {

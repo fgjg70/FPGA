@@ -1,7 +1,7 @@
 Copyright 1986-2018 Xilinx, Inc. All Rights Reserved.
 -------------------------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2018.3 (win64) Build 2405991 Thu Dec  6 23:38:27 MST 2018
-| Date         : Sun Nov  1 14:26:47 2026
+| Date         : Sun Nov  1 14:33:37 2026
 | Host         : fgjg running 64-bit major release  (build 9200)
 | Command      : report_timing_summary -file D:/USER/Desktop/FPGA/FPGA/results/ai-accel/proto/engine/synth100_timing.rpt -max_paths 10 -delay_type max
 | Design       : nn_eng_timing_wrap_v3
@@ -126,7 +126,7 @@ Table of Contents
 
     WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints  
     -------      -------  ---------------------  -------------------     --------     --------  ----------------------  --------------------  
-      0.840        0.000                      0                40123        4.500        0.000                       0                 14456  
+      3.137        0.000                      0                40553        4.500        0.000                       0                 14495  
 
 
 All user specified timing constraints are met.
@@ -149,7 +149,7 @@ clk    {0.000 5.000}      10.000          100.000
 
 Clock             WNS(ns)      TNS(ns)  TNS Failing Endpoints  TNS Total Endpoints     WPWS(ns)     TPWS(ns)  TPWS Failing Endpoints  TPWS Total Endpoints  
 -----             -------      -------  ---------------------  -------------------     --------     --------  ----------------------  --------------------  
-clk                 0.840        0.000                      0                40123        4.500        0.000                       0                 14456  
+clk                 3.137        0.000                      0                40553        4.500        0.000                       0                 14495  
 
 
 ------------------------------------------------------------------------------------------------
@@ -180,7 +180,7 @@ Path Group    From Clock    To Clock          WNS(ns)      TNS(ns)  TNS Failing 
 From Clock:  clk
   To Clock:  clk
 
-Setup :            0  Failing Endpoints,  Worst Slack        0.840ns,  Total Violation        0.000ns
+Setup :            0  Failing Endpoints,  Worst Slack        3.137ns,  Total Violation        0.000ns
 Hold  :           NA  Failing Endpoints,  Worst Slack           NA  ,  Total Violation           NA
 PW    :            0  Failing Endpoints,  Worst Slack        4.500ns,  Total Violation        0.000ns
 ---------------------------------------------------------------------------------------------------
@@ -188,16 +188,16 @@ PW    :            0  Failing Endpoints,  Worst Slack        4.500ns,  Total Vio
 
 Max Delay Paths
 --------------------------------------------------------------------------------------
-Slack (MET) :             0.840ns  (required time - arrival time)
-  Source:                 u_eng/src_word_q_reg[1]/C
+Slack (MET) :             3.137ns  (required time - arrival time)
+  Source:                 u_eng/x_ld_reg[1]/C
                             (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            u_eng/ad_delta_reg[0][3]/D
-                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            u_mem/act_mem_reg_0_0/ADDRBWRADDR[10]
+                            (rising edge-triggered cell RAMB36E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            10.000ns  (clk rise@10.000ns - clk rise@0.000ns)
-  Data Path Delay:        9.128ns  (logic 6.489ns (71.090%)  route 2.639ns (28.910%))
-  Logic Levels:           9  (CARRY4=3 DSP48E1=2 LUT2=1 LUT6=3)
+  Data Path Delay:        6.298ns  (logic 1.856ns (29.468%)  route 4.442ns (70.532%))
+  Logic Levels:           9  (CARRY4=2 LUT3=2 LUT4=1 LUT6=4)
   Clock Path Skew:        -0.039ns (DCD - SCD + CPR)
     Destination Clock Delay (DCD):    0.748ns = ( 10.748 - 10.000 ) 
     Source Clock Delay      (SCD):    0.787ns
@@ -212,60 +212,58 @@ Slack (MET) :             0.840ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=14472, unset)        0.787     0.787    u_eng/clk
-                         FDRE                                         r  u_eng/src_word_q_reg[1]/C
+                         net (fo=14495, unset)        0.787     0.787    u_eng/clk
+                         FDRE                                         r  u_eng/x_ld_reg[1]/C
   -------------------------------------------------------------------    -------------------
-                         FDRE (Prop_fdre_C_Q)         0.397     1.184 r  u_eng/src_word_q_reg[1]/Q
-                         net (fo=3, unplaced)         0.380     1.564    u_eng/src_word_q_reg_n_0_[1]
-                         LUT2 (Prop_lut2_I0_O)        0.232     1.796 r  u_eng/p_1_out__13_i_10/O
-                         net (fo=1, unplaced)         0.000     1.796    u_eng/p_1_out__13_i_10_n_0
-                         CARRY4 (Prop_carry4_S[1]_CO[3])
-                                                      0.444     2.240 r  u_eng/p_1_out__13_i_3/CO[3]
-                         net (fo=1, unplaced)         0.000     2.240    u_eng/p_1_out__13_i_3_n_0
+                         FDRE (Prop_fdre_C_Q)         0.397     1.184 f  u_eng/x_ld_reg[1]/Q
+                         net (fo=6, unplaced)         0.657     1.841    u_eng/x_ld_reg_n_0_[1]
+                         LUT4 (Prop_lut4_I1_O)        0.252     2.093 r  u_eng/ld_fill_d_i_35/O
+                         net (fo=1, unplaced)         0.000     2.093    u_eng/ld_fill_d_i_35_n_0
+                         CARRY4 (Prop_carry4_DI[0]_CO[3])
+                                                      0.477     2.570 r  u_eng/ld_fill_d_reg_i_15/CO[3]
+                         net (fo=1, unplaced)         0.000     2.570    u_eng/ld_fill_d_reg_i_15_n_0
                          CARRY4 (Prop_carry4_CI_CO[3])
-                                                      0.100     2.340 r  u_eng/p_1_out__13_i_2/CO[3]
-                         net (fo=1, unplaced)         0.000     2.340    u_eng/p_1_out__13_i_2_n_0
-                         CARRY4 (Prop_carry4_CI_O[0])
-                                                      0.189     2.529 r  u_eng/p_1_out__13_i_1/O[0]
-                         net (fo=27, unplaced)        0.647     3.176    u_eng/p_1_out__13_i_1_n_7
-                         DSP48E1 (Prop_dsp48e1_A[16]_PCOUT[47])
-                                                      3.541     6.717 r  u_eng/p_1_out__13/PCOUT[47]
-                         net (fo=1, unplaced)         0.000     6.717    u_eng/p_1_out__13_n_106
-                         DSP48E1 (Prop_dsp48e1_PCIN[47]_P[5])
-                                                      1.271     7.988 r  u_eng/p_1_out__14/P[5]
-                         net (fo=2, unplaced)         0.647     8.636    u_eng/p_1_out__14_n_100
-                         LUT6 (Prop_lut6_I3_O)        0.105     8.741 r  u_eng/ad_delta[0][6]_i_4/O
-                         net (fo=4, unplaced)         0.606     9.347    u_eng/ad_delta[0][6]_i_4_n_0
-                         LUT6 (Prop_lut6_I1_O)        0.105     9.452 r  u_eng/ad_delta[0][4]_i_3/O
-                         net (fo=2, unplaced)         0.358     9.810    u_eng/ad_delta[0][4]_i_3_n_0
-                         LUT6 (Prop_lut6_I3_O)        0.105     9.915 r  u_eng/ad_delta[0][3]_i_1/O
-                         net (fo=1, unplaced)         0.000     9.915    u_eng/ad_delta[0][3]_i_1_n_0
-                         FDRE                                         r  u_eng/ad_delta_reg[0][3]/D
+                                                      0.100     2.670 f  u_eng/ld_fill_d_reg_i_5/CO[3]
+                         net (fo=17, unplaced)        0.633     3.303    u_eng/ld_inb0
+                         LUT3 (Prop_lut3_I1_O)        0.105     3.408 f  u_eng/abuf[8][43]_i_2/O
+                         net (fo=132, unplaced)       0.454     3.862    u_eng/abuf[8][43]_i_2_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     3.967 f  u_eng/act_mem_reg_0_0_i_89/O
+                         net (fo=1, unplaced)         0.347     4.314    u_eng/act_mem_reg_0_0_i_89_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     4.419 f  u_eng/act_mem_reg_0_0_i_75/O
+                         net (fo=1, unplaced)         0.778     5.197    u_eng/a_re
+                         LUT6 (Prop_lut6_I1_O)        0.105     5.302 r  u_eng/act_mem_reg_0_0_i_49/O
+                         net (fo=1, unplaced)         0.528     5.830    u_eng/act_mem_reg_0_0_i_49_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     5.935 r  u_eng/act_mem_reg_0_0_i_33/O
+                         net (fo=14, unplaced)        0.398     6.333    u_eng/act_mem_reg_0_0_i_33_n_0
+                         LUT3 (Prop_lut3_I1_O)        0.105     6.438 r  u_eng/act_mem_reg_0_0_i_19/O
+                         net (fo=32, unplaced)        0.647     7.085    u_mem/act_mem_reg_15_1_1[8]
+                         RAMB36E1                                     r  u_mem/act_mem_reg_0_0/ADDRBWRADDR[10]
   -------------------------------------------------------------------    -------------------
 
                          (clock clk rise edge)       10.000    10.000 r  
                                                       0.000    10.000 r  clk (IN)
-                         net (fo=14472, unset)        0.748    10.748    u_eng/clk
-                         FDRE                                         r  u_eng/ad_delta_reg[0][3]/C
+                         net (fo=14495, unset)        0.748    10.748    u_mem/clk
+                         RAMB36E1                                     r  u_mem/act_mem_reg_0_0/CLKBWRCLK
                          clock pessimism              0.000    10.748    
                          clock uncertainty           -0.035    10.712    
-                         FDRE (Setup_fdre_C_D)        0.043    10.755    u_eng/ad_delta_reg[0][3]
+                         RAMB36E1 (Setup_ramb36e1_CLKBWRCLK_ADDRBWRADDR[10])
+                                                     -0.490    10.222    u_mem/act_mem_reg_0_0
   -------------------------------------------------------------------
-                         required time                         10.755    
-                         arrival time                          -9.915    
+                         required time                         10.222    
+                         arrival time                          -7.085    
   -------------------------------------------------------------------
-                         slack                                  0.840    
+                         slack                                  3.137    
 
-Slack (MET) :             0.840ns  (required time - arrival time)
-  Source:                 u_eng/src_word_q_reg[1]/C
+Slack (MET) :             3.137ns  (required time - arrival time)
+  Source:                 u_eng/x_ld_reg[1]/C
                             (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            u_eng/ad_delta_reg[0][4]/D
-                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            u_mem/act_mem_reg_0_0/ADDRBWRADDR[11]
+                            (rising edge-triggered cell RAMB36E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            10.000ns  (clk rise@10.000ns - clk rise@0.000ns)
-  Data Path Delay:        9.128ns  (logic 6.489ns (71.090%)  route 2.639ns (28.910%))
-  Logic Levels:           9  (CARRY4=3 DSP48E1=2 LUT2=1 LUT6=3)
+  Data Path Delay:        6.298ns  (logic 1.856ns (29.468%)  route 4.442ns (70.532%))
+  Logic Levels:           9  (CARRY4=2 LUT3=2 LUT4=1 LUT6=4)
   Clock Path Skew:        -0.039ns (DCD - SCD + CPR)
     Destination Clock Delay (DCD):    0.748ns = ( 10.748 - 10.000 ) 
     Source Clock Delay      (SCD):    0.787ns
@@ -280,60 +278,58 @@ Slack (MET) :             0.840ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=14472, unset)        0.787     0.787    u_eng/clk
-                         FDRE                                         r  u_eng/src_word_q_reg[1]/C
+                         net (fo=14495, unset)        0.787     0.787    u_eng/clk
+                         FDRE                                         r  u_eng/x_ld_reg[1]/C
   -------------------------------------------------------------------    -------------------
-                         FDRE (Prop_fdre_C_Q)         0.397     1.184 r  u_eng/src_word_q_reg[1]/Q
-                         net (fo=3, unplaced)         0.380     1.564    u_eng/src_word_q_reg_n_0_[1]
-                         LUT2 (Prop_lut2_I0_O)        0.232     1.796 r  u_eng/p_1_out__13_i_10/O
-                         net (fo=1, unplaced)         0.000     1.796    u_eng/p_1_out__13_i_10_n_0
-                         CARRY4 (Prop_carry4_S[1]_CO[3])
-                                                      0.444     2.240 r  u_eng/p_1_out__13_i_3/CO[3]
-                         net (fo=1, unplaced)         0.000     2.240    u_eng/p_1_out__13_i_3_n_0
+                         FDRE (Prop_fdre_C_Q)         0.397     1.184 f  u_eng/x_ld_reg[1]/Q
+                         net (fo=6, unplaced)         0.657     1.841    u_eng/x_ld_reg_n_0_[1]
+                         LUT4 (Prop_lut4_I1_O)        0.252     2.093 r  u_eng/ld_fill_d_i_35/O
+                         net (fo=1, unplaced)         0.000     2.093    u_eng/ld_fill_d_i_35_n_0
+                         CARRY4 (Prop_carry4_DI[0]_CO[3])
+                                                      0.477     2.570 r  u_eng/ld_fill_d_reg_i_15/CO[3]
+                         net (fo=1, unplaced)         0.000     2.570    u_eng/ld_fill_d_reg_i_15_n_0
                          CARRY4 (Prop_carry4_CI_CO[3])
-                                                      0.100     2.340 r  u_eng/p_1_out__13_i_2/CO[3]
-                         net (fo=1, unplaced)         0.000     2.340    u_eng/p_1_out__13_i_2_n_0
-                         CARRY4 (Prop_carry4_CI_O[0])
-                                                      0.189     2.529 r  u_eng/p_1_out__13_i_1/O[0]
-                         net (fo=27, unplaced)        0.647     3.176    u_eng/p_1_out__13_i_1_n_7
-                         DSP48E1 (Prop_dsp48e1_A[16]_PCOUT[47])
-                                                      3.541     6.717 r  u_eng/p_1_out__13/PCOUT[47]
-                         net (fo=1, unplaced)         0.000     6.717    u_eng/p_1_out__13_n_106
-                         DSP48E1 (Prop_dsp48e1_PCIN[47]_P[6])
-                                                      1.271     7.988 r  u_eng/p_1_out__14/P[6]
-                         net (fo=2, unplaced)         0.647     8.636    u_eng/p_1_out__14_n_99
-                         LUT6 (Prop_lut6_I3_O)        0.105     8.741 r  u_eng/ad_delta[0][7]_i_3/O
-                         net (fo=4, unplaced)         0.606     9.347    u_eng/ad_delta[0][7]_i_3_n_0
-                         LUT6 (Prop_lut6_I1_O)        0.105     9.452 r  u_eng/ad_delta[0][5]_i_3/O
-                         net (fo=2, unplaced)         0.358     9.810    u_eng/ad_delta[0][5]_i_3_n_0
-                         LUT6 (Prop_lut6_I3_O)        0.105     9.915 r  u_eng/ad_delta[0][4]_i_1/O
-                         net (fo=1, unplaced)         0.000     9.915    u_eng/ad_delta[0][4]_i_1_n_0
-                         FDRE                                         r  u_eng/ad_delta_reg[0][4]/D
+                                                      0.100     2.670 f  u_eng/ld_fill_d_reg_i_5/CO[3]
+                         net (fo=17, unplaced)        0.633     3.303    u_eng/ld_inb0
+                         LUT3 (Prop_lut3_I1_O)        0.105     3.408 f  u_eng/abuf[8][43]_i_2/O
+                         net (fo=132, unplaced)       0.454     3.862    u_eng/abuf[8][43]_i_2_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     3.967 f  u_eng/act_mem_reg_0_0_i_89/O
+                         net (fo=1, unplaced)         0.347     4.314    u_eng/act_mem_reg_0_0_i_89_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     4.419 f  u_eng/act_mem_reg_0_0_i_75/O
+                         net (fo=1, unplaced)         0.778     5.197    u_eng/a_re
+                         LUT6 (Prop_lut6_I1_O)        0.105     5.302 r  u_eng/act_mem_reg_0_0_i_49/O
+                         net (fo=1, unplaced)         0.528     5.830    u_eng/act_mem_reg_0_0_i_49_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     5.935 r  u_eng/act_mem_reg_0_0_i_33/O
+                         net (fo=14, unplaced)        0.398     6.333    u_eng/act_mem_reg_0_0_i_33_n_0
+                         LUT3 (Prop_lut3_I1_O)        0.105     6.438 r  u_eng/act_mem_reg_0_0_i_18/O
+                         net (fo=32, unplaced)        0.647     7.085    u_mem/act_mem_reg_15_1_1[9]
+                         RAMB36E1                                     r  u_mem/act_mem_reg_0_0/ADDRBWRADDR[11]
   -------------------------------------------------------------------    -------------------
 
                          (clock clk rise edge)       10.000    10.000 r  
                                                       0.000    10.000 r  clk (IN)
-                         net (fo=14472, unset)        0.748    10.748    u_eng/clk
-                         FDRE                                         r  u_eng/ad_delta_reg[0][4]/C
+                         net (fo=14495, unset)        0.748    10.748    u_mem/clk
+                         RAMB36E1                                     r  u_mem/act_mem_reg_0_0/CLKBWRCLK
                          clock pessimism              0.000    10.748    
                          clock uncertainty           -0.035    10.712    
-                         FDRE (Setup_fdre_C_D)        0.043    10.755    u_eng/ad_delta_reg[0][4]
+                         RAMB36E1 (Setup_ramb36e1_CLKBWRCLK_ADDRBWRADDR[11])
+                                                     -0.490    10.222    u_mem/act_mem_reg_0_0
   -------------------------------------------------------------------
-                         required time                         10.755    
-                         arrival time                          -9.915    
+                         required time                         10.222    
+                         arrival time                          -7.085    
   -------------------------------------------------------------------
-                         slack                                  0.840    
+                         slack                                  3.137    
 
-Slack (MET) :             0.840ns  (required time - arrival time)
-  Source:                 u_eng/src_word_q_reg[1]/C
+Slack (MET) :             3.137ns  (required time - arrival time)
+  Source:                 u_eng/x_ld_reg[1]/C
                             (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            u_eng/ad_delta_reg[0][5]/D
-                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            u_mem/act_mem_reg_0_0/ADDRBWRADDR[12]
+                            (rising edge-triggered cell RAMB36E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            10.000ns  (clk rise@10.000ns - clk rise@0.000ns)
-  Data Path Delay:        9.128ns  (logic 6.489ns (71.090%)  route 2.639ns (28.910%))
-  Logic Levels:           9  (CARRY4=3 DSP48E1=2 LUT2=1 LUT6=3)
+  Data Path Delay:        6.298ns  (logic 1.856ns (29.468%)  route 4.442ns (70.532%))
+  Logic Levels:           9  (CARRY4=2 LUT3=2 LUT4=1 LUT6=4)
   Clock Path Skew:        -0.039ns (DCD - SCD + CPR)
     Destination Clock Delay (DCD):    0.748ns = ( 10.748 - 10.000 ) 
     Source Clock Delay      (SCD):    0.787ns
@@ -348,60 +344,58 @@ Slack (MET) :             0.840ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=14472, unset)        0.787     0.787    u_eng/clk
-                         FDRE                                         r  u_eng/src_word_q_reg[1]/C
+                         net (fo=14495, unset)        0.787     0.787    u_eng/clk
+                         FDRE                                         r  u_eng/x_ld_reg[1]/C
   -------------------------------------------------------------------    -------------------
-                         FDRE (Prop_fdre_C_Q)         0.397     1.184 r  u_eng/src_word_q_reg[1]/Q
-                         net (fo=3, unplaced)         0.380     1.564    u_eng/src_word_q_reg_n_0_[1]
-                         LUT2 (Prop_lut2_I0_O)        0.232     1.796 r  u_eng/p_1_out__13_i_10/O
-                         net (fo=1, unplaced)         0.000     1.796    u_eng/p_1_out__13_i_10_n_0
-                         CARRY4 (Prop_carry4_S[1]_CO[3])
-                                                      0.444     2.240 r  u_eng/p_1_out__13_i_3/CO[3]
-                         net (fo=1, unplaced)         0.000     2.240    u_eng/p_1_out__13_i_3_n_0
+                         FDRE (Prop_fdre_C_Q)         0.397     1.184 f  u_eng/x_ld_reg[1]/Q
+                         net (fo=6, unplaced)         0.657     1.841    u_eng/x_ld_reg_n_0_[1]
+                         LUT4 (Prop_lut4_I1_O)        0.252     2.093 r  u_eng/ld_fill_d_i_35/O
+                         net (fo=1, unplaced)         0.000     2.093    u_eng/ld_fill_d_i_35_n_0
+                         CARRY4 (Prop_carry4_DI[0]_CO[3])
+                                                      0.477     2.570 r  u_eng/ld_fill_d_reg_i_15/CO[3]
+                         net (fo=1, unplaced)         0.000     2.570    u_eng/ld_fill_d_reg_i_15_n_0
                          CARRY4 (Prop_carry4_CI_CO[3])
-                                                      0.100     2.340 r  u_eng/p_1_out__13_i_2/CO[3]
-                         net (fo=1, unplaced)         0.000     2.340    u_eng/p_1_out__13_i_2_n_0
-                         CARRY4 (Prop_carry4_CI_O[0])
-                                                      0.189     2.529 r  u_eng/p_1_out__13_i_1/O[0]
-                         net (fo=27, unplaced)        0.647     3.176    u_eng/p_1_out__13_i_1_n_7
-                         DSP48E1 (Prop_dsp48e1_A[16]_PCOUT[47])
-                                                      3.541     6.717 r  u_eng/p_1_out__13/PCOUT[47]
-                         net (fo=1, unplaced)         0.000     6.717    u_eng/p_1_out__13_n_106
-                         DSP48E1 (Prop_dsp48e1_PCIN[47]_P[7])
-                                                      1.271     7.988 r  u_eng/p_1_out__14/P[7]
-                         net (fo=2, unplaced)         0.647     8.636    u_eng/p_1_out__14_n_98
-                         LUT6 (Prop_lut6_I3_O)        0.105     8.741 r  u_eng/ad_delta[0][8]_i_9/O
-                         net (fo=4, unplaced)         0.606     9.347    u_eng/ad_delta[0][8]_i_9_n_0
-                         LUT6 (Prop_lut6_I1_O)        0.105     9.452 r  u_eng/ad_delta[0][6]_i_3/O
-                         net (fo=2, unplaced)         0.358     9.810    u_eng/ad_delta[0][6]_i_3_n_0
-                         LUT6 (Prop_lut6_I3_O)        0.105     9.915 r  u_eng/ad_delta[0][5]_i_1/O
-                         net (fo=1, unplaced)         0.000     9.915    u_eng/ad_delta[0][5]_i_1_n_0
-                         FDRE                                         r  u_eng/ad_delta_reg[0][5]/D
+                                                      0.100     2.670 f  u_eng/ld_fill_d_reg_i_5/CO[3]
+                         net (fo=17, unplaced)        0.633     3.303    u_eng/ld_inb0
+                         LUT3 (Prop_lut3_I1_O)        0.105     3.408 f  u_eng/abuf[8][43]_i_2/O
+                         net (fo=132, unplaced)       0.454     3.862    u_eng/abuf[8][43]_i_2_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     3.967 f  u_eng/act_mem_reg_0_0_i_89/O
+                         net (fo=1, unplaced)         0.347     4.314    u_eng/act_mem_reg_0_0_i_89_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     4.419 f  u_eng/act_mem_reg_0_0_i_75/O
+                         net (fo=1, unplaced)         0.778     5.197    u_eng/a_re
+                         LUT6 (Prop_lut6_I1_O)        0.105     5.302 r  u_eng/act_mem_reg_0_0_i_49/O
+                         net (fo=1, unplaced)         0.528     5.830    u_eng/act_mem_reg_0_0_i_49_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     5.935 r  u_eng/act_mem_reg_0_0_i_33/O
+                         net (fo=14, unplaced)        0.398     6.333    u_eng/act_mem_reg_0_0_i_33_n_0
+                         LUT3 (Prop_lut3_I1_O)        0.105     6.438 r  u_eng/act_mem_reg_0_0_i_17/O
+                         net (fo=32, unplaced)        0.647     7.085    u_mem/act_mem_reg_15_1_1[10]
+                         RAMB36E1                                     r  u_mem/act_mem_reg_0_0/ADDRBWRADDR[12]
   -------------------------------------------------------------------    -------------------
 
                          (clock clk rise edge)       10.000    10.000 r  
                                                       0.000    10.000 r  clk (IN)
-                         net (fo=14472, unset)        0.748    10.748    u_eng/clk
-                         FDRE                                         r  u_eng/ad_delta_reg[0][5]/C
+                         net (fo=14495, unset)        0.748    10.748    u_mem/clk
+                         RAMB36E1                                     r  u_mem/act_mem_reg_0_0/CLKBWRCLK
                          clock pessimism              0.000    10.748    
                          clock uncertainty           -0.035    10.712    
-                         FDRE (Setup_fdre_C_D)        0.043    10.755    u_eng/ad_delta_reg[0][5]
+                         RAMB36E1 (Setup_ramb36e1_CLKBWRCLK_ADDRBWRADDR[12])
+                                                     -0.490    10.222    u_mem/act_mem_reg_0_0
   -------------------------------------------------------------------
-                         required time                         10.755    
-                         arrival time                          -9.915    
+                         required time                         10.222    
+                         arrival time                          -7.085    
   -------------------------------------------------------------------
-                         slack                                  0.840    
+                         slack                                  3.137    
 
-Slack (MET) :             0.840ns  (required time - arrival time)
-  Source:                 u_eng/src_word_q_reg[1]/C
+Slack (MET) :             3.137ns  (required time - arrival time)
+  Source:                 u_eng/x_ld_reg[1]/C
                             (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            u_eng/ad_delta_reg[0][6]/D
-                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            u_mem/act_mem_reg_0_0/ADDRBWRADDR[13]
+                            (rising edge-triggered cell RAMB36E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            10.000ns  (clk rise@10.000ns - clk rise@0.000ns)
-  Data Path Delay:        9.128ns  (logic 6.489ns (71.090%)  route 2.639ns (28.910%))
-  Logic Levels:           9  (CARRY4=3 DSP48E1=2 LUT2=1 LUT6=3)
+  Data Path Delay:        6.298ns  (logic 1.856ns (29.468%)  route 4.442ns (70.532%))
+  Logic Levels:           9  (CARRY4=2 LUT3=2 LUT4=1 LUT6=4)
   Clock Path Skew:        -0.039ns (DCD - SCD + CPR)
     Destination Clock Delay (DCD):    0.748ns = ( 10.748 - 10.000 ) 
     Source Clock Delay      (SCD):    0.787ns
@@ -416,60 +410,58 @@ Slack (MET) :             0.840ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=14472, unset)        0.787     0.787    u_eng/clk
-                         FDRE                                         r  u_eng/src_word_q_reg[1]/C
+                         net (fo=14495, unset)        0.787     0.787    u_eng/clk
+                         FDRE                                         r  u_eng/x_ld_reg[1]/C
   -------------------------------------------------------------------    -------------------
-                         FDRE (Prop_fdre_C_Q)         0.397     1.184 r  u_eng/src_word_q_reg[1]/Q
-                         net (fo=3, unplaced)         0.380     1.564    u_eng/src_word_q_reg_n_0_[1]
-                         LUT2 (Prop_lut2_I0_O)        0.232     1.796 r  u_eng/p_1_out__13_i_10/O
-                         net (fo=1, unplaced)         0.000     1.796    u_eng/p_1_out__13_i_10_n_0
-                         CARRY4 (Prop_carry4_S[1]_CO[3])
-                                                      0.444     2.240 r  u_eng/p_1_out__13_i_3/CO[3]
-                         net (fo=1, unplaced)         0.000     2.240    u_eng/p_1_out__13_i_3_n_0
+                         FDRE (Prop_fdre_C_Q)         0.397     1.184 f  u_eng/x_ld_reg[1]/Q
+                         net (fo=6, unplaced)         0.657     1.841    u_eng/x_ld_reg_n_0_[1]
+                         LUT4 (Prop_lut4_I1_O)        0.252     2.093 r  u_eng/ld_fill_d_i_35/O
+                         net (fo=1, unplaced)         0.000     2.093    u_eng/ld_fill_d_i_35_n_0
+                         CARRY4 (Prop_carry4_DI[0]_CO[3])
+                                                      0.477     2.570 r  u_eng/ld_fill_d_reg_i_15/CO[3]
+                         net (fo=1, unplaced)         0.000     2.570    u_eng/ld_fill_d_reg_i_15_n_0
                          CARRY4 (Prop_carry4_CI_CO[3])
-                                                      0.100     2.340 r  u_eng/p_1_out__13_i_2/CO[3]
-                         net (fo=1, unplaced)         0.000     2.340    u_eng/p_1_out__13_i_2_n_0
-                         CARRY4 (Prop_carry4_CI_O[0])
-                                                      0.189     2.529 r  u_eng/p_1_out__13_i_1/O[0]
-                         net (fo=27, unplaced)        0.647     3.176    u_eng/p_1_out__13_i_1_n_7
-                         DSP48E1 (Prop_dsp48e1_A[16]_PCOUT[47])
-                                                      3.541     6.717 r  u_eng/p_1_out__13/PCOUT[47]
-                         net (fo=1, unplaced)         0.000     6.717    u_eng/p_1_out__13_n_106
-                         DSP48E1 (Prop_dsp48e1_PCIN[47]_P[8])
-                                                      1.271     7.988 r  u_eng/p_1_out__14/P[8]
-                         net (fo=2, unplaced)         0.647     8.636    u_eng/p_1_out__14_n_97
-                         LUT6 (Prop_lut6_I3_O)        0.105     8.741 r  u_eng/ad_delta[0][8]_i_13/O
-                         net (fo=4, unplaced)         0.606     9.347    u_eng/ad_delta[0][8]_i_13_n_0
-                         LUT6 (Prop_lut6_I1_O)        0.105     9.452 r  u_eng/ad_delta[0][7]_i_2/O
-                         net (fo=2, unplaced)         0.358     9.810    u_eng/ad_delta[0][7]_i_2_n_0
-                         LUT6 (Prop_lut6_I3_O)        0.105     9.915 r  u_eng/ad_delta[0][6]_i_1/O
-                         net (fo=1, unplaced)         0.000     9.915    u_eng/ad_delta[0][6]_i_1_n_0
-                         FDRE                                         r  u_eng/ad_delta_reg[0][6]/D
+                                                      0.100     2.670 f  u_eng/ld_fill_d_reg_i_5/CO[3]
+                         net (fo=17, unplaced)        0.633     3.303    u_eng/ld_inb0
+                         LUT3 (Prop_lut3_I1_O)        0.105     3.408 f  u_eng/abuf[8][43]_i_2/O
+                         net (fo=132, unplaced)       0.454     3.862    u_eng/abuf[8][43]_i_2_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     3.967 f  u_eng/act_mem_reg_0_0_i_89/O
+                         net (fo=1, unplaced)         0.347     4.314    u_eng/act_mem_reg_0_0_i_89_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     4.419 f  u_eng/act_mem_reg_0_0_i_75/O
+                         net (fo=1, unplaced)         0.778     5.197    u_eng/a_re
+                         LUT6 (Prop_lut6_I1_O)        0.105     5.302 r  u_eng/act_mem_reg_0_0_i_49/O
+                         net (fo=1, unplaced)         0.528     5.830    u_eng/act_mem_reg_0_0_i_49_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     5.935 r  u_eng/act_mem_reg_0_0_i_33/O
+                         net (fo=14, unplaced)        0.398     6.333    u_eng/act_mem_reg_0_0_i_33_n_0
+                         LUT3 (Prop_lut3_I1_O)        0.105     6.438 r  u_eng/act_mem_reg_0_0_i_16/O
+                         net (fo=32, unplaced)        0.647     7.085    u_mem/act_mem_reg_15_1_1[11]
+                         RAMB36E1                                     r  u_mem/act_mem_reg_0_0/ADDRBWRADDR[13]
   -------------------------------------------------------------------    -------------------
 
                          (clock clk rise edge)       10.000    10.000 r  
                                                       0.000    10.000 r  clk (IN)
-                         net (fo=14472, unset)        0.748    10.748    u_eng/clk
-                         FDRE                                         r  u_eng/ad_delta_reg[0][6]/C
+                         net (fo=14495, unset)        0.748    10.748    u_mem/clk
+                         RAMB36E1                                     r  u_mem/act_mem_reg_0_0/CLKBWRCLK
                          clock pessimism              0.000    10.748    
                          clock uncertainty           -0.035    10.712    
-                         FDRE (Setup_fdre_C_D)        0.043    10.755    u_eng/ad_delta_reg[0][6]
+                         RAMB36E1 (Setup_ramb36e1_CLKBWRCLK_ADDRBWRADDR[13])
+                                                     -0.490    10.222    u_mem/act_mem_reg_0_0
   -------------------------------------------------------------------
-                         required time                         10.755    
-                         arrival time                          -9.915    
+                         required time                         10.222    
+                         arrival time                          -7.085    
   -------------------------------------------------------------------
-                         slack                                  0.840    
+                         slack                                  3.137    
 
-Slack (MET) :             0.840ns  (required time - arrival time)
-  Source:                 u_eng/src_word_q_reg[9]/C
+Slack (MET) :             3.137ns  (required time - arrival time)
+  Source:                 u_eng/x_ld_reg[1]/C
                             (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            u_eng/ad_delta_reg[1][3]/D
-                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            u_mem/act_mem_reg_0_0/ADDRBWRADDR[14]
+                            (rising edge-triggered cell RAMB36E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            10.000ns  (clk rise@10.000ns - clk rise@0.000ns)
-  Data Path Delay:        9.128ns  (logic 6.489ns (71.090%)  route 2.639ns (28.910%))
-  Logic Levels:           9  (CARRY4=3 DSP48E1=2 LUT2=1 LUT6=3)
+  Data Path Delay:        6.298ns  (logic 1.856ns (29.468%)  route 4.442ns (70.532%))
+  Logic Levels:           9  (CARRY4=2 LUT3=2 LUT4=1 LUT6=4)
   Clock Path Skew:        -0.039ns (DCD - SCD + CPR)
     Destination Clock Delay (DCD):    0.748ns = ( 10.748 - 10.000 ) 
     Source Clock Delay      (SCD):    0.787ns
@@ -484,60 +476,58 @@ Slack (MET) :             0.840ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=14472, unset)        0.787     0.787    u_eng/clk
-                         FDRE                                         r  u_eng/src_word_q_reg[9]/C
+                         net (fo=14495, unset)        0.787     0.787    u_eng/clk
+                         FDRE                                         r  u_eng/x_ld_reg[1]/C
   -------------------------------------------------------------------    -------------------
-                         FDRE (Prop_fdre_C_Q)         0.397     1.184 r  u_eng/src_word_q_reg[9]/Q
-                         net (fo=3, unplaced)         0.380     1.564    u_eng/src_word_q_reg_n_0_[9]
-                         LUT2 (Prop_lut2_I0_O)        0.232     1.796 r  u_eng/p_1_out__11_i_10/O
-                         net (fo=1, unplaced)         0.000     1.796    u_eng/p_1_out__11_i_10_n_0
-                         CARRY4 (Prop_carry4_S[1]_CO[3])
-                                                      0.444     2.240 r  u_eng/p_1_out__11_i_3/CO[3]
-                         net (fo=1, unplaced)         0.000     2.240    u_eng/p_1_out__11_i_3_n_0
+                         FDRE (Prop_fdre_C_Q)         0.397     1.184 f  u_eng/x_ld_reg[1]/Q
+                         net (fo=6, unplaced)         0.657     1.841    u_eng/x_ld_reg_n_0_[1]
+                         LUT4 (Prop_lut4_I1_O)        0.252     2.093 r  u_eng/ld_fill_d_i_35/O
+                         net (fo=1, unplaced)         0.000     2.093    u_eng/ld_fill_d_i_35_n_0
+                         CARRY4 (Prop_carry4_DI[0]_CO[3])
+                                                      0.477     2.570 r  u_eng/ld_fill_d_reg_i_15/CO[3]
+                         net (fo=1, unplaced)         0.000     2.570    u_eng/ld_fill_d_reg_i_15_n_0
                          CARRY4 (Prop_carry4_CI_CO[3])
-                                                      0.100     2.340 r  u_eng/p_1_out__11_i_2/CO[3]
-                         net (fo=1, unplaced)         0.000     2.340    u_eng/p_1_out__11_i_2_n_0
-                         CARRY4 (Prop_carry4_CI_O[0])
-                                                      0.189     2.529 r  u_eng/p_1_out__11_i_1/O[0]
-                         net (fo=27, unplaced)        0.647     3.176    u_eng/p_1_out__11_i_1_n_7
-                         DSP48E1 (Prop_dsp48e1_A[16]_PCOUT[47])
-                                                      3.541     6.717 r  u_eng/p_1_out__11/PCOUT[47]
-                         net (fo=1, unplaced)         0.000     6.717    u_eng/p_1_out__11_n_106
-                         DSP48E1 (Prop_dsp48e1_PCIN[47]_P[5])
-                                                      1.271     7.988 r  u_eng/p_1_out__12/P[5]
-                         net (fo=2, unplaced)         0.647     8.636    u_eng/p_1_out__12_n_100
-                         LUT6 (Prop_lut6_I3_O)        0.105     8.741 r  u_eng/ad_delta[1][6]_i_4/O
-                         net (fo=4, unplaced)         0.606     9.347    u_eng/ad_delta[1][6]_i_4_n_0
-                         LUT6 (Prop_lut6_I1_O)        0.105     9.452 r  u_eng/ad_delta[1][4]_i_3/O
-                         net (fo=2, unplaced)         0.358     9.810    u_eng/ad_delta[1][4]_i_3_n_0
-                         LUT6 (Prop_lut6_I3_O)        0.105     9.915 r  u_eng/ad_delta[1][3]_i_1/O
-                         net (fo=1, unplaced)         0.000     9.915    u_eng/ad_delta[1][3]_i_1_n_0
-                         FDRE                                         r  u_eng/ad_delta_reg[1][3]/D
+                                                      0.100     2.670 f  u_eng/ld_fill_d_reg_i_5/CO[3]
+                         net (fo=17, unplaced)        0.633     3.303    u_eng/ld_inb0
+                         LUT3 (Prop_lut3_I1_O)        0.105     3.408 f  u_eng/abuf[8][43]_i_2/O
+                         net (fo=132, unplaced)       0.454     3.862    u_eng/abuf[8][43]_i_2_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     3.967 f  u_eng/act_mem_reg_0_0_i_89/O
+                         net (fo=1, unplaced)         0.347     4.314    u_eng/act_mem_reg_0_0_i_89_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     4.419 f  u_eng/act_mem_reg_0_0_i_75/O
+                         net (fo=1, unplaced)         0.778     5.197    u_eng/a_re
+                         LUT6 (Prop_lut6_I1_O)        0.105     5.302 r  u_eng/act_mem_reg_0_0_i_49/O
+                         net (fo=1, unplaced)         0.528     5.830    u_eng/act_mem_reg_0_0_i_49_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     5.935 r  u_eng/act_mem_reg_0_0_i_33/O
+                         net (fo=14, unplaced)        0.398     6.333    u_eng/act_mem_reg_0_0_i_33_n_0
+                         LUT3 (Prop_lut3_I1_O)        0.105     6.438 r  u_eng/act_mem_reg_0_0_i_15/O
+                         net (fo=32, unplaced)        0.647     7.085    u_mem/act_mem_reg_15_1_1[12]
+                         RAMB36E1                                     r  u_mem/act_mem_reg_0_0/ADDRBWRADDR[14]
   -------------------------------------------------------------------    -------------------
 
                          (clock clk rise edge)       10.000    10.000 r  
                                                       0.000    10.000 r  clk (IN)
-                         net (fo=14472, unset)        0.748    10.748    u_eng/clk
-                         FDRE                                         r  u_eng/ad_delta_reg[1][3]/C
+                         net (fo=14495, unset)        0.748    10.748    u_mem/clk
+                         RAMB36E1                                     r  u_mem/act_mem_reg_0_0/CLKBWRCLK
                          clock pessimism              0.000    10.748    
                          clock uncertainty           -0.035    10.712    
-                         FDRE (Setup_fdre_C_D)        0.043    10.755    u_eng/ad_delta_reg[1][3]
+                         RAMB36E1 (Setup_ramb36e1_CLKBWRCLK_ADDRBWRADDR[14])
+                                                     -0.490    10.222    u_mem/act_mem_reg_0_0
   -------------------------------------------------------------------
-                         required time                         10.755    
-                         arrival time                          -9.915    
+                         required time                         10.222    
+                         arrival time                          -7.085    
   -------------------------------------------------------------------
-                         slack                                  0.840    
+                         slack                                  3.137    
 
-Slack (MET) :             0.840ns  (required time - arrival time)
-  Source:                 u_eng/src_word_q_reg[9]/C
+Slack (MET) :             3.137ns  (required time - arrival time)
+  Source:                 u_eng/x_ld_reg[1]/C
                             (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            u_eng/ad_delta_reg[1][4]/D
-                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            u_mem/act_mem_reg_0_0/ADDRBWRADDR[2]
+                            (rising edge-triggered cell RAMB36E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            10.000ns  (clk rise@10.000ns - clk rise@0.000ns)
-  Data Path Delay:        9.128ns  (logic 6.489ns (71.090%)  route 2.639ns (28.910%))
-  Logic Levels:           9  (CARRY4=3 DSP48E1=2 LUT2=1 LUT6=3)
+  Data Path Delay:        6.298ns  (logic 1.856ns (29.468%)  route 4.442ns (70.532%))
+  Logic Levels:           9  (CARRY4=2 LUT3=2 LUT4=1 LUT6=4)
   Clock Path Skew:        -0.039ns (DCD - SCD + CPR)
     Destination Clock Delay (DCD):    0.748ns = ( 10.748 - 10.000 ) 
     Source Clock Delay      (SCD):    0.787ns
@@ -552,60 +542,58 @@ Slack (MET) :             0.840ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=14472, unset)        0.787     0.787    u_eng/clk
-                         FDRE                                         r  u_eng/src_word_q_reg[9]/C
+                         net (fo=14495, unset)        0.787     0.787    u_eng/clk
+                         FDRE                                         r  u_eng/x_ld_reg[1]/C
   -------------------------------------------------------------------    -------------------
-                         FDRE (Prop_fdre_C_Q)         0.397     1.184 r  u_eng/src_word_q_reg[9]/Q
-                         net (fo=3, unplaced)         0.380     1.564    u_eng/src_word_q_reg_n_0_[9]
-                         LUT2 (Prop_lut2_I0_O)        0.232     1.796 r  u_eng/p_1_out__11_i_10/O
-                         net (fo=1, unplaced)         0.000     1.796    u_eng/p_1_out__11_i_10_n_0
-                         CARRY4 (Prop_carry4_S[1]_CO[3])
-                                                      0.444     2.240 r  u_eng/p_1_out__11_i_3/CO[3]
-                         net (fo=1, unplaced)         0.000     2.240    u_eng/p_1_out__11_i_3_n_0
+                         FDRE (Prop_fdre_C_Q)         0.397     1.184 f  u_eng/x_ld_reg[1]/Q
+                         net (fo=6, unplaced)         0.657     1.841    u_eng/x_ld_reg_n_0_[1]
+                         LUT4 (Prop_lut4_I1_O)        0.252     2.093 r  u_eng/ld_fill_d_i_35/O
+                         net (fo=1, unplaced)         0.000     2.093    u_eng/ld_fill_d_i_35_n_0
+                         CARRY4 (Prop_carry4_DI[0]_CO[3])
+                                                      0.477     2.570 r  u_eng/ld_fill_d_reg_i_15/CO[3]
+                         net (fo=1, unplaced)         0.000     2.570    u_eng/ld_fill_d_reg_i_15_n_0
                          CARRY4 (Prop_carry4_CI_CO[3])
-                                                      0.100     2.340 r  u_eng/p_1_out__11_i_2/CO[3]
-                         net (fo=1, unplaced)         0.000     2.340    u_eng/p_1_out__11_i_2_n_0
-                         CARRY4 (Prop_carry4_CI_O[0])
-                                                      0.189     2.529 r  u_eng/p_1_out__11_i_1/O[0]
-                         net (fo=27, unplaced)        0.647     3.176    u_eng/p_1_out__11_i_1_n_7
-                         DSP48E1 (Prop_dsp48e1_A[16]_PCOUT[47])
-                                                      3.541     6.717 r  u_eng/p_1_out__11/PCOUT[47]
-                         net (fo=1, unplaced)         0.000     6.717    u_eng/p_1_out__11_n_106
-                         DSP48E1 (Prop_dsp48e1_PCIN[47]_P[6])
-                                                      1.271     7.988 r  u_eng/p_1_out__12/P[6]
-                         net (fo=2, unplaced)         0.647     8.636    u_eng/p_1_out__12_n_99
-                         LUT6 (Prop_lut6_I3_O)        0.105     8.741 r  u_eng/ad_delta[1][7]_i_3/O
-                         net (fo=4, unplaced)         0.606     9.347    u_eng/ad_delta[1][7]_i_3_n_0
-                         LUT6 (Prop_lut6_I1_O)        0.105     9.452 r  u_eng/ad_delta[1][5]_i_3/O
-                         net (fo=2, unplaced)         0.358     9.810    u_eng/ad_delta[1][5]_i_3_n_0
-                         LUT6 (Prop_lut6_I3_O)        0.105     9.915 r  u_eng/ad_delta[1][4]_i_1/O
-                         net (fo=1, unplaced)         0.000     9.915    u_eng/ad_delta[1][4]_i_1_n_0
-                         FDRE                                         r  u_eng/ad_delta_reg[1][4]/D
+                                                      0.100     2.670 f  u_eng/ld_fill_d_reg_i_5/CO[3]
+                         net (fo=17, unplaced)        0.633     3.303    u_eng/ld_inb0
+                         LUT3 (Prop_lut3_I1_O)        0.105     3.408 f  u_eng/abuf[8][43]_i_2/O
+                         net (fo=132, unplaced)       0.454     3.862    u_eng/abuf[8][43]_i_2_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     3.967 f  u_eng/act_mem_reg_0_0_i_89/O
+                         net (fo=1, unplaced)         0.347     4.314    u_eng/act_mem_reg_0_0_i_89_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     4.419 f  u_eng/act_mem_reg_0_0_i_75/O
+                         net (fo=1, unplaced)         0.778     5.197    u_eng/a_re
+                         LUT6 (Prop_lut6_I1_O)        0.105     5.302 r  u_eng/act_mem_reg_0_0_i_49/O
+                         net (fo=1, unplaced)         0.528     5.830    u_eng/act_mem_reg_0_0_i_49_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     5.935 r  u_eng/act_mem_reg_0_0_i_33/O
+                         net (fo=14, unplaced)        0.398     6.333    u_eng/act_mem_reg_0_0_i_33_n_0
+                         LUT3 (Prop_lut3_I1_O)        0.105     6.438 r  u_eng/act_mem_reg_0_0_i_27/O
+                         net (fo=32, unplaced)        0.647     7.085    u_mem/act_mem_reg_15_1_1[0]
+                         RAMB36E1                                     r  u_mem/act_mem_reg_0_0/ADDRBWRADDR[2]
   -------------------------------------------------------------------    -------------------
 
                          (clock clk rise edge)       10.000    10.000 r  
                                                       0.000    10.000 r  clk (IN)
-                         net (fo=14472, unset)        0.748    10.748    u_eng/clk
-                         FDRE                                         r  u_eng/ad_delta_reg[1][4]/C
+                         net (fo=14495, unset)        0.748    10.748    u_mem/clk
+                         RAMB36E1                                     r  u_mem/act_mem_reg_0_0/CLKBWRCLK
                          clock pessimism              0.000    10.748    
                          clock uncertainty           -0.035    10.712    
-                         FDRE (Setup_fdre_C_D)        0.043    10.755    u_eng/ad_delta_reg[1][4]
+                         RAMB36E1 (Setup_ramb36e1_CLKBWRCLK_ADDRBWRADDR[2])
+                                                     -0.490    10.222    u_mem/act_mem_reg_0_0
   -------------------------------------------------------------------
-                         required time                         10.755    
-                         arrival time                          -9.915    
+                         required time                         10.222    
+                         arrival time                          -7.085    
   -------------------------------------------------------------------
-                         slack                                  0.840    
+                         slack                                  3.137    
 
-Slack (MET) :             0.840ns  (required time - arrival time)
-  Source:                 u_eng/src_word_q_reg[9]/C
+Slack (MET) :             3.137ns  (required time - arrival time)
+  Source:                 u_eng/x_ld_reg[1]/C
                             (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            u_eng/ad_delta_reg[1][5]/D
-                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            u_mem/act_mem_reg_0_0/ADDRBWRADDR[3]
+                            (rising edge-triggered cell RAMB36E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            10.000ns  (clk rise@10.000ns - clk rise@0.000ns)
-  Data Path Delay:        9.128ns  (logic 6.489ns (71.090%)  route 2.639ns (28.910%))
-  Logic Levels:           9  (CARRY4=3 DSP48E1=2 LUT2=1 LUT6=3)
+  Data Path Delay:        6.298ns  (logic 1.856ns (29.468%)  route 4.442ns (70.532%))
+  Logic Levels:           9  (CARRY4=2 LUT3=2 LUT4=1 LUT6=4)
   Clock Path Skew:        -0.039ns (DCD - SCD + CPR)
     Destination Clock Delay (DCD):    0.748ns = ( 10.748 - 10.000 ) 
     Source Clock Delay      (SCD):    0.787ns
@@ -620,60 +608,58 @@ Slack (MET) :             0.840ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=14472, unset)        0.787     0.787    u_eng/clk
-                         FDRE                                         r  u_eng/src_word_q_reg[9]/C
+                         net (fo=14495, unset)        0.787     0.787    u_eng/clk
+                         FDRE                                         r  u_eng/x_ld_reg[1]/C
   -------------------------------------------------------------------    -------------------
-                         FDRE (Prop_fdre_C_Q)         0.397     1.184 r  u_eng/src_word_q_reg[9]/Q
-                         net (fo=3, unplaced)         0.380     1.564    u_eng/src_word_q_reg_n_0_[9]
-                         LUT2 (Prop_lut2_I0_O)        0.232     1.796 r  u_eng/p_1_out__11_i_10/O
-                         net (fo=1, unplaced)         0.000     1.796    u_eng/p_1_out__11_i_10_n_0
-                         CARRY4 (Prop_carry4_S[1]_CO[3])
-                                                      0.444     2.240 r  u_eng/p_1_out__11_i_3/CO[3]
-                         net (fo=1, unplaced)         0.000     2.240    u_eng/p_1_out__11_i_3_n_0
+                         FDRE (Prop_fdre_C_Q)         0.397     1.184 f  u_eng/x_ld_reg[1]/Q
+                         net (fo=6, unplaced)         0.657     1.841    u_eng/x_ld_reg_n_0_[1]
+                         LUT4 (Prop_lut4_I1_O)        0.252     2.093 r  u_eng/ld_fill_d_i_35/O
+                         net (fo=1, unplaced)         0.000     2.093    u_eng/ld_fill_d_i_35_n_0
+                         CARRY4 (Prop_carry4_DI[0]_CO[3])
+                                                      0.477     2.570 r  u_eng/ld_fill_d_reg_i_15/CO[3]
+                         net (fo=1, unplaced)         0.000     2.570    u_eng/ld_fill_d_reg_i_15_n_0
                          CARRY4 (Prop_carry4_CI_CO[3])
-                                                      0.100     2.340 r  u_eng/p_1_out__11_i_2/CO[3]
-                         net (fo=1, unplaced)         0.000     2.340    u_eng/p_1_out__11_i_2_n_0
-                         CARRY4 (Prop_carry4_CI_O[0])
-                                                      0.189     2.529 r  u_eng/p_1_out__11_i_1/O[0]
-                         net (fo=27, unplaced)        0.647     3.176    u_eng/p_1_out__11_i_1_n_7
-                         DSP48E1 (Prop_dsp48e1_A[16]_PCOUT[47])
-                                                      3.541     6.717 r  u_eng/p_1_out__11/PCOUT[47]
-                         net (fo=1, unplaced)         0.000     6.717    u_eng/p_1_out__11_n_106
-                         DSP48E1 (Prop_dsp48e1_PCIN[47]_P[7])
-                                                      1.271     7.988 r  u_eng/p_1_out__12/P[7]
-                         net (fo=2, unplaced)         0.647     8.636    u_eng/p_1_out__12_n_98
-                         LUT6 (Prop_lut6_I3_O)        0.105     8.741 r  u_eng/ad_delta[1][8]_i_9/O
-                         net (fo=4, unplaced)         0.606     9.347    u_eng/ad_delta[1][8]_i_9_n_0
-                         LUT6 (Prop_lut6_I1_O)        0.105     9.452 r  u_eng/ad_delta[1][6]_i_3/O
-                         net (fo=2, unplaced)         0.358     9.810    u_eng/ad_delta[1][6]_i_3_n_0
-                         LUT6 (Prop_lut6_I3_O)        0.105     9.915 r  u_eng/ad_delta[1][5]_i_1/O
-                         net (fo=1, unplaced)         0.000     9.915    u_eng/ad_delta[1][5]_i_1_n_0
-                         FDRE                                         r  u_eng/ad_delta_reg[1][5]/D
+                                                      0.100     2.670 f  u_eng/ld_fill_d_reg_i_5/CO[3]
+                         net (fo=17, unplaced)        0.633     3.303    u_eng/ld_inb0
+                         LUT3 (Prop_lut3_I1_O)        0.105     3.408 f  u_eng/abuf[8][43]_i_2/O
+                         net (fo=132, unplaced)       0.454     3.862    u_eng/abuf[8][43]_i_2_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     3.967 f  u_eng/act_mem_reg_0_0_i_89/O
+                         net (fo=1, unplaced)         0.347     4.314    u_eng/act_mem_reg_0_0_i_89_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     4.419 f  u_eng/act_mem_reg_0_0_i_75/O
+                         net (fo=1, unplaced)         0.778     5.197    u_eng/a_re
+                         LUT6 (Prop_lut6_I1_O)        0.105     5.302 r  u_eng/act_mem_reg_0_0_i_49/O
+                         net (fo=1, unplaced)         0.528     5.830    u_eng/act_mem_reg_0_0_i_49_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     5.935 r  u_eng/act_mem_reg_0_0_i_33/O
+                         net (fo=14, unplaced)        0.398     6.333    u_eng/act_mem_reg_0_0_i_33_n_0
+                         LUT3 (Prop_lut3_I1_O)        0.105     6.438 r  u_eng/act_mem_reg_0_0_i_26/O
+                         net (fo=32, unplaced)        0.647     7.085    u_mem/act_mem_reg_15_1_1[1]
+                         RAMB36E1                                     r  u_mem/act_mem_reg_0_0/ADDRBWRADDR[3]
   -------------------------------------------------------------------    -------------------
 
                          (clock clk rise edge)       10.000    10.000 r  
                                                       0.000    10.000 r  clk (IN)
-                         net (fo=14472, unset)        0.748    10.748    u_eng/clk
-                         FDRE                                         r  u_eng/ad_delta_reg[1][5]/C
+                         net (fo=14495, unset)        0.748    10.748    u_mem/clk
+                         RAMB36E1                                     r  u_mem/act_mem_reg_0_0/CLKBWRCLK
                          clock pessimism              0.000    10.748    
                          clock uncertainty           -0.035    10.712    
-                         FDRE (Setup_fdre_C_D)        0.043    10.755    u_eng/ad_delta_reg[1][5]
+                         RAMB36E1 (Setup_ramb36e1_CLKBWRCLK_ADDRBWRADDR[3])
+                                                     -0.490    10.222    u_mem/act_mem_reg_0_0
   -------------------------------------------------------------------
-                         required time                         10.755    
-                         arrival time                          -9.915    
+                         required time                         10.222    
+                         arrival time                          -7.085    
   -------------------------------------------------------------------
-                         slack                                  0.840    
+                         slack                                  3.137    
 
-Slack (MET) :             0.840ns  (required time - arrival time)
-  Source:                 u_eng/src_word_q_reg[9]/C
+Slack (MET) :             3.137ns  (required time - arrival time)
+  Source:                 u_eng/x_ld_reg[1]/C
                             (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            u_eng/ad_delta_reg[1][6]/D
-                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            u_mem/act_mem_reg_0_0/ADDRBWRADDR[4]
+                            (rising edge-triggered cell RAMB36E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            10.000ns  (clk rise@10.000ns - clk rise@0.000ns)
-  Data Path Delay:        9.128ns  (logic 6.489ns (71.090%)  route 2.639ns (28.910%))
-  Logic Levels:           9  (CARRY4=3 DSP48E1=2 LUT2=1 LUT6=3)
+  Data Path Delay:        6.298ns  (logic 1.856ns (29.468%)  route 4.442ns (70.532%))
+  Logic Levels:           9  (CARRY4=2 LUT3=2 LUT4=1 LUT6=4)
   Clock Path Skew:        -0.039ns (DCD - SCD + CPR)
     Destination Clock Delay (DCD):    0.748ns = ( 10.748 - 10.000 ) 
     Source Clock Delay      (SCD):    0.787ns
@@ -688,60 +674,58 @@ Slack (MET) :             0.840ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=14472, unset)        0.787     0.787    u_eng/clk
-                         FDRE                                         r  u_eng/src_word_q_reg[9]/C
+                         net (fo=14495, unset)        0.787     0.787    u_eng/clk
+                         FDRE                                         r  u_eng/x_ld_reg[1]/C
   -------------------------------------------------------------------    -------------------
-                         FDRE (Prop_fdre_C_Q)         0.397     1.184 r  u_eng/src_word_q_reg[9]/Q
-                         net (fo=3, unplaced)         0.380     1.564    u_eng/src_word_q_reg_n_0_[9]
-                         LUT2 (Prop_lut2_I0_O)        0.232     1.796 r  u_eng/p_1_out__11_i_10/O
-                         net (fo=1, unplaced)         0.000     1.796    u_eng/p_1_out__11_i_10_n_0
-                         CARRY4 (Prop_carry4_S[1]_CO[3])
-                                                      0.444     2.240 r  u_eng/p_1_out__11_i_3/CO[3]
-                         net (fo=1, unplaced)         0.000     2.240    u_eng/p_1_out__11_i_3_n_0
+                         FDRE (Prop_fdre_C_Q)         0.397     1.184 f  u_eng/x_ld_reg[1]/Q
+                         net (fo=6, unplaced)         0.657     1.841    u_eng/x_ld_reg_n_0_[1]
+                         LUT4 (Prop_lut4_I1_O)        0.252     2.093 r  u_eng/ld_fill_d_i_35/O
+                         net (fo=1, unplaced)         0.000     2.093    u_eng/ld_fill_d_i_35_n_0
+                         CARRY4 (Prop_carry4_DI[0]_CO[3])
+                                                      0.477     2.570 r  u_eng/ld_fill_d_reg_i_15/CO[3]
+                         net (fo=1, unplaced)         0.000     2.570    u_eng/ld_fill_d_reg_i_15_n_0
                          CARRY4 (Prop_carry4_CI_CO[3])
-                                                      0.100     2.340 r  u_eng/p_1_out__11_i_2/CO[3]
-                         net (fo=1, unplaced)         0.000     2.340    u_eng/p_1_out__11_i_2_n_0
-                         CARRY4 (Prop_carry4_CI_O[0])
-                                                      0.189     2.529 r  u_eng/p_1_out__11_i_1/O[0]
-                         net (fo=27, unplaced)        0.647     3.176    u_eng/p_1_out__11_i_1_n_7
-                         DSP48E1 (Prop_dsp48e1_A[16]_PCOUT[47])
-                                                      3.541     6.717 r  u_eng/p_1_out__11/PCOUT[47]
-                         net (fo=1, unplaced)         0.000     6.717    u_eng/p_1_out__11_n_106
-                         DSP48E1 (Prop_dsp48e1_PCIN[47]_P[8])
-                                                      1.271     7.988 r  u_eng/p_1_out__12/P[8]
-                         net (fo=2, unplaced)         0.647     8.636    u_eng/p_1_out__12_n_97
-                         LUT6 (Prop_lut6_I3_O)        0.105     8.741 r  u_eng/ad_delta[1][8]_i_13/O
-                         net (fo=4, unplaced)         0.606     9.347    u_eng/ad_delta[1][8]_i_13_n_0
-                         LUT6 (Prop_lut6_I1_O)        0.105     9.452 r  u_eng/ad_delta[1][7]_i_2/O
-                         net (fo=2, unplaced)         0.358     9.810    u_eng/ad_delta[1][7]_i_2_n_0
-                         LUT6 (Prop_lut6_I3_O)        0.105     9.915 r  u_eng/ad_delta[1][6]_i_1/O
-                         net (fo=1, unplaced)         0.000     9.915    u_eng/ad_delta[1][6]_i_1_n_0
-                         FDRE                                         r  u_eng/ad_delta_reg[1][6]/D
+                                                      0.100     2.670 f  u_eng/ld_fill_d_reg_i_5/CO[3]
+                         net (fo=17, unplaced)        0.633     3.303    u_eng/ld_inb0
+                         LUT3 (Prop_lut3_I1_O)        0.105     3.408 f  u_eng/abuf[8][43]_i_2/O
+                         net (fo=132, unplaced)       0.454     3.862    u_eng/abuf[8][43]_i_2_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     3.967 f  u_eng/act_mem_reg_0_0_i_89/O
+                         net (fo=1, unplaced)         0.347     4.314    u_eng/act_mem_reg_0_0_i_89_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     4.419 f  u_eng/act_mem_reg_0_0_i_75/O
+                         net (fo=1, unplaced)         0.778     5.197    u_eng/a_re
+                         LUT6 (Prop_lut6_I1_O)        0.105     5.302 r  u_eng/act_mem_reg_0_0_i_49/O
+                         net (fo=1, unplaced)         0.528     5.830    u_eng/act_mem_reg_0_0_i_49_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     5.935 r  u_eng/act_mem_reg_0_0_i_33/O
+                         net (fo=14, unplaced)        0.398     6.333    u_eng/act_mem_reg_0_0_i_33_n_0
+                         LUT3 (Prop_lut3_I1_O)        0.105     6.438 r  u_eng/act_mem_reg_0_0_i_25/O
+                         net (fo=32, unplaced)        0.647     7.085    u_mem/act_mem_reg_15_1_1[2]
+                         RAMB36E1                                     r  u_mem/act_mem_reg_0_0/ADDRBWRADDR[4]
   -------------------------------------------------------------------    -------------------
 
                          (clock clk rise edge)       10.000    10.000 r  
                                                       0.000    10.000 r  clk (IN)
-                         net (fo=14472, unset)        0.748    10.748    u_eng/clk
-                         FDRE                                         r  u_eng/ad_delta_reg[1][6]/C
+                         net (fo=14495, unset)        0.748    10.748    u_mem/clk
+                         RAMB36E1                                     r  u_mem/act_mem_reg_0_0/CLKBWRCLK
                          clock pessimism              0.000    10.748    
                          clock uncertainty           -0.035    10.712    
-                         FDRE (Setup_fdre_C_D)        0.043    10.755    u_eng/ad_delta_reg[1][6]
+                         RAMB36E1 (Setup_ramb36e1_CLKBWRCLK_ADDRBWRADDR[4])
+                                                     -0.490    10.222    u_mem/act_mem_reg_0_0
   -------------------------------------------------------------------
-                         required time                         10.755    
-                         arrival time                          -9.915    
+                         required time                         10.222    
+                         arrival time                          -7.085    
   -------------------------------------------------------------------
-                         slack                                  0.840    
+                         slack                                  3.137    
 
-Slack (MET) :             0.840ns  (required time - arrival time)
-  Source:                 u_eng/src_word_q_reg[17]/C
+Slack (MET) :             3.137ns  (required time - arrival time)
+  Source:                 u_eng/x_ld_reg[1]/C
                             (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            u_eng/ad_delta_reg[2][3]/D
-                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            u_mem/act_mem_reg_0_0/ADDRBWRADDR[5]
+                            (rising edge-triggered cell RAMB36E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            10.000ns  (clk rise@10.000ns - clk rise@0.000ns)
-  Data Path Delay:        9.128ns  (logic 6.489ns (71.090%)  route 2.639ns (28.910%))
-  Logic Levels:           9  (CARRY4=3 DSP48E1=2 LUT2=1 LUT6=3)
+  Data Path Delay:        6.298ns  (logic 1.856ns (29.468%)  route 4.442ns (70.532%))
+  Logic Levels:           9  (CARRY4=2 LUT3=2 LUT4=1 LUT6=4)
   Clock Path Skew:        -0.039ns (DCD - SCD + CPR)
     Destination Clock Delay (DCD):    0.748ns = ( 10.748 - 10.000 ) 
     Source Clock Delay      (SCD):    0.787ns
@@ -756,60 +740,58 @@ Slack (MET) :             0.840ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=14472, unset)        0.787     0.787    u_eng/clk
-                         FDRE                                         r  u_eng/src_word_q_reg[17]/C
+                         net (fo=14495, unset)        0.787     0.787    u_eng/clk
+                         FDRE                                         r  u_eng/x_ld_reg[1]/C
   -------------------------------------------------------------------    -------------------
-                         FDRE (Prop_fdre_C_Q)         0.397     1.184 r  u_eng/src_word_q_reg[17]/Q
-                         net (fo=3, unplaced)         0.380     1.564    u_eng/src_word_q_reg_n_0_[17]
-                         LUT2 (Prop_lut2_I0_O)        0.232     1.796 r  u_eng/p_1_out__9_i_10/O
-                         net (fo=1, unplaced)         0.000     1.796    u_eng/p_1_out__9_i_10_n_0
-                         CARRY4 (Prop_carry4_S[1]_CO[3])
-                                                      0.444     2.240 r  u_eng/p_1_out__9_i_3/CO[3]
-                         net (fo=1, unplaced)         0.000     2.240    u_eng/p_1_out__9_i_3_n_0
+                         FDRE (Prop_fdre_C_Q)         0.397     1.184 f  u_eng/x_ld_reg[1]/Q
+                         net (fo=6, unplaced)         0.657     1.841    u_eng/x_ld_reg_n_0_[1]
+                         LUT4 (Prop_lut4_I1_O)        0.252     2.093 r  u_eng/ld_fill_d_i_35/O
+                         net (fo=1, unplaced)         0.000     2.093    u_eng/ld_fill_d_i_35_n_0
+                         CARRY4 (Prop_carry4_DI[0]_CO[3])
+                                                      0.477     2.570 r  u_eng/ld_fill_d_reg_i_15/CO[3]
+                         net (fo=1, unplaced)         0.000     2.570    u_eng/ld_fill_d_reg_i_15_n_0
                          CARRY4 (Prop_carry4_CI_CO[3])
-                                                      0.100     2.340 r  u_eng/p_1_out__9_i_2/CO[3]
-                         net (fo=1, unplaced)         0.000     2.340    u_eng/p_1_out__9_i_2_n_0
-                         CARRY4 (Prop_carry4_CI_O[0])
-                                                      0.189     2.529 r  u_eng/p_1_out__9_i_1/O[0]
-                         net (fo=27, unplaced)        0.647     3.176    u_eng/p_1_out__9_i_1_n_7
-                         DSP48E1 (Prop_dsp48e1_A[16]_PCOUT[47])
-                                                      3.541     6.717 r  u_eng/p_1_out__9/PCOUT[47]
-                         net (fo=1, unplaced)         0.000     6.717    u_eng/p_1_out__9_n_106
-                         DSP48E1 (Prop_dsp48e1_PCIN[47]_P[5])
-                                                      1.271     7.988 r  u_eng/p_1_out__10/P[5]
-                         net (fo=2, unplaced)         0.647     8.636    u_eng/p_1_out__10_n_100
-                         LUT6 (Prop_lut6_I3_O)        0.105     8.741 r  u_eng/ad_delta[2][6]_i_4/O
-                         net (fo=4, unplaced)         0.606     9.347    u_eng/ad_delta[2][6]_i_4_n_0
-                         LUT6 (Prop_lut6_I1_O)        0.105     9.452 r  u_eng/ad_delta[2][4]_i_3/O
-                         net (fo=2, unplaced)         0.358     9.810    u_eng/ad_delta[2][4]_i_3_n_0
-                         LUT6 (Prop_lut6_I3_O)        0.105     9.915 r  u_eng/ad_delta[2][3]_i_1/O
-                         net (fo=1, unplaced)         0.000     9.915    u_eng/ad_delta[2][3]_i_1_n_0
-                         FDRE                                         r  u_eng/ad_delta_reg[2][3]/D
+                                                      0.100     2.670 f  u_eng/ld_fill_d_reg_i_5/CO[3]
+                         net (fo=17, unplaced)        0.633     3.303    u_eng/ld_inb0
+                         LUT3 (Prop_lut3_I1_O)        0.105     3.408 f  u_eng/abuf[8][43]_i_2/O
+                         net (fo=132, unplaced)       0.454     3.862    u_eng/abuf[8][43]_i_2_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     3.967 f  u_eng/act_mem_reg_0_0_i_89/O
+                         net (fo=1, unplaced)         0.347     4.314    u_eng/act_mem_reg_0_0_i_89_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     4.419 f  u_eng/act_mem_reg_0_0_i_75/O
+                         net (fo=1, unplaced)         0.778     5.197    u_eng/a_re
+                         LUT6 (Prop_lut6_I1_O)        0.105     5.302 r  u_eng/act_mem_reg_0_0_i_49/O
+                         net (fo=1, unplaced)         0.528     5.830    u_eng/act_mem_reg_0_0_i_49_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     5.935 r  u_eng/act_mem_reg_0_0_i_33/O
+                         net (fo=14, unplaced)        0.398     6.333    u_eng/act_mem_reg_0_0_i_33_n_0
+                         LUT3 (Prop_lut3_I1_O)        0.105     6.438 r  u_eng/act_mem_reg_0_0_i_24/O
+                         net (fo=32, unplaced)        0.647     7.085    u_mem/act_mem_reg_15_1_1[3]
+                         RAMB36E1                                     r  u_mem/act_mem_reg_0_0/ADDRBWRADDR[5]
   -------------------------------------------------------------------    -------------------
 
                          (clock clk rise edge)       10.000    10.000 r  
                                                       0.000    10.000 r  clk (IN)
-                         net (fo=14472, unset)        0.748    10.748    u_eng/clk
-                         FDRE                                         r  u_eng/ad_delta_reg[2][3]/C
+                         net (fo=14495, unset)        0.748    10.748    u_mem/clk
+                         RAMB36E1                                     r  u_mem/act_mem_reg_0_0/CLKBWRCLK
                          clock pessimism              0.000    10.748    
                          clock uncertainty           -0.035    10.712    
-                         FDRE (Setup_fdre_C_D)        0.043    10.755    u_eng/ad_delta_reg[2][3]
+                         RAMB36E1 (Setup_ramb36e1_CLKBWRCLK_ADDRBWRADDR[5])
+                                                     -0.490    10.222    u_mem/act_mem_reg_0_0
   -------------------------------------------------------------------
-                         required time                         10.755    
-                         arrival time                          -9.915    
+                         required time                         10.222    
+                         arrival time                          -7.085    
   -------------------------------------------------------------------
-                         slack                                  0.840    
+                         slack                                  3.137    
 
-Slack (MET) :             0.840ns  (required time - arrival time)
-  Source:                 u_eng/src_word_q_reg[17]/C
+Slack (MET) :             3.137ns  (required time - arrival time)
+  Source:                 u_eng/x_ld_reg[1]/C
                             (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
-  Destination:            u_eng/ad_delta_reg[2][4]/D
-                            (rising edge-triggered cell FDRE clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
+  Destination:            u_mem/act_mem_reg_0_0/ADDRBWRADDR[6]
+                            (rising edge-triggered cell RAMB36E1 clocked by clk  {rise@0.000ns fall@5.000ns period=10.000ns})
   Path Group:             clk
   Path Type:              Setup (Max at Slow Process Corner)
   Requirement:            10.000ns  (clk rise@10.000ns - clk rise@0.000ns)
-  Data Path Delay:        9.128ns  (logic 6.489ns (71.090%)  route 2.639ns (28.910%))
-  Logic Levels:           9  (CARRY4=3 DSP48E1=2 LUT2=1 LUT6=3)
+  Data Path Delay:        6.298ns  (logic 1.856ns (29.468%)  route 4.442ns (70.532%))
+  Logic Levels:           9  (CARRY4=2 LUT3=2 LUT4=1 LUT6=4)
   Clock Path Skew:        -0.039ns (DCD - SCD + CPR)
     Destination Clock Delay (DCD):    0.748ns = ( 10.748 - 10.000 ) 
     Source Clock Delay      (SCD):    0.787ns
@@ -824,49 +806,47 @@ Slack (MET) :             0.840ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=14472, unset)        0.787     0.787    u_eng/clk
-                         FDRE                                         r  u_eng/src_word_q_reg[17]/C
+                         net (fo=14495, unset)        0.787     0.787    u_eng/clk
+                         FDRE                                         r  u_eng/x_ld_reg[1]/C
   -------------------------------------------------------------------    -------------------
-                         FDRE (Prop_fdre_C_Q)         0.397     1.184 r  u_eng/src_word_q_reg[17]/Q
-                         net (fo=3, unplaced)         0.380     1.564    u_eng/src_word_q_reg_n_0_[17]
-                         LUT2 (Prop_lut2_I0_O)        0.232     1.796 r  u_eng/p_1_out__9_i_10/O
-                         net (fo=1, unplaced)         0.000     1.796    u_eng/p_1_out__9_i_10_n_0
-                         CARRY4 (Prop_carry4_S[1]_CO[3])
-                                                      0.444     2.240 r  u_eng/p_1_out__9_i_3/CO[3]
-                         net (fo=1, unplaced)         0.000     2.240    u_eng/p_1_out__9_i_3_n_0
+                         FDRE (Prop_fdre_C_Q)         0.397     1.184 f  u_eng/x_ld_reg[1]/Q
+                         net (fo=6, unplaced)         0.657     1.841    u_eng/x_ld_reg_n_0_[1]
+                         LUT4 (Prop_lut4_I1_O)        0.252     2.093 r  u_eng/ld_fill_d_i_35/O
+                         net (fo=1, unplaced)         0.000     2.093    u_eng/ld_fill_d_i_35_n_0
+                         CARRY4 (Prop_carry4_DI[0]_CO[3])
+                                                      0.477     2.570 r  u_eng/ld_fill_d_reg_i_15/CO[3]
+                         net (fo=1, unplaced)         0.000     2.570    u_eng/ld_fill_d_reg_i_15_n_0
                          CARRY4 (Prop_carry4_CI_CO[3])
-                                                      0.100     2.340 r  u_eng/p_1_out__9_i_2/CO[3]
-                         net (fo=1, unplaced)         0.000     2.340    u_eng/p_1_out__9_i_2_n_0
-                         CARRY4 (Prop_carry4_CI_O[0])
-                                                      0.189     2.529 r  u_eng/p_1_out__9_i_1/O[0]
-                         net (fo=27, unplaced)        0.647     3.176    u_eng/p_1_out__9_i_1_n_7
-                         DSP48E1 (Prop_dsp48e1_A[16]_PCOUT[47])
-                                                      3.541     6.717 r  u_eng/p_1_out__9/PCOUT[47]
-                         net (fo=1, unplaced)         0.000     6.717    u_eng/p_1_out__9_n_106
-                         DSP48E1 (Prop_dsp48e1_PCIN[47]_P[6])
-                                                      1.271     7.988 r  u_eng/p_1_out__10/P[6]
-                         net (fo=2, unplaced)         0.647     8.636    u_eng/p_1_out__10_n_99
-                         LUT6 (Prop_lut6_I3_O)        0.105     8.741 r  u_eng/ad_delta[2][7]_i_3/O
-                         net (fo=4, unplaced)         0.606     9.347    u_eng/ad_delta[2][7]_i_3_n_0
-                         LUT6 (Prop_lut6_I1_O)        0.105     9.452 r  u_eng/ad_delta[2][5]_i_3/O
-                         net (fo=2, unplaced)         0.358     9.810    u_eng/ad_delta[2][5]_i_3_n_0
-                         LUT6 (Prop_lut6_I3_O)        0.105     9.915 r  u_eng/ad_delta[2][4]_i_1/O
-                         net (fo=1, unplaced)         0.000     9.915    u_eng/ad_delta[2][4]_i_1_n_0
-                         FDRE                                         r  u_eng/ad_delta_reg[2][4]/D
+                                                      0.100     2.670 f  u_eng/ld_fill_d_reg_i_5/CO[3]
+                         net (fo=17, unplaced)        0.633     3.303    u_eng/ld_inb0
+                         LUT3 (Prop_lut3_I1_O)        0.105     3.408 f  u_eng/abuf[8][43]_i_2/O
+                         net (fo=132, unplaced)       0.454     3.862    u_eng/abuf[8][43]_i_2_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     3.967 f  u_eng/act_mem_reg_0_0_i_89/O
+                         net (fo=1, unplaced)         0.347     4.314    u_eng/act_mem_reg_0_0_i_89_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     4.419 f  u_eng/act_mem_reg_0_0_i_75/O
+                         net (fo=1, unplaced)         0.778     5.197    u_eng/a_re
+                         LUT6 (Prop_lut6_I1_O)        0.105     5.302 r  u_eng/act_mem_reg_0_0_i_49/O
+                         net (fo=1, unplaced)         0.528     5.830    u_eng/act_mem_reg_0_0_i_49_n_0
+                         LUT6 (Prop_lut6_I0_O)        0.105     5.935 r  u_eng/act_mem_reg_0_0_i_33/O
+                         net (fo=14, unplaced)        0.398     6.333    u_eng/act_mem_reg_0_0_i_33_n_0
+                         LUT3 (Prop_lut3_I1_O)        0.105     6.438 r  u_eng/act_mem_reg_0_0_i_23/O
+                         net (fo=32, unplaced)        0.647     7.085    u_mem/act_mem_reg_15_1_1[4]
+                         RAMB36E1                                     r  u_mem/act_mem_reg_0_0/ADDRBWRADDR[6]
   -------------------------------------------------------------------    -------------------
 
                          (clock clk rise edge)       10.000    10.000 r  
                                                       0.000    10.000 r  clk (IN)
-                         net (fo=14472, unset)        0.748    10.748    u_eng/clk
-                         FDRE                                         r  u_eng/ad_delta_reg[2][4]/C
+                         net (fo=14495, unset)        0.748    10.748    u_mem/clk
+                         RAMB36E1                                     r  u_mem/act_mem_reg_0_0/CLKBWRCLK
                          clock pessimism              0.000    10.748    
                          clock uncertainty           -0.035    10.712    
-                         FDRE (Setup_fdre_C_D)        0.043    10.755    u_eng/ad_delta_reg[2][4]
+                         RAMB36E1 (Setup_ramb36e1_CLKBWRCLK_ADDRBWRADDR[6])
+                                                     -0.490    10.222    u_mem/act_mem_reg_0_0
   -------------------------------------------------------------------
-                         required time                         10.755    
-                         arrival time                          -9.915    
+                         required time                         10.222    
+                         arrival time                          -7.085    
   -------------------------------------------------------------------
-                         slack                                  0.840    
+                         slack                                  3.137    
 
 
 
@@ -880,16 +860,16 @@ Period(ns):         10.000
 Sources:            { clk }
 
 Check Type        Corner  Lib Pin      Reference Pin  Required(ns)  Actual(ns)  Slack(ns)  Location  Pin
-Min Period        n/a     DSP48E1/CLK  n/a            3.272         10.000      6.728                u_eng/prod_reg[0][11]/CLK
-Min Period        n/a     DSP48E1/CLK  n/a            3.272         10.000      6.728                u_eng/prod_reg[1][9]/CLK
-Min Period        n/a     DSP48E1/CLK  n/a            3.272         10.000      6.728                u_eng/prod_reg[2][8]/CLK
-Min Period        n/a     DSP48E1/CLK  n/a            3.272         10.000      6.728                u_eng/prod_reg[7][1]/CLK
-Min Period        n/a     DSP48E1/CLK  n/a            3.272         10.000      6.728                u_eng/prod_reg[3][7]/CLK
-Min Period        n/a     DSP48E1/CLK  n/a            3.272         10.000      6.728                u_eng/prod_reg[4][6]/CLK
-Min Period        n/a     DSP48E1/CLK  n/a            3.272         10.000      6.728                u_eng/prod_reg[6][2]/CLK
-Min Period        n/a     DSP48E1/CLK  n/a            3.272         10.000      6.728                u_eng/prod_lo_reg[14]/CLK
-Min Period        n/a     DSP48E1/CLK  n/a            3.272         10.000      6.728                u_eng/prod_hi_reg[3]/CLK
-Min Period        n/a     DSP48E1/CLK  n/a            3.272         10.000      6.728                u_eng/prod_reg[1][10]/CLK
+Min Period        n/a     DSP48E1/CLK  n/a            3.272         10.000      6.728                u_eng/prod_reg[0][3]/CLK
+Min Period        n/a     DSP48E1/CLK  n/a            3.272         10.000      6.728                u_eng/prod_reg[2][15]/CLK
+Min Period        n/a     DSP48E1/CLK  n/a            3.272         10.000      6.728                u_eng/prod_reg[3][14]/CLK
+Min Period        n/a     DSP48E1/CLK  n/a            3.272         10.000      6.728                u_eng/prod_reg[4][12]/CLK
+Min Period        n/a     DSP48E1/CLK  n/a            3.272         10.000      6.728                u_eng/prod_reg[5][11]/CLK
+Min Period        n/a     DSP48E1/CLK  n/a            3.272         10.000      6.728                u_eng/prod_reg[7][8]/CLK
+Min Period        n/a     DSP48E1/CLK  n/a            3.272         10.000      6.728                u_eng/prod_reg[6][9]/CLK
+Min Period        n/a     DSP48E1/CLK  n/a            3.272         10.000      6.728                u_eng/prod_lo_reg[5]/CLK
+Min Period        n/a     DSP48E1/CLK  n/a            3.272         10.000      6.728                u_eng/prod_hi_reg[12]/CLK
+Min Period        n/a     DSP48E1/CLK  n/a            3.272         10.000      6.728                u_eng/prod_hi_reg[9]/CLK
 Low Pulse Width   Slow    FDRE/C       n/a            0.500         5.000       4.500                cnt_reg[0]/C
 Low Pulse Width   Slow    FDRE/C       n/a            0.500         5.000       4.500                cnt_reg[10]/C
 Low Pulse Width   Slow    FDRE/C       n/a            0.500         5.000       4.500                cnt_reg[11]/C
@@ -898,8 +878,8 @@ Low Pulse Width   Slow    FDRE/C       n/a            0.500         5.000       
 Low Pulse Width   Slow    FDRE/C       n/a            0.500         5.000       4.500                cnt_reg[14]/C
 Low Pulse Width   Slow    FDRE/C       n/a            0.500         5.000       4.500                cnt_reg[15]/C
 Low Pulse Width   Slow    FDRE/C       n/a            0.500         5.000       4.500                cnt_reg[16]/C
-Low Pulse Width   Slow    FDRE/C       n/a            0.500         5.000       4.500                u_eng/prod_reg[1][0][0]/C
-Low Pulse Width   Slow    FDRE/C       n/a            0.500         5.000       4.500                u_eng/prod_reg[1][0][10]/C
+Low Pulse Width   Slow    FDRE/C       n/a            0.500         5.000       4.500                u_eng/prod_reg[1][1][0]/C
+Low Pulse Width   Slow    FDRE/C       n/a            0.500         5.000       4.500                u_eng/prod_reg[1][1][10]/C
 High Pulse Width  Slow    FDRE/C       n/a            0.500         5.000       4.500                cnt_reg[0]/C
 High Pulse Width  Fast    FDRE/C       n/a            0.500         5.000       4.500                cnt_reg[0]/C
 High Pulse Width  Slow    FDRE/C       n/a            0.500         5.000       4.500                cnt_reg[10]/C
