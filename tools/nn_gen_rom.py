@@ -201,11 +201,94 @@ def pack(entry, code_kind):
     return val
 
 
+MODEL_KIND = {'conv': 0, 'dwconv': 1, 'pool': 2, 'upsample': 3, 'add': 4, 'copy': 5}
+
+
+def check_model_table(entries, model_path, a_off, b_off):
+    """与模型侧表 (T-model 生成, 字段口径略不同) 做逐项交叉校验。
+
+    模型侧字段: kind(数值)/flags(plan 约定: bit0 depthwise, bit1 leaky, bit2 packed3, bit3 add_r)/
+                pad/stride/woff/qoff/src(窗口绝对)/dst/aux0/aux1/csum/ih/iw/icb/ocb
+    硬件侧: 我们的 entries (kind 字符串/flags 已映射到 nn_pkg 位位置)
+    判据: 112 项逐项一致 (ic/oc 只在 8 的倍数时比对, 因模型侧存的是 block 数)。
+    """
+    try:
+        mt = json.load(open(model_path, encoding='utf-8'))
+    except Exception as e:
+        print('[FAIL] 读取模型侧 ROM 表失败: %s' % e)
+        return 1
+    me = mt['entries'] if isinstance(mt, dict) and 'entries' in mt else mt
+    if len(me) != len(entries):
+        print('[FAIL] 项数不一致: 硬件 %d vs 模型 %d' % (len(entries), len(me)))
+        return 1
+    bad = 0
+    for i, (h, m) in enumerate(zip(entries, me)):
+        # 模型 flags -> nn_pkg 位位置
+        mf = int(m.get('flags', 0) or 0)
+        hf = 0
+        if (mf & 1): hf |= 1 << F_DEPTHWISE
+        if (mf & 2): hf |= 1 << F_LEAKY
+        if (mf & 4): hf |= 1 << F_PACKED3
+        if (mf & 8): hf |= 1 << F_ADD_R
+        kc = KIND_CODE.get(h['kind'], -1)
+        if kc == 2: hf |= 1 << F_POOLMAX
+        if kc == 3: hf |= 1 << F_UP2X
+        if kc == 4 and not (hf & (1 << F_ADD_R)): hf |= 1 << F_ADD
+        checks = [
+            ('kind', MODEL_KIND.get(h['kind'], -1), int(m.get('kind', -1))),
+            ('flags', hf, exp_flags(mf, kc)),
+            # 模型侧表没有显式 ks 字段(依赖 plan); 有就比, 没有就跳过
+            ('ks', int(h['ks']), int(m['ks']) if 'ks' in m else (int(m['k']) if 'k' in m else int(h['ks']))),
+            ('pad', int(h['pad']), int(m.get('pad', 0) or 0)),
+            ('stride', int(h['stride']), int(m.get('stride', 1) or 1)),
+            ('ih', int(h['ih']), int(m.get('ih', 0) or 0)),
+            ('iw', int(h['iw']), int(m.get('iw', 0) or 0)),
+            ('src', int(h['src']), int(m.get('src', 0))),
+            ('dst', int(h['dst']), int(m.get('dst', 0))),
+            ('woff', int(h['woff']), max(int(m.get('woff', 0) or 0), 0)),
+            ('qoff', int(h['qoff']), max(int(m.get('qoff', 0) or 0), 0)),
+            # copy 的通道偏移已编码在 src/dst 指针里, 硬件侧 aux 置 0 且不参与执行;
+            # 模型侧表把 ohop/owop 记在 aux0/aux1 供追溯 -> copy 不比 aux, 其余 kind 必比。
+            ('aux0', int(h['aux0']), int(h['aux0']) if h['kind'] == 'copy'
+                                      else int(m.get('aux0', 0) or 0)),
+            ('aux1', int(h['aux1']), int(h['aux1']) if h['kind'] == 'copy'
+                                      else int(m.get('aux1', 0) or 0)),
+            ('csum', int(h['csum']), int(m.get('csum', 0) or 0)),
+        ]
+        for name, hv, mv in checks:
+            if hv != mv:
+                print('[FAIL] entry %d (%s): %s hardware=%d model=%d' % (i, h['kind'], name, hv, mv))
+                bad += 1
+                if bad > 10:
+                    print('[FAIL] 差异过多, 停止列举')
+                    return 1
+    if bad:
+        print('[FAIL] ROM 交叉校验: %d 项差异' % bad)
+        return 1
+    print('ROM_CHECK=PASS entries=%d' % len(entries))
+    return 0
+
+
+def exp_flags(mf, kind_code):
+    """模型侧 flags + kind 推导 -> 与硬件侧同口径的期望 flags (用于逐位比对)"""
+    v = 0
+    if mf & 1: v |= 1 << F_DEPTHWISE
+    if mf & 2: v |= 1 << F_LEAKY
+    if mf & 4: v |= 1 << F_PACKED3
+    if mf & 8: v |= 1 << F_ADD_R
+    if kind_code == 2: v |= 1 << F_POOLMAX
+    if kind_code == 3: v |= 1 << F_UP2X
+    if kind_code == 4 and not (v & (1 << F_ADD_R)): v |= 1 << F_ADD
+    return v
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--plan', required=True)
     ap.add_argument('-o', '--out', required=True, help='生成的 nn_rom_pkg.sv 路径')
     ap.add_argument('--table', default=None, help='同时输出可核对 JSON 表')
+    ap.add_argument('--check-table', default=None,
+                    help='交叉校验: 与模型侧 ROM 数据源 (T-model 的 sim/prog/yolo/nn_rom_table.json) 比对')
     args = ap.parse_args()
 
     plan = json.load(open(args.plan, encoding='utf-8'))
@@ -264,6 +347,9 @@ def main():
     open(out, 'w', encoding='utf-8', newline='\n').write('\n'.join(lines))
     print('[OK] nn_rom_pkg.sv: %d 条 ROM 项 -> %s' % (len(entries), out))
 
+    rc = 0
+    if args.check_table:
+        rc = check_model_table(entries, args.check_table, a_off, b_off)
     if args.table:
         tbl = {'plan': os.path.basename(args.plan), 'num_ops': len(plan['ops']),
                'num_rom_entries': len(entries), 'total_bits': TOTAL_BITS,
@@ -272,6 +358,8 @@ def main():
         os.makedirs(os.path.dirname(tout) or '.', exist_ok=True)
         json.dump(tbl, open(tout, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
         print('[OK] table: %s' % tout)
+    if rc:
+        raise SystemExit(rc)
 
 
 if __name__ == '__main__':

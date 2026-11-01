@@ -247,6 +247,8 @@ module tb_nn_engine;
   // ==========================================================================
   // case 执行
   // ==========================================================================
+  logic [31:0] dbgv0, dbgv1, dbgv2, dbgv3;
+
   task automatic run_case(input string nm, input int op, input int flags,
                           input int ks, input int st, input int pad,
                           input int ih, input int iw, input int ic, input int oc,
@@ -278,7 +280,20 @@ module tb_nn_engine;
       desc.dst    = dst[31:0];
       desc.woff   = woff[31:0];
       desc.qoff   = (qoff[31:0] >= NN_Q_OFF) ? (qoff[31:0] - NN_Q_OFF) : qoff[31:0];
+      if ($test$plusargs("dbgv")) begin
+        cpu_rd32(NN_A_OFF + 32'd0, dbgv0);
+        cpu_rd32(NN_A_OFF + 32'd4, dbgv1);
+        $display("TBDBG %s pre  A0=%08x_%08x dst=%08x sel_b_dst=%b woff=%08x qoff=%08x",
+                 nm, dbgv1, dbgv0, u_eng.d_dst, u_eng.sel_b_dst, u_eng.d_woff, u_eng.d_qoff);
+      end
       run_op(cyc, ecode, ok);
+      if ($test$plusargs("dbgv")) begin
+        cpu_rd32(NN_B_OFF + 32'd64, dbgv0);
+        cpu_rd32(NN_B_OFF + 32'd68, dbgv1);
+        cpu_rd32(NN_B_OFF + 32'd0,  dbgv2);
+        cpu_rd32(NN_B_OFF + 32'd4,  dbgv3);
+        $display("TBDBG %s post B+0x40=%08x_%08x B+0=%08x_%08x", nm, dbgv1, dbgv0, dbgv3, dbgv2);
+      end
       // 3) 读回比较
       check_buf(nm, "a", NN_A_OFF, mis_a);
       check_buf(nm, "b", NN_B_OFF, mis_b);

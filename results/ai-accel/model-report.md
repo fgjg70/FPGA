@@ -585,6 +585,13 @@ op 统计：**112 ops** = conv 56 / dwconv 28 / add 18 / copy 6 / pool 3 / upsam
 | aux0/aux1 | add: R(u16) / KADD；copy: 源通道偏移 / 目标通道偏移；其它 0 |
 | ROM 表 sha256(plan) | `685beded81b73c7b` |
 
+**两种表的分工（均入 git，不冲突）**：
+
+| 表 | 生成者 | 用途 |
+|---|---|---|
+| `results/ai-accel/nn_rom_table.json` | Lead 的 `tools/nn_gen_rom.py` | **硬件侧 canonical**（200-bit/项，直接进 RTL build 与 MODE_CPU/MODE_AUTO 双模 E2E）|
+| `sim/prog/yolo/nn_rom_table.json` | `tools/yolo/gen_rom_table.py`（本目录）| **模型侧数据源**：保留 aux/ohop/owop 追溯信息，供与 canonical 表交叉校验（字段值均出自同一 plan.json）|
+
 ### 11.5 C320 档（最终验收分辨率，D1）
 
 - `quantize.py --hw 320`：**只重算 Q 区**（激活量化参数按 320 校准）；W 区权重不变。
@@ -604,6 +611,13 @@ op 统计：**112 ops** = conv 56 / dwconv 28 / add 18 / copy 6 / pool 3 / upsam
 | 端到端框匹配 @320 | 73.1%（38/52）| **73.1%（38/52）** | 一致 |
 
 > v0.5 的 0.9742/0.9174 是 108-op 口径；v0.7 有 112 ops（6 个 copy 取代 2 个 cpu_concat），copy 的 op 输出只覆盖写入的通道切片，因此 112-op 均值略低（0.9738），但**每个共享输出的数值与 cos 与 v0.5 完全相同**（由 108 个 FNV 逐位相等的断言保证）。
+
+### 11.7 v0.7 硬件口径（冻结）
+
+- **qoff = Q 区相对字节偏移**；**W/Q 拆两个镜像**：`yolo_w.hex`（81,920 行，W 320 KB）+ `yolo_q.hex`（12,288 行，Q 48 KB）；旧 `yolo_wq.hex`（94,208 行）仅作历史存档；微码 ROM **112 项**（深度 128 内）。
+- **copy 执行语义**：引擎按 `src/dst` 指针 + `ic/oc` 执行（v0.5 copy 语义）；通道偏移已编码在 src/dst 绝对偏移里（例：SPP concat 目标 B@3840，4 条 copy 的 dst 依次 +0/+48/+96/+144），ROM 里 copy 的 aux0/aux1 置 0、不参与执行；模型侧表保留 ohop/owop 供追溯。
+- **C320 = P3**（DDR3 中间激活 + tile DMA + 更宽 ROM 变体；当前 `nn_rom_t.src/dst` 为 19 位，只够片上 A/B 窗口口径）。**本轮以 C128 为集成口径**；`sim/prog/yolo320/` 仅作为模型侧参考产物，已冻结、不再变更。
+- **冻结哈希（C128，模型侧）**：plan `685beded…`、`yolo_w.hex` `09ce6ffe…`（W 区字节 = 冻结 v0.5 值）、`yolo_q.hex` `2be86cb7…`、`checksums.txt` `effb0efb…`、`model.json` `400b3003…`；canonical ROM 表由 `nn_gen_rom.py` 从同一 plan 生成（当前 112 项）。
 
 ---
 
