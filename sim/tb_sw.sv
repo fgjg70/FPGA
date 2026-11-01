@@ -250,6 +250,7 @@ module tb_sw;
         finished = 1'b1;
         $display("[tb_sw] FAIL: timeout (%0d cycles), id_pc=0x%08x instr=0x%08x",
                  max_cycles, dbg_id_pc, dbg_instr);
+        dump_program_output_now();
         $fatal(1);
       end
 
@@ -550,6 +551,21 @@ module tb_sw;
                cycles, u_dut.mem_wb_pc_plus4 - 32'd4, u_dut.wb_data);
   end
 
+  // ---- 超时/异常时也把程序输出打出来 (不必等到 pass) ----
+  // 原因: 程序把 output 写到 dmem 日志区 (0x90003000); 以前只在 PASS 时 dump,
+  // 于是"卡住/超时"类失败只能看到 tohost=0, 看不到程序跑到哪一步。2026-11-01 踩到。
+  task automatic dump_program_output_now;
+    int i;
+    logic [7:0] b;
+    $display("  --- program output (at failure) ---");
+    for (i = 0; i < LOG_MAX; i++) begin
+      b = u_dut.u_dmem.mem[LOG_IDX + i/4] >> (8 * (i % 4));
+      if (b == 8'h00) break;
+      $write("%c", b);
+    end
+    $display("  --- end of output ---");
+  endtask
+
   // ---- 日志 dump ----
   initial begin : dump_log
     wait (pass_seen);
@@ -778,6 +794,7 @@ module tb_sw;
     #(wd_ms * 1ms);
     $display("[tb_sw] FAIL: global timeout at %0t (watchdog_ms=%0d), tohost=0x%08x cycles=%0d",
              $time, wd_ms, tohost_word, cycles);
+    dump_program_output_now();
     $fatal(1);
   end
 
