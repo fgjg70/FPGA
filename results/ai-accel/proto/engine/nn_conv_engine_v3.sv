@@ -862,7 +862,7 @@ module nn_conv_engine
               p1_4        <= p1 << 2;
               w_dgrp      <= p1 - (({8'd0, oc8_r} << 3) - {8'd0, oc8_r});
               p3_oy       <= st2_r ? (p3_row << 1) : p3_row;
-              p3_ox       <= st2_r ? (p3_row << 4) : (p3_row << 3);
+              p3_ox       <= st2_r ? 24'd48 : 24'd24;   // 8 px * stride * 3B
             end
             16'd5: begin
               // 首个 OC tile (c_ocb=0) 的 Q 参数打拍

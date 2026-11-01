@@ -277,10 +277,11 @@ if {[info exists ::env(GEMM_EN)] && $::env(GEMM_EN) ne ""} {
 #   is inside `ifdef NN_EN`, so the delivery netlist is unchanged when this is
 #   unset -- the same discipline as GEMM_EN/RAS_EN/A_EN above.
 #   WEIGHT INITIALISATION (measured constraint, see results/ai-accel/mem-report.md):
-#   v0.7: W (320KB) is a 128-bit-wide array split into FOUR power-of-two segments.
-#   The workflow packs 4 x 32-bit words into one 128-bit line, so the files are
-#   NN_WQ_INIT_A (8192 lines x 128-bit) / _B (4096) / _C (4096) / _D (4096).
-#   (128-bit-deep-8192 segments map to ~75.5 RAMB tiles, measured by T-mem.)
+#   v0.7 R3: W (320KB) is FOUR 64-bit-wide segments (each with two full-width read
+#   ports, implementing the 8B-aligned 16B window read). The workflow packs 2 x 32-bit
+#   words into one 64-bit line: NN_WQ_INIT_A = 16384 lines x 64-bit, _B/_C/_D = 8192 each.
+#   Measured: W = 80 RAMB36 (128-bit-wide variant with mixed-width dual read was
+#   rejected: Vivado replicates storage -> 147.5 tiles).
 #   Q (48KB) lives in DISTRIBUTED RAM (LUTRAM) and is initialised from the separate
 #   NN_Q_INIT_FILE (6144 lines x 64-bit = 12,288 x 32-bit words); it costs no BRAM.
 #   Forward slashes are used in the macro strings on purpose: a backslash inside

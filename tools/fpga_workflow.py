@@ -2169,10 +2169,11 @@ def cmd_synth(args) -> int:
                     print(f"  [FAIL] --nn 需要权重镜像, 但 {nnw_abs} 不存在")
                     print("         先跑 tools/yolo/make_vectors.py 生成 yolo_wq.hex")
                     return 1
-                # v0.7: W 是 128-bit 读口的物理阵列 -> 综合初始化的每行必须写 128 bit
-                # (4 个 32-bit 字)。段大小按 32-bit 字数 32768/16384/16384/16384,
-                # 打包后每段行数 = 8192/4096/4096/4096。T-mem 实测: 128-bit 深 8192 段
-                # = RAMB36 74 + RAMB18 3 = 75.5 tiles (<=80)。
+                # v0.7 R3: T-mem 把 W 物理阵列实现为 4 段 **64-bit 宽 ROM**（每段两个满宽读口，
+                # 实现 8B 对齐的 16B 窗口读）。所以综合初始化每行写 **64 bit**（2 个 32-bit 字）：
+                # 段 A: 32768 个 32-bit 字 -> 16,384 行; B/C/D: 16384 字 -> 8,192 行。
+                # 实测 W = 80 RAMB36（此前 128-bit 方案 75.5，但 128/64 混合双读会被 Vivado
+                # 复制存储到 147.5 tiles，不可接受）。
                 seg_words = [32768, 16384, 16384, 16384]
                 total_words = sum(seg_words)          # 81920 = 320KB/4 (v0.7: W 独立)
                 lines = [ln.strip() for ln in read_text(nnw_abs).splitlines() if ln.strip()]
@@ -2186,18 +2187,17 @@ def cmd_synth(args) -> int:
                 for name, words in zip("ABCD", seg_words):
                     seg_path = os.path.join(seg_dir, f"w_{name}.hex")
                     seg = lines[base:base + words]
-                    # 4 个 32-bit 字打包成 1 个 128-bit 行 (高字在前: lane3..lane0)
+                    # 2 个 32-bit 字打包成 1 个 64-bit 行 (低字在前)
                     packed = []
-                    for k in range(0, words, 4):
-                        v = (int(seg[k + 3], 16) << 96) | (int(seg[k + 2], 16) << 64) \
-                            | (int(seg[k + 1], 16) << 32) | int(seg[k], 16)
-                        packed.append("%032x" % v)
+                    for k in range(0, words, 2):
+                        v = (int(seg[k + 1], 16) << 32) | int(seg[k], 16)
+                        packed.append("%016x" % v)
                     with open(seg_path, "w", encoding="ascii", newline="\n") as f:
                         f.write("\n".join(packed) + "\n")
                     benv[f"NN_WQ_INIT_{name}"] = posix(seg_path)
                     base += words
                 print(f"  [NN] W 段打包: {seg_words} 个 32-bit 字 -> "
-                      f"{[w // 4 for w in seg_words]} 行 x 128-bit")
+                      f"{[w // 2 for w in seg_words]} 行 x 64-bit")
                 # Q 镜像 (v0.7: 独立 LUTRAM 初始化)
                 nnq = getattr(args, "nn_q", None) or "sim/prog/yolo/yolo_q.hex"
                 nnq_abs = nnq if os.path.isabs(nnq) else abspath(nnq)

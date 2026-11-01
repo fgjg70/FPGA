@@ -864,6 +864,29 @@ module tb_sw;
     end
   end
 
+  // MODE_AUTO 监视: 每次 auto 引擎启动的 desc + 周期性状态 (定位 nn_seq 卡住位置)
+  int dbg_auto_cnt = 0;
+  int dbg_auto_tick = 0;
+  always @(posedge clk) begin
+    if (u_nn.auto_r && u_nn.eng_start && (dbg_auto_cnt < 130)) begin
+      dbg_auto_cnt = dbg_auto_cnt + 1;
+      $display("NN_AUTO_ENG #%0d op=%0d flags=%b ks=%0d st=%0d pad=%0d ih=%0d iw=%0d ic=%0d oc=%0d src=%h dst=%h woff=%h qoff=%h",
+               dbg_auto_cnt, u_nn.desc_seq.op, u_nn.desc_seq.flags, u_nn.desc_seq.ks,
+               u_nn.desc_seq.stride, u_nn.desc_seq.pad,
+               u_nn.desc_seq.ih, u_nn.desc_seq.iw, u_nn.desc_seq.ic, u_nn.desc_seq.oc,
+               u_nn.desc_seq.src, u_nn.desc_seq.dst, u_nn.desc_seq.woff, u_nn.desc_seq.qoff);
+    end
+    if (u_nn.auto_r) begin
+      dbg_auto_tick = dbg_auto_tick + 1;
+      if ((dbg_auto_tick % 500000) == 0) begin
+        $display("NN_AUTO_MON tick=%0d seq_state=%0d idx=%0d busy=%b err=%b code=%h eng_busy=%b eng_done=%b eng_err=%h cycles=%0d",
+                 dbg_auto_tick, u_nn.u_seq.st, u_nn.u_seq.idx, u_nn.u_seq.busy,
+                 u_nn.u_seq.err, u_nn.u_seq.err_code, u_nn.eng_busy, u_nn.eng_done,
+                 u_nn.eng_err, u_nn.u_seq.cycles);
+      end
+    end
+  end
+
   // op0 (首个 NN start) 的总线数据采样: 前几次 W/A 读返回 + 所有 B 写
   int dbg_cnt_w = 0, dbg_cnt_a = 0, dbg_cnt_q = 0, dbg_cnt_b = 0;
   always @(posedge clk) begin

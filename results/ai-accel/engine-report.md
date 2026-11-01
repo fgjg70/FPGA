@@ -799,3 +799,50 @@ exp=0x9985162c，之后 106 op 级联失败。
 > 纪律说明：本轮只改/新增了 `results/ai-accel/proto/engine/` 下的重放工具与本文档，
 > `nn_conv_engine.sv` / `sim/tb_nn_engine.sv` **未改动**（engine 保持冻结），
 > `tools\fpga_workflow.py verify --only tb_nn_engine --force` 仍 PASS。
+
+
+---
+
+## 0.6 T-accel-R3：引擎 v3（128 MAC/拍，16 OC lane × 8 px）
+
+> 本轮把引擎从 64 MAC/拍 升到 **128 MAC/拍**，并新增 v0.7 的 PACKED3 / ADD_R 模式与独立 Q 读口；
+> 数值/量化语义与 v2 完全一致。根目录 
+n_conv_engine.sv 已替换为 v3 修复版。
+
+### 0.6.1 接口与模式（CONTRACT v0.7）
+- w_re/w_addr[23:0]/w_rdata[127:0]（**8B 对齐 16B 窗口**；t-mem nn_mem v0.7 已按此实现，低 3 位忽略）
+- q_re/q_addr[12:0]/q_rdata[63:0]（q_addr=64b Q 字索引；**引擎侧地址打拍 → 有效时延 2 拍**）
+- _sel/b_we/b_addr[23:0]/b_wdata_128[127:0]/b_wstrb[15:0]（b_addr 16B 对齐 + 字节 strobe；
+  dense16 且在 16B 对齐时每像素 1 个 16B beat，否则 2 个 8B beat；copy/oc_pad=8 用 8B strobe）
+- desc 不变（flags 7 位）；新增 NN_F_PACKED3（conv0 3B/px 输入）与 NN_F_ADD_R
+  （out=clamp(q_d+(((q_s-zp_s)*R)>>KADD))，Q 块 16B：[0]=zp_s [1]=zp_d [2:3]=R(u16 LE) [4]=KADD）。
+
+### 0.6.2 周期公式（50/50 case 实测==公式；回归 47 case 全 PASS）
+`
+BASE = 8   (S_INIT 1 + S_VCHK 1 + S_CPREP 6)
+dense conv: BASE + Σ_tile Q(act) + OCB16·NB·(1 + sub·per + DRN3 + REQ(act) + NEXT2)
+  Q(act) = q_tot+4, q_tot = act/2+act/4+1      (act16→17 拍, act8→11 拍)
+  REQ(act) = 6 + beats + 2                     (act16 单beat=16 / 双beat=24; act8=16)
+  per = (count+1) + wi + 8K                    (PACKED3: load = 3·count+1)
+dw:    BASE + OCB8·11 + OCB8·NB·(1 + K·(count+2+K) + DRN3 + 16 + NEXT2)
+pool:  BASE + NB·(1 + K·(count+2+K) + 8 + NEXT2)
+copy:  BASE + words·(5 if up2x else 2);   add: BASE + 1 + words·4
+`
+
+### 0.6.3 全模型（当前 112-op plan）
+- **C128 = 1,167,368 拍**（@100MHz = 11.67ms/帧，85.7fps）；同 plan v2 口径 1,321,892 拍。
+- C320 粗估 ≈ 6.25× = **7.3M 拍 @100MHz ≈ 73ms/帧 ≈ 13.7fps**（dw 仍 8-lane 是主因，占 38.6% 周期）；
+  后续优化路径与 PX16 评估见 PX16-STUDY.md。
+
+### 0.6.4 集成 bug 修复（SoC op0）
+- 现象：full-size conv0（128×128 packed3 → 64×64×8）前 64B 正确、byte 64 起错（27155/32768 字节不同）。
+- 根因：p3_ox（PACKED3 x-tile 输入步长）误写成 (iw*3)<<4（iw=128 → 6144B/tile）；应为 8·st·3=48/24。
+- 修复后全尺寸 l0 replay **mismatch=0**（stub 与真 nn_mem v0.7 各跑一遍）；l0 replay 已并入 TB 回归（47 case）。
+
+### 0.6.5 交付与证据
+- 根目录：
+n_conv_engine.sv（52,578B, sha256 661fd509…b1a198）、sim/tb_nn_engine.sv（14,719B, 891d0583…）；
+  python tools\\fpga_workflow.py verify --only tb_nn_engine --force → **PASS 4.0s**。
+- 证据：proto/engine/{v3_run_final.log, v3_extra.log, v3_t13.log, replay_l0_stub.log, replay_l0_real.log, v3r_all47.log, calc_cycles_v3.py, full_model_estimate_v3.md}
+- OOC @100MHz（engine v3 + 真 nn_mem v0.7，synth100_v3.tcl）：WNS **+0.607ns (MET，验收 +1.0 待继续)**；
+  LUT **33,730**（其中 nn_mem Q ROM ≈6,976 ⇒ 引擎逻辑 ≈26.75K，目标 25K）；FF 13,810；DSP **200（目标 160，收敛中）**；BRAM **107.5**（W75.5+A/B32）。

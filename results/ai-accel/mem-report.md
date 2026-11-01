@@ -1,4 +1,4 @@
-# AI 加速子系统 · nn_mem 存储交付报告（v0.7 特化架构）
+# AI 加速子系统 · nn_mem 存储交付报告（v0.7 特化架构 + R3 集成修复）
 
 > 交付人：T-mem。日期：2026-11-01。分支：`feat/ai-accel`。
 > 规格：`results/ai-accel/SPEC-SPECIALIZED.md` §3 + `MODEL-FREEZE.md`（D1–D5）。
@@ -9,9 +9,13 @@
 
 ## 0. 一句话结论
 
-**nn_mem v0.7 完成：W 320KB 落 75.5 个 BRAM36、Q 48KB 落分布式 ROM（0 BRAM，6,981 LUT）、
-A/B 128KB 落 32 个 BRAM36 ⇒ nn_mem 合计 107.5 tiles；加交付档核心约 9.5 ⇒ 约 117/135，
-满足"整机 BRAM ≤121.5/135、给视频帧缓冲腾地方"的目标。** tb_nn_mem 三种加载模式全 PASS。
+**nn_mem v0.7 完成并修复了 R3 集成阻塞项（W 读口 8B 粒度窗口）：
+W 320KB 落 80 个 BRAM36（4 段 64-bit 宽、每段两个满宽读口）、Q 48KB 落分布式 ROM
+（0 BRAM，6,981 LUT）、A/B 128KB 落 32 个 BRAM36 ⇒ nn_mem 合计 112 tiles；
+加交付档核心约 9.5 ⇒ 约 121.5/135，满足"整机 BRAM ≤121.5/135、给视频帧缓冲腾地方"。
+tb_nn_mem 三种加载模式全 PASS（47,146 checks）；引擎×内存联合 TB（T-accel 的
+46/47 向量 + PACKED3/ADD_R 4 向量）：stub 与真 nn_mem 结果完全一致，真 mem 47/47+4/4 PASS，
+根目录 engine 快照同样 47/47+4/4 PASS。**
 
 ---
 
@@ -19,7 +23,7 @@ A/B 128KB 落 32 个 BRAM36 ⇒ nn_mem 合计 107.5 tiles；加交付档核心�
 
 | 文件 | 说明 |
 |---|---|
-| `nn_mem.sv`（仓库根） | v0.7 存储子系统（Q LUTRAM / W 128b / A,B 128b+strobe / dbg 装载口） |
+| `nn_mem.sv`（仓库根） | v0.7 存储子系统（W 64-bit 宽 2R / Q LUTRAM / A,B 128b+strobe / dbg 装载口） |
 | `sim/tb_nn_mem.sv` | 自检 TB（`MEM_TB: PASS/FAIL` + mismatch/xerr；X 用 `!==` 显式报错） |
 | `results/ai-accel/mem-report.md` | 本文件 |
 | `results/ai-accel/proto/mem/nn_mem_synth_top.sv` | 综合取证小顶层（动态全地址激励 + dbg tie 0） |
@@ -27,8 +31,8 @@ A/B 128KB 落 32 个 BRAM36 ⇒ nn_mem 合计 107.5 tiles；加交付档核心�
 | `results/ai-accel/proto/mem/run_synth.bat` | 纯 ASCII，一键生成镜像 + 综合出全部报告 |
 | `results/ai-accel/proto/mem/gen_wq_image.py` | 生成仿真/综合镜像（测试样图 或 `--seed` 伪随机） |
 
-未修改任何 Lead 文件（`nn_pkg.sv` / `nn_subsys.sv` / `nn_conv_engine.sv` / `build*.tcl` /
-`fpga_workflow.py` / `sw/**` / `tools/yolo/**`）。
+未修改任何 Lead/T-accel 文件（`nn_pkg.sv` / `nn_subsys.sv` / `nn_conv_engine.sv` /
+`build*.tcl` / `fpga_workflow.py` / `sw/**` / `tools/yolo/**`）。
 
 ---
 
@@ -53,7 +57,7 @@ module nn_mem import nn_pkg::*; #(
   output logic [31:0]  cpu_rdata,
   // NPU 权重读 (128b, 1 拍)
   input  logic         w_re,
-  input  logic [23:0]  w_addr,        // W 区字节偏移, 16B 对齐 (低 4 位忽略)
+  input  logic [23:0]  w_addr,        // W 区字节偏移, **8B 对齐 (低 3 位忽略)**
   output logic [127:0] w_rdata,
   // NPU Q 参数读 (64b, 1 拍)
   input  logic         q_re,
@@ -70,7 +74,7 @@ module nn_mem import nn_pkg::*; #(
   input  logic [23:0]  b_addr,        // 绝对窗口字节偏移, 16B 对齐
   input  logic [127:0] b_wdata,
   input  logic [15:0]  b_wstrb,       // copy/oc_pad=8 层只写半字用
-  // debug 装载口 (module 级 TB 用; SoC 恒 0)
+  // debug 装载口 (module 级 TB 用; SoC 恒 0; 写口仅仿真存在, 见 §6)
   input  logic         dbg_we,
   input  logic         dbg_space,     // 0=W, 1=Q
   input  logic [16:0]  dbg_addr,      // 32-bit 字索引
@@ -82,21 +86,21 @@ module nn_mem import nn_pkg::*; #(
 
 | 口 | 语义 |
 |---|---|
-| `w_*` | `w_addr` = W 区字节偏移（0x00000..0x4FFFF，16B 对齐，低 4 位忽略）；`w_rdata[127:0]` = 16 字节小端；越界 -> 128'b0 |
+| `w_*` | `w_addr` = W 区字节偏移（0x00000..0x4FFFF，**8B 对齐、低 3 位忽略**）；`w_rdata[127:0]` = 从 `w_addr` 起的 **16 字节小端窗口**（`w_addr[3]=1` 时跨 128b 字边界，取 {下一 64b 字, 当前 64b 字}）；越界 -> 128'b0 |
 | `q_*` | `q_addr` = **64-bit Q 字索引**（Q 48KB = 6144 个 64b 字）；`q_rdata[63:0] = {Q32[2k+1], Q32[2k]}`（低地址 32 位字在 `[31:0]`）；`q_addr>=6144` -> 64'b0 |
 | `a_*` | `a_sel` + `a_addr`（绝对窗口偏移，16B 对齐）；A=[0x60000,0x78000)、B=[0x78000,0x80000)；sel/地址归属不符或越界 -> 128'b0；`a_rdata` = 16 字节小端 |
-| `b_*` | 128b 整字 + `b_wstrb[15:0]` 字节使能；**不做 RMW**；`b_addr` 16B 对齐 |
+| `b_*` | 128b 整字 + `b_wstrb[15:0]` 字节使能；**不做 RMW**；`b_addr` 16B 对齐（低 4 位忽略） |
 | `cpu_*` | `cpu_addr` 是**窗口内字节偏移**（不是 0x9004_xxxx 绝对地址！）；只 A/B 命中，其余读 0 / 写忽略（不产生 err）；32 位 + `cpu_wstrb` 字节写；1 拍寄存读 |
-| `dbg_*` | `space=0`: `dbg_addr[16:2]` 选 128b 字、`[1:0]` 选 32b lane；`space=1`: `dbg_addr[13:1]` 选 64b 字、`[0]` 选半字。**仿真可用；综合时写路径置常量 0（见 §6.3）** |
+| `dbg_*` | `space=0`: `dbg_addr` = W 区 32-bit 字索引（`[16:1]` 选 64b 字，`[0]` 选半字）；`space=1`: `dbg_addr` = Q 区 32-bit 字索引（`[13:1]` 选 64b 字，`[0]` 选半字）。**仅仿真可写，见 §6** |
 
 ### 2.2 物理组织
 
 | 区 | 容量 | 实现 | 综合实测 |
 |---|---|---|---|
-| W | 320KB | 4 段 128-bit 宽阵列：8192 / 4096 / 4096 / 4096 个 128b 字（128KB / 64KB / 64KB / 64KB），每拍 4 段并行读后按段 mux | **74 RAMB36 + 3 RAMB18 = 75.5 tiles** |
+| W | 320KB | 4 段 **64-bit 宽** ROM：A=16384 / B/C/D=8192 个 64b 字（128KB / 64KB / 64KB / 64KB）；每段两个满宽读口：`cur=mem[base]`、`next=mem[base+1]`，`base=2*w_idx+w_addr[3]`；`w_rdata={next64,cur64}` | **80 RAMB36**（4KB/BRAM） |
 | Q | 48KB | 64-bit 宽 × 6144 深分布式 ROM（`(* ram_style="distributed" *)`），单读口 | **0 BRAM，6,981 LUT**（LUT-ROM） |
 | A/B | 96KB+32KB | 一块 128-bit 宽 × 8192 深阵列（A/B 连续，靠地址隔离） | **32 RAMB36** |
-| **合计** | — | — | **107.5 tiles**；+核心 ~9.5 ⇒ **~117/135** |
+| **合计** | — | — | **112 tiles**；+核心 ~9.5 ⇒ **~121.5/135** |
 
 ---
 
@@ -121,32 +125,32 @@ rem       v07_timing.rpt / v07_paths.rpt
 +-------------------+------+-------+-----------+-------+
 |     Site Type     | Used | Fixed | Available | Util% |
 +-------------------+------+-------+-----------+-------+
-| Slice LUTs*       | 6991 |     0 |     63400 | 11.03 |
-|   LUT as Logic    | 6991 |     0 |     63400 | 11.03 |
+| Slice LUTs*       | 7186 |     0 |     63400 | 11.33 |
+|   LUT as Logic    | 7186 |     0 |     63400 | 11.33 |
 |   LUT as Memory   |    0 |     0 |     19000 |  0.00 |
-| Slice Registers   |  774 |     0 |    126800 |  0.61 |
-| Block RAM Tile    |107.5 |     0 |       135 | 79.63 |
-|   RAMB36/FIFO*    |  106 |     0 |       135 | 78.52 |
-|     RAMB36E1 only |  106 |       |           |       |
-|   RAMB18          |    3 |     0 |       270 |  1.11 |
+| Slice Registers   | 1260 |     0 |    126800 |  0.99 |
+| Block RAM Tile    |  112 |     0 |       135 | 82.96 |
+|   RAMB36/FIFO*    |  112 |     0 |       135 | 82.96 |
+|     RAMB36E1 only |  112 |       |           |       |
+|   RAMB18          |    0 |     0 |       270 |  0.00 |
 +-------------------+------+-------+-----------+-------+
 ```
 
 层次归属（`v07_util_hier.rpt`）：
 
 ```
-|   u_dut | nn_mem | LUT 6981 | LUTRAM 0 | FF 71 | RAMB36 106 | RAMB18 3 |
+|   u_dut | nn_mem | LUT 7175 | LUTRAM 0 | FF 85 | RAMB36 112 | RAMB18 0 |
 ```
 
-**W/Q 落点**（综合 log 的 "ROM:" 表，`%TEMP%\nn_mem_v07_synth\vivado.log`）：
+**W/Q 落点**（综合 log 的 "ROM:" 表）：
 
 ```
 ROM:
-| nn_mem | w_rd_a_reg | 8192x128 | Block RAM |
-| nn_mem | w_rd_b_reg | 4096x128 | Block RAM |
-| nn_mem | w_rd_c_reg | 4096x128 | Block RAM |
-| nn_mem | w_rd_d_reg | 4096x128 | Block RAM |
-| nn_mem | p_0_out    | 8192x64  | LUT       |   <- Q 分布式 ROM (LUT 实现, 0 BRAM)
+| nn_mem | w_cur_a_reg | 16384x64 | Block RAM |   <- W 段 A (128KB)
+| nn_mem | w_nxt_a_reg | 16384x64 | Block RAM |   <- 第二读口 (next)
+| nn_mem | w_cur_b/c/d_reg | 8192x64 | Block RAM |
+| nn_mem | w_nxt_b/c/d_reg | 8192x64 | Block RAM |
+| nn_mem | p_0_out     | 8192x64  | LUT       |   <- Q 分布式 ROM (LUT 实现, 0 BRAM)
 Block RAM: act_mem_reg 8Kx128 ... RAMB36 = 32     <- A/B 32 块
 ```
 
@@ -154,29 +158,36 @@ Block RAM: act_mem_reg 8Kx128 ... RAMB36 = 32     <- A/B 32 块
 
 | 项 | 数字 | 说明 |
 |---|---|---|
-| W | 74 RAMB36 + 3 RAMB18 = 75.5 tiles | 128-bit 宽 ROM；单块 20480 深会被按 32768 取整成 128 块，必须 4 段 |
+| W | 80 RAMB36 | 4 段 64-bit 宽、每段两个满宽读口（BRAM36 真双口） |
 | A/B | 32 RAMB36 | 128KB / 4KB per BRAM = 32（精确） |
 | Q | 0 BRAM / 6,981 LUT | 分布式 ROM |
-| nn_mem 合计 | **107.5 tiles** | `Block RAM Tile 107.5/135` |
+| nn_mem 合计 | **112 tiles** | `Block RAM Tile 112/135` |
 | + 交付档核心 | ~9.5 tiles | 交付档 `fpga/util.rpt`：RAMB36=8 + RAMB18=3 |
-| **整机估算** | **~117/135** | ≤121.5 目标 ✓（余 ~18 tiles 给视频链路/320 tile 缓存） |
+| **整机估算** | **~121.5/135** | ≤121.5 目标 ✓（余 13.5 tiles 给视频链路/320 tile 缓存） |
 
 ### 3.4 重要方法学（证据有效性）
 
-1. **镜像内容必须不可压缩**：测试样图 `wpat32/qpat32` 是线性结构，Vivado 会把它优化成
-   压缩实现——实测同一份 RTL 用测试样图只报 68 RAMB36+3 RAMB18（W）/ 2,446 LUT（Q），
-   用 `--seed` 伪随机内容则是 74+3（W）/ 6,981 LUT（Q）。真实权重/量化参数不可压缩，
-   **本报告采用随机内容数字**（保守、可复现：`run_synth.bat` 已带 `--seed 20261101`）。
-2. **激励必须覆盖全地址**：只喂窄地址范围会被综合器按"地址可达范围"裁掉 RAM 容量
-   （v0.3.2 取证第一版踩过）。`nn_mem_synth_top.sv` 用快/慢两个计数器打通所有地址位。
-3. **dbg 写口在综合时置常量 0**：保留写口会让 Q 从 LUT-ROM（6,981 LUT）变成
-   分布式 RAM（12,288 LUTRAM，+76%）。见 §6.3。
+1. **R3 修复的取舍（实测三方案）**：8B 对齐窗口需要每拍读"两个相邻 128b 字"。
+   - 128-bit 宽阵列 + 第二读口（混合 128/64 位宽，不加 keep）→ Vivado 额外复制
+     64-bit 存储：**W 147.5 tiles（超 135 预算，不可用）**；
+   - 128-bit 宽阵列 + `(* keep *)` 保持第二读口 128-bit → 第二读口落 LUT：
+     **54,618 LUT（86% 器件，不可用）**；
+   - **64-bit 宽阵列 + 两个满宽 64-bit 读口**（现方案）→ 两个读口都是满宽使用，
+     Vivado 用 BRAM36 真双口：**W 80 tiles**（比原 128-bit 单读的 75.5 多 4.5，
+     但远小于其他方案；nn_mem 总 112 tiles、整机 ~121.5 仍满足目标）。
+2. **镜像内容必须不可压缩**：测试样图 `wpat32/qpat32` 是线性结构，Vivado 会把它优化成
+   压缩实现——同一份 RTL 用测试样图综合出来的 W/Q 数字会偏小（实测 W 68 tiles /
+   Q 2,446 LUT vs 随机内容 80 tiles / 6,981 LUT）。真实权重/量化参数不可压缩，
+   **本报告采用随机内容数字**（`run_synth.bat` 已带 `--seed 20261101`）。
+3. **激励必须覆盖全地址**：只喂窄地址范围会被综合器按"地址可达范围"裁掉 RAM 容量。
+   `nn_mem_synth_top.sv` 用快/慢计数器打通所有地址位，并且 `w_addr[3]` 动态，
+   强制综合出两个读口（否则第二读口会被优化掉）。
 
 ### 3.5 时序粗估（**不是**实现后 fmax / 上板实测）
 
-`v07_timing.rpt`：`create_clock 10ns (100MHz)` 下 **WNS = +6.102ns**（2723 端点，0 失败）
-⇒ 综合网表粗估 `fmax ≈ 1/(10-6.102) ≈ 256MHz`。仅说明"107.5 块 BRAM 的读口/译码逻辑
-不是 100MHz 瓶颈"；真实 fmax 以 Lead 的 OOC/impl 数据为准。
+`v07_timing.rpt`：`create_clock 10ns (100MHz)` 下 **WNS = +5.846ns**（4398 端点，0 失败）
+⇒ 综合网表粗估 `fmax ≈ 1/(10-5.846) ≈ 241MHz`。仅说明 W 双读口/地址译码/
+Q 分布式 ROM 的组合逻辑不是 100MHz 瓶颈；真实 fmax 以 Lead 的 OOC/impl 数据为准。
 
 ---
 
@@ -193,29 +204,30 @@ vsim -c -do "run -all; quit -f" work.tb_nn_mem +nnw=<yolo_w.hex> +nnq=<yolo_q.he
 vsim -c -do "run -all; quit -f" work.tb_nn_mem                            # 无镜像 (verify 默认)
 ```
 
-实测（2026-11-01）：
+实测（2026-11-01 R3）：
 
 ```
 # ① +nnwq=<94208 行 32-bit>  (W 81920 + Q 12288 顺序拼接)
-# [nn_mem] WQ image loaded: ...\yolo_wq.hex (W 20480 x128b, Q 6144 x64b)
-# [MEM_TB] W sweep done: 20480 reads, fnv=0x5b283069/0x5b283069
+# [nn_mem] WQ image loaded: ...\yolo_wq.hex (W 40960 x64b, Q 6144 x64b)
+# [MEM_TB] W sweep done: 40960 reads, fnv=0x7011972a/0x7011972a
 # [MEM_TB] Q sweep done: 6144 reads, fnv=0xfd77f0ce/0xfd77f0ce
-# [MEM_TB] SUMMARY checks=26666 w_sweep=20480 q_sweep=6144 act=8 cpu=10
-# MEM_TB: PASS (checks=26666, mismatch=0, xerr=0)
+# [MEM_TB] SUMMARY checks=47146 w_sweep=40960 q_sweep=6144 act=8 cpu=10
+# MEM_TB: PASS (checks=47146, mismatch=0, xerr=0)
 
-# ② +nnw=<yolo_w.hex> +nnq=<yolo_q.hex>  -> 同上, MEM_TB: PASS (26666/0/0)
+# ② +nnw=<yolo_w.hex> +nnq=<yolo_q.hex>  -> 同上, MEM_TB: PASS (47146/0/0)
 
 # ③ 无镜像 -> SKIP 扫描, MEM_TB: PASS (checks=40, mismatch=0, xerr=0)
 ```
 
-日志：`%TEMP%\nn_mem_v07\tb_a.log` / `tb_b.log` / `tb_c.log`。
+日志：`%TEMP%\nn_mem_v07\r3_a.log` / `r3_b.log` / `r3_c.log`。
 
 ### 4.2 TB 覆盖点
 
-① W 128b 全量扫描（20,480 次 = 81,920 个 32-bit 字）+ FNV-1a 校验和；
+① W 128b 读：**2 × 20,480 次全量扫描** —— 16B 对齐（整个 W 区）+ **8B 对齐窗口
+  （跨 128b 字边界，引擎 v3 的 8-lane tile 会发这种地址）**，与打包前 32-bit 字序列
+   逐字节比对 + FNV-1a；
 ② Q 64b 全量扫描（6,144 次 × 64b）+ FNV；
-③ dbg 装载口：写 W 的 128b 字内不同 lane（含段 B 首字、最后字）、写 Q 的 64b 字内半字，
-   经 NPU 口回读；
+③ dbg 装载口：写 W 的 64b 字内两个半字、写 Q 的 64b 字内半字，经 NPU 口回读；
 ④ A/B：128b 写 + `b_wstrb` 单字节/低 64b/高 64b 写（验证无 RMW、相邻半字不被覆盖）、
    128b 读、A/B 同偏移不串扰、A/B 最后 16B 边界、非法 sel/越界 -> 0；
 ⑤ CPU 窗口：A/B 1 拍读写 + 字节写；W/Q/空洞/越界读 0；CPU 写 W/Q 被忽略（内容经
@@ -224,41 +236,81 @@ vsim -c -do "run -all; quit -f" work.tb_nn_mem                            # 无�
 
 ---
 
-## 5. 初始化镜像
+## 5. R3 集成联调证据（SoC E2E 从 op0 全错的根因）
+
+### 5.1 根因
+
+引擎 v3（继承 v0.6 语义）按 **8B 粒度**发 `w_addr`（8-lane tile 的 `row + ic*8`，
+奇数 ic 时地址 ≡8 mod 16）。旧 nn_mem v0.7 按 16B 粒度 `w_idx = w_addr[18:4]`
+（忽略低 4 位）返回对齐的 16B，于是 `w_addr[3]=1` 的读全部读到"上一个 16B 窗口"
+→ 权重错位 8B。影响面：当前 plan 中 34 层 OC8%16==8 + 47 层 woff%16!=0，
+共 74/84 个 conv/dw 层读错权重，正是 SoC E2E 从 op0 起全错的原因
+（CPU 写 A 正常、op 都能 done；stub 按 32-bit 字寻址天然支持 8B，所以 stub 46/46 过）。
+
+### 5.2 修复
+
+`w_addr` 语义改为 **8B 对齐（低 3 位忽略）**，返回从 `w_addr` 起的 16B 窗口；
+物理阵列改为 64-bit 宽 + 每段两个满宽读口（§2.2 / §3.4）。延迟保持 **1 拍**。
+
+### 5.3 联合 TB 证据（引擎×内存换成真 nn_mem，其余不变）
+
+在 `%TEMP%\nn_joint3\` 复跑 T-accel 的引擎 TB（`tb_nn_engine_v3r.sv`：与 v3 版
+唯一区别是把 `nn_mem_v07_stub` 换成真 `nn_mem`），向量用 T-accel 的 `vec/`
+（46/47 case 随其 manifest 更新）与 `vec_v3extra/`（PACKED3 + ADD_R 3 case）：
+
+| 配置 | vec/ | vec_v3extra/ |
+|---|---|---|
+| 引擎 v3 + **stub**（T-accel 基线） | PASS 47/47, mismatch=0 | PASS 4/4, mismatch=0 |
+| 引擎 v3 + **真 nn_mem（R3 修复后）** | **PASS 47/47, mismatch=0** | **PASS 4/4, mismatch=0** |
+| **根目录 engine 快照** + 真 nn_mem | **PASS 47/47, mismatch=0** | **PASS 4/4, mismatch=0** |
+
+日志：`%TEMP%\nn_joint3\{protoR46,protoR4,rootR46,rootR4}\run.log`。
+⇒ 真 nn_mem 与 stub 在引擎全部用例上**逐位一致**（含 PACKED3 conv0、dwconv、
+copy/up2x、ADD/ADD_R）；根目录集成快照的 engine 也能跑通 47/47+4/4。
+
+---
+
+## 6. 初始化镜像
 
 | 用途 | 格式 | 生成 |
 |---|---|---|
 | 仿真 | 32-bit 字/行（8 hex）：`+nnw=` 81,920 行 / `+nnq=` 12,288 行 / 旧 `+nnwq=` 94,208 行（W+Q 顺序拼接） | T-model 的 `yolo_w.hex` / `yolo_q.hex` 直接可用 |
-| 综合 | W 4 段 **128-bit/行**（32 hex）8192/4096/4096/4096 行 → `NN_W_INIT_A..D`；Q **64-bit/行**（16 hex）6,144 行 → `NN_Q_INIT_FILE` | Lead 的 `fpga_workflow.py` 从 32-bit 行镜像打包（已确认口径） |
+| 综合 | W 4 段 **64-bit/行**（16 hex）：A 16,384 行、B/C/D 各 8,192 行 → `NN_W_INIT_A..D`；Q **64-bit/行**（16 hex）6,144 行 → `NN_Q_INIT_FILE` | Lead 的 `fpga_workflow.py` 从 32-bit 行镜像打包 |
 
-打包公式（低字在低 32 位）：
-- W 128b 行 k：`W32[4k] | W32[4k+1]<<32 | W32[4k+2]<<64 | W32[4k+3]<<96`；
-- Q 64b 行 k：`Q32[2k] | Q32[2k+1]<<32`。
+**R3 打包口径变化（需 workflow 同步）**：W 从 128-bit/行 改为 **64-bit/行**：
+- 段 A：32-bit 字 0..32767 → 16,384 行，行 k = `W32[2k] | W32[2k+1]<<32`；
+- 段 B/C/D：各 32-bit 字 32768../49152../65536.. → 8,192 行，同样两字一行。
+- Q 不变：6,144 行，行 k = `Q32[2k] | Q32[2k+1]<<32`。
 
-仿真侧 `nn_mem` 内置小 loader（`$fgets/$sscanf`，仅非 SYNTHESIS 分支）把 32-bit 行打包成
-物理字宽；综合侧直接 `$readmemh` 打包后的文件。激活 A/B 不初始化（仿真零填充仅为消 X）。
+仿真侧 `nn_mem` 内置小 loader（`$fgets/$sscanf`，仅非 SYNTHESIS 分支）把 32-bit 行
+打包成 64-bit 物理字；综合侧直接 `$readmemh` 打包后的文件。激活 A/B 不初始化
+（仿真零填充仅为消 X）。
 
 ---
 
-## 6. 已知限制 / 与 SPEC 的偏差
+## 7. 已知限制 / 与 SPEC 的偏差
 
-### 6.1 与 SPEC §3 一致的部分
-W 320KB (80→实测 75.5 tiles)、Q 48KB LUTRAM (0 BRAM)、A/B 96K/32K、CPU 只 A/B、
-b_wstrb[15:0]、q 64b 独立口——全部按规格实现。
+### 7.1 与 SPEC §3 一致的部分
+W 320KB（80 tiles）、Q 48KB LUTRAM（0 BRAM）、A/B 96K/32K、CPU 只 A/B、
+`b_wstrb[15:0]`、`q` 64b 独立口、w 读 1 拍——全部按规格实现。
 
-### 6.2 dbg 装载口（新增，SPEC 文本外，Lead 要求）
-端口在仿真/综合都存在；**综合时写路径被 `ifdef SYNTHESIS` 置常量 0**（SoC 本来就 tie 0，
-行为无差异），这样 Q 才能落 6,981 LUT 的分布式 ROM，而不是 12,288 LUTRAM（+76% LUT）。
-module 级 TB 在仿真里正常用 dbg 初始化/回读。若未来需要在**综合后网表**里写 W/Q，
-需要重新引入写口（代价见 §3.4-3）。
+### 7.2 需要知道的偏差（2 条）
+1. **R3 修复使 W 从 75.5 → 80 BRAM36（+4.5）**：这是 8B 粒度 16B 窗口 + 1 拍延迟下
+   的实测最优（其他方案 147.5 tiles 或 54.6K LUT，见 §3.4）。nn_mem 总 112 tiles，
+   加核心 ~9.5 ⇒ **~121.5/135，正好满足 ≤121.5 目标**；若后续 video 链路还要更多
+   BRAM，可选的零成本替代是让引擎把 `w_addr` 对齐到 16B 并自行选半字（mem 改动小、
+   W 可回落 75.5），但这需要 T-accel 侧改动，本轮按 Lead 决策做在 mem 侧。
+2. **dbg 装载口写路径只存在于仿真**（`ifndef SYNTHESIS`）：SoC 里 dbg 本来就 tie 0，
+   行为无差异；综合时写口不存在，W/Q 才能是纯 ROM（W 两个满宽读口落 BRAM36 真双口、
+   Q 落 6,981 LUT 分布式 ROM）。若未来要在综合后网表里写 W/Q，需要重新引入写口
+   （代价见 §3.4）。
 
-### 6.3 其它
-1. W 必须拆 4 段（128-bit 宽 ROM 深度 >16384 会被按 32768 取整）；段边界
-   `8192/12288/16384` 个 128-bit 字是地址译码的一部分，改 W_BYTES 需同步改段大小与
-   打包脚本（RTL 用 localparam 自动算 D 段）。
-2. Q 的 `q_addr` 是 64b 字索引（0..6143），engine 侧需按 `(qoff + 字节偏移)/8` 换算。
+### 7.3 其它
+1. W 必须拆 4 段（64-bit 宽 ROM 深度 >16384 会按 32768 取整）；段大小 16384/8192/
+   8192/8192（64b 字），改 W_BYTES 需同步改段大小与打包脚本。
+2. Q 的 `q_addr` 是 64b 字索引（0..6143），engine 侧按 `(qoff 相对 Q 基址)/8` 换算。
 3. Q 在综合里是 LUT-ROM（Vivado 报 `LUT as Logic`，不是 LUTRAM 单元）：功能上是
-   分布式实现、0 BRAM，符合"Q 不占 BRAM"的硬目标；LUT 数与随机内容强相关（6,981）。
+   分布式实现、0 BRAM；LUT 数与随机内容强相关（6,981）。
 4. fmax 只有**综合粗估**（§3.5），没有 opt/place/route；真实时序以 Lead 的 OOC/impl 为准。
 5. TB 的 W/Q 期望值来自测试样图；**不要把 T-model 真实镜像传给 tb_nn_mem**
    （verify 矩阵默认不传镜像，走 40-checks PASS 路径）。真实镜像装载由 SoC 级
@@ -267,15 +319,16 @@ module 级 TB 在仿真里正常用 dbg 初始化/回读。若未来需要在**�
 
 ---
 
-## 7. 与 v0.3.2 的历史对照
+## 8. 与 v0.3.2 的历史对照
 
-| 项 | v0.3.2（旧） | v0.7（本次） |
+| 项 | v0.3.2（旧） | v0.7 + R3（本次） |
 |---|---|---|
-| WQ | 368KB 单阵列拆 4 段（含 Q） | W 320KB 4 段（仅权重）+ Q 48KB LUTRAM |
-| W | 92 BRAM36 | 75.5 tiles（128b 读口） |
+| WQ | 368KB 单阵列拆 4 段（含 Q） | W 320KB 独立 + Q 48KB LUTRAM |
+| W | 92 BRAM36 | **80 tiles**（64-bit 宽 × 2 满宽读口，支持 8B 窗口） |
 | Q | 含在 WQ 里 | **0 BRAM / 6,981 LUT** |
 | A/B | 64K+64K（128b 写铺 64b 接口） | 96K+32K，写口 128b + strobe |
 | CPU 窗口 | WQ + A + B | **只 A/B** |
-| nn_mem BRAM | 124 tiles | **107.5 tiles** |
-| + 核心 | ~133.5/135 | **~117/135**（给视频帧缓冲留 ~18 tiles） |
-| 初始化 | 单阵列 4 段 32-bit 行 | 仿真 32-bit 行；综合 W 128b 行 / Q 64b 行 |
+| nn_mem BRAM | 124 tiles | **112 tiles** |
+| + 核心 | ~133.5/135 | **~121.5/135**（给视频帧缓冲留 13.5 tiles） |
+| W 读口径 | 16B 对齐 | **8B 对齐（低 3 位忽略），16B 窗口** |
+| 初始化 | 单阵列 4 段 32-bit 行 | 仿真 32-bit 行；综合 W/Q 均 64-bit 行 |
