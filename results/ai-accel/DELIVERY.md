@@ -204,3 +204,59 @@ python tools/fpga_workflow.py synth --nn --prog yolo_board --no-lc --fanout-limi
 2. dw 16-lane（C128 阶段 dwconv 占 38.6% 周期）、conv0 loader 优化（129,555 → 目标 ~60k）；
 3. C320 集成（DDR3 中间激活，P3）+ 30fps 路线决策（PX16 评估见 `PX16-STUDY.md`）；
 4. 全实现 `synth --nn` ≥100MHz + bitstream（board-ready，板卡当前不在位）。
+
+
+---
+
+## 9. v0.7 AI 档交付（2026-11-01 晚，**100MHz 全实现 PASS + bitstream**）
+
+### 9.1 交付物
+
+| 文件 | 说明 |
+|---|---|
+| `fpga/cpu_a100t_nn.bit` | **v0.7 AI 档 bitstream，100MHz**，3,825,894 B，sha256 `6ab25b9bdf76c6cf3cd21396aee25a6312bf16786bd2989b6c79baddec22f0ee`（2026-11-01 20:26 写入）|
+| `results/ai-accel/impl/ai100/cpu_a100t_nn_100mhz.bit` | 同上，归档副本 |
+| `results/ai-accel/impl/ai80/cpu_a100t_nn_80mhz.bit` | 80MHz 版本（WNS +0.380，sha256 `dea6a1ee47a771ba300a9dd9221e6d13279460a2a0b101785afb307a7a75b6cb`），备选 |
+| `results/ai-accel/impl/nn_mem_ooc/` | nn_mem OOC DCP（黑盒链接用）、8 个时钟变体、no-clock DCP、复现脚本/报告 |
+
+### 9.2 全实现实测（100MHz）
+
+```
+BUILD_TIMING=PASS  WNS +0.049ns  WHS +0.051ns   fmax 100.5MHz
+LUT 36,985 / FF 16,381 / BRAM 132 / DSP 168
+CoreMark/MHz 2.7063（交付档 CPU 未受影响）
+```
+- 最差路径：`u_nn/u_eng/wa_r[*] → u_nn/u_mem/w_cur_*`（**route 8.881ns，logic 0 级**，纯物理距离）；
+- 时钟：`sys_clk_core` 125→100MHz（`--nn-freq-mhz 100`，MMCM 12/6，XDC/CLK_HZ 三处同源自证）。
+
+### 9.3 构建流程修复（本轮关键工程突破）
+
+1. **W 320KB / Q 常量 ROM 的 in-context 展开**：默认推断会把 W 展开成 **5,248,702 个未映射寄存器**，使综合卡 2.5~3 小时；
+   修复：`nn_mem` 的 W 4 段 + Q 显式 `rom_style="block"`，并把 `nn_mem` 做成 **OOC DCP 黑盒**（`fpga/nn_mem_bb.sv` + `read_checkpoint -cell u_nn/u_mem`）→ **综合 3.5 分钟**；
+2. **Q 拆分**：`q_mem_lo`(4096×64) 落 8 tiles BRAM + `q_mem_hi`(2048×64) 落分布式 ROM → mem 120 tiles（整机 132/135）；
+3. **去掉 OOC DCP 内 `create_clock`**（`nn_mem_noclk.dcp`）：消除了 `sys_clk_core → clk` 跨时钟分析造成的 **−3.526ns 时钟偏斜**，整机 WNS 从 80MHz 的 +0.380 提升到 100MHz 的 +0.049。
+
+### 9.4 时序收敛过程（实测轨迹）
+
+| 阶段 | 频点 | WNS | 结论 |
+|---|---|---|---|
+| OOC 综合（engine+mem） | 125MHz | +1.371 | 模块级可行（不等于整机） |
+| 整机全实现 | 125MHz | **−3.739** | FAIL（fmax ≈85MHz） |
+| 整机全实现（no-clock DCP） | 80MHz | +0.380 | PASS（备选 bitstream） |
+| **整机全实现（no-clock DCP）** | **100MHz** | **+0.049** | **PASS（当前交付）** |
+
+> 下一步冲 125/131MHz：最差路径已是纯 route 8.88ns（engine→mem 物理距离），优化方向 = `u_nn` pblock/floorplan 让 engine 与 BRAM 同区 + 引擎侧 `wa_r/la` 前移流水（t-accel E 方案）。
+
+### 9.5 验证证据
+
+- **全量回归 `verify --force` → PASS 16**（12 项原回归 + `tb_sw_nn_demo` / `tb_sw_nn_yolo` / `tb_nn_mem` / `tb_nn_engine` / `tb_nn_seq`）；
+- **112-op 双模 E2E**：`hw_bad=0 / auto_bad=0`，MODE_CPU 与 MODE_AUTO 的 NPU 周期均为 **1,177,320**（双模等价）；
+  @100MHz ⇒ 11.77ms/帧（128×128 输入，理论 85fps 上限）；
+- 交付档（无 `NN_EN`）功能回归包含在 PASS 16 内；综合资源 parity 检查见下一节（进行中）。
+
+### 9.6 板卡部署状态
+
+**板卡不在位（2026-11-01 多轮 JTAG 探测均为 `no current hw_target`，无 USB-TTL 串口）**：
+- bitstream 已就绪，接板即可按 `BOARD-RUN.md` 烧写；
+- 上板判据（`yolo_board` 两遍镜像）：`sw_bad=0`、`hw_bad=0`、`RESULT : PASS`、`sw_cycles/hw_cycles/npu_cycles/speedup`；
+- 无板替代证据：ModelSim 两遍仿真（软件基线+NPU）正在产出 `sw_cycles/speedup`；CPU 软件基线 vs 加速器逐层位精确比对已由 112-op E2E 的 per-op checksum（`hw_bad=0`）+ golden 向量证明。
