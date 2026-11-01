@@ -2186,6 +2186,14 @@ def cmd_synth(args) -> int:
                     benv["NN_XDC_MULT"] = "21"
                     benv["NN_XDC_DIV"] = str(_nn_div)
                     print(f"  [NN] core clock: VCO 1050MHz / {_nn_div} = {1050.0/_nn_div:.3f} MHz")
+                _dcp = getattr(args, "nn_mem_dcp", None)
+                if _dcp:
+                    _dcp_abs = str(Path(_dcp).resolve())
+                    if not os.path.exists(_dcp_abs):
+                        print(f"  [FAIL] --nn-mem-dcp 不存在: {_dcp_abs}")
+                        return 1
+                    benv["NN_MEM_DCP"] = _dcp_abs
+                    print(f"  [NN] nn_mem OOC blackbox -> {_dcp_abs}")
                 # 【绝不覆盖交付档 bitstream】build.tcl 默认写 fpga/cpu_a100t.bit，
                 # AI 档另存 cpu_a100t_nn.bit；显式 --bit-name 优先。
                 bn = getattr(args, "bit_name", None)
@@ -2308,6 +2316,8 @@ def cmd_synth(args) -> int:
                 # 宏生效自证 (PITFALLS R31 同族: 参数被解析却没写进 env -> 静默按默认构建)
                 expect.append("BUILD_NN_EN=1")
                 expect.append("BUILD_NN_CLK=")
+                if getattr(args, "nn_mem_dcp", None):
+                    expect.append("BUILD_NN_MEM_DCP=")
                 # 非 7 分频必须看到 build.tcl 的时钟覆盖证据 (XDC 不支持条件逻辑,
                 # 曾因 if 被 XDC 解析器静默忽略而按错频率布线 —— 这里把它变成硬判据)
                 if _nn_div != 7:
@@ -3344,6 +3354,10 @@ def main() -> int:
                         "标准值: 7=150, 8=131.25, 10=105, 11=95.45, 12=87.5, 14=75, 21=50 MHz")
     p.add_argument("--nn-q", default=None,
                    help="Q 区 (LUTRAM) 初始化镜像; 默认 sim/prog/yolo/yolo_q.hex")
+    p.add_argument("--nn-mem-dcp", default=None,
+                   help="nn_mem OOC 综合 DCP: 综合阶段把 nn_mem 当黑盒, synth_design 后 "
+                        "read_checkpoint -cell u_nn/u_mem 链接。绕开 W 320KB 常量 ROM 在 "
+                        "in-context 综合里被展开成 500 万未映射寄存器 (综合 3 小时) 的问题。")
     p.add_argument("--nn-weights", default="sim/prog/yolo/yolo_w.hex",
                    help="NN_W_INIT_FILE: 烧进权重 BRAM 的 $readmemh 镜像 (默认 "
                         "sim/prog/yolo/yolo_wq.hex)")

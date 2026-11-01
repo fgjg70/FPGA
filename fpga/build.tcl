@@ -137,7 +137,16 @@ proc br_timing_gate {rpt tag} {
   return $ok
 }
 
-read_verilog -sv [list "$root/rv32_pkg.sv" "$root/nn_pkg.sv" "$root/nn_rom_pkg.sv" "$root/alu.sv" "$root/branch_unit.sv" "$root/control_unit.sv" "$root/imm_gen.sv" "$root/pc.sv" "$root/regfile.sv" "$root/id_ex_reg.sv" "$root/ex_mem_reg.sv" "$root/mem_wb_reg.sv" "$root/hazard_unit.sv" "$root/load_store_unit.sv" "$root/imem.sv" "$root/dmem.sv" "$root/btb.sv" "$root/bht.sv" "$root/ras.sv" "$root/muldiv.sv" "$root/csr_file.sv" "$root/core.sv" "$root/gemm_accel.sv" "$root/nn_mem.sv" "$root/nn_conv_engine.sv" "$root/nn_seq.sv" "$root/nn_subsys.sv" "$root/fpga/mmio_subsys.sv" "$root/fpga/top_a100t.sv"]
+# ---- [2026-11-01] nn_mem OOC 黑盒构建 (可选) --------------------------------
+# in-context 综合会把 W 320KB 常量 ROM 展开成 ~5.2M 未映射寄存器 (综合 2.5-3h)。
+# 设置 NN_MEM_DCP=<nn_mem.dcp> 时: 综合阶段用 fpga/nn_mem_bb.sv 黑盒代替 nn_mem.sv,
+# synth_design 之后 read_checkpoint -cell 链接 OOC 综合结果 (W/Q 已落 BRAM)。
+set NN_MEM_SRC "$root/nn_mem.sv"
+if {[info exists ::env(NN_MEM_DCP)] && $::env(NN_MEM_DCP) ne ""} {
+  set NN_MEM_SRC "$root/fpga/nn_mem_bb.sv"
+  puts "BUILD_NN_MEM_BLACKBOX=1 SRC=$NN_MEM_SRC"
+}
+read_verilog -sv [list "$root/rv32_pkg.sv" "$root/nn_pkg.sv" "$root/nn_rom_pkg.sv" "$root/alu.sv" "$root/branch_unit.sv" "$root/control_unit.sv" "$root/imm_gen.sv" "$root/pc.sv" "$root/regfile.sv" "$root/id_ex_reg.sv" "$root/ex_mem_reg.sv" "$root/mem_wb_reg.sv" "$root/hazard_unit.sv" "$root/load_store_unit.sv" "$root/imem.sv" "$root/dmem.sv" "$root/btb.sv" "$root/bht.sv" "$root/ras.sv" "$root/muldiv.sv" "$root/csr_file.sv" "$root/core.sv" "$root/gemm_accel.sv" $NN_MEM_SRC "$root/nn_conv_engine.sv" "$root/nn_seq.sv" "$root/nn_subsys.sv" "$root/fpga/mmio_subsys.sv" "$root/fpga/top_a100t.sv"]
 # ---------------------------------------------------------------------------
 # AI core clock: materialise an XDC copy with a LITERAL divider.
 # Why not conditional logic inside the .xdc: Vivado 2018.3's XDC parser rejects
@@ -464,6 +473,15 @@ if {[info exists ::env(SYNTH_FANOUT_LIMIT)] && $::env(SYNTH_FANOUT_LIMIT) ne ""}
   puts "BUILD_SYNTH_FANOUT_LIMIT_OFF=1"
 }
 synth_design -top top_a100t -part $part {*}$RETIM_OPT {*}$SYNTH_OPT -verilog_define "IMEM_INIT_FILE=\"$imem\" DMEM_INIT_FILE=\"$dmem\" $IMEM_DEFS"
+if {[info exists ::env(NN_MEM_DCP)] && $::env(NN_MEM_DCP) ne ""} {
+  set _nn_dcp [string map {\\ /} $::env(NN_MEM_DCP)]
+  if {![file exists $_nn_dcp]} {
+    puts "BUILD_ERROR: missing NN_MEM_DCP=$_nn_dcp"
+    exit 1
+  }
+  read_checkpoint -cell u_nn/u_mem $_nn_dcp
+  puts "BUILD_NN_MEM_DCP=$_nn_dcp (linked -> u_nn/u_mem)"
+}
 puts "BUILD_PROG=$PROG"
 
 # ---- Pblock (physical optimization) -- ON BY DEFAULT for this part ---------
