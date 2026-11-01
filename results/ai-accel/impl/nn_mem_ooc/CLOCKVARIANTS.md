@@ -43,3 +43,34 @@ rem 汇总验证全部变体（open_checkpoint，不重综合）:
 vivado -mode batch -source check_clockvars.tcl
 ```
 产物：`nn_mem_<tag>.dcp` + `nn_mem_<tag>_{util,timing,paths}.rpt`；汇总表在 `check_clockvars.rpt`。
+
+---
+
+## ⚠ 2026-11-01 20:1x 更新：改用 **no-clock DCP**（时钟变体保留供对照）
+
+Lead 定位 80MHz 全实现 worst path 的 **−3.526ns Clock Path Skew** 来自 DCP 内
+`create_clock -name clk`（链接后 STA 按 `sys_clk_core → clk` 跨时钟分析）。改为**不带任何时钟约束**
+的 DCP 后，整机用顶层 `sys_clk_core` 统一分析，这 3.5ns 直接省掉（预计 fmax 84.6 → 115MHz+）。
+
+| DCP 文件 | 说明 | sha256 | Block RAM | 时钟 |
+|---|---|---|---|---|
+| **`nn_mem_noclk.dcp`**（推荐，全频点共用） | 同网表，**无 create_clock / 无 XDC** | `b93708886b2c8e747329c4b5a6a20a616cb1e1651bf67d4ca8f8a46317ee76a5`（1,451,501 B） | 120 | **0（get_clocks 为空）** |
+
+- 生成：`vivado -mode batch -source synth_nn_mem_noclk.tcl`（~1 分钟）；
+- 验证：`vivado -mode batch -source check_noclk.tcl` → `clocks=0 generated=0, RAMB36=120, RAMB18=0, FDRE=90, LUTCELLS=2504`；
+- 上面所有 `nn_mem_<tag>.dcp` 时钟变体**保留作对照/归档**；正式构建建议统一用 `nn_mem_noclk.dcp`，
+  不再需要按频点切 DCP（整机时序由顶层时钟约束重算）。
+
+### OOC 布局/pblock 参考数据（供 Lead floorplan）
+
+- XC7A100T-FGG484 的 **RAMB36 site 只分布在 4 个列：X0(40) / X1(40) / X2(35) / X3(20) = 135**；
+  其余列为 SLICE 列（X0..X89）→ **u_mem 的 120 BRAM 必然落在器件最左侧 4 列**。
+- 因此 engine→mem 的 7.5ns route 很可能来自 engine SLICE 被摆到右侧远处；建议：
+  1. 给 `u_mem` 加 pblock 限定到 `RAMB36_X0Y*:RAMB36_X3Y*`（4 列全给，留 15 site 余量）；
+  2. 给 `u_eng`（或至少 `u_eng` 的权重地址/load 逻辑）加 pblock 到**左半器件**的 SLICE 列
+     （X4 起，按 engine ~29K LUT ≈ 36 列估算：X4..X44 + 相邻时钟区域），让最差路径两端同区；
+  3. pblock 不要过紧（会拥塞），先用 `place_design -directive ExtraTimingOpt` / `AggressiveExplore`
+     对比，再决定是否 pblock；若 pblock 后 WNS 变差，回退到无 pblock + phys_opt。
+- 命令参考：`get_sites -filter {SITE_TYPE == RAMBFIFO36E1}`（2018.3 里 RAMB36 site 类型名是
+  `RAMBFIFO36E1`，不是 `RAMB36E1`）。
+
