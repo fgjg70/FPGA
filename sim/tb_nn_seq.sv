@@ -58,7 +58,7 @@ module tb_nn_seq;
   int          n_start;        // 收到的 start 次数
   int          n_mismatch;
   logic [31:0] sum_cycles;     // 假引擎 cycles 之和
-  logic [31:0] op_desc [0:255];
+  nn_desc_t    op_desc [0:255];      // 完整描述符 (200+ 位, 不能用 32 位截断)
   int          n_cap;
 
   // 每次 start 的延时 = 3 + (src[3:0] ^ dst[3:0]) 拍(小), 保证有变化
@@ -172,27 +172,28 @@ module tb_nn_seq;
     end
 
     // ---- 第 2 轮: 引擎报错注入 ----
+    // 顺序: 先起 start, 等 nn_seq 进入 WAIT 且引擎 busy, 在 WAIT 期间把 eng_err_code 拉高,
+    // nn_seq 的 WAIT 分支会转 S_ERR。 (时序必须单调, 不能靠 join_any 竞态)
     if (NN_ROM_LEN > 0) begin
-      // 让假引擎把第一次 done 的 err_code 置非零 -> nn_seq 应进 S_ERR
-      fork
-        begin
-          @(negedge clk); start = 1'b1;
-          @(negedge clk); start = 1'b0;
+      @(negedge clk); start = 1'b1;
+      @(negedge clk); start = 1'b0;
+      wait (eng_busy === 1'b1);
+      repeat (3) @(posedge clk);
+      #1 eng_err_code = 8'h7A;
+      begin : wait_err
+        int g2;
+        g2 = 0;
+        while (dut.err !== 1'b1) begin
+          @(posedge clk); #1;
+          if (g2 > 20000) begin
+            $display("NN_SEQ_TB: FAIL err path not triggered");
+            errors++;
+            disable wait_err;
+          end
+          g2++;
         end
-        begin
-          // 等第一个 eng_done 拍的前一拍注入
-          wait (eng_busy === 1'b1);
-          repeat (2) @(posedge clk);
-          eng_err_code <= 8'h7A;
-          wait (dut.err === 1'b1);
-          @(posedge clk);
-          eng_err_code <= 8'd0;
-        end
-      join_any
-      if (dut.err !== 1'b1) begin
-        $display("NN_SEQ_TB: FAIL err path not triggered");
-        errors++;
       end
+      #1 eng_err_code = 8'd0;
       repeat (5) @(posedge clk);
     end
 

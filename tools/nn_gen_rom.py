@@ -94,19 +94,28 @@ def clamp(v, w, what):
 
 
 def op_flags(op, kind_code):
+    """把 plan 的 flags 约定映射到 nn_pkg::NN_F_* 的位位置。
+
+    plan.json (v0.6, T-model 生成) 的 flags 约定:
+      bit0 = depthwise, bit1 = leaky, bit2 = PACKED3, bit3 = ADD_R
+    nn_pkg 的位位置: depthwise=0, leaky=1, add=2, up2x=3, poolmax=4, packed3=5, add_r=6
+    （两者**不是同一张表** —— 首版直接照搬 plan.flags 会让 ROM 的 PACKED3/ADD_R 丢失,
+      引擎就会按普通 conv/add 跑，数值全错。这里显式映射并在文件头记下差异。）
+    """
+    pf = int(op.get('flags', 0) or 0)
     f = 0
-    if op.get('kind') == 'dwconv' or op.get('depthwise'):
+    if op.get('kind') == 'dwconv' or (pf & 1) or op.get('depthwise'):
         f |= 1 << F_DEPTHWISE
-    if op.get('leaky'):
+    if (pf & 2) or op.get('leaky'):
         f |= 1 << F_LEAKY
+    if (pf & 4) or op.get('packed3'):
+        f |= 1 << F_PACKED3
+    if (pf & 8) or (op.get('kind') == 'add' and ('r_scale' in op or 'R' in op)):
+        f |= 1 << F_ADD_R
     if kind_code == 2:                       # pool
         f |= 1 << F_POOLMAX
     if kind_code == 3:                       # upsample (copy + UP2X)
         f |= 1 << F_UP2X
-    if op.get('packed3'):
-        f |= 1 << F_PACKED3
-    if op.get('kind') == 'add' and ('r_scale' in op or 'R' in op):
-        f |= 1 << F_ADD_R
     if kind_code == 4 and not (f & (1 << F_ADD_R)):
         f |= (1 << F_ADD)                    # 纯 add（不带 R）时置 ADD 位
     return f
@@ -154,9 +163,13 @@ def build_entries(plan, a_off, b_off):
         woff = int(op.get('woff', -1))
         qoff = int(op.get('qoff', -1))
         if woff < 0:
-            woff = 0                             # copy/add 无权重
+            woff = 0                             # pool/copy/upsample/add 无权重
         if qoff < 0:
-            fail('op#%d kind=%s 缺 qoff（v0.6 plan 必须给每个 op 的 Q 区字节偏移）' % (idx, k))
+            # pool/copy/upsample 不需要 Q; conv/dw/add 必须有
+            if kind_code in (2, 3, 5):           # pool / upsample / copy
+                qoff = 0
+            else:
+                fail('op#%d kind=%s 缺 qoff（conv/dw/add 必须给 Q 区字节偏移）' % (idx, k))
         aux0 = aux1 = 0
         if kind_code == 4 and (flags & (1 << F_ADD_R)):
             R = int(op.get('r_scale', op.get('R', 0)))
@@ -232,8 +245,11 @@ def main():
         code = KIND_CODE[e['kind']]
         val = pack(e, code)
         hexs = ('%0' + str((TOTAL_BITS + 3) // 4) + 'x') % val
+        # 逗号规则: 只要不是整个数组的最后一个元素就必须有逗号
+        # (首版按"最后一条真实项"判逗号, 有 padding 时漏逗号 -> vlog 语法错)
+        need_comma = (i < depth_max - 1)
         lines.append("    %d'h%s%s   // %3d: %-8s flags=0x%02x ic=%d oc=%d ih=%d iw=%d" %
-                     (TOTAL_BITS, hexs, ',' if i < len(entries) - 1 else ' ', i, e['kind'],
+                     (TOTAL_BITS, hexs, ',' if need_comma else '', i, e['kind'],
                       e['flags'], e['ic'], e['oc'], e['ih'], e['iw']))
     # 未用项填 0（kind=0 但 flags 全 0 且 ic=0 → nn_seq 以 ic==0 判结束，或按 NN_ROM_LEN 控制）
     for i in range(len(entries), depth_max):
