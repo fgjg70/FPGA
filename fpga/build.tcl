@@ -326,12 +326,21 @@ if {[info exists ::env(NN_EN)] && $::env(NN_EN) ne ""} {
     puts "BUILD_NN_WARN: NN_XDC([expr {[info exists ::env(NN_XDC_MULT)] ? $::env(NN_XDC_MULT) : {unset}}]/[expr {[info exists ::env(NN_XDC_DIV)] ? $::env(NN_XDC_DIV) : {unset}}]) != RTL $nn_mult/$nn_div -> 时钟不同源!"
   }
   # v0.7: W 独立 320KB, 切成 32768/16384/16384/16384 个 32-bit 字; Q 独立 LUTRAM 镜像。
-  if {[info exists ::env(NN_Q_INIT_FILE)] && $::env(NN_Q_INIT_FILE) ne ""} {
-    set qp [string map {\\ /} [file normalize $::env(NN_Q_INIT_FILE)]]
-    append IMEM_DEFS " NN_Q_INIT_FILE=\"$qp\""
-    puts "BUILD_NN_Q_INIT=$qp"
+  # [2026-11-01 Q 拆分] Q 48KB 拆成两个 BRAM ROM (4096 + 2048 行 x 64-bit),
+  # 整机 BRAM 由此从 137.5 降到 133.5/135。初始化镜像必须拆成两份 (纯切分)。
+  if {[info exists ::env(NN_Q_INIT_LO)] && $::env(NN_Q_INIT_LO) ne ""} {
+    set qlo [string map {\\ /} [file normalize $::env(NN_Q_INIT_LO)]]
+    append IMEM_DEFS " NN_Q_INIT_LO=\"$qlo\""
+    puts "BUILD_NN_Q_INIT_LO=$qlo"
   } else {
-    puts "BUILD_NN_WARN: NN_Q_INIT_FILE unset -> Q (LUTRAM) 初始化为 0"
+    puts "BUILD_NN_WARN: NN_Q_INIT_LO unset -> q_mem_lo 初始化为 0"
+  }
+  if {[info exists ::env(NN_Q_INIT_HI)] && $::env(NN_Q_INIT_HI) ne ""} {
+    set qhi [string map {\\ /} [file normalize $::env(NN_Q_INIT_HI)]]
+    append IMEM_DEFS " NN_Q_INIT_HI=\"$qhi\""
+    puts "BUILD_NN_Q_INIT_HI=$qhi"
+  } else {
+    puts "BUILD_NN_WARN: NN_Q_INIT_HI unset -> q_mem_hi 初始化为 0"
   }
   set nn_missing ""
   foreach s {A B C D} {

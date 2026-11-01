@@ -118,13 +118,20 @@
 
 ### 4.1 可用 BRAM
 
-- 器件 135 tiles；当前整机 = nn_mem 112（W80 + A/B32 + Q0）+ 核心 ~9.5 ≈ **121.5/135**（R3 实测）。
-- ⇒ **tile 缓存可用 ≈ 13.5 tiles ≈ 60.75KB**（若 MIG/互联不吃 BRAM；见 §6 风险）。
-- **⚠ 显性风险（Lead 要求保持可见）**：推荐 tile cache 设计 = **12.4 tiles（56KB）**，
-  整机余量只剩 **~1.1 tiles（~5KB）**。**若后续上 MIG（或其它 IP 吃 BRAM/LUT），必须重算 BRAM 预算**：
-  MIG 7-series 控制器本身通常不吃 BRAM（但 AXI 互联/FIFO/调试可能吃），且 MIG 会吃 LUT/MMCM；
-  一旦 BRAM 不够，tile cache 需降级到 §4.2 的方案 2（8.9 tiles，B 选择更保守，流量 18.5MB/帧仍带宽安全）
-  或进一步缩到单缓冲（牺牲 DMA/计算 overlap）。**结论：tile cache 尺寸要在"MIG 资源实测后"复核，不能先定死。**
+- 器件 135 tiles。**2026-11-01 19:1x 构建修复后口径变化**：Q 从 LUTRAM 改为 **2 个 BRAM ROM**
+  （lo 4096 深 8 tiles + hi 2048 深 4 tiles = **12 tiles**，为修整机综合 5.2M 单元问题），
+  ⇒ 整机 = **nn_mem 124**（W 80 + Q 12 + A/B 32）+ 核心 ~9.5 ≈ **133.5/135**。
+- ⇒ **tile 缓存可用只剩 ~1.5 tiles ≈ 6.75KB**（原来按 Q=0 BRAM 估的是 ~13.5 tiles）。
+  **推荐 tile cache 设计 12.4 tiles（56KB）已放不下** —— 这是 P3 的**前置阻塞项**，必须先腾 BRAM：
+  (a) C320 模式把 Q 改回 LUTRAM（+48KB 片上 RAM 换回 12 tiles；但会重现"LUT 常量网络"综合慢，
+      可配合"Q 黑盒 + 小 ROM"或 Q 放 DDR3 解决）；
+  (b) 权重 W 流式化/分时复用（W 80 tiles 是最大块，C320 每层只驻留当前层权重可大幅缩小，
+      但 DDR3 带宽要重算）；
+  (c) tile cache 降级到方案 2（8.9 tiles）甚至单缓冲——仍不够，只能配合 (a)/(b)。
+  详见 §4.2/§4.3 的缓冲预算。**结论：P3 的 tile cache 尺寸必须在"Q 回 LUTRAM / W 流式化"决策后重定，
+  不能按旧的 13.5 tiles 余量推进。**
+- 其它风险（保留）：若后续上 MIG（或其它 IP 吃 BRAM/LUT），还要再重算；MIG 7-series 控制器
+  本身通常不吃 BRAM（但 AXI 互联/FIFO/调试可能吃），且 MIG 会吃 LUT/MMCM。
 - C128 的 A/B 窗口（96KB+32KB，物理 32 tiles）在 P3 模式下即为"片上直通模式"保留兼容；
   P3 模式复用同一块 A/B 物理阵列作为 tile cache（见 §4.4 方案 B），或新增独立 tilecache 模块（方案 A）。
 

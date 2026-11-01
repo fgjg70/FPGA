@@ -14,7 +14,8 @@
 #   - port list must stay EXACTLY as root nn_mem.sv (see nn_mem_ports.txt)
 #   - W/Q init macros are the CURRENT root names:
 #       NN_W_INIT_A..D (64-bit/line: 16384/8192/8192/8192 lines)
-#       NN_Q_INIT_FILE (64-bit/line: 6144 lines)  [Q synth variant = BRAM ROM]
+#       NN_Q_INIT_LO (64-bit/line: 4096 lines) + NN_Q_INIT_HI (64-bit/line: 2048 lines)
+#       [Q synth = 2 ? BRAM ROM (4096+2048), ? 12 tiles; ? mem-report ?3.7]
 #   - clock: create_clock -name clk -period 8.000 (125MHz); no I/O delays
 #     (in-context timing is closed by the top-level flow; this DCP reports
 #      internal reg-to-reg WNS only)
@@ -40,14 +41,21 @@ set wqdefs [list \
     [format {NN_W_INIT_B="%s"} [file join $split "w_B.hex"]] \
     [format {NN_W_INIT_C="%s"} [file join $split "w_C.hex"]] \
     [format {NN_W_INIT_D="%s"} [file join $split "w_D.hex"]] \
-    [format {NN_Q_INIT_FILE="%s"} [file join $split "q_packed.hex"]] ]
+    [format {NN_Q_INIT_LO="%s"} [file join $split "q_lo.hex"]] \
+    [format {NN_Q_INIT_HI="%s"} [file join $split "q_hi.hex"]] ]
 puts "OOC_DEFS $wqdefs"
 
 synth_design -top $top -part $part -mode out_of_context -directive Default -verilog_define $wqdefs
 
 create_clock -name clk -period $period [get_ports clk]
 
+# DCP ?? (?? clk ??, ?? I/O delay -> ???????; ??????????)
 write_checkpoint -force [file join $script_dir "nn_mem.dcp"]
+
+# ???: ??? I/O delay (0.5ns) ???????? timing ?? (??? DCP)?
+# ?????? @8ns ? OOC WNS ??; ??????????? I/O?
+set_input_delay  -clock clk 0.500 [all_inputs]
+set_output_delay -clock clk 0.500 [all_outputs]
 report_utilization -file [file join $script_dir "util.rpt"]
 report_timing_summary -file [file join $script_dir "timing.rpt"] -max_paths 10 -delay_type max
 report_timing -max_paths 20 -file [file join $script_dir "paths.rpt"]

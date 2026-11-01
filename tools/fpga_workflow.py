@@ -2188,7 +2188,7 @@ def cmd_synth(args) -> int:
                     print(f"  [NN] core clock: VCO 1050MHz / {_nn_div} = {1050.0/_nn_div:.3f} MHz")
                 _dcp = getattr(args, "nn_mem_dcp", None)
                 if _dcp:
-                    _dcp_abs = str(Path(_dcp).resolve())
+                    _dcp_abs = os.path.abspath(_dcp)
                     if not os.path.exists(_dcp_abs):
                         print(f"  [FAIL] --nn-mem-dcp 不存在: {_dcp_abs}")
                         return 1
@@ -2251,10 +2251,18 @@ def cmd_synth(args) -> int:
                 for k in range(0, q_words, 2):
                     v = (int(q_lines[k + 1], 16) << 32) | int(q_lines[k], 16)
                     q_packed.append("%016x" % v)
+                # [2026-11-01 Q 拆分] 综合用两份 ROM: 前 4096 行 / 后 2048 行
+                q_lo_path = os.path.join(seg_dir, "q_lo.hex")
+                q_hi_path = os.path.join(seg_dir, "q_hi.hex")
+                with open(q_lo_path, "w", encoding="ascii", newline="\n") as f:
+                    f.write("\n".join(q_packed[:4096]) + "\n")
+                with open(q_hi_path, "w", encoding="ascii", newline="\n") as f:
+                    f.write("\n".join(q_packed[4096:]) + "\n")
+                benv["NN_Q_INIT_LO"] = posix(q_lo_path)
+                benv["NN_Q_INIT_HI"] = posix(q_hi_path)
                 q_path = os.path.join(seg_dir, "q_packed.hex")
                 with open(q_path, "w", encoding="ascii", newline="\n") as f:
                     f.write("\n".join(q_packed) + "\n")
-                benv["NN_Q_INIT_FILE"] = posix(q_path)
                 print(f"  [NN] W 段 {seg_words} ({seg_dir}); Q {q_words} 词 -> "
                       f"{len(q_packed)} 行 x 64-bit (LUTRAM)")
             rc, out, dt = run(["cmd", "/c", abspath("fpga/build.bat")],
@@ -2320,12 +2328,13 @@ def cmd_synth(args) -> int:
                     expect.append("BUILD_NN_MEM_DCP=")
                 # 非 7 分频必须看到 build.tcl 的时钟覆盖证据 (XDC 不支持条件逻辑,
                 # 曾因 if 被 XDC 解析器静默忽略而按错频率布线 —— 这里把它变成硬判据)
-                if _nn_div != 7:
+                if (benv.get("NN_XDC_MULT", "21") != "21") or (benv.get("NN_XDC_DIV", "7") != "7"):
                     expect.append("BUILD_NN_XDC_GEN=")
-                    expect.append("divide_by %d" % _nn_div)
+                    expect.append("divide_by %s" % benv.get("NN_XDC_DIV", "7"))
                 for _s in "ABCD":
                     expect.append(f"BUILD_NN_WQ_INIT_{_s}=")
-                expect.append("BUILD_NN_Q_INIT=")
+                expect.append("BUILD_NN_Q_INIT_LO=")
+                expect.append("BUILD_NN_Q_INIT_HI=")
             else:
                 expect.append("BUILD_NN_OFF=1")
             missing = [e for e in expect if e not in out]

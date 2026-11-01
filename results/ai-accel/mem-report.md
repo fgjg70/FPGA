@@ -10,9 +10,10 @@
 ## 0. 一句话结论
 
 **nn_mem v0.7 完成并修复了 R3 集成阻塞项（W 读口 8B 粒度窗口）：
-W 320KB 落 80 个 BRAM36（4 段 64-bit 宽、每段两个满宽读口）、Q 48KB 落分布式 ROM
-（0 BRAM，6,981 LUT）、A/B 128KB 落 32 个 BRAM36 ⇒ nn_mem 合计 112 tiles；
-加交付档核心约 9.5 ⇒ 约 121.5/135，满足"整机 BRAM ≤121.5/135、给视频帧缓冲腾地方"。
+W 320KB 落 80 个 BRAM36（4 段 64-bit 宽、每段两个满宽读口）、A/B 128KB 落 32 个 BRAM36；
+Q 48KB 在 2026-11-01 19:1x 构建修复中改为 **2 个 BRAM ROM（4096+2048 深，共 12 tiles）**
+⇒ **nn_mem 合计 124 tiles**；加交付档核心约 9.5 ⇒ 约 **133.5/135**。
+（历史：Q 为 LUTRAM 时 mem 合计 112、整机 121.5；该口径已被构建修复取代，见 §3.7。）
 tb_nn_mem 三种加载模式全 PASS（47,146 checks）；引擎×内存联合 TB（T-accel 的
 46/47 向量 + PACKED3/ADD_R 4 向量）：stub 与真 nn_mem 结果完全一致，真 mem 47/47+4/4 PASS，
 根目录 engine 快照同样 47/47+4/4 PASS。**
@@ -98,13 +99,17 @@ module nn_mem import nn_pkg::*; #(
 | 区 | 容量 | 实现 | 综合实测 |
 |---|---|---|---|
 | W | 320KB | 4 段 **64-bit 宽** ROM：A=16384 / B/C/D=8192 个 64b 字（128KB / 64KB / 64KB / 64KB）；每段两个满宽读口：`cur=mem[base]`、`next=mem[base+1]`，`base=2*w_idx+w_addr[3]`；`w_rdata={next64,cur64}` | **80 RAMB36**（4KB/BRAM） |
-| Q | 48KB | 64-bit 宽 × 6144 深分布式 ROM（`(* ram_style="distributed" *)`），单读口 | **0 BRAM，6,981 LUT**（LUT-ROM） |
+| Q | 48KB | **2 个 64-bit 宽 BRAM ROM**（`(* rom_style="block" *)`）：`q_mem_lo[0:4095]` + `q_mem_hi[0:2047]`；两路并行读，按 `q_addr[12]` 选择（行为与单块 6144 深完全等价） | **12 RAMB36**（lo 8 + hi 4；若用单块 6144 深会被按 8192 取整 → 16 tiles） |
 | A/B | 96KB+32KB | 一块 128-bit 宽 × 8192 深阵列（A/B 连续，靠地址隔离） | **32 RAMB36** |
-| **合计** | — | — | **112 tiles**；+核心 ~9.5 ⇒ **~121.5/135** |
+| **合计** | — | — | **124 tiles**；+核心 ~9.5 ⇒ **~133.5/135** |
 
 ---
 
 ## 3. Vivado 2018.3 综合证据（核心交付）
+
+> **⚠ 口径说明（2026-11-01 19:1x）**：§3.1–§3.6 的数字是 **Q=LUTRAM 时代**（mem 112 tiles、
+> 整机 121.5）的记录；构建修复后 Q 改为 BRAM ROM（2 子 ROM），**当前口径 = §3.7**
+> （mem 124 tiles、整机 ≈133.5、@8ns WNS +2.306）。历史数字仅作对照。
 
 ### 3.1 一键复现
 
@@ -203,7 +208,7 @@ Q 分布式 ROM 的组合逻辑不是 100MHz 瓶颈；真实 fmax 以 Lead 的 O
 | 指标 | 数值 |
 |---|---|
 | WNS @8.000ns | **+3.846 ns（MET，0 failing endpoints）** |
-| Block RAM | **112 tiles**（RAMB36 112 / RAMB18 0：W80 + A/B32 + Q0） |
+| Block RAM | **112 tiles**（历史口径：Q 为 LUTRAM；**当前构建口径 124 tiles，见 §3.7**） |
 | Slice LUTs | 7,186（Q ROM ≈6,981 + 少量 glue） |
 | Slice Registers | 1,260（`u_dut` 内 85） |
 | DSP | 0 |
@@ -212,6 +217,35 @@ Q 分布式 ROM 的组合逻辑不是 100MHz 瓶颈；真实 fmax 以 Lead 的 O
 结论：mem 自身在 125MHz 有大量余量；整机 125MHz 的瓶颈在引擎内部与**引擎↔mem 的跨模块
 act 地址路径**。后者已在 `P3-DDR3-TILECACHE.md` §5 给出"NPU act 写命令在 nn_mem 侧打一拍"
 （写延迟 1→2，引擎周期 0 成本）的方案与影响面。
+
+### 3.7 nn_mem OOC DCP（整机"黑盒 + OOC checkpoint"构建，2026-11-01 19:1x **当前口径**）
+
+背景：整机 in-context 综合曾卡 ~2.5h（W 320KB ROM 被展开成 5.2M 未映射寄存器，等 Technology
+Mapping 才落 BRAM）。Lead 改为"nn_mem 黑盒 + 链接本 DCP"；Q 在 OOC 下若仍为 LUT 常量 ROM
+同样有 5.2M 单元问题，故 Q 改为 **BRAM ROM**，又因单块 6144 深会被 Vivado 按 8192 取整成
+16 tiles（整机 137.5 超 135），**拆成 4096+2048 两个子 ROM = 12 tiles**（`NN_Q_INIT_LO/HI`）。
+
+| 项 | 数值 |
+|---|---|
+| DCP | `results/ai-accel/impl/nn_mem_ooc/nn_mem.dcp`，1,385,653 B，sha256 `8e447a468ea47ebe0d3a8c621e1afd69f4ab5dd7efe20b63fce8f04631390ecd` |
+| Block RAM | **124 tiles（RAMB36 124 / RAMB18 0）**：W **80**（`w_cur_*`）+ Q **12**（`q_rd_lo_reg_*` **8** + `q_rd_hi_reg_*` **4**）+ A/B **32**（`act_mem_*`） |
+| LUT / FF / DSP | 830 / 26 / 0（数据全在 BRAM） |
+| OOC WNS | **+2.306 ns @8ns（MET，3,677 端点）**；worst = `w_cur_a_reg CLKBWRK → w_rdata`（2 级 LUT，4.371ns） |
+| 约束口径 | DCP 内仅 `create_clock -name clk -period 8.000`（无 I/O delay，黑盒链接友好）；timing.rpt 的 WNS 是报告时临时加 0.5ns 虚拟 I/O 所得，不写入 DCP |
+| 复现 | `cd results\ai-accel\impl\nn_mem_ooc && vivado -mode batch -source synth_nn_mem_ooc.tcl`（~1min）；`check_nn_mem_dcp.tcl` 做 open_checkpoint 复验（RAMB36=124/WNS=2.306） |
+| Q 初始化镜像 | `.fpga-cache/nn_wq_split/q_lo.hex`（4096 行 64-bit，69,632 B，sha256 `12b33d2300277d98869cec9577852f3922eb2d19cdf63bd1a876fd99ebfa36b8`）+ `q_hi.hex`（2048 行，34,816 B，sha256 `37e4183ccbd8c5da820ee017b73004523c7866dc9006b86c4ae750280c61c687`）；由 `q_packed.hex`（6144 行，sha256 `438bd9619e63b13fa4ed960128e860c4461b721b654ab9f7bd496180b445d7d3`）前 4096/后 2048 行切分 |
+| 行为自证 | **tb_nn_mem 三种模式 PASS（47,146 / 47,146 / 40 checks，mismatch=0）**；引擎×真 mem `tb_nn_engine` 47/47 + 4/4 PASS |
+
+**P3 tile 缓存影响**：整机 ≈133.5/135 只剩 **~1.5 tiles**；P3 原计划需 ~12.4 tiles tile cache
+⇒ P3 必须另行腾 BRAM（C320 模式把 Q 改回 LUTRAM / 权重流式化 / 缩 tile），详见
+`P3-DDR3-TILECACHE.md` §4.1 更新说明。
+
+端口清单（逐字）：`results/ai-accel/impl/nn_mem_ooc/nn_mem_ports.txt`（UTF-8 原样）与
+`nn_mem_ports_ascii.txt`（去注释 ASCII，供黑盒 stub 生成）。宏名是 `NN_W_INIT_A..D` +
+`NN_Q_INIT_LO/HI`（不是 `NN_WQ_INIT_A..D`），镜像 64-bit/行：W A 16384 / B·C·D 8192；
+Q lo 4096 / hi 2048。
+
+---
 
 ---
 

@@ -1,0 +1,43 @@
+module nn_mem
+  import nn_pkg::*;
+#(
+  parameter int W_BYTES = 320*1024,
+  parameter int Q_BYTES = 48*1024,
+  parameter int A_BYTES = 96*1024,
+  parameter int B_BYTES = 32*1024,
+  parameter int CPU_AW  = 19
+)(
+  input  logic         clk,
+  input  logic         rst,
+
+  input  logic         cpu_re,
+  input  logic         cpu_we,
+  input  logic [31:0]  cpu_addr,
+  input  logic [31:0]  cpu_wdata,
+  input  logic [3:0]   cpu_wstrb,
+  output logic [31:0]  cpu_rdata,
+
+  input  logic         w_re,
+  input  logic [23:0]  w_addr,
+  output logic [127:0] w_rdata,
+
+  input  logic         q_re,
+  input  logic [12:0]  q_addr,
+  output logic [63:0]  q_rdata,
+
+  input  logic [1:0]   a_sel,
+  input  logic         a_re,
+  input  logic [23:0]  a_addr,
+  output logic [127:0] a_rdata,
+
+  input  logic [1:0]   b_sel,
+  input  logic         b_we,
+  input  logic [23:0]  b_addr,
+  input  logic [127:0] b_wdata,
+  input  logic [15:0]  b_wstrb,
+
+  input  logic         dbg_we,
+  input  logic         dbg_space,
+  input  logic [16:0]  dbg_addr,
+  input  logic [31:0]  dbg_wdata
+);

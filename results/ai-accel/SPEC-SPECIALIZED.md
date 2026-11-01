@@ -64,15 +64,23 @@ CPU ───▶│ CPU 窗口: A/B only (1拍读)   MMIO: JOB_START / STATUS / 
 | 区 | 大小 | 实现 | 端口 |
 |---|---|---|---|
 | W | 320KB | **80×BRAM36**（$readmemh 4 段初始化，同现有机制）| NPU 128b 读；**CPU 不可访问** |
-| Q | 48KB | **分布式 RAM（LUTRAM）** 12,288×32b | NPU 独立 64b 读；CPU 不可访问 |
+| Q | 48KB | **2 个 BRAM ROM**（64-bit 宽：lo 4096 深 8 tiles + hi 2048 深 4 tiles = **12 BRAM36**）| NPU 独立 64b 读；CPU 不可访问 |
 | A | 96KB | BRAM，128b 读 + 128b 写 | CPU 窗口（读/写）|
 | B | 32KB | 同上 | CPU 窗口（读/写）|
+
+> **2026-11-01 19:1x 更新（构建口径）**：Q 综合版从 LUTRAM 改为 **BRAM ROM**（LUT 常量网络
+> 曾展开 5.2M cells 导致整机综合 3h）。单块 6144 深会被 Vivado 按 8192 取整成 16 tiles，
+> 故拆成 **4096+2048 两个子 ROM = 12 tiles**（初始化宏 `NN_Q_INIT_LO` / `NN_Q_INIT_HI`）。
+> 仿真行为/端口/时延不变（tb_nn_mem 47,146 checks PASS）。**nn_mem 合计 124 tiles，
+> 整机 ≈133.5/135**（见 mem-report §3.7 / `impl/nn_mem_ooc/` DCP）。
 
 **调试装载口（v0.7 新增，SoC 里 tie 0）**：`dbg_we, dbg_space(0=W/1=Q), dbg_addr[16:0] (32-bit 字索引), dbg_wdata[31:0]`
 ——供 module-level TB / OOC wrapper 初始化与回读 W、Q，避免为了测试再造一套端口。
 
 - CPU 窗口只映射 A（offset 0x60000）/B（0x78000），其余地址读 0/写忽略；
-- 释放出的 12 块 BRAM 留给视频链路帧缓冲 / 320 档 tile 缓存（P3）。
+- **P3 tile 缓存预算变化**：Q 落 BRAM 后 nn_mem 124 tiles（原 112），整机 ≈133.5/135，
+  只剩 **~1.5 tiles** 给 320 档 tile 缓存（P3 原计划需 ~12.4 tiles）→ P3 必须另行腾 BRAM
+  （Q 在 C320 模式改回 LUTRAM / 权重流式化 / 缩 tile），详见 `P3-DDR3-TILECACHE.md` §4.1。
 
 ## 4. nn_seq 状态机（P0 范围）
 

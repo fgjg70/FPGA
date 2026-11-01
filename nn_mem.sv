@@ -9,8 +9,11 @@
 //   1. W 区独立 320KB, 只给 NPU 128-bit 读口 (w_re/w_addr/w_rdata[127:0], 1 拍);
 //      CPU 不可访问。4 段 $readmemh 初始化 (NN_W_INIT_A..D, 每段 64-bit/行)。
 //      读地址 **8B 对齐** (引擎 v3 的 8-lane tile 会发 w_addr[3]=1, 见 R3 修复)。
-//   2. Q 区 48KB 迁**分布式 RAM/ROM (LUTRAM)** (q_re/q_addr[12:0]/q_rdata[63:0],
-//      1 拍); CPU 不可访问; 不占 BRAM (实测约 7,000 LUT / 0 BRAM, 见 mem-report.md)。
+//   2. Q 区 48KB 拆成 **2 个子 ROM** (q_mem_lo 4096 深 + q_mem_hi 2048 深, 64-bit 宽);
+//      q_re/q_addr[12:0]/q_rdata[63:0], 1 拍; CPU 不可访问。
+//      仿真行为与"单块 6144 深 ROM"完全等价 (dbg 预装/loader 按 idx<4096 写 lo)。
+//      [2026-11-01 build fix] 综合落 BRAM ROM: lo 8 + hi 4 = **12 tiles**
+//      (单块 6144 深会被 Vivado 按 8192 取整成 16 tiles; 见 mem-report.md §3.7)。
 //   3. 激活 A/B: 读 128-bit 不变; 写口升级 128-bit + b_wstrb[15:0] (配引擎 v3 的
 //      16 lane 写回; copy/concat 的 8 字节半字写只写 half word, **不做 RMW**)。
 //   4. CPU 窗口只映射 A(0x60000)/B(0x78000): 其余窗口地址读 0/写忽略 (1 拍寄存读)。
@@ -46,14 +49,17 @@
 //        用到 64-bit, Vivado 会额外复制 64-bit 存储 (实测 W 147.5 tiles 超预算;
 //        用 keep 又会落 54K LUT)。64-bit 宽 + 满宽双读 = 80 tiles, 干净。
 //        为什么必须拆 4 段: 64-bit 宽 ROM 深度 >16384 会按 32768 取整。
-//   Q  : 64-bit 宽、6144 深的分布式 ROM (`ram_style="distributed"`),
-//        综合 -> 0 BRAM, 约 7,000 LUT (ROM 内容 6144 LUT + 地址/输出逻辑)。
+//   Q  : 2 个 64-bit 宽 BRAM ROM: lo 4096 深 (32KB -> 8 tiles) + hi 2048 深
+//        (16KB -> 4 tiles) = **12 tiles**; 读时两路并行、按 q_addr[12] 选择。
+//        为什么拆: 6144 深单块会被 Vivado 按 8192 取整 -> 16 tiles (多 4 块,
+//        整机 128+9.5=137.5 超 135); 拆成 4096+2048 后正好 12 tiles。
 //   A/B: 128KB 128-bit 宽一块阵列 -> 32 BRAM36 (精确 4KB/BRAM)。
-//   => nn_mem 合计 **112 tiles**; + 交付档核心约 9.5 ≈ 121.5/135 (≤121.5 目标)。
+//   => nn_mem 合计 **124 tiles**; + 交付档核心约 9.5 ≈ **133.5/135**。
 //
 // 【初始化镜像】
 //   综合: W 4 段 `NN_W_INIT_A..D` (每行 16 hex = 64-bit 字, 行数 16384/8192/
-//         8192/8192); Q `NN_Q_INIT_FILE` (每行 16 hex = 64-bit 字, 6144 行)。
+//         8192/8192); Q 拆两段 `NN_Q_INIT_LO` (前 4096 行) + `NN_Q_INIT_HI`
+//         (后 2048 行), 均 64-bit 字/行。
 //         文件由 build flow 从 yolo_w / yolo_q 的 32-bit 行镜像打包 (低字在低 32 位)。
 //   仿真: `+nnw=<yolo_w.hex>` (81920 行 32-bit) + `+nnq=<yolo_q.hex>` (12288 行
 //         32-bit); 或旧 `+nnwq=<yolo_wq.hex>` (94208 行 = W 81920 + Q 12288 顺序)。
@@ -112,6 +118,8 @@ module nn_mem
   localparam int W64      = W_BYTES / 8;        // 40,960 个 64-bit 字
   localparam int Q_WORDS  = Q_BYTES / 4;        // 12,288 个 32-bit 字
   localparam int Q64      = Q_WORDS / 2;        // 6,144 个 64-bit 字
+  localparam int QLO      = 4096;               // Q 低段 ROM 深度 (32KB)
+  localparam int QHI      = Q64 - QLO;          // Q 高段 ROM 深度 (2,048 = 16KB)
 
   // W 4 段 (64-bit 字): A=16384, B/C/D=8192 (默认 40,960 = 320KB)
   //   byte 段边界与旧版一致: A=128KB, B/C/D=64KB (仅物理字宽变 64-bit)
@@ -318,41 +326,45 @@ module nn_mem
   assign w_rdata = w_rd_valid_r ? {w_nxt_r, w_cur_r} : 128'b0;
 
   // ==========================================================================
-  // Q 区: 64-bit 宽、6144 深 -> 分布式 RAM/ROM (LUTRAM, 0 BRAM)
+  // Q 区: 2 个 64-bit 宽 BRAM ROM (lo 4096 深 + hi 2048 深), 行为与单块 6144 深等价
   //   读: q_addr = 64-bit Q 字索引; 写: 只给 dbg 装载 (SoC 恒 0 -> ROM)
+  //   [2026-11-01 build fix] 综合落 BRAM ROM: 48KB 常量 ROM 若落 LUT/常量网络,
+  //   Vivado 会展开成 5.2M 单元 (实测 cross-boundary 32min + timing opt 68min)。
+  //   拆 4096+2048 而不是单块 6144: Vivado 对 6144 深 64-bit 按 8192 取整 ->
+  //   16 tiles; 拆成 4096 (8 tiles) + 2048 (4 tiles) = 12 tiles, 整机 133.5/135。
   // ==========================================================================
-  // [2026-11-01 build fix] 仿真用 LUTRAM/distributed ROM (支持 dbg 预装, tb_nn_mem/E2E 走这里);
-  // **综合版改用 BRAM ROM**: 48KB 常量 ROM 若落 LUT, Vivado 会展开成
-  // 5.2M 单元的常量网络 (实测 RTL partition 5,242,586 instances -> cross-boundary 32min +
-  // timing optimization 68min, 完全不可接受)。BRAM ROM 的初值是存储内容, 不参与组合优化。
-  // 代价: 整机 BRAM 112 -> 124 tiles (+核心 ~9.5 => 133.5/135, 仍在预算内)。
-`ifdef SYNTHESIS
-  (* rom_style = "block" *)
-`else
-  (* ram_style = "distributed" *)
-`endif
-  logic [63:0] q_mem [0:Q64-1];
+  (* rom_style = "block" *) logic [63:0] q_mem_lo [0:QLO-1];
+  (* rom_style = "block" *) logic [63:0] q_mem_hi [0:QHI-1];
 
-  logic [63:0] q_rd;
+  logic [63:0] q_rd_lo, q_rd_hi, q_rd;
+  logic        q_hi_r;
   logic        q_rd_valid_r;
-  // dbg 装载写口只存在于仿真: 综合时写块整体不存在 -> Q 推断成分布式 ROM
-  // (若综合里保留写口, Vivado 落 12,288 LUTRAM, 比 ROM 的 6,981 LUT 多 76%)。
+  // dbg 装载写口只存在于仿真 (综合时写块整体不存在 -> Q 是纯 ROM)。
 `ifndef SYNTHESIS
   always @(posedge clk) begin
     if (q_dbg_we) begin
-      if (dbg_addr[0]) q_mem[dbg_addr[13:1]][63:32] <= dbg_wdata;
-      else             q_mem[dbg_addr[13:1]][31:0]  <= dbg_wdata;
+      if (dbg_addr[13:1] < 13'(QLO)) begin
+        if (dbg_addr[0]) q_mem_lo[dbg_addr[12:1]][63:32] <= dbg_wdata;
+        else             q_mem_lo[dbg_addr[12:1]][31:0]  <= dbg_wdata;
+      end else begin
+        if (dbg_addr[0]) q_mem_hi[dbg_addr[11:1]][63:32] <= dbg_wdata;
+        else             q_mem_hi[dbg_addr[11:1]][31:0]  <= dbg_wdata;
+      end
     end
   end
 `endif
+  // 两段并行读 (各 1 读口), 按地址高位选择 -> 1 拍延迟不变
   always @(posedge clk) begin
-    q_rd <= q_mem[q_addr];
+    q_rd_lo <= q_mem_lo[q_addr[11:0]];
+    q_rd_hi <= q_mem_hi[q_addr[10:0]];   // q_addr-4096 的低 11 位 (4096 = 2^12)
+    q_hi_r  <= q_addr[12];
   end
   always @(posedge clk) begin
     if (rst) q_rd_valid_r <= 1'b0;
     else     q_rd_valid_r <= q_re && (q_addr < 13'(Q64));
   end
-  assign q_rdata = q_rd_valid_r ? q_rd : 64'b0;
+  assign q_rd     = q_hi_r ? q_rd_hi : q_rd_lo;
+  assign q_rdata  = q_rd_valid_r ? q_rd : 64'b0;
 
   // ==========================================================================
   // 激活区 A+B (连续 128KB, 共用一块 128-bit 宽阵列)
@@ -481,8 +493,11 @@ module nn_mem
 `ifdef NN_W_INIT_D
     $readmemh(`NN_W_INIT_D, w_mem_d);
 `endif
-`ifdef NN_Q_INIT_FILE
-    $readmemh(`NN_Q_INIT_FILE, q_mem);
+`ifdef NN_Q_INIT_LO
+    $readmemh(`NN_Q_INIT_LO, q_mem_lo);
+`endif
+`ifdef NN_Q_INIT_HI
+    $readmemh(`NN_Q_INIT_HI, q_mem_hi);
 `endif
 `else
     begin : sim_init
@@ -501,7 +516,8 @@ module nn_mem
       for (int i = 0; i < WSEG_B; i++)    w_mem_b[i] = 64'b0;
       for (int i = 0; i < WSEG_C; i++)    w_mem_c[i] = 64'b0;
       for (int i = 0; i < WSEG_D; i++)    w_mem_d[i] = 64'b0;
-      for (int i = 0; i < Q64; i++)       q_mem[i]   = 64'b0;
+      for (int i = 0; i < QLO; i++)       q_mem_lo[i] = 64'b0;
+      for (int i = 0; i < QHI; i++)       q_mem_hi[i] = 64'b0;
       for (int i = 0; i < ACT_WORDS; i++) act_mem[i] = 128'b0;
 
       // ---- 模式 1: 单个 WQ 文件 (94208 行 = W 81920 + Q 12288 顺序拼接) ----
@@ -541,7 +557,8 @@ module nn_mem
                 acc64[31:0] = v32;
               end else begin
                 acc64[63:32] = v32;
-                q_mem[qidx] = acc64;
+                if (qidx < QLO) q_mem_lo[qidx] = acc64;
+                else            q_mem_hi[qidx - QLO] = acc64;
                 qidx = qidx + 1;
                 acc64 = '0;
               end
@@ -606,7 +623,8 @@ module nn_mem
                   acc64[31:0] = v32;
                 end else begin
                   acc64[63:32] = v32;
-                  q_mem[qidx] = acc64;
+                  if (qidx < QLO) q_mem_lo[qidx] = acc64;
+                  else            q_mem_hi[qidx - QLO] = acc64;
                   qidx = qidx + 1;
                   acc64 = '0;
                 end
