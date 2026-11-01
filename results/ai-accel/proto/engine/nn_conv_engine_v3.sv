@@ -52,7 +52,7 @@ module nn_conv_engine
   output logic [1:0]   b_sel,
   output logic         b_we,
   output logic [23:0]  b_addr,
-  output logic [127:0] b_wdata,
+  output logic [127:0] b_wdata_128,
   output logic [15:0]  b_wstrb
 );
 
@@ -483,7 +483,7 @@ module nn_conv_engine
   assign b_we      = b_we_q;
   assign b_addr    = b_addr_q;
   assign b_sel     = sel_b_dst ? 2'd1 : 2'd0;
-  assign b_wdata   = b_wdata_q;
+  assign b_wdata_128 = b_wdata_q;
   assign b_wstrb   = b_wstrb_q;
 
   // ==========================================================================
@@ -878,7 +878,7 @@ module nn_conv_engine
                   b1 = w32[o5 + 5'd1];
                   b2 = w32[o5 + 5'd2];
                   if (!ld_inb)
-                    abuf[c_ld[4:0]] <= {5{ld_fillbyte}};
+                    abuf[c_ld[4:0]] <= {5{ld_fill}};
                   else
                     abuf[c_ld[4:0]] <= {zp_in, zp_in, zp_in, zp_in, zp_in, b2, b1, b0};
                 end

@@ -87,6 +87,20 @@ static u32 fnv_tensor(u32 abs, u32 h, u32 w, u32 c) {
     return hsh;
 }
 
+/** 对"张量中的通道切片"求 FNV-1a: 逻辑 stride = stride_c (通常是目标张量 pad8(oc)),
+ *  但每个像素只取前 c_sel 个通道 (copy op 的 plan csum 口径: 覆盖被写入的切片)。 */
+static u32 fnv_slice(u32 abs, u32 h, u32 w, u32 c_sel, u32 stride_c) {
+    u32 hsh = 2166136261u;
+    for (u32 y = 0; y < h; y++) {
+        u32 row = abs + y * w * stride_c;
+        for (u32 x = 0; x < w; x++) {
+            u32 o = row + x * stride_c;
+            for (u32 i = 0; i < c_sel; i++) hsh = fnv_byte(hsh, rd8(o + i));
+        }
+    }
+    return hsh;
+}
+
 /** 对 packed 张量 (H,W,C, stride=C) 求 FNV-1a（输入图用，CONTRACT §10.1）。 */
 static u32 fnv_tensor_packed(u32 abs, u32 h, u32 w, u32 c) {
     u32 hsh = 2166136261u;
@@ -447,7 +461,11 @@ static u32 run_plan(int hw, u64 *cycles_out, u32 *first_bad) {
         /* 逐 op 比对 golden checksum */
         u32 gh, gw, gc;
         op_out_shape(o, &gh, &gw, &gc);
-        u32 got = fnv_tensor(o->dst, gh, gw, gc);
+        /* v0.6: copy 的 plan csum 覆盖"写入切片"(h=ih,w=iw, 只取 ic 个通道),
+         * 像素 stride = 目标张量 pad8(oc)。其它 kind 仍是整张量 FNV。 */
+        u32 got = (o->kind == YK_COPY)
+                    ? fnv_slice(o->dst, o->ih, o->iw, o->ic, (o->oc + 7u) & ~7u)
+                    : fnv_tensor(o->dst, gh, gw, gc);
         if (got != o->csum) {
             if (bad == 0 && first_bad) *first_bad = i;
             bad++;

@@ -555,7 +555,7 @@ op 统计：**112 ops** = conv 56 / dwconv 28 / add 18 / copy 6 / pool 3 / upsam
   byte[0]=zp_s  byte[1]=zp_d(debug)  byte[2:3]=R (u16 LE)  byte[4]=KADD  byte[5:15]=0
   out = clamp(q_d + (((q_s - zp_s) * R) >> KADD), -128, 127)   # int64 中间, floor
   ```
-  18 个 add 的 R∈[4249, 41736]（全部 ≤65535，u16 安全）、KADD 全 15；R/KADD/zp_s 与 v0.5 CPU 版逐位相同 ⇒ 数值完全一致（fp32 对照误差 ≤1 LSB，见 Round-2 §6.5）。
+  18 个 add 的 R：C128 ∈ [3908, 29651]、C320 ∈ [3110, 28821]（全部 ≤65535，u16 安全）、KADD 全 15；R/KADD/zp_s 与 v0.5 CPU 版逐位相同 ⇒ 数值完全一致（fp32 对照误差 ≤1 LSB，见 Round-2 §6.5）。
 - **copy（6 个，替代 2 个 concat）**：SPP 拼接 = 4 个源张量（各 48ch → 目标 192ch，dst 块偏移 0/48/96/144）；head 拼接 = 2 个源（96ch + 24ch → 120ch，偏移 0/96）。copy 不做 requant，源/目标同属一个量化组（共享 s/zp）⇒ 与原 concat 结果逐位相同。
 
 ### 11.3 W/Q 镜像（v0.7 拆分）与 Q 区布局
