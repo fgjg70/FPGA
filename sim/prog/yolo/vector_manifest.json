@@ -1,0 +1,571 @@
+{
+ "format": "yolo-vector-manifest-v1",
+ "generated_by": "tools/yolo/gen_vector_manifest.py",
+ "plan": "sim/prog/yolo/plan.json",
+ "plan_sha256": "685beded81b73c7b",
+ "plan_ops_total": 112,
+ "hw": 128,
+ "file_formats": {
+  "i8_hex": {
+   "files": [
+    "*_in.hex",
+    "*_out.hex",
+    "*_w.hex"
+   ],
+   "format": "one signed int8 per line: 2 lowercase hex digits (two's complement) + LF",
+   "bytes_per_element": 3,
+   "note": "file size = 3 x element count (this is why e.g. l2_in.hex is 98,304 B for 32,768 elements)"
+  },
+  "u32_hex": {
+   "files": [
+    "*_q.hex"
+   ],
+   "format": "one 32-bit little-endian word per line: 8 lowercase hex digits + LF",
+   "bytes_per_element": 9,
+   "note": "file size = 9 x word count"
+  }
+ },
+ "tensor_layout": {
+  "activation_files": "in/out hex store the op's REAL channels only, compact NHWC row-major: index = ((y*W)+x)*C + c (y outer, x middle, c inner)",
+  "hardware_pixel_stride": "ceil(C/8)*8 bytes per pixel (CONTRACT \u00a78); when C is not a multiple of 8 the loader must pad each pixel with zp_in in the padding lanes",
+  "packed3": "op0 only: input is 3 B/pixel packed, index = ((y*W)+x)*3+c, c in {0,1,2}; engine PACKED3 fills lanes 3..7 with zp_in",
+  "channel_slices": "copy: in/out hex contain only the copied channel slice; add: in = source branch, out = in-place dst"
+ },
+ "stale_files_removed": {
+  "files": [
+   "l96_in.hex",
+   "l96_out.hex",
+   "l96_w.hex",
+   "l96_q.hex",
+   "l100_in.hex",
+   "l100_out.hex",
+   "l100_w.hex",
+   "l100_q.hex",
+   "l101_in.hex",
+   "l101_out.hex"
+  ],
+  "reason": "v0.5 (108-op) numbering: v0.5 op96/100/101 == v0.7 op99/103/104 (op ids shifted by +3 after SPP concat was expanded into 4 copy ops). Contents were byte-identical to the v0.7 files; the stale duplicates were deleted to avoid replay mix-ups."
+ },
+ "c320": {
+  "has_vectors": false,
+  "note": "no l*.hex for C320 (only plan/w/q/rom/arena_map). The C320 plan uses the same weights but 320-calibrated Q; vectors are not needed for P3 data-path bring-up. If needed, generate separately without overwriting the frozen plan/w/q."
+ },
+ "current_vector_set": [
+  {
+   "op_id": 0,
+   "kind": "conv",
+   "layer_idx": 0,
+   "base": "l0"
+  },
+  {
+   "op_id": 94,
+   "kind": "copy",
+   "layer_idx": 114,
+   "base": "l94"
+  },
+  {
+   "op_id": 70,
+   "kind": "conv",
+   "layer_idx": 83,
+   "base": "l70"
+  },
+  {
+   "op_id": 2,
+   "kind": "dwconv",
+   "layer_idx": 2,
+   "base": "l2"
+  },
+  {
+   "op_id": 99,
+   "kind": "dwconv",
+   "layer_idx": 116,
+   "base": "l99"
+  },
+  {
+   "op_id": 93,
+   "kind": "pool",
+   "layer_idx": 113,
+   "base": "l93"
+  },
+  {
+   "op_id": 7,
+   "kind": "add",
+   "layer_idx": 8,
+   "base": "l7"
+  },
+  {
+   "op_id": 103,
+   "kind": "conv",
+   "layer_idx": 120,
+   "base": "l103"
+  },
+  {
+   "op_id": 104,
+   "kind": "upsample",
+   "layer_idx": 123,
+   "base": "l104"
+  }
+ ],
+ "vectors": [
+  {
+   "op_id": 0,
+   "kind": "conv",
+   "kind_desc": "2D conv (PACKED3 if flags bit2)",
+   "layer_idx": 0,
+   "flags": 6,
+   "label": "conv0_packed3",
+   "tensor_in": {
+    "h": 128,
+    "w": 128,
+    "c": 3,
+    "note": "PACKED3 (3 bytes/pixel)",
+    "elements": 49152,
+    "pixel_bytes": 3,
+    "pixel_stride_pad8": 3
+   },
+   "tensor_out": {
+    "h": 64,
+    "w": 64,
+    "c": 8,
+    "note": "real channels only (no channel padding)",
+    "elements": 32768,
+    "pixel_bytes": 8,
+    "pixel_stride_pad8": 8
+   },
+   "files": {
+    "in": {
+     "file": "l0_in.hex",
+     "bytes": 147456,
+     "lines": 49152,
+     "sha256": "096731a6d690aa5434b077c3561b837949d45525d01a5671b70bce1b2b9fefb1"
+    },
+    "out": {
+     "file": "l0_out.hex",
+     "bytes": 98304,
+     "lines": 32768,
+     "sha256": "223fb856676c3e6a6ec7da684b7dcdb873049cfcca570f8462136394453e1eec"
+    },
+    "w": {
+     "file": "l0_w.hex",
+     "bytes": 1728,
+     "lines": 576,
+     "sha256": "2888a2d23980c5c97a49650c7b6621405132aaf1c20263fc68c24b0cbd803e03",
+     "elements": 576,
+     "layout": "dense: [tap][IC_pad][OC_pad], tap=k*k row-major; IC then OC, OC fastest; zero-padded IC/OC lanes"
+    },
+    "q": {
+     "file": "l0_q.hex",
+     "bytes": 144,
+     "lines": 16,
+     "sha256": "8cad823dd99b8b7c9940c30a2ba45d899090ad6c210f3c7f9d20f6440c465583",
+     "words": 16,
+     "payload_bytes": 64,
+     "layout": "conv Q payload 32-bit LE words: bias_adj int32[OC_pad] @0, M_pos int16[OC_pad] @4*OC_pad, tail 16 B {zp_out, zp_in, leaky_en, SHIFT, 12'b0} @6*OC_pad"
+    }
+   }
+  },
+  {
+   "op_id": 94,
+   "kind": "copy",
+   "kind_desc": "channel-block copy (concat expansion)",
+   "layer_idx": 114,
+   "flags": 0,
+   "label": "copy(concat)",
+   "tensor_in": {
+    "h": 4,
+    "w": 4,
+    "c": 48,
+    "note": "source channel slice (c_src=0) of source tensor",
+    "elements": 768,
+    "pixel_bytes": 48,
+    "pixel_stride_pad8": 48
+   },
+   "tensor_out": {
+    "h": 4,
+    "w": 4,
+    "c": 48,
+    "note": "written channel slice (c_dst=0) of target tensor",
+    "elements": 768,
+    "pixel_bytes": 48,
+    "pixel_stride_pad8": 48
+   },
+   "files": {
+    "in": {
+     "file": "l94_in.hex",
+     "bytes": 2304,
+     "lines": 768,
+     "sha256": "29d90d0543f984f2a0a525ce120476c3be964bf8a281b69acd25c3478636562e"
+    },
+    "out": {
+     "file": "l94_out.hex",
+     "bytes": 2304,
+     "lines": 768,
+     "sha256": "29d90d0543f984f2a0a525ce120476c3be964bf8a281b69acd25c3478636562e"
+    }
+   }
+  },
+  {
+   "op_id": 70,
+   "kind": "conv",
+   "kind_desc": "2D conv (PACKED3 if flags bit2)",
+   "layer_idx": 83,
+   "flags": 0,
+   "label": "conv1x1",
+   "tensor_in": {
+    "h": 4,
+    "w": 4,
+    "c": 136,
+    "note": "real channels only (no channel padding)",
+    "elements": 2176,
+    "pixel_bytes": 136,
+    "pixel_stride_pad8": 136
+   },
+   "tensor_out": {
+    "h": 4,
+    "w": 4,
+    "c": 48,
+    "note": "real channels only (no channel padding)",
+    "elements": 768,
+    "pixel_bytes": 48,
+    "pixel_stride_pad8": 48
+   },
+   "files": {
+    "in": {
+     "file": "l70_in.hex",
+     "bytes": 6528,
+     "lines": 2176,
+     "sha256": "ebcf6fa2bb1f88c6200164e4f4657982cbe79aaf303ad9c2fe8e2b46239f948b"
+    },
+    "out": {
+     "file": "l70_out.hex",
+     "bytes": 2304,
+     "lines": 768,
+     "sha256": "936cca097965304aea6f27d3180f7fbc0bffc84c0e976a1af3f9f22486876231"
+    },
+    "w": {
+     "file": "l70_w.hex",
+     "bytes": 19584,
+     "lines": 6528,
+     "sha256": "ee64e4ad14d30315198bdfa3e38023639601622b04dc1c30fbd6fe5a46c1ca6f",
+     "elements": 6528,
+     "layout": "dense: [tap][IC_pad][OC_pad], tap=k*k row-major; IC then OC, OC fastest; zero-padded IC/OC lanes"
+    },
+    "q": {
+     "file": "l70_q.hex",
+     "bytes": 684,
+     "lines": 76,
+     "sha256": "13b85dd303c95eab9e21ecdb56a649c3d732029b691f365292f73bdf07f81f1c",
+     "words": 76,
+     "payload_bytes": 304,
+     "layout": "conv Q payload 32-bit LE words: bias_adj int32[OC_pad] @0, M_pos int16[OC_pad] @4*OC_pad, tail 16 B {zp_out, zp_in, leaky_en, SHIFT, 12'b0} @6*OC_pad"
+    }
+   }
+  },
+  {
+   "op_id": 2,
+   "kind": "dwconv",
+   "kind_desc": "depthwise conv",
+   "layer_idx": 2,
+   "flags": 3,
+   "label": "dwconv3x3",
+   "tensor_in": {
+    "h": 64,
+    "w": 64,
+    "c": 8,
+    "note": "real channels only (no channel padding)",
+    "elements": 32768,
+    "pixel_bytes": 8,
+    "pixel_stride_pad8": 8
+   },
+   "tensor_out": {
+    "h": 64,
+    "w": 64,
+    "c": 8,
+    "note": "real channels only (no channel padding)",
+    "elements": 32768,
+    "pixel_bytes": 8,
+    "pixel_stride_pad8": 8
+   },
+   "files": {
+    "in": {
+     "file": "l2_in.hex",
+     "bytes": 98304,
+     "lines": 32768,
+     "sha256": "f0b00ab0e64578142e1b28a6fc340618a45ec949f3d1b6b2b77bdfdaa233a991"
+    },
+    "out": {
+     "file": "l2_out.hex",
+     "bytes": 98304,
+     "lines": 32768,
+     "sha256": "61806f49ef2bb2b3017bac6ffffce661e3bc657951d5e46ac49e48e4ab055dd9"
+    },
+    "w": {
+     "file": "l2_w.hex",
+     "bytes": 216,
+     "lines": 72,
+     "sha256": "d034fb9d8c60df4a20457e37d6a10e1b76278ef3bb7fe956f1c5af15d997bc07",
+     "elements": 72,
+     "layout": "dw: [tap][OC_pad], tap=k*k index row-major; OC fastest"
+    },
+    "q": {
+     "file": "l2_q.hex",
+     "bytes": 144,
+     "lines": 16,
+     "sha256": "4d461ebe055052be5db9faafa0174ddbf722467057634af88aa3f4dfcc2bf2e6",
+     "words": 16,
+     "payload_bytes": 64,
+     "layout": "conv Q payload 32-bit LE words: bias_adj int32[OC_pad] @0, M_pos int16[OC_pad] @4*OC_pad, tail 16 B {zp_out, zp_in, leaky_en, SHIFT, 12'b0} @6*OC_pad"
+    }
+   }
+  },
+  {
+   "op_id": 99,
+   "kind": "dwconv",
+   "kind_desc": "depthwise conv",
+   "layer_idx": 116,
+   "flags": 3,
+   "label": "dwconv5x5",
+   "tensor_in": {
+    "h": 4,
+    "w": 4,
+    "c": 96,
+    "note": "real channels only (no channel padding)",
+    "elements": 1536,
+    "pixel_bytes": 96,
+    "pixel_stride_pad8": 96
+   },
+   "tensor_out": {
+    "h": 4,
+    "w": 4,
+    "c": 96,
+    "note": "real channels only (no channel padding)",
+    "elements": 1536,
+    "pixel_bytes": 96,
+    "pixel_stride_pad8": 96
+   },
+   "files": {
+    "in": {
+     "file": "l99_in.hex",
+     "bytes": 4608,
+     "lines": 1536,
+     "sha256": "c6cff92dec309f5abb178a225fec74c0c76eb5244e001dd758b26f562981e3c2"
+    },
+    "out": {
+     "file": "l99_out.hex",
+     "bytes": 4608,
+     "lines": 1536,
+     "sha256": "b19dbec6f2e401a3e53c0f8d9cf1bb234973b34b5bfd43291988719e96d91578"
+    },
+    "w": {
+     "file": "l99_w.hex",
+     "bytes": 7200,
+     "lines": 2400,
+     "sha256": "77b25b5719f2a5dd51bef426d38eb116efcbc535f5af0de0a588420e3175195c",
+     "elements": 2400,
+     "layout": "dw: [tap][OC_pad], tap=k*k index row-major; OC fastest"
+    },
+    "q": {
+     "file": "l99_q.hex",
+     "bytes": 1332,
+     "lines": 148,
+     "sha256": "2b5db161041860a7d2b81cb54687ce0e72b54bd593e56998e54f00511f931cad",
+     "words": 148,
+     "payload_bytes": 592,
+     "layout": "conv Q payload 32-bit LE words: bias_adj int32[OC_pad] @0, M_pos int16[OC_pad] @4*OC_pad, tail 16 B {zp_out, zp_in, leaky_en, SHIFT, 12'b0} @6*OC_pad"
+    }
+   }
+  },
+  {
+   "op_id": 93,
+   "kind": "pool",
+   "kind_desc": "maxpool",
+   "layer_idx": 113,
+   "flags": 0,
+   "label": "pool9",
+   "tensor_in": {
+    "h": 4,
+    "w": 4,
+    "c": 48,
+    "note": "real channels only (no channel padding)",
+    "elements": 768,
+    "pixel_bytes": 48,
+    "pixel_stride_pad8": 48
+   },
+   "tensor_out": {
+    "h": 4,
+    "w": 4,
+    "c": 48,
+    "note": "real channels only (no channel padding)",
+    "elements": 768,
+    "pixel_bytes": 48,
+    "pixel_stride_pad8": 48
+   },
+   "files": {
+    "in": {
+     "file": "l93_in.hex",
+     "bytes": 2304,
+     "lines": 768,
+     "sha256": "05be464dcf7bc9906ac83ee1cf1570e0ed9f5c8d3830504b33ad28cad355e744"
+    },
+    "out": {
+     "file": "l93_out.hex",
+     "bytes": 2304,
+     "lines": 768,
+     "sha256": "29d90d0543f984f2a0a525ce120476c3be964bf8a281b69acd25c3478636562e"
+    }
+   }
+  },
+  {
+   "op_id": 7,
+   "kind": "add",
+   "kind_desc": "residual add, ADD_R (per-tensor source requant)",
+   "layer_idx": 8,
+   "flags": 8,
+   "label": "add_ADD_R",
+   "tensor_in": {
+    "h": 64,
+    "w": 64,
+    "c": 4,
+    "note": "source branch tensor, real channels",
+    "elements": 16384,
+    "pixel_bytes": 4,
+    "pixel_stride_pad8": 8
+   },
+   "tensor_out": {
+    "h": 64,
+    "w": 64,
+    "c": 4,
+    "note": "in-place accumulated dst tensor (ADD_R)",
+    "elements": 16384,
+    "pixel_bytes": 4,
+    "pixel_stride_pad8": 8
+   },
+   "files": {
+    "in": {
+     "file": "l7_in.hex",
+     "bytes": 49152,
+     "lines": 16384,
+     "sha256": "ed5f1190c3218e62e0a957cdbfd0fc5ba4090e6cc22ae645a477bb177dbf9086"
+    },
+    "out": {
+     "file": "l7_out.hex",
+     "bytes": 49152,
+     "lines": 16384,
+     "sha256": "9e63466d2d8bf73719d512567b37644290dfa5b9da252833743b752a1a57e47f"
+    },
+    "q": {
+     "file": "l7_q.hex",
+     "bytes": 36,
+     "lines": 4,
+     "sha256": "41143579a0067c06690fc9b43d27a0ec81ef1c284fbbbcf20790ba45d8259fff",
+     "words": 4,
+     "payload_bytes": 16,
+     "layout": "ADD_R Q block 16 B as 4 u32 LE words: [0]=zp_s [1]=zp_d [2:3]=R u16 LE [4]=KADD [5:15]=0"
+    }
+   },
+   "add_params": {
+    "r_scale": 29651,
+    "k_add": 15,
+    "zp_s": -52,
+    "zp_d": -21
+   }
+  },
+  {
+   "op_id": 103,
+   "kind": "conv",
+   "kind_desc": "2D conv (PACKED3 if flags bit2)",
+   "layer_idx": 120,
+   "flags": 0,
+   "label": "head_conv255",
+   "tensor_in": {
+    "h": 4,
+    "w": 4,
+    "c": 96,
+    "note": "real channels only (no channel padding)",
+    "elements": 1536,
+    "pixel_bytes": 96,
+    "pixel_stride_pad8": 96
+   },
+   "tensor_out": {
+    "h": 4,
+    "w": 4,
+    "c": 255,
+    "note": "real channels only (no channel padding)",
+    "elements": 4080,
+    "pixel_bytes": 255,
+    "pixel_stride_pad8": 256
+   },
+   "files": {
+    "in": {
+     "file": "l103_in.hex",
+     "bytes": 4608,
+     "lines": 1536,
+     "sha256": "16869fc3da058ea7968a3f101ea8e69f073e31065ed88be818433974cbbd113e"
+    },
+    "out": {
+     "file": "l103_out.hex",
+     "bytes": 12240,
+     "lines": 4080,
+     "sha256": "ebd9f37b22895292cca36e57f3bd56ada0d26d94e27a047e89c1d514b8a5394a"
+    },
+    "w": {
+     "file": "l103_w.hex",
+     "bytes": 73728,
+     "lines": 24576,
+     "sha256": "36727701512322eba5f23085dfb1120288accd1a4f6f55990ddebe7dc500d25d",
+     "elements": 24576,
+     "layout": "dense: [tap][IC_pad][OC_pad], tap=k*k row-major; IC then OC, OC fastest; zero-padded IC/OC lanes"
+    },
+    "q": {
+     "file": "l103_q.hex",
+     "bytes": 3492,
+     "lines": 388,
+     "sha256": "a5b6445648b35395f890681d5bb9b5125621541f451100cfab563f6f31ca863e",
+     "words": 388,
+     "payload_bytes": 1552,
+     "layout": "conv Q payload 32-bit LE words: bias_adj int32[OC_pad] @0, M_pos int16[OC_pad] @4*OC_pad, tail 16 B {zp_out, zp_in, leaky_en, SHIFT, 12'b0} @6*OC_pad"
+    }
+   }
+  },
+  {
+   "op_id": 104,
+   "kind": "upsample",
+   "kind_desc": "2x nearest-neighbour upsample",
+   "layer_idx": 123,
+   "flags": 0,
+   "label": "upsample",
+   "tensor_in": {
+    "h": 4,
+    "w": 4,
+    "c": 96,
+    "note": "real channels only (no channel padding)",
+    "elements": 1536,
+    "pixel_bytes": 96,
+    "pixel_stride_pad8": 96
+   },
+   "tensor_out": {
+    "h": 8,
+    "w": 8,
+    "c": 96,
+    "note": "real channels only (no channel padding)",
+    "elements": 6144,
+    "pixel_bytes": 96,
+    "pixel_stride_pad8": 96
+   },
+   "files": {
+    "in": {
+     "file": "l104_in.hex",
+     "bytes": 4608,
+     "lines": 1536,
+     "sha256": "c6cff92dec309f5abb178a225fec74c0c76eb5244e001dd758b26f562981e3c2"
+    },
+    "out": {
+     "file": "l104_out.hex",
+     "bytes": 18432,
+     "lines": 6144,
+     "sha256": "bee4db512cfce4ecc91d2913a10c7d9865d56f5fbfa3e24dd8ea04112b52b6af"
+    }
+   }
+  }
+ ]
+}

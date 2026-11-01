@@ -66,9 +66,19 @@ module nn_seq
   wire last_entry = (NN_ROM_LEN == 0) || (idx == 8'(NN_ROM_LEN - 1));
 
   // ROM 同步读 (LUTRAM/distributed ROM)
+  // [2026-11-01 修复] 原来直接 `rom <= NN_ROM[idx]` 读 package 常量数组: 综合必须把
+  //   "112:1 x 200-bit" 展开成纯组合 mux 树 (~7.6K LUT), 导致整机综合在
+  //   "Applying XDC Timing Constraints / Timing Optimization" 卡 40+ 分钟, 且白吃 LUT。
+  // 改成"常量初始化 + 同步读"的数组: Vivado 推断成分布式 ROM (LUTRAM, ~400-500 LUT),
+  //   功能/时序(1 拍)完全不变, tb_nn_seq 的期望值仍来自 nn_rom_pkg::NN_ROM。
+  (* rom_style = "distributed" *)
+  logic [199:0] rom_mem [0:NN_ROM_DEPTH-1];
+  initial begin
+    for (int i = 0; i < NN_ROM_DEPTH; i++) rom_mem[i] = NN_ROM[i];
+  end
   always_ff @(posedge clk) begin
     if (rst) rom <= '0;
-    else     rom <= NN_ROM[idx];
+    else     rom <= rom_mem[idx];
   end
 
   // kind -> (op, flags); 其它字段由 nn_rom_to_desc 填

@@ -120,6 +120,11 @@
 
 - 器件 135 tiles；当前整机 = nn_mem 112（W80 + A/B32 + Q0）+ 核心 ~9.5 ≈ **121.5/135**（R3 实测）。
 - ⇒ **tile 缓存可用 ≈ 13.5 tiles ≈ 60.75KB**（若 MIG/互联不吃 BRAM；见 §6 风险）。
+- **⚠ 显性风险（Lead 要求保持可见）**：推荐 tile cache 设计 = **12.4 tiles（56KB）**，
+  整机余量只剩 **~1.1 tiles（~5KB）**。**若后续上 MIG（或其它 IP 吃 BRAM/LUT），必须重算 BRAM 预算**：
+  MIG 7-series 控制器本身通常不吃 BRAM（但 AXI 互联/FIFO/调试可能吃），且 MIG 会吃 LUT/MMCM；
+  一旦 BRAM 不够，tile cache 需降级到 §4.2 的方案 2（8.9 tiles，B 选择更保守，流量 18.5MB/帧仍带宽安全）
+  或进一步缩到单缓冲（牺牲 DMA/计算 overlap）。**结论：tile cache 尺寸要在"MIG 资源实测后"复核，不能先定死。**
 - C128 的 A/B 窗口（96KB+32KB，物理 32 tiles）在 P3 模式下即为"片上直通模式"保留兼容；
   P3 模式复用同一块 A/B 物理阵列作为 tile cache（见 §4.4 方案 B），或新增独立 tilecache 模块（方案 A）。
 
@@ -203,33 +208,43 @@
 
 ## 5. 125MHz 时序评估（act 读/写地址寄存）
 
+> **2026-11-01 15:4x 修正（实测发现，重要）**：Lead 最初判断"最差路径是 act_mem **写**地址"，
+> 但方案 A（写命令打拍）实测后最差路径的源寄存器仍是引擎 `x_ld`，而不是新加的 `npu_wr_idx`
+> ⇒ `ADDRBWRADDR` 是 A/B 阵列的**读地址口**（Vivado 把 read 映射到 port B）。因此：
+> **方案 A 单独对该路径无效**（pipe@8ns WNS 只 +1.299ns，data 6.298→6.136ns）；
+> 真正对症的是 **方案 B：act 读地址打一拍**（读时延 1→2，+2.2% 周期；CPU 窗口读也 +1 拍），
+> 或 **方案 C：引擎侧预寄存 a_addr**（周期可 0）。详见 `proto/mem/ACTWR-PIPE.md`（含契约变更与
+> 三个变体的功能自证 PASS 记录）。
+
 ### 5.1 现状证据
 
 - T-accel 的 engine+mem OOC（`proto/engine/synth100_timing.rpt`，`create_clock 10ns`）：
   **WNS +3.137ns**，worst path：
   `u_eng/x_ld_reg[1] → u_mem/act_mem_reg_0_0/ADDRBWRADDR[10]`，
   data 6.298ns（logic 1.856 / **route 4.442 = 70.5%**），9 级逻辑（CARRY4×2 + LUT3×2 + LUT4 + LUT6×4）。
-  即：**引擎激活窗口/padding 选择逻辑 → nn_mem act_mem 的 A/B 阵列地址**，与 Lead 观察一致。
+  源是引擎 load/pad 列逻辑 ⇒ 该端口实为 **act 阵列读地址（a_addr）** 路径。
 - 同一 RTL 加 8ns 约束后（`synth125_timing.rpt`）最差路径变为 ADD_R 的
   `src_word_q → ad_mul`（+0.031ns）——说明在**综合网表**里 act_mem 路径在 8ns 下还有 ~1.1ns 余量；
-  但**全实现**里该路径 route 占 70%，布线后会成为最差路径（Lead 实测），所以要先治它。
+  但**全实现**里该路径 route 占 70%，布线后会成为最差路径，所以要先治它。
 - 另一条相关：nn_mem 单独 OOC @125MHz **WNS +3.846ns**（§6）⇒ 问题在"引擎→mem 的跨模块长组合路径 +
   布线"，不在 mem 内部寄存器（mem 内部 reg→reg 余量充足）。
 
-### 5.2 方案与代价
+### 5.2 方案与代价（实测修正后）
 
-| 方案 | 做法 | 合同/功能影响 | 周期代价 | 预期收益 |
+| 方案 | 做法 | 合同/功能影响 | 周期代价 | 实测/预期收益 |
 |---|---|---|---|---|
-| **A. act 写命令寄存（推荐先做）** | nn_mem 内对 **NPU 侧** `b_sel/b_we/b_addr/b_wdata/b_wstrb` 打一拍再进 act_mem（CPU 写路径不打拍，保持 CPU 窗口 1 拍语义） | **b 写延迟 1→2 拍**（只写不读、fire-and-forget；引擎 done 后 ≥NEXT+BASE 拍才可能读同地址，天然安全） | **0 拍**（引擎不等待写完成） | 把 9 级/70% route 链从 write-address setup 路径上摘掉；新 worst 回到引擎内部（OOC 约 4.5ns 级）⇒ @8ns 余量估 **+2.5~3ns**，125MHz 变稳，150MHz 可试 |
-| B. act 读地址寄存 | nn_mem 内对 `a_*` 读地址打一拍（读延迟 1→2） | **a 读延迟 1→2 拍**，引擎 LD 相位 +1 拍/块 | **+1 拍/块**：C128 +25,200 拍 = **+2.2%**（1.167M → 1.193M）；C320 同样 +2.2%（约 +1.3ms@125MHz） | 摘掉读地址长链；与 A 组合后可再降一截 |
-| C. 引擎侧预寄存 | 在 S_NEXT 预计算 `a_addr`（把 x_ld/pad 逻辑的最后一拍提前），或把 `ld_inb/ld_fill` 的 pad 判断寄存 | 无 mem 合同变化 | 可能 0（用现成空拍）或 +1 拍/band | 效果同 A 但落在引擎（T-accel 域）；适合作为 A 之后的补充 |
-| D. 只加 pipeline 寄存器（retiming） | 在模块边界插 1 级（等同 A+B 的组合） | 读写延迟都 +1 | 读侧 +2.2% | 最激进，留给 150MHz |
+| A. NPU act **写**命令寄存 | nn_mem 内对 NPU 侧 `b_*` 打一拍（CPU 写不打拍） | b 写延迟 1→2 拍 | **0 拍** | **实测无效**：pipe@10ns +3.299 / @8ns +1.299；最差路径不变（源仍是 x_ld）。仅作 A+B 组合项 |
+| **B. act 读地址寄存（对症）** | nn_mem 内对 `act_rd_idx` 打一拍（NPU 与 CPU 共用读口） | **a 读 1→2 拍**；**CPU 窗口读也 1→2 拍** | **+1 拍/块**：C128 +25,200 拍 = **+2.2%**；C320 同样 2.2% | 预期 @8ns **+3.2～+4.1ns**（收益 +1.9～+2.8ns），@150MHz 有机会；功能自证已 PASS（TB a/cpu 读 +1 拍） |
+| **C. 引擎侧预寄存 a_addr** | 在 S_NEXT 提前算好 a_addr，或把 pad/load 选择寄存 | 无 mem 合同变化（CPU 窗口保持 1 拍） | 可能 0（用现成空拍） | 效果同 B 且无 CPU 读 2 拍副作用；属于 T-accel 域改动（推荐与 B 二选一） |
+| A+B 组合 | A+B 同时 | 写 2 拍 + 读 2 拍 | 读侧 +2.2% | 预期与 B 接近（A 增量 <0.2ns），留作 150MHz 余量 |
 
-- **建议顺序**：**A（写命令寄存，零周期）→ 复测 125MHz 全实现 → 若仍差 ≤0.5ns 再做 B/C（+2.2% 周期）**。
-  A 的实现要注意：只寄存 NPU 写路径（CPU 窗口写保持 1 拍，避免改 CPU/SoC 语义）；写数据宽度 128b+16 strobe，
-  FF 约 +170；仿真/TB 需把"b 写后读同地址"的等待从 1 拍改 2 拍（tb_nn_mem 的 b_write→a_read 序列 +1 拍）。
-- 合同文档更新项：SPEC §3 的 b 写时延、nn_mem 端口注释、tb_nn_mem、engine 的 done/next-op 时序假设
-  （当前 ≥BASE 拍间隔，2 拍写延迟仍安全，需在 engine-report 注明）。
+- **建议顺序（修正）**：先看 125MHz 全实现结果；若差 ≤0.5ns 且 CPU 窗口 2 拍可接受 →
+  **方案 B**（proto 已就绪，功能 PASS，可直接落）；若 CPU 2 拍不可接受 → **方案 C**（T-accel 引擎预寄存）；
+  A 单独不解决问题，作为 B/C 之后的余量手段。
+- 合同文档更新项：SPEC §3 的 **a 读时延（B 时 1→2）**、**b 写时延（A 时 1→2）**、CPU 窗口读时延（B 时 1→2）、
+  tb_nn_mem 等待、engine 的 LD 相位（B 时 +1 拍/块）与 done/next-op 间隔（A 时写 2 拍仍安全）。
+- 已就绪的 proto 材料：`nn_mem_pipe/piperd/pipeab.sv` + 对应 TB（PASS）+ OOC wrapper/tcl/bat +
+  `ACTWR-PIPE.md`；三档（100/125/150MHz）× 四变体的 OOC 对比等 Lead 的"125 全实现跑完"信号后执行。
 
 ---
 

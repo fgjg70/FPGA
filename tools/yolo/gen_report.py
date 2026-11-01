@@ -753,6 +753,45 @@ def main():
     A("精度复核（引用冻结产物，未重跑流水线）：320 golden **mismatch=0**（112 ops），"
       "端到端 **73.1%**（38/52），mean IoU **0.843** —— 见 §11.5 与 `data/eval_320.json`。")
     A("")
+
+    A("### 11.9 代表层 replay 向量命名口径（`sim/prog/yolo/vector_manifest.json`）")
+    A("")
+    A("`tools/yolo/gen_vector_manifest.py` 生成机器可读清单（sha256 前缀 `3eb74844…`）："
+      "每个 `l{id}_*.hex` 的 `id` = **plan.json 的 ops 下标（op_id）**，不是 darknet layer_idx；"
+      "张量形状/元素数/文件行数逐条核对（不一致会直接 assert）。")
+    A("")
+    A("**文件格式（t-accel 反馈的 98,304 B vs 32,768 B 差异来源）**：`*_in/_out/_w.hex` 是"
+      "**每行 1 个 int8（2 位 hex + LF，3 B/元素）**，故文件字节数 = 3×元素数；"
+      "`*_q.hex` 每行 1 个 32-bit LE word（8 位 hex + LF，9 B/word）。")
+    A("")
+    A("| op_id | layer | kind | in (h,w,c) | out (h,w,c) | 文件 |")
+    A("|---:|---:|---|---|---|---|")
+    A("| 0 | 0 | conv+PACKED3 | 128×128×3（packed3）| 64×64×8 | l0_in/out/w/q |")
+    A("| 2 | 2 | dwconv | 64×64×8 | 64×64×8 | l2_in/out/w/q |")
+    A("| 7 | 8 | add (ADD_R) | 64×64×4 | 64×64×4（原地）| l7_in/out/q |")
+    A("| 70 | 83 | conv1x1 | 4×4×136 | 4×4×48 | l70_in/out/w/q |")
+    A("| 93 | 113 | pool9 | 4×4×48 | 4×4×48 | l93_in/out |")
+    A("| 94 | 114 | copy | 4×4×48（源切片）| 4×4×48（目标切片）| l94_in/out |")
+    A("| 99 | 116 | dwconv5x5 | 4×4×96 | 4×4×96 | l99_in/out/w/q |")
+    A("| 103 | 120 | conv (head, oc=255) | 4×4×96 | 4×4×255 | l103_in/out/w/q |")
+    A("| 104 | 123 | upsample | 4×4×96 | 8×8×96 | l104_in/out |")
+    A("")
+    A("- 激活 in/out：只存**真实通道**（紧凑 NHWC 行优先，`index=((y*W)+x)*C+c`）；"
+      "硬件像素 stride 是 `ceil(C/8)*8`，加载进 A/B 时需用 `zp_in` 补齐 padding 通道；"
+      "l0_in 是 **PACKED3**（3 B/像素，输入专用）；copy 的 in/out 只含被拷贝的通道切片。")
+    A("- `l7` = **op7 add L8**（ADD_R，q 为 16 B ADD_R 块）；**不是 layer_idx=7** —— darknet L7 是 dropout，"
+      "dropout 层不产生 op（layer_idx 只出现在 op 的元数据里）。")
+    A("- `l94` = **op94 copy L114**（SPP concat 的第 1 条 copy，4×4×48 切片）；它与 op79 conv L92 的"
+      "输入同形（4×4×48）但**不是同一个 op**，replay op79 需要单独生成该 op 的向量。")
+    A("- `l2` = op2 dwconv L2：32,768 个元素 → 文件 98,304 B（×3）。")
+    A("- `*_w.hex` 为 CONTRACT §6 权重布局：dense = `[tap][IC_pad][OC_pad]`（OC 最快），"
+      "dw = `[tap][OC_pad]`；`*_q.hex` 为 Q payload 的 32-bit LE 字：conv/dw = "
+      "`bias_adj int32[OC_pad] @0, M_pos int16[OC_pad] @4*OC_pad, tail 16 B @6*OC_pad`；"
+      "add = 16 B v0.7 布局 `[0]=zp_s [1]=zp_d [2:3]=R u16 LE [4]=KADD [5:15]=0`。")
+    A("- v0.5 旧编号的 `l96/l100/l101_*`（对应现 op99/103/104，内容逐字节相同）已删除；"
+      "**当前可用全尺寸 replay 集合 = 上表 9 个 op**。")
+    A("- `sim/prog/yolo320/` **没有** l*.hex（只放 plan/w/q/rom/arena_map，避免动冻结产物）。")
+    A("")
     A("---")
     A("")
     A("*报告由 `tools/yolo/gen_report.py` 自动生成；所有数字均可由 §1 命令重放。*")

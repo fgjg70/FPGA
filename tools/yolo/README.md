@@ -22,7 +22,9 @@
 | `golden.py` | **③ 全整数 golden**（独立实现），与 quantize 的向量化整数前向逐位一致（mismatch=0） |
 | `make_vectors.py` | **④ 集成向量**：`plan.json` / `model.json` / `yolo_w.hex` / `yolo_q.hex` / `yolo_wq.hex`(存档) / `checksums.txt` / `l*_*.hex` |
 | `gen_rom_table.py` | **⑤ 微码 ROM 数据源**：plan.json → `nn_rom_table.json`（SPEC §1 字段） |
+| `vector_manifest.json` | 代表层 replay 向量清单：9 个 op 的 `l{op_id}` ↔ plan op_id/kind/layer、in/out 形状与布局、文件格式、w/q 格式 |
 | `gen_arena_map.py` | **P3 模型侧数据**：C320 DDR3 激活 arena 地址/张量表（`sim/prog/yolo320/arena_map.json`）+ conv0 流式 band + 流量/ROM 位宽分析 |
+| `gen_vector_manifest.py` | **代表层 replay 清单**：`sim/prog/yolo/vector_manifest.json`（l{op_id} ↔ plan op / 形状 / 布局 / 文件格式，供 t-accel 生成 vec/ replay）|
 | `evaluate.py` | 端到端 float vs int8 检测框对比（IoU 匹配率） |
 | `analyze_ceiling.py` | 量化方案精度天花板诊断（floor/round/QDQ 理想模型对照） |
 | `apples_to_apples.py` | 同 case/同 seed 的 Round-1（重建）vs Round-2 对照 + cpu_add fp32 回归检查 |
@@ -88,6 +90,7 @@ python tools/yolo/make_vectors.py --hw 320 --outdir sim/prog/yolo320 ^
     --buffer-a 4194304 --buffer-b 4194304 --a-base 0 --b-base 4194304 --no-vectors
 python tools/yolo/gen_rom_table.py --plan sim/prog/yolo320/plan.json --out sim/prog/yolo320/nn_rom_table.json
 python tools/yolo/gen_arena_map.py   # -> sim/prog/yolo320/arena_map.json（P3 arena 表）
+python tools/yolo/gen_vector_manifest.py   # -> sim/prog/yolo/vector_manifest.json
 ```
 
 输出（`sim/prog/yolo/`，C320 在 `sim/prog/yolo320/`）：
