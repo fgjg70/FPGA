@@ -316,7 +316,16 @@ module nn_mem
   // Q 区: 64-bit 宽、6144 深 -> 分布式 RAM/ROM (LUTRAM, 0 BRAM)
   //   读: q_addr = 64-bit Q 字索引; 写: 只给 dbg 装载 (SoC 恒 0 -> ROM)
   // ==========================================================================
+  // [2026-11-01 build fix] 仿真用 LUTRAM/distributed ROM (支持 dbg 预装, tb_nn_mem/E2E 走这里);
+  // **综合版改用 BRAM ROM**: 48KB 常量 ROM 若落 LUT, Vivado 会展开成
+  // 5.2M 单元的常量网络 (实测 RTL partition 5,242,586 instances -> cross-boundary 32min +
+  // timing optimization 68min, 完全不可接受)。BRAM ROM 的初值是存储内容, 不参与组合优化。
+  // 代价: 整机 BRAM 112 -> 124 tiles (+核心 ~9.5 => 133.5/135, 仍在预算内)。
+`ifdef SYNTHESIS
+  (* rom_style = "block" *)
+`else
   (* ram_style = "distributed" *)
+`endif
   logic [63:0] q_mem [0:Q64-1];
 
   logic [63:0] q_rd;
