@@ -142,3 +142,39 @@ results\ai-accel\proto\mem\run_synth_pipe.bat full
 3. **A 的写延迟 2 拍**对 SoC 无影响（引擎 fire-and-forget；CPU 写不打拍），但 tb_nn_mem 需 +1 拍；
    `tb_sw_nn_yolo` 的 op 间间隔远大于 2 拍，无需改。
 4. 本文件所有数字均为 **proto/OOC 综合/仿真**，不是全实现后实测；最终以 Lead 的 125/150MHz 全实现为准。
+
+---
+
+## 8. E1（引擎侧预寄存，Lead 选的优先路径）与最终 OOC 计划
+
+Lead 2026-11-01 15:5x 决定：**优先做引擎侧 E1**（`a_addr` 预寄存器，周期 0，设计见
+`results/ai-accel/proto/engine/E-aaddr-patch-design.md`）；本文件的 B（mem 读打拍）**暂时不动**，
+只在 E1 不够时叠加。为此已准备好最终 OOC 对比设施（待机器空闲时执行）：
+
+- **E1 前引擎快照**：`proto/mem/engine_pre_e1.sv`（根目录引擎 2026-11-01 14:33，52,828B，
+  sha256 `820AA34E…E67EBC`；当前根引擎尚未含 E1，无 `a_addr_q`/`a_addr_nxt`）。
+- **E1 后引擎**：根目录 `nn_conv_engine.sv`（E1 落地后由 T-accel/Lead 覆盖；本目录只读取、不复制）。
+- **OOC 脚本**：
+  ```bat
+  rem 默认 4 配置: {pre,post} x {125MHz(8ns), 142.86MHz(7ns)}
+  results\ai-accel\proto\mem\run_synth_final.bat
+  rem 追加 {pre,post} x 131.25MHz(7.619ns) -> 共 6 个
+  results\ai-accel\proto\mem\run_synth_final.bat 131
+  rem 若需要 E1 + 方案B 组合: 直接调 tcl 第 4 参数 B
+  vivado -mode batch -source ...\synth_final.tcl -tclargs post 7.000 post_142_B B
+  ```
+  产物：`proto/mem/reports_final/<prefix>_{util,timing,paths}.rpt`。
+- **验收判据（来自 E1 设计文档）**：E1 后 `@8ns WNS 期望 ≥ +2.5`（E1 前基准约 +1.37），
+  `@7ns 期望 ≥ +1.0`；若达成 → 131.25/142.86/150MHz 全实现候选；若 E1 不够 → 叠加 B（+2.2% 周期）。
+- **功能基线（pre-E1，ModelSim，已跑）**：根引擎 + 根 nn_mem，
+  `vec/ 47/47 PASS + vec_v3extra/ 4/4 PASS, mismatch=0`（日志 `proto/mem/logs_e1/eng_pre_e1_*.log`）；
+  E1 落地后需用同一命令复跑并对比（E1 是纯结构改动，周期/功能应不变）。
+- **E1 验收检查表（落地后按序做）**：
+  1. 功能：根引擎+根 mem 复跑 `tb_nn_engine`（vec 47 + v3extra 4）必须 **PASS/mismatch=0**；
+  2. **周期逐 case 不变**（E1 应是纯结构改动）：`python proto/mem/cmp_engine_cycles.py \
+     logs_e1/eng_pre_e1_vec47.log <e1_new.log>` → 期望 `ENGINE_CYCLES: SAME`（pre-E1 基线 47 case 总 188,393 拍）；
+  3. OOC：`run_synth_final.bat` → @8ns WNS ≥ +2.5、@7ns WNS ≥ +1.0（否则叠加 B 再测）；
+  4. 全实现：Lead 的 125/131.25/142.86MHz 结果为准（nn_seq 已省 ~7K LUT，整机 fmax 可能优于 OOC 预估）。
+- **nn_seq LUT 节省（Lead 2026-11-01 15:56）**：整机 LUT 省 ~7K（112:1×200bit 常量 mux 树 → 分布式 ROM），
+  对本目录的 **engine+mem OOC 无影响**（wrapper 不含 nn_seq），但**整机全实现 fmax 可能高于 OOC 预估**
+  —— 最终以 Lead 的全实现结果为准。

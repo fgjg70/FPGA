@@ -71,7 +71,11 @@ module nn_seq
   //   "Applying XDC Timing Constraints / Timing Optimization" 卡 40+ 分钟, 且白吃 LUT。
   // 改成"常量初始化 + 同步读"的数组: Vivado 推断成分布式 ROM (LUTRAM, ~400-500 LUT),
   //   功能/时序(1 拍)完全不变, tb_nn_seq 的期望值仍来自 nn_rom_pkg::NN_ROM。
-  (* rom_style = "distributed" *)
+  // [2026-11-01 修复 v2] 用 **BRAM ROM** 而不是 LUTROM: 112x200bit 的常量表如果落 LUT,
+  // Vivado 的 "Cross Boundary and Area Optimization" 会逐个寄存器做常量传播/合并,
+  // 整机综合卡 30+ 分钟 (实测 AlternateRoutability 和 Default 指令都卡在同一阶段)。
+  // BRAM ROM 的初值是存储内容、不参与组合优化, 综合秒过; 代价 ~1-2 个 RAMB36。
+  (* rom_style = "block" *)
   logic [199:0] rom_mem [0:NN_ROM_DEPTH-1];
   initial begin
     for (int i = 0; i < NN_ROM_DEPTH; i++) rom_mem[i] = NN_ROM[i];
