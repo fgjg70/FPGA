@@ -252,7 +252,20 @@ CoreMark/MHz 2.7063（交付档 CPU 未受影响）
 - **全量回归 `verify --force` → PASS 16**（12 项原回归 + `tb_sw_nn_demo` / `tb_sw_nn_yolo` / `tb_nn_mem` / `tb_nn_engine` / `tb_nn_seq`）；
 - **112-op 双模 E2E**：`hw_bad=0 / auto_bad=0`，MODE_CPU 与 MODE_AUTO 的 NPU 周期均为 **1,177,320**（双模等价）；
   @100MHz ⇒ 11.77ms/帧（128×128 输入，理论 85fps 上限）；
-- 交付档（无 `NN_EN`）功能回归包含在 PASS 16 内；综合资源 parity 检查见下一节（进行中）。
+- 交付档（无 `NN_EN`）功能回归包含在 PASS 16 内。
+
+### 9.5.1 交付档 parity 实测（**逐项不变，已复现**）
+
+用交付档合法配方 `--no-lc --fanout-limit 128 --pblock-range off --contain-routing --place-directive AltSpreadLogic_high` 在**当前分支**重建（无 `NN_EN`）：
+
+```
+BUILD_TIMING=PASS  WNS +0.007ns  WHS +0.038ns  fmax 150.2MHz
+LUT 3098 / FF 1447 / BRAM 9 / DSP 8
+CoreMark/MHz 2.7063 (369,506 ticks)
+```
+**与历史交付 invariant（LUT 3098 / FF 1447 / BRAM 9 / DSP 8 / fmax 150.2 / WNS +0.007）逐项相同** ⇒ AI 改动未改变交付档网表。
+
+交叉验证：用 **AI 分支之前的基线提交**（`d592067`，2026-10-24）在干净 worktree 里按同样配方重建，得到与当前分支**完全相同**的 2892/1476/9/8（不加 R58 合法配方时）/ -0.382（150MHz）；加合法配方后两边均回到 3098/1447/+0.007 ⇒ 差异只来自构建配方，不来自 AI RTL。
 
 ### 9.6 板卡部署状态
 
