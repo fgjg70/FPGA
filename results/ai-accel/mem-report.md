@@ -195,6 +195,24 @@ FF 13,779、**WNS +0.807 ns MET**（DSP 200 待压）。日志：`proto/engine/v
 ⇒ 综合网表粗估 `fmax ≈ 1/(10-5.846) ≈ 241MHz`。仅说明 W 双读口/地址译码/
 Q 分布式 ROM 的组合逻辑不是 100MHz 瓶颈；真实 fmax 以 Lead 的 OOC/impl 数据为准。
 
+### 3.6 nn_mem 单独 OOC @125MHz（8.0ns 约束，R4 交付）
+
+一键复现：`results/ai-accel/proto/mem/run_synth_125.bat`（同一个 tcl 的第 8 个参数传 8.000）。
+产物：`%TEMP%\nn_mem_v07_synth\v07_125_util.rpt` / `v07_125_timing.rpt`。
+
+| 指标 | 数值 |
+|---|---|
+| WNS @8.000ns | **+3.846 ns（MET，0 failing endpoints）** |
+| Block RAM | **112 tiles**（RAMB36 112 / RAMB18 0：W80 + A/B32 + Q0） |
+| Slice LUTs | 7,186（Q ROM ≈6,981 + 少量 glue） |
+| Slice Registers | 1,260（`u_dut` 内 85） |
+| DSP | 0 |
+| 最差路径 | `u_dut/act_mem_reg_4_0/CLKBWRCLK → probe_reg[0]/D`（取证顶层观测寄存器，3 级/4.016ns）——**不是 mem 内部 reg→reg** |
+
+结论：mem 自身在 125MHz 有大量余量；整机 125MHz 的瓶颈在引擎内部与**引擎↔mem 的跨模块
+act 地址路径**。后者已在 `P3-DDR3-TILECACHE.md` §5 给出"NPU act 写命令在 nn_mem 侧打一拍"
+（写延迟 1→2，引擎周期 0 成本）的方案与影响面。
+
 ---
 
 ## 4. 仿真自检（ModelSim SE-64 2020.4）

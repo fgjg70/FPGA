@@ -20,6 +20,8 @@ set wq_c       [string map {\\ /} [lindex $argv 3]]
 set wq_d       [string map {\\ /} [lindex $argv 4]]
 set q_packed   [string map {\\ /} [lindex $argv 5]]
 set out_prefix [string map {\\ /} [lindex $argv 6]]
+set period    10.000
+if {[llength $argv] >= 8} { set period [lindex $argv 7] }
 set part       "xc7a100tfgg484-2"
 
 puts "SYNTH_CFG top=$top part=$part"
@@ -28,7 +30,7 @@ puts "SYNTH_CFG w_b=$wq_b"
 puts "SYNTH_CFG w_c=$wq_c"
 puts "SYNTH_CFG w_d=$wq_d"
 puts "SYNTH_CFG q=$q_packed"
-puts "SYNTH_CFG out=$out_prefix repo=$repo"
+puts "SYNTH_CFG out=$out_prefix repo=$repo period=$period"
 
 read_verilog -sv [file join $repo "nn_pkg.sv"]
 read_verilog -sv [file join $repo "nn_mem.sv"]
@@ -43,7 +45,7 @@ set set_defs [list \
 synth_design -top $top -part $part -verilog_define $set_defs
 
 # 100 MHz (v0.7 ???????????????; AI ?????????????????????) -- ??????????????????????????????
-create_clock -name sys_clk -period 10.000 [get_ports clk]
+create_clock -name sys_clk -period $period [get_ports clk]
 
 report_utilization -file "${out_prefix}_util.rpt"
 if {[catch {report_utilization -hierarchical -file "${out_prefix}_util_hier.rpt"} hier_err]} {

@@ -1,0 +1,5393 @@
+{
+ "format": "c320-ddr3-arena-map-v1",
+ "source_plan": "sim/prog/yolo320/plan.json",
+ "plan_sha256_note": "plan is frozen (sha256 71745e5fd46e2770); see plan.json",
+ "input_hw": [
+  320,
+  320
+ ],
+ "alignment_B": 16,
+ "arena_base": 16777216,
+ "arena_reserved_bytes": 2097152,
+ "arena_usage": {
+  "start": 16777216,
+  "end": 17596416,
+  "used_bytes": 819200,
+  "reserved_bytes": 2097152,
+  "headroom_x": 2.56
+ },
+ "arena_layout": "single flat DDR3 activation arena at DDR3 base 0x0100_0000, 16-byte aligned; static interval-graph packing (tensors sorted by size desc, lowest byte-disjoint offset; lifetimes [def_op,last_use] never overlap); arena base = 0 in this map",
+ "summary": {
+  "num_ops": 112,
+  "unique_tensor_bytes": 7077600,
+  "no_reuse_bytes": 7077600,
+  "peak_concurrent_bytes": 819200,
+  "min_arena_bytes": 819200,
+  "min_arena_bytes_16B_aligned": 819200,
+  "min_arena_8B_words": 102400,
+  "num_tensors": 91,
+  "per_op_double_buffer_bytes": 15246400,
+  "traffic_read_bytes_per_frame": 7978400,
+  "traffic_write_bytes_per_frame": 7268000,
+  "traffic_total_bytes_per_frame": 15246400,
+  "traffic_total_MB_per_frame": 15.246,
+  "tiles_total_row_band8": 1854,
+  "max_tiles_per_op": {
+   "op": 111,
+   "n_tiles": 48
+  },
+  "max_in_band_bytes": {
+   "op": 9,
+   "bytes": 65280
+  },
+  "max_out_band_bytes": {
+   "op": 111,
+   "bytes": 40960
+  }
+ },
+ "rom_width": {
+  "decision": "21-bit BYTE address (Lead 2026-11-01)",
+  "current_nn_rom_t_src_dst_bits": 19,
+  "required_bits_byte_addressed": 21,
+  "arena_bytes": 819200,
+  "arena_base": 16777216,
+  "why": {
+   "19b_byte": 524288,
+   "20b_byte": 1048576,
+   "21b_byte": 2097152,
+   "note": "arena 819,200 B: 19 b byte (512 KB) not enough; 20 b (1 MB) has no headroom; 21 b (2 MB) = 2.4x headroom, and the reserved DDR3 window is 2 MB (0x0100_0000..0x011F_FFFF)"
+  },
+  "nn_rom_t_impact": {
+   "entry_bits": "200 -> 208 (src/dst 19 -> 21 each)",
+   "lutram_delta_bytes": 128,
+   "note": "P3 kickoff: Lead updates nn_pkg.sv + tools/nn_gen_rom.py and regenerates both C128/C320 ROMs; C128 values (<=0x7FFFF) are unaffected by the wider field"
+  },
+  "tile_loop_vs_flat_entries": {
+   "flat_entry_per_tile": 1854,
+   "entries_per_op_plus_loops": 112,
+   "note": "1,854 tiles > ROM depth 128 -> keep one ROM entry per op (112) + inner row-band/OC-tile/IC-block loops; tile counts are loop trip counts (see ops[].tile_est)"
+  }
+ },
+ "conv0_streaming": {
+  "input_tensor": "input_packed3",
+  "layout": "PACKED3 (3 bytes/pixel, no C8 padding)",
+  "input_bytes": 307200,
+  "input_arena_off": 16777216,
+  "tensor_hw": [
+   320,
+   320
+  ],
+  "bytes_per_pixel": 3,
+  "bytes_per_row": 960,
+  "conv0": {
+   "k": 3,
+   "stride": 2,
+   "pad": 1,
+   "out_hw": [
+    160,
+    160
+   ],
+   "oc": 8
+  },
+  "row_band_rows": 8,
+  "num_bands": 20,
+  "scan_order": "output rows top->bottom; inside a band: 3 k-taps x 8 pixels, PACKED3 address = y*960 + x*3 + c (c<3), lanes 3..7 = zp_in",
+  "distinct_input_bytes": 307200,
+  "loaded_bytes_with_halo": 325440,
+  "halo_overhead_bytes": 18240,
+  "bands": [
+   {
+    "band": 0,
+    "out_rows": [
+     0,
+     8
+    ],
+    "in_rows": [
+     -1,
+     15
+    ],
+    "in_rows_clipped": [
+     0,
+     15
+    ],
+    "in_byte_range": [
+     16777216,
+     16792576
+    ],
+    "bytes": 15360,
+    "halo_top": 1,
+    "halo_bottom": 0,
+    "reused_rows_from_prev_band": 0
+   },
+   {
+    "band": 1,
+    "out_rows": [
+     8,
+     16
+    ],
+    "in_rows": [
+     15,
+     31
+    ],
+    "in_rows_clipped": [
+     15,
+     31
+    ],
+    "in_byte_range": [
+     16791616,
+     16807936
+    ],
+    "bytes": 16320,
+    "halo_top": 0,
+    "halo_bottom": 0,
+    "reused_rows_from_prev_band": 2
+   },
+   {
+    "band": 2,
+    "out_rows": [
+     16,
+     24
+    ],
+    "in_rows": [
+     31,
+     47
+    ],
+    "in_rows_clipped": [
+     31,
+     47
+    ],
+    "in_byte_range": [
+     16806976,
+     16823296
+    ],
+    "bytes": 16320,
+    "halo_top": 0,
+    "halo_bottom": 0,
+    "reused_rows_from_prev_band": 2
+   },
+   {
+    "band": 3,
+    "out_rows": [
+     24,
+     32
+    ],
+    "in_rows": [
+     47,
+     63
+    ],
+    "in_rows_clipped": [
+     47,
+     63
+    ],
+    "in_byte_range": [
+     16822336,
+     16838656
+    ],
+    "bytes": 16320,
+    "halo_top": 0,
+    "halo_bottom": 0,
+    "reused_rows_from_prev_band": 2
+   },
+   {
+    "band": 4,
+    "out_rows": [
+     32,
+     40
+    ],
+    "in_rows": [
+     63,
+     79
+    ],
+    "in_rows_clipped": [
+     63,
+     79
+    ],
+    "in_byte_range": [
+     16837696,
+     16854016
+    ],
+    "bytes": 16320,
+    "halo_top": 0,
+    "halo_bottom": 0,
+    "reused_rows_from_prev_band": 2
+   },
+   {
+    "band": 5,
+    "out_rows": [
+     40,
+     48
+    ],
+    "in_rows": [
+     79,
+     95
+    ],
+    "in_rows_clipped": [
+     79,
+     95
+    ],
+    "in_byte_range": [
+     16853056,
+     16869376
+    ],
+    "bytes": 16320,
+    "halo_top": 0,
+    "halo_bottom": 0,
+    "reused_rows_from_prev_band": 2
+   },
+   {
+    "band": 6,
+    "out_rows": [
+     48,
+     56
+    ],
+    "in_rows": [
+     95,
+     111
+    ],
+    "in_rows_clipped": [
+     95,
+     111
+    ],
+    "in_byte_range": [
+     16868416,
+     16884736
+    ],
+    "bytes": 16320,
+    "halo_top": 0,
+    "halo_bottom": 0,
+    "reused_rows_from_prev_band": 2
+   },
+   {
+    "band": 7,
+    "out_rows": [
+     56,
+     64
+    ],
+    "in_rows": [
+     111,
+     127
+    ],
+    "in_rows_clipped": [
+     111,
+     127
+    ],
+    "in_byte_range": [
+     16883776,
+     16900096
+    ],
+    "bytes": 16320,
+    "halo_top": 0,
+    "halo_bottom": 0,
+    "reused_rows_from_prev_band": 2
+   },
+   {
+    "band": 8,
+    "out_rows": [
+     64,
+     72
+    ],
+    "in_rows": [
+     127,
+     143
+    ],
+    "in_rows_clipped": [
+     127,
+     143
+    ],
+    "in_byte_range": [
+     16899136,
+     16915456
+    ],
+    "bytes": 16320,
+    "halo_top": 0,
+    "halo_bottom": 0,
+    "reused_rows_from_prev_band": 2
+   },
+   {
+    "band": 9,
+    "out_rows": [
+     72,
+     80
+    ],
+    "in_rows": [
+     143,
+     159
+    ],
+    "in_rows_clipped": [
+     143,
+     159
+    ],
+    "in_byte_range": [
+     16914496,
+     16930816
+    ],
+    "bytes": 16320,
+    "halo_top": 0,
+    "halo_bottom": 0,
+    "reused_rows_from_prev_band": 2
+   },
+   {
+    "band": 10,
+    "out_rows": [
+     80,
+     88
+    ],
+    "in_rows": [
+     159,
+     175
+    ],
+    "in_rows_clipped": [
+     159,
+     175
+    ],
+    "in_byte_range": [
+     16929856,
+     16946176
+    ],
+    "bytes": 16320,
+    "halo_top": 0,
+    "halo_bottom": 0,
+    "reused_rows_from_prev_band": 2
+   },
+   {
+    "band": 11,
+    "out_rows": [
+     88,
+     96
+    ],
+    "in_rows": [
+     175,
+     191
+    ],
+    "in_rows_clipped": [
+     175,
+     191
+    ],
+    "in_byte_range": [
+     16945216,
+     16961536
+    ],
+    "bytes": 16320,
+    "halo_top": 0,
+    "halo_bottom": 0,
+    "reused_rows_from_prev_band": 2
+   },
+   {
+    "band": 12,
+    "out_rows": [
+     96,
+     104
+    ],
+    "in_rows": [
+     191,
+     207
+    ],
+    "in_rows_clipped": [
+     191,
+     207
+    ],
+    "in_byte_range": [
+     16960576,
+     16976896
+    ],
+    "bytes": 16320,
+    "halo_top": 0,
+    "halo_bottom": 0,
+    "reused_rows_from_prev_band": 2
+   },
+   {
+    "band": 13,
+    "out_rows": [
+     104,
+     112
+    ],
+    "in_rows": [
+     207,
+     223
+    ],
+    "in_rows_clipped": [
+     207,
+     223
+    ],
+    "in_byte_range": [
+     16975936,
+     16992256
+    ],
+    "bytes": 16320,
+    "halo_top": 0,
+    "halo_bottom": 0,
+    "reused_rows_from_prev_band": 2
+   },
+   {
+    "band": 14,
+    "out_rows": [
+     112,
+     120
+    ],
+    "in_rows": [
+     223,
+     239
+    ],
+    "in_rows_clipped": [
+     223,
+     239
+    ],
+    "in_byte_range": [
+     16991296,
+     17007616
+    ],
+    "bytes": 16320,
+    "halo_top": 0,
+    "halo_bottom": 0,
+    "reused_rows_from_prev_band": 2
+   },
+   {
+    "band": 15,
+    "out_rows": [
+     120,
+     128
+    ],
+    "in_rows": [
+     239,
+     255
+    ],
+    "in_rows_clipped": [
+     239,
+     255
+    ],
+    "in_byte_range": [
+     17006656,
+     17022976
+    ],
+    "bytes": 16320,
+    "halo_top": 0,
+    "halo_bottom": 0,
+    "reused_rows_from_prev_band": 2
+   },
+   {
+    "band": 16,
+    "out_rows": [
+     128,
+     136
+    ],
+    "in_rows": [
+     255,
+     271
+    ],
+    "in_rows_clipped": [
+     255,
+     271
+    ],
+    "in_byte_range": [
+     17022016,
+     17038336
+    ],
+    "bytes": 16320,
+    "halo_top": 0,
+    "halo_bottom": 0,
+    "reused_rows_from_prev_band": 2
+   },
+   {
+    "band": 17,
+    "out_rows": [
+     136,
+     144
+    ],
+    "in_rows": [
+     271,
+     287
+    ],
+    "in_rows_clipped": [
+     271,
+     287
+    ],
+    "in_byte_range": [
+     17037376,
+     17053696
+    ],
+    "bytes": 16320,
+    "halo_top": 0,
+    "halo_bottom": 0,
+    "reused_rows_from_prev_band": 2
+   },
+   {
+    "band": 18,
+    "out_rows": [
+     144,
+     152
+    ],
+    "in_rows": [
+     287,
+     303
+    ],
+    "in_rows_clipped": [
+     287,
+     303
+    ],
+    "in_byte_range": [
+     17052736,
+     17069056
+    ],
+    "bytes": 16320,
+    "halo_top": 0,
+    "halo_bottom": 0,
+    "reused_rows_from_prev_band": 2
+   },
+   {
+    "band": 19,
+    "out_rows": [
+     152,
+     160
+    ],
+    "in_rows": [
+     303,
+     319
+    ],
+    "in_rows_clipped": [
+     303,
+     319
+    ],
+    "in_byte_range": [
+     17068096,
+     17084416
+    ],
+    "bytes": 16320,
+    "halo_top": 0,
+    "halo_bottom": 0,
+    "reused_rows_from_prev_band": 2
+   }
+  ]
+ },
+ "tensors": [
+  {
+   "tid": 0,
+   "name": "input_packed3",
+   "h": 320,
+   "w": 320,
+   "c": 3,
+   "pad8": 3,
+   "bytes": 307200,
+   "packed": true,
+   "arena_off": 16777216,
+   "def_op": -1,
+   "last_use": 0
+  },
+  {
+   "tid": 1,
+   "name": "t1_conv_L0",
+   "h": 160,
+   "w": 160,
+   "c": 8,
+   "pad8": 8,
+   "bytes": 204800,
+   "packed": false,
+   "arena_off": 17084416,
+   "def_op": 0,
+   "last_use": 1
+  },
+  {
+   "tid": 2,
+   "name": "t2_conv_L1",
+   "h": 160,
+   "w": 160,
+   "c": 8,
+   "pad8": 8,
+   "bytes": 204800,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 1,
+   "last_use": 2
+  },
+  {
+   "tid": 3,
+   "name": "t3_dwconv_L2",
+   "h": 160,
+   "w": 160,
+   "c": 8,
+   "pad8": 8,
+   "bytes": 204800,
+   "packed": false,
+   "arena_off": 16982016,
+   "def_op": 2,
+   "last_use": 3
+  },
+  {
+   "tid": 4,
+   "name": "t4_conv_L3",
+   "h": 160,
+   "w": 160,
+   "c": 4,
+   "pad8": 8,
+   "bytes": 204800,
+   "packed": false,
+   "arena_off": 17391616,
+   "def_op": 3,
+   "last_use": 8
+  },
+  {
+   "tid": 5,
+   "name": "t5_conv_L4",
+   "h": 160,
+   "w": 160,
+   "c": 8,
+   "pad8": 8,
+   "bytes": 204800,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 4,
+   "last_use": 5
+  },
+  {
+   "tid": 6,
+   "name": "t6_dwconv_L5",
+   "h": 160,
+   "w": 160,
+   "c": 8,
+   "pad8": 8,
+   "bytes": 204800,
+   "packed": false,
+   "arena_off": 16982016,
+   "def_op": 5,
+   "last_use": 6
+  },
+  {
+   "tid": 7,
+   "name": "t7_conv_L6",
+   "h": 160,
+   "w": 160,
+   "c": 4,
+   "pad8": 8,
+   "bytes": 204800,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 6,
+   "last_use": 7
+  },
+  {
+   "tid": 8,
+   "name": "t8_conv_L9",
+   "h": 160,
+   "w": 160,
+   "c": 24,
+   "pad8": 24,
+   "bytes": 614400,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 8,
+   "last_use": 9
+  },
+  {
+   "tid": 9,
+   "name": "t9_dwconv_L10",
+   "h": 80,
+   "w": 80,
+   "c": 24,
+   "pad8": 24,
+   "bytes": 153600,
+   "packed": false,
+   "arena_off": 17391616,
+   "def_op": 9,
+   "last_use": 10
+  },
+  {
+   "tid": 10,
+   "name": "t10_conv_L11",
+   "h": 80,
+   "w": 80,
+   "c": 8,
+   "pad8": 8,
+   "bytes": 51200,
+   "packed": false,
+   "arena_off": 17186816,
+   "def_op": 10,
+   "last_use": 19
+  },
+  {
+   "tid": 11,
+   "name": "t11_conv_L12",
+   "h": 80,
+   "w": 80,
+   "c": 32,
+   "pad8": 32,
+   "bytes": 204800,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 11,
+   "last_use": 12
+  },
+  {
+   "tid": 12,
+   "name": "t12_dwconv_L13",
+   "h": 80,
+   "w": 80,
+   "c": 32,
+   "pad8": 32,
+   "bytes": 204800,
+   "packed": false,
+   "arena_off": 16982016,
+   "def_op": 12,
+   "last_use": 13
+  },
+  {
+   "tid": 13,
+   "name": "t13_conv_L14",
+   "h": 80,
+   "w": 80,
+   "c": 8,
+   "pad8": 8,
+   "bytes": 51200,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 13,
+   "last_use": 14
+  },
+  {
+   "tid": 14,
+   "name": "t14_conv_L17",
+   "h": 80,
+   "w": 80,
+   "c": 32,
+   "pad8": 32,
+   "bytes": 204800,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 15,
+   "last_use": 16
+  },
+  {
+   "tid": 15,
+   "name": "t15_dwconv_L18",
+   "h": 80,
+   "w": 80,
+   "c": 32,
+   "pad8": 32,
+   "bytes": 204800,
+   "packed": false,
+   "arena_off": 16982016,
+   "def_op": 16,
+   "last_use": 17
+  },
+  {
+   "tid": 16,
+   "name": "t16_conv_L19",
+   "h": 80,
+   "w": 80,
+   "c": 8,
+   "pad8": 8,
+   "bytes": 51200,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 17,
+   "last_use": 18
+  },
+  {
+   "tid": 17,
+   "name": "t17_conv_L22",
+   "h": 80,
+   "w": 80,
+   "c": 32,
+   "pad8": 32,
+   "bytes": 204800,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 19,
+   "last_use": 20
+  },
+  {
+   "tid": 18,
+   "name": "t18_dwconv_L23",
+   "h": 40,
+   "w": 40,
+   "c": 32,
+   "pad8": 32,
+   "bytes": 51200,
+   "packed": false,
+   "arena_off": 16982016,
+   "def_op": 20,
+   "last_use": 21
+  },
+  {
+   "tid": 19,
+   "name": "t19_conv_L24",
+   "h": 40,
+   "w": 40,
+   "c": 8,
+   "pad8": 8,
+   "bytes": 12800,
+   "packed": false,
+   "arena_off": 16930816,
+   "def_op": 21,
+   "last_use": 30
+  },
+  {
+   "tid": 20,
+   "name": "t20_conv_L25",
+   "h": 40,
+   "w": 40,
+   "c": 48,
+   "pad8": 48,
+   "bytes": 76800,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 22,
+   "last_use": 23
+  },
+  {
+   "tid": 21,
+   "name": "t21_dwconv_L26",
+   "h": 40,
+   "w": 40,
+   "c": 48,
+   "pad8": 48,
+   "bytes": 76800,
+   "packed": false,
+   "arena_off": 16854016,
+   "def_op": 23,
+   "last_use": 24
+  },
+  {
+   "tid": 22,
+   "name": "t22_conv_L27",
+   "h": 40,
+   "w": 40,
+   "c": 8,
+   "pad8": 8,
+   "bytes": 12800,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 24,
+   "last_use": 25
+  },
+  {
+   "tid": 23,
+   "name": "t23_conv_L30",
+   "h": 40,
+   "w": 40,
+   "c": 48,
+   "pad8": 48,
+   "bytes": 76800,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 26,
+   "last_use": 27
+  },
+  {
+   "tid": 24,
+   "name": "t24_dwconv_L31",
+   "h": 40,
+   "w": 40,
+   "c": 48,
+   "pad8": 48,
+   "bytes": 76800,
+   "packed": false,
+   "arena_off": 16854016,
+   "def_op": 27,
+   "last_use": 28
+  },
+  {
+   "tid": 25,
+   "name": "t25_conv_L32",
+   "h": 40,
+   "w": 40,
+   "c": 8,
+   "pad8": 8,
+   "bytes": 12800,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 28,
+   "last_use": 29
+  },
+  {
+   "tid": 26,
+   "name": "t26_conv_L35",
+   "h": 40,
+   "w": 40,
+   "c": 48,
+   "pad8": 48,
+   "bytes": 76800,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 30,
+   "last_use": 31
+  },
+  {
+   "tid": 27,
+   "name": "t27_dwconv_L36",
+   "h": 40,
+   "w": 40,
+   "c": 48,
+   "pad8": 48,
+   "bytes": 76800,
+   "packed": false,
+   "arena_off": 16854016,
+   "def_op": 31,
+   "last_use": 32
+  },
+  {
+   "tid": 28,
+   "name": "t28_conv_L37",
+   "h": 40,
+   "w": 40,
+   "c": 16,
+   "pad8": 16,
+   "bytes": 25600,
+   "packed": false,
+   "arena_off": 17084416,
+   "def_op": 32,
+   "last_use": 49
+  },
+  {
+   "tid": 29,
+   "name": "t29_conv_L38",
+   "h": 40,
+   "w": 40,
+   "c": 96,
+   "pad8": 96,
+   "bytes": 153600,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 33,
+   "last_use": 34
+  },
+  {
+   "tid": 30,
+   "name": "t30_dwconv_L39",
+   "h": 40,
+   "w": 40,
+   "c": 96,
+   "pad8": 96,
+   "bytes": 153600,
+   "packed": false,
+   "arena_off": 16930816,
+   "def_op": 34,
+   "last_use": 35
+  },
+  {
+   "tid": 31,
+   "name": "t31_conv_L40",
+   "h": 40,
+   "w": 40,
+   "c": 16,
+   "pad8": 16,
+   "bytes": 25600,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 35,
+   "last_use": 36
+  },
+  {
+   "tid": 32,
+   "name": "t32_conv_L43",
+   "h": 40,
+   "w": 40,
+   "c": 96,
+   "pad8": 96,
+   "bytes": 153600,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 37,
+   "last_use": 38
+  },
+  {
+   "tid": 33,
+   "name": "t33_dwconv_L44",
+   "h": 40,
+   "w": 40,
+   "c": 96,
+   "pad8": 96,
+   "bytes": 153600,
+   "packed": false,
+   "arena_off": 16930816,
+   "def_op": 38,
+   "last_use": 39
+  },
+  {
+   "tid": 34,
+   "name": "t34_conv_L45",
+   "h": 40,
+   "w": 40,
+   "c": 16,
+   "pad8": 16,
+   "bytes": 25600,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 39,
+   "last_use": 40
+  },
+  {
+   "tid": 35,
+   "name": "t35_conv_L48",
+   "h": 40,
+   "w": 40,
+   "c": 96,
+   "pad8": 96,
+   "bytes": 153600,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 41,
+   "last_use": 42
+  },
+  {
+   "tid": 36,
+   "name": "t36_dwconv_L49",
+   "h": 40,
+   "w": 40,
+   "c": 96,
+   "pad8": 96,
+   "bytes": 153600,
+   "packed": false,
+   "arena_off": 16930816,
+   "def_op": 42,
+   "last_use": 43
+  },
+  {
+   "tid": 37,
+   "name": "t37_conv_L50",
+   "h": 40,
+   "w": 40,
+   "c": 16,
+   "pad8": 16,
+   "bytes": 25600,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 43,
+   "last_use": 44
+  },
+  {
+   "tid": 38,
+   "name": "t38_conv_L53",
+   "h": 40,
+   "w": 40,
+   "c": 96,
+   "pad8": 96,
+   "bytes": 153600,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 45,
+   "last_use": 46
+  },
+  {
+   "tid": 39,
+   "name": "t39_dwconv_L54",
+   "h": 40,
+   "w": 40,
+   "c": 96,
+   "pad8": 96,
+   "bytes": 153600,
+   "packed": false,
+   "arena_off": 16930816,
+   "def_op": 46,
+   "last_use": 47
+  },
+  {
+   "tid": 40,
+   "name": "t40_conv_L55",
+   "h": 40,
+   "w": 40,
+   "c": 16,
+   "pad8": 16,
+   "bytes": 25600,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 47,
+   "last_use": 48
+  },
+  {
+   "tid": 41,
+   "name": "t41_conv_L58",
+   "h": 40,
+   "w": 40,
+   "c": 96,
+   "pad8": 96,
+   "bytes": 153600,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 49,
+   "last_use": 50
+  },
+  {
+   "tid": 42,
+   "name": "t42_dwconv_L59",
+   "h": 20,
+   "w": 20,
+   "c": 96,
+   "pad8": 96,
+   "bytes": 38400,
+   "packed": false,
+   "arena_off": 16930816,
+   "def_op": 50,
+   "last_use": 51
+  },
+  {
+   "tid": 43,
+   "name": "t43_conv_L60",
+   "h": 20,
+   "w": 20,
+   "c": 24,
+   "pad8": 24,
+   "bytes": 9600,
+   "packed": false,
+   "arena_off": 16886016,
+   "def_op": 51,
+   "last_use": 106
+  },
+  {
+   "tid": 44,
+   "name": "t44_conv_L61",
+   "h": 20,
+   "w": 20,
+   "c": 136,
+   "pad8": 136,
+   "bytes": 54400,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 52,
+   "last_use": 53
+  },
+  {
+   "tid": 45,
+   "name": "t45_dwconv_L62",
+   "h": 20,
+   "w": 20,
+   "c": 136,
+   "pad8": 136,
+   "bytes": 54400,
+   "packed": false,
+   "arena_off": 16831616,
+   "def_op": 53,
+   "last_use": 54
+  },
+  {
+   "tid": 46,
+   "name": "t46_conv_L63",
+   "h": 20,
+   "w": 20,
+   "c": 24,
+   "pad8": 24,
+   "bytes": 9600,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 54,
+   "last_use": 55
+  },
+  {
+   "tid": 47,
+   "name": "t47_conv_L66",
+   "h": 20,
+   "w": 20,
+   "c": 136,
+   "pad8": 136,
+   "bytes": 54400,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 56,
+   "last_use": 57
+  },
+  {
+   "tid": 48,
+   "name": "t48_dwconv_L67",
+   "h": 20,
+   "w": 20,
+   "c": 136,
+   "pad8": 136,
+   "bytes": 54400,
+   "packed": false,
+   "arena_off": 16831616,
+   "def_op": 57,
+   "last_use": 58
+  },
+  {
+   "tid": 49,
+   "name": "t49_conv_L68",
+   "h": 20,
+   "w": 20,
+   "c": 24,
+   "pad8": 24,
+   "bytes": 9600,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 58,
+   "last_use": 59
+  },
+  {
+   "tid": 50,
+   "name": "t50_conv_L71",
+   "h": 20,
+   "w": 20,
+   "c": 136,
+   "pad8": 136,
+   "bytes": 54400,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 60,
+   "last_use": 61
+  },
+  {
+   "tid": 51,
+   "name": "t51_dwconv_L72",
+   "h": 20,
+   "w": 20,
+   "c": 136,
+   "pad8": 136,
+   "bytes": 54400,
+   "packed": false,
+   "arena_off": 16831616,
+   "def_op": 61,
+   "last_use": 62
+  },
+  {
+   "tid": 52,
+   "name": "t52_conv_L73",
+   "h": 20,
+   "w": 20,
+   "c": 24,
+   "pad8": 24,
+   "bytes": 9600,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 62,
+   "last_use": 63
+  },
+  {
+   "tid": 53,
+   "name": "t53_conv_L76",
+   "h": 20,
+   "w": 20,
+   "c": 136,
+   "pad8": 136,
+   "bytes": 54400,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 64,
+   "last_use": 65
+  },
+  {
+   "tid": 54,
+   "name": "t54_dwconv_L77",
+   "h": 20,
+   "w": 20,
+   "c": 136,
+   "pad8": 136,
+   "bytes": 54400,
+   "packed": false,
+   "arena_off": 16831616,
+   "def_op": 65,
+   "last_use": 66
+  },
+  {
+   "tid": 55,
+   "name": "t55_conv_L78",
+   "h": 20,
+   "w": 20,
+   "c": 24,
+   "pad8": 24,
+   "bytes": 9600,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 66,
+   "last_use": 67
+  },
+  {
+   "tid": 56,
+   "name": "t56_conv_L81",
+   "h": 20,
+   "w": 20,
+   "c": 136,
+   "pad8": 136,
+   "bytes": 54400,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 68,
+   "last_use": 69
+  },
+  {
+   "tid": 57,
+   "name": "t57_dwconv_L82",
+   "h": 10,
+   "w": 10,
+   "c": 136,
+   "pad8": 136,
+   "bytes": 13600,
+   "packed": false,
+   "arena_off": 16831616,
+   "def_op": 69,
+   "last_use": 70
+  },
+  {
+   "tid": 58,
+   "name": "t58_conv_L83",
+   "h": 10,
+   "w": 10,
+   "c": 48,
+   "pad8": 48,
+   "bytes": 4800,
+   "packed": false,
+   "arena_off": 16822016,
+   "def_op": 70,
+   "last_use": 97
+  },
+  {
+   "tid": 59,
+   "name": "t59_conv_L84",
+   "h": 10,
+   "w": 10,
+   "c": 224,
+   "pad8": 224,
+   "bytes": 22400,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 71,
+   "last_use": 72
+  },
+  {
+   "tid": 60,
+   "name": "t60_dwconv_L85",
+   "h": 10,
+   "w": 10,
+   "c": 224,
+   "pad8": 224,
+   "bytes": 22400,
+   "packed": false,
+   "arena_off": 16799616,
+   "def_op": 72,
+   "last_use": 73
+  },
+  {
+   "tid": 61,
+   "name": "t61_conv_L86",
+   "h": 10,
+   "w": 10,
+   "c": 48,
+   "pad8": 48,
+   "bytes": 4800,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 73,
+   "last_use": 74
+  },
+  {
+   "tid": 62,
+   "name": "t62_conv_L89",
+   "h": 10,
+   "w": 10,
+   "c": 224,
+   "pad8": 224,
+   "bytes": 22400,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 75,
+   "last_use": 76
+  },
+  {
+   "tid": 63,
+   "name": "t63_dwconv_L90",
+   "h": 10,
+   "w": 10,
+   "c": 224,
+   "pad8": 224,
+   "bytes": 22400,
+   "packed": false,
+   "arena_off": 16799616,
+   "def_op": 76,
+   "last_use": 77
+  },
+  {
+   "tid": 64,
+   "name": "t64_conv_L91",
+   "h": 10,
+   "w": 10,
+   "c": 48,
+   "pad8": 48,
+   "bytes": 4800,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 77,
+   "last_use": 78
+  },
+  {
+   "tid": 65,
+   "name": "t65_conv_L94",
+   "h": 10,
+   "w": 10,
+   "c": 224,
+   "pad8": 224,
+   "bytes": 22400,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 79,
+   "last_use": 80
+  },
+  {
+   "tid": 66,
+   "name": "t66_dwconv_L95",
+   "h": 10,
+   "w": 10,
+   "c": 224,
+   "pad8": 224,
+   "bytes": 22400,
+   "packed": false,
+   "arena_off": 16799616,
+   "def_op": 80,
+   "last_use": 81
+  },
+  {
+   "tid": 67,
+   "name": "t67_conv_L96",
+   "h": 10,
+   "w": 10,
+   "c": 48,
+   "pad8": 48,
+   "bytes": 4800,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 81,
+   "last_use": 82
+  },
+  {
+   "tid": 68,
+   "name": "t68_conv_L99",
+   "h": 10,
+   "w": 10,
+   "c": 224,
+   "pad8": 224,
+   "bytes": 22400,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 83,
+   "last_use": 84
+  },
+  {
+   "tid": 69,
+   "name": "t69_dwconv_L100",
+   "h": 10,
+   "w": 10,
+   "c": 224,
+   "pad8": 224,
+   "bytes": 22400,
+   "packed": false,
+   "arena_off": 16799616,
+   "def_op": 84,
+   "last_use": 85
+  },
+  {
+   "tid": 70,
+   "name": "t70_conv_L101",
+   "h": 10,
+   "w": 10,
+   "c": 48,
+   "pad8": 48,
+   "bytes": 4800,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 85,
+   "last_use": 86
+  },
+  {
+   "tid": 71,
+   "name": "t71_conv_L104",
+   "h": 10,
+   "w": 10,
+   "c": 224,
+   "pad8": 224,
+   "bytes": 22400,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 87,
+   "last_use": 88
+  },
+  {
+   "tid": 72,
+   "name": "t72_dwconv_L105",
+   "h": 10,
+   "w": 10,
+   "c": 224,
+   "pad8": 224,
+   "bytes": 22400,
+   "packed": false,
+   "arena_off": 16799616,
+   "def_op": 88,
+   "last_use": 89
+  },
+  {
+   "tid": 73,
+   "name": "t73_conv_L106",
+   "h": 10,
+   "w": 10,
+   "c": 48,
+   "pad8": 48,
+   "bytes": 4800,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 89,
+   "last_use": 90
+  },
+  {
+   "tid": 74,
+   "name": "t74_pool_L109",
+   "h": 10,
+   "w": 10,
+   "c": 48,
+   "pad8": 48,
+   "bytes": 4800,
+   "packed": false,
+   "arena_off": 16796416,
+   "def_op": 91,
+   "last_use": 96
+  },
+  {
+   "tid": 75,
+   "name": "t75_pool_L111",
+   "h": 10,
+   "w": 10,
+   "c": 48,
+   "pad8": 48,
+   "bytes": 4800,
+   "packed": false,
+   "arena_off": 16801216,
+   "def_op": 92,
+   "last_use": 95
+  },
+  {
+   "tid": 76,
+   "name": "t76_pool_L113",
+   "h": 10,
+   "w": 10,
+   "c": 48,
+   "pad8": 48,
+   "bytes": 4800,
+   "packed": false,
+   "arena_off": 16806016,
+   "def_op": 93,
+   "last_use": 94
+  },
+  {
+   "tid": 77,
+   "name": "concat_L114",
+   "h": 10,
+   "w": 10,
+   "c": 192,
+   "pad8": 192,
+   "bytes": 19200,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 94,
+   "last_use": 98
+  },
+  {
+   "tid": 78,
+   "name": "t78_conv_L115",
+   "h": 10,
+   "w": 10,
+   "c": 96,
+   "pad8": 96,
+   "bytes": 9600,
+   "packed": false,
+   "arena_off": 16796416,
+   "def_op": 98,
+   "last_use": 104
+  },
+  {
+   "tid": 79,
+   "name": "t79_dwconv_L116",
+   "h": 10,
+   "w": 10,
+   "c": 96,
+   "pad8": 96,
+   "bytes": 9600,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 99,
+   "last_use": 100
+  },
+  {
+   "tid": 80,
+   "name": "t80_conv_L117",
+   "h": 10,
+   "w": 10,
+   "c": 96,
+   "pad8": 96,
+   "bytes": 9600,
+   "packed": false,
+   "arena_off": 16786816,
+   "def_op": 100,
+   "last_use": 101
+  },
+  {
+   "tid": 81,
+   "name": "t81_dwconv_L118",
+   "h": 10,
+   "w": 10,
+   "c": 96,
+   "pad8": 96,
+   "bytes": 9600,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 101,
+   "last_use": 102
+  },
+  {
+   "tid": 82,
+   "name": "t82_conv_L119",
+   "h": 10,
+   "w": 10,
+   "c": 96,
+   "pad8": 96,
+   "bytes": 9600,
+   "packed": false,
+   "arena_off": 16786816,
+   "def_op": 102,
+   "last_use": 103
+  },
+  {
+   "tid": 83,
+   "name": "t83_conv_L120",
+   "h": 10,
+   "w": 10,
+   "c": 255,
+   "pad8": 256,
+   "bytes": 25600,
+   "packed": false,
+   "arena_off": 16927616,
+   "def_op": 103,
+   "last_use": -1
+  },
+  {
+   "tid": 84,
+   "name": "t84_upsample_L123",
+   "h": 20,
+   "w": 20,
+   "c": 96,
+   "pad8": 96,
+   "bytes": 38400,
+   "packed": false,
+   "arena_off": 16825216,
+   "def_op": 104,
+   "last_use": 105
+  },
+  {
+   "tid": 85,
+   "name": "concat_L124",
+   "h": 20,
+   "w": 20,
+   "c": 120,
+   "pad8": 120,
+   "bytes": 48000,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 105,
+   "last_use": 107
+  },
+  {
+   "tid": 86,
+   "name": "t86_dwconv_L125",
+   "h": 20,
+   "w": 20,
+   "c": 120,
+   "pad8": 120,
+   "bytes": 48000,
+   "packed": false,
+   "arena_off": 16825216,
+   "def_op": 107,
+   "last_use": 108
+  },
+  {
+   "tid": 87,
+   "name": "t87_conv_L126",
+   "h": 20,
+   "w": 20,
+   "c": 120,
+   "pad8": 120,
+   "bytes": 48000,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 108,
+   "last_use": 109
+  },
+  {
+   "tid": 88,
+   "name": "t88_dwconv_L127",
+   "h": 20,
+   "w": 20,
+   "c": 120,
+   "pad8": 120,
+   "bytes": 48000,
+   "packed": false,
+   "arena_off": 16825216,
+   "def_op": 109,
+   "last_use": 110
+  },
+  {
+   "tid": 89,
+   "name": "t89_conv_L128",
+   "h": 20,
+   "w": 20,
+   "c": 120,
+   "pad8": 120,
+   "bytes": 48000,
+   "packed": false,
+   "arena_off": 16879616,
+   "def_op": 110,
+   "last_use": 111
+  },
+  {
+   "tid": 90,
+   "name": "t90_conv_L129",
+   "h": 20,
+   "w": 20,
+   "c": 255,
+   "pad8": 256,
+   "bytes": 102400,
+   "packed": false,
+   "arena_off": 16777216,
+   "def_op": 111,
+   "last_use": -1
+  }
+ ],
+ "ops": [
+  {
+   "op_id": 0,
+   "kind": "conv",
+   "flags": 6,
+   "layer_idx": 0,
+   "tensor_in": {
+    "tid": 0,
+    "h": 320,
+    "w": 320,
+    "c": 3,
+    "pad8": 3,
+    "bytes": 307200
+   },
+   "tensor_out": {
+    "tid": 1,
+    "h": 160,
+    "w": 160,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 204800
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 17084416,
+   "traffic_read": 307200,
+   "traffic_write": 204800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 20,
+    "in_band_bytes": 16320,
+    "out_band_bytes": 10240,
+    "in_band_note": "PACKED3: 3 B/pixel (pixel stride 3, not pad8)"
+   }
+  },
+  {
+   "op_id": 1,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 1,
+   "tensor_in": {
+    "tid": 1,
+    "h": 160,
+    "w": 160,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 204800
+   },
+   "tensor_out": {
+    "tid": 2,
+    "h": 160,
+    "w": 160,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 204800
+   },
+   "src_arena_off": 17084416,
+   "dst_arena_off": 16777216,
+   "traffic_read": 204800,
+   "traffic_write": 204800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 20,
+    "in_band_bytes": 10240,
+    "out_band_bytes": 10240
+   }
+  },
+  {
+   "op_id": 2,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 2,
+   "tensor_in": {
+    "tid": 2,
+    "h": 160,
+    "w": 160,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 204800
+   },
+   "tensor_out": {
+    "tid": 3,
+    "h": 160,
+    "w": 160,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 204800
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16982016,
+   "traffic_read": 204800,
+   "traffic_write": 204800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 20,
+    "in_band_bytes": 12800,
+    "out_band_bytes": 10240
+   }
+  },
+  {
+   "op_id": 3,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 3,
+   "tensor_in": {
+    "tid": 3,
+    "h": 160,
+    "w": 160,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 204800
+   },
+   "tensor_out": {
+    "tid": 4,
+    "h": 160,
+    "w": 160,
+    "c": 4,
+    "pad8": 8,
+    "bytes": 204800
+   },
+   "src_arena_off": 16982016,
+   "dst_arena_off": 17391616,
+   "traffic_read": 204800,
+   "traffic_write": 204800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 20,
+    "in_band_bytes": 10240,
+    "out_band_bytes": 10240
+   }
+  },
+  {
+   "op_id": 4,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 4,
+   "tensor_in": {
+    "tid": 4,
+    "h": 160,
+    "w": 160,
+    "c": 4,
+    "pad8": 8,
+    "bytes": 204800
+   },
+   "tensor_out": {
+    "tid": 5,
+    "h": 160,
+    "w": 160,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 204800
+   },
+   "src_arena_off": 17391616,
+   "dst_arena_off": 16777216,
+   "traffic_read": 204800,
+   "traffic_write": 204800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 20,
+    "in_band_bytes": 10240,
+    "out_band_bytes": 10240
+   }
+  },
+  {
+   "op_id": 5,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 5,
+   "tensor_in": {
+    "tid": 5,
+    "h": 160,
+    "w": 160,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 204800
+   },
+   "tensor_out": {
+    "tid": 6,
+    "h": 160,
+    "w": 160,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 204800
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16982016,
+   "traffic_read": 204800,
+   "traffic_write": 204800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 20,
+    "in_band_bytes": 12800,
+    "out_band_bytes": 10240
+   }
+  },
+  {
+   "op_id": 6,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 6,
+   "tensor_in": {
+    "tid": 6,
+    "h": 160,
+    "w": 160,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 204800
+   },
+   "tensor_out": {
+    "tid": 7,
+    "h": 160,
+    "w": 160,
+    "c": 4,
+    "pad8": 8,
+    "bytes": 204800
+   },
+   "src_arena_off": 16982016,
+   "dst_arena_off": 16777216,
+   "traffic_read": 204800,
+   "traffic_write": 204800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 20,
+    "in_band_bytes": 10240,
+    "out_band_bytes": 10240
+   }
+  },
+  {
+   "op_id": 7,
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 8,
+   "tensor_in": {
+    "tid": 7,
+    "h": 160,
+    "w": 160,
+    "c": 4,
+    "pad8": 8,
+    "bytes": 204800
+   },
+   "tensor_out": {
+    "tid": 4,
+    "h": 160,
+    "w": 160,
+    "c": 4,
+    "pad8": 8,
+    "bytes": 204800
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 17391616,
+   "traffic_read": 409600,
+   "traffic_write": 204800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 20,
+    "in_band_bytes": 10240,
+    "out_band_bytes": 10240
+   },
+   "in_place": true,
+   "dst_tensor_total_bytes": 204800
+  },
+  {
+   "op_id": 8,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 9,
+   "tensor_in": {
+    "tid": 4,
+    "h": 160,
+    "w": 160,
+    "c": 4,
+    "pad8": 8,
+    "bytes": 204800
+   },
+   "tensor_out": {
+    "tid": 8,
+    "h": 160,
+    "w": 160,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 614400
+   },
+   "src_arena_off": 17391616,
+   "dst_arena_off": 16777216,
+   "traffic_read": 204800,
+   "traffic_write": 614400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 40,
+    "in_band_bytes": 10240,
+    "out_band_bytes": 30720
+   }
+  },
+  {
+   "op_id": 9,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 10,
+   "tensor_in": {
+    "tid": 8,
+    "h": 160,
+    "w": 160,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 614400
+   },
+   "tensor_out": {
+    "tid": 9,
+    "h": 80,
+    "w": 80,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 153600
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 17391616,
+   "traffic_read": 614400,
+   "traffic_write": 153600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 20,
+    "in_band_bytes": 65280,
+    "out_band_bytes": 15360
+   }
+  },
+  {
+   "op_id": 10,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 11,
+   "tensor_in": {
+    "tid": 9,
+    "h": 80,
+    "w": 80,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 153600
+   },
+   "tensor_out": {
+    "tid": 10,
+    "h": 80,
+    "w": 80,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 51200
+   },
+   "src_arena_off": 17391616,
+   "dst_arena_off": 17186816,
+   "traffic_read": 153600,
+   "traffic_write": 51200,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 10,
+    "in_band_bytes": 15360,
+    "out_band_bytes": 5120
+   }
+  },
+  {
+   "op_id": 11,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 12,
+   "tensor_in": {
+    "tid": 10,
+    "h": 80,
+    "w": 80,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 51200
+   },
+   "tensor_out": {
+    "tid": 11,
+    "h": 80,
+    "w": 80,
+    "c": 32,
+    "pad8": 32,
+    "bytes": 204800
+   },
+   "src_arena_off": 17186816,
+   "dst_arena_off": 16777216,
+   "traffic_read": 51200,
+   "traffic_write": 204800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 20,
+    "in_band_bytes": 5120,
+    "out_band_bytes": 20480
+   }
+  },
+  {
+   "op_id": 12,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 13,
+   "tensor_in": {
+    "tid": 11,
+    "h": 80,
+    "w": 80,
+    "c": 32,
+    "pad8": 32,
+    "bytes": 204800
+   },
+   "tensor_out": {
+    "tid": 12,
+    "h": 80,
+    "w": 80,
+    "c": 32,
+    "pad8": 32,
+    "bytes": 204800
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16982016,
+   "traffic_read": 204800,
+   "traffic_write": 204800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 20,
+    "in_band_bytes": 25600,
+    "out_band_bytes": 20480
+   }
+  },
+  {
+   "op_id": 13,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 14,
+   "tensor_in": {
+    "tid": 12,
+    "h": 80,
+    "w": 80,
+    "c": 32,
+    "pad8": 32,
+    "bytes": 204800
+   },
+   "tensor_out": {
+    "tid": 13,
+    "h": 80,
+    "w": 80,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 51200
+   },
+   "src_arena_off": 16982016,
+   "dst_arena_off": 16777216,
+   "traffic_read": 204800,
+   "traffic_write": 51200,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 10,
+    "in_band_bytes": 20480,
+    "out_band_bytes": 5120
+   }
+  },
+  {
+   "op_id": 14,
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 16,
+   "tensor_in": {
+    "tid": 13,
+    "h": 80,
+    "w": 80,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 51200
+   },
+   "tensor_out": {
+    "tid": 10,
+    "h": 80,
+    "w": 80,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 51200
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 17186816,
+   "traffic_read": 102400,
+   "traffic_write": 51200,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 10,
+    "in_band_bytes": 5120,
+    "out_band_bytes": 5120
+   },
+   "in_place": true,
+   "dst_tensor_total_bytes": 51200
+  },
+  {
+   "op_id": 15,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 17,
+   "tensor_in": {
+    "tid": 10,
+    "h": 80,
+    "w": 80,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 51200
+   },
+   "tensor_out": {
+    "tid": 14,
+    "h": 80,
+    "w": 80,
+    "c": 32,
+    "pad8": 32,
+    "bytes": 204800
+   },
+   "src_arena_off": 17186816,
+   "dst_arena_off": 16777216,
+   "traffic_read": 51200,
+   "traffic_write": 204800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 20,
+    "in_band_bytes": 5120,
+    "out_band_bytes": 20480
+   }
+  },
+  {
+   "op_id": 16,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 18,
+   "tensor_in": {
+    "tid": 14,
+    "h": 80,
+    "w": 80,
+    "c": 32,
+    "pad8": 32,
+    "bytes": 204800
+   },
+   "tensor_out": {
+    "tid": 15,
+    "h": 80,
+    "w": 80,
+    "c": 32,
+    "pad8": 32,
+    "bytes": 204800
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16982016,
+   "traffic_read": 204800,
+   "traffic_write": 204800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 20,
+    "in_band_bytes": 25600,
+    "out_band_bytes": 20480
+   }
+  },
+  {
+   "op_id": 17,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 19,
+   "tensor_in": {
+    "tid": 15,
+    "h": 80,
+    "w": 80,
+    "c": 32,
+    "pad8": 32,
+    "bytes": 204800
+   },
+   "tensor_out": {
+    "tid": 16,
+    "h": 80,
+    "w": 80,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 51200
+   },
+   "src_arena_off": 16982016,
+   "dst_arena_off": 16777216,
+   "traffic_read": 204800,
+   "traffic_write": 51200,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 10,
+    "in_band_bytes": 20480,
+    "out_band_bytes": 5120
+   }
+  },
+  {
+   "op_id": 18,
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 21,
+   "tensor_in": {
+    "tid": 16,
+    "h": 80,
+    "w": 80,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 51200
+   },
+   "tensor_out": {
+    "tid": 10,
+    "h": 80,
+    "w": 80,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 51200
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 17186816,
+   "traffic_read": 102400,
+   "traffic_write": 51200,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 10,
+    "in_band_bytes": 5120,
+    "out_band_bytes": 5120
+   },
+   "in_place": true,
+   "dst_tensor_total_bytes": 51200
+  },
+  {
+   "op_id": 19,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 22,
+   "tensor_in": {
+    "tid": 10,
+    "h": 80,
+    "w": 80,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 51200
+   },
+   "tensor_out": {
+    "tid": 17,
+    "h": 80,
+    "w": 80,
+    "c": 32,
+    "pad8": 32,
+    "bytes": 204800
+   },
+   "src_arena_off": 17186816,
+   "dst_arena_off": 16777216,
+   "traffic_read": 51200,
+   "traffic_write": 204800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 20,
+    "in_band_bytes": 5120,
+    "out_band_bytes": 20480
+   }
+  },
+  {
+   "op_id": 20,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 23,
+   "tensor_in": {
+    "tid": 17,
+    "h": 80,
+    "w": 80,
+    "c": 32,
+    "pad8": 32,
+    "bytes": 204800
+   },
+   "tensor_out": {
+    "tid": 18,
+    "h": 40,
+    "w": 40,
+    "c": 32,
+    "pad8": 32,
+    "bytes": 51200
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16982016,
+   "traffic_read": 204800,
+   "traffic_write": 51200,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 10,
+    "in_band_bytes": 43520,
+    "out_band_bytes": 10240
+   }
+  },
+  {
+   "op_id": 21,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 24,
+   "tensor_in": {
+    "tid": 18,
+    "h": 40,
+    "w": 40,
+    "c": 32,
+    "pad8": 32,
+    "bytes": 51200
+   },
+   "tensor_out": {
+    "tid": 19,
+    "h": 40,
+    "w": 40,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 12800
+   },
+   "src_arena_off": 16982016,
+   "dst_arena_off": 16930816,
+   "traffic_read": 51200,
+   "traffic_write": 12800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 5,
+    "in_band_bytes": 10240,
+    "out_band_bytes": 2560
+   }
+  },
+  {
+   "op_id": 22,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 25,
+   "tensor_in": {
+    "tid": 19,
+    "h": 40,
+    "w": 40,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 12800
+   },
+   "tensor_out": {
+    "tid": 20,
+    "h": 40,
+    "w": 40,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 76800
+   },
+   "src_arena_off": 16930816,
+   "dst_arena_off": 16777216,
+   "traffic_read": 12800,
+   "traffic_write": 76800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 15,
+    "in_band_bytes": 2560,
+    "out_band_bytes": 15360
+   }
+  },
+  {
+   "op_id": 23,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 26,
+   "tensor_in": {
+    "tid": 20,
+    "h": 40,
+    "w": 40,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 76800
+   },
+   "tensor_out": {
+    "tid": 21,
+    "h": 40,
+    "w": 40,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 76800
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16854016,
+   "traffic_read": 76800,
+   "traffic_write": 76800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 15,
+    "in_band_bytes": 19200,
+    "out_band_bytes": 15360
+   }
+  },
+  {
+   "op_id": 24,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 27,
+   "tensor_in": {
+    "tid": 21,
+    "h": 40,
+    "w": 40,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 76800
+   },
+   "tensor_out": {
+    "tid": 22,
+    "h": 40,
+    "w": 40,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 12800
+   },
+   "src_arena_off": 16854016,
+   "dst_arena_off": 16777216,
+   "traffic_read": 76800,
+   "traffic_write": 12800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 5,
+    "in_band_bytes": 15360,
+    "out_band_bytes": 2560
+   }
+  },
+  {
+   "op_id": 25,
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 29,
+   "tensor_in": {
+    "tid": 22,
+    "h": 40,
+    "w": 40,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 12800
+   },
+   "tensor_out": {
+    "tid": 19,
+    "h": 40,
+    "w": 40,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 12800
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16930816,
+   "traffic_read": 25600,
+   "traffic_write": 12800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 5,
+    "in_band_bytes": 2560,
+    "out_band_bytes": 2560
+   },
+   "in_place": true,
+   "dst_tensor_total_bytes": 12800
+  },
+  {
+   "op_id": 26,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 30,
+   "tensor_in": {
+    "tid": 19,
+    "h": 40,
+    "w": 40,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 12800
+   },
+   "tensor_out": {
+    "tid": 23,
+    "h": 40,
+    "w": 40,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 76800
+   },
+   "src_arena_off": 16930816,
+   "dst_arena_off": 16777216,
+   "traffic_read": 12800,
+   "traffic_write": 76800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 15,
+    "in_band_bytes": 2560,
+    "out_band_bytes": 15360
+   }
+  },
+  {
+   "op_id": 27,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 31,
+   "tensor_in": {
+    "tid": 23,
+    "h": 40,
+    "w": 40,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 76800
+   },
+   "tensor_out": {
+    "tid": 24,
+    "h": 40,
+    "w": 40,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 76800
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16854016,
+   "traffic_read": 76800,
+   "traffic_write": 76800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 15,
+    "in_band_bytes": 19200,
+    "out_band_bytes": 15360
+   }
+  },
+  {
+   "op_id": 28,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 32,
+   "tensor_in": {
+    "tid": 24,
+    "h": 40,
+    "w": 40,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 76800
+   },
+   "tensor_out": {
+    "tid": 25,
+    "h": 40,
+    "w": 40,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 12800
+   },
+   "src_arena_off": 16854016,
+   "dst_arena_off": 16777216,
+   "traffic_read": 76800,
+   "traffic_write": 12800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 5,
+    "in_band_bytes": 15360,
+    "out_band_bytes": 2560
+   }
+  },
+  {
+   "op_id": 29,
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 34,
+   "tensor_in": {
+    "tid": 25,
+    "h": 40,
+    "w": 40,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 12800
+   },
+   "tensor_out": {
+    "tid": 19,
+    "h": 40,
+    "w": 40,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 12800
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16930816,
+   "traffic_read": 25600,
+   "traffic_write": 12800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 5,
+    "in_band_bytes": 2560,
+    "out_band_bytes": 2560
+   },
+   "in_place": true,
+   "dst_tensor_total_bytes": 12800
+  },
+  {
+   "op_id": 30,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 35,
+   "tensor_in": {
+    "tid": 19,
+    "h": 40,
+    "w": 40,
+    "c": 8,
+    "pad8": 8,
+    "bytes": 12800
+   },
+   "tensor_out": {
+    "tid": 26,
+    "h": 40,
+    "w": 40,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 76800
+   },
+   "src_arena_off": 16930816,
+   "dst_arena_off": 16777216,
+   "traffic_read": 12800,
+   "traffic_write": 76800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 15,
+    "in_band_bytes": 2560,
+    "out_band_bytes": 15360
+   }
+  },
+  {
+   "op_id": 31,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 36,
+   "tensor_in": {
+    "tid": 26,
+    "h": 40,
+    "w": 40,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 76800
+   },
+   "tensor_out": {
+    "tid": 27,
+    "h": 40,
+    "w": 40,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 76800
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16854016,
+   "traffic_read": 76800,
+   "traffic_write": 76800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 15,
+    "in_band_bytes": 19200,
+    "out_band_bytes": 15360
+   }
+  },
+  {
+   "op_id": 32,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 37,
+   "tensor_in": {
+    "tid": 27,
+    "h": 40,
+    "w": 40,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 76800
+   },
+   "tensor_out": {
+    "tid": 28,
+    "h": 40,
+    "w": 40,
+    "c": 16,
+    "pad8": 16,
+    "bytes": 25600
+   },
+   "src_arena_off": 16854016,
+   "dst_arena_off": 17084416,
+   "traffic_read": 76800,
+   "traffic_write": 25600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 5,
+    "in_band_bytes": 15360,
+    "out_band_bytes": 5120
+   }
+  },
+  {
+   "op_id": 33,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 38,
+   "tensor_in": {
+    "tid": 28,
+    "h": 40,
+    "w": 40,
+    "c": 16,
+    "pad8": 16,
+    "bytes": 25600
+   },
+   "tensor_out": {
+    "tid": 29,
+    "h": 40,
+    "w": 40,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 153600
+   },
+   "src_arena_off": 17084416,
+   "dst_arena_off": 16777216,
+   "traffic_read": 25600,
+   "traffic_write": 153600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 30,
+    "in_band_bytes": 5120,
+    "out_band_bytes": 30720
+   }
+  },
+  {
+   "op_id": 34,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 39,
+   "tensor_in": {
+    "tid": 29,
+    "h": 40,
+    "w": 40,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 153600
+   },
+   "tensor_out": {
+    "tid": 30,
+    "h": 40,
+    "w": 40,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 153600
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16930816,
+   "traffic_read": 153600,
+   "traffic_write": 153600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 30,
+    "in_band_bytes": 38400,
+    "out_band_bytes": 30720
+   }
+  },
+  {
+   "op_id": 35,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 40,
+   "tensor_in": {
+    "tid": 30,
+    "h": 40,
+    "w": 40,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 153600
+   },
+   "tensor_out": {
+    "tid": 31,
+    "h": 40,
+    "w": 40,
+    "c": 16,
+    "pad8": 16,
+    "bytes": 25600
+   },
+   "src_arena_off": 16930816,
+   "dst_arena_off": 16777216,
+   "traffic_read": 153600,
+   "traffic_write": 25600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 5,
+    "in_band_bytes": 30720,
+    "out_band_bytes": 5120
+   }
+  },
+  {
+   "op_id": 36,
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 42,
+   "tensor_in": {
+    "tid": 31,
+    "h": 40,
+    "w": 40,
+    "c": 16,
+    "pad8": 16,
+    "bytes": 25600
+   },
+   "tensor_out": {
+    "tid": 28,
+    "h": 40,
+    "w": 40,
+    "c": 16,
+    "pad8": 16,
+    "bytes": 25600
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 17084416,
+   "traffic_read": 51200,
+   "traffic_write": 25600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 5,
+    "in_band_bytes": 5120,
+    "out_band_bytes": 5120
+   },
+   "in_place": true,
+   "dst_tensor_total_bytes": 25600
+  },
+  {
+   "op_id": 37,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 43,
+   "tensor_in": {
+    "tid": 28,
+    "h": 40,
+    "w": 40,
+    "c": 16,
+    "pad8": 16,
+    "bytes": 25600
+   },
+   "tensor_out": {
+    "tid": 32,
+    "h": 40,
+    "w": 40,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 153600
+   },
+   "src_arena_off": 17084416,
+   "dst_arena_off": 16777216,
+   "traffic_read": 25600,
+   "traffic_write": 153600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 30,
+    "in_band_bytes": 5120,
+    "out_band_bytes": 30720
+   }
+  },
+  {
+   "op_id": 38,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 44,
+   "tensor_in": {
+    "tid": 32,
+    "h": 40,
+    "w": 40,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 153600
+   },
+   "tensor_out": {
+    "tid": 33,
+    "h": 40,
+    "w": 40,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 153600
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16930816,
+   "traffic_read": 153600,
+   "traffic_write": 153600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 30,
+    "in_band_bytes": 38400,
+    "out_band_bytes": 30720
+   }
+  },
+  {
+   "op_id": 39,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 45,
+   "tensor_in": {
+    "tid": 33,
+    "h": 40,
+    "w": 40,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 153600
+   },
+   "tensor_out": {
+    "tid": 34,
+    "h": 40,
+    "w": 40,
+    "c": 16,
+    "pad8": 16,
+    "bytes": 25600
+   },
+   "src_arena_off": 16930816,
+   "dst_arena_off": 16777216,
+   "traffic_read": 153600,
+   "traffic_write": 25600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 5,
+    "in_band_bytes": 30720,
+    "out_band_bytes": 5120
+   }
+  },
+  {
+   "op_id": 40,
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 47,
+   "tensor_in": {
+    "tid": 34,
+    "h": 40,
+    "w": 40,
+    "c": 16,
+    "pad8": 16,
+    "bytes": 25600
+   },
+   "tensor_out": {
+    "tid": 28,
+    "h": 40,
+    "w": 40,
+    "c": 16,
+    "pad8": 16,
+    "bytes": 25600
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 17084416,
+   "traffic_read": 51200,
+   "traffic_write": 25600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 5,
+    "in_band_bytes": 5120,
+    "out_band_bytes": 5120
+   },
+   "in_place": true,
+   "dst_tensor_total_bytes": 25600
+  },
+  {
+   "op_id": 41,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 48,
+   "tensor_in": {
+    "tid": 28,
+    "h": 40,
+    "w": 40,
+    "c": 16,
+    "pad8": 16,
+    "bytes": 25600
+   },
+   "tensor_out": {
+    "tid": 35,
+    "h": 40,
+    "w": 40,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 153600
+   },
+   "src_arena_off": 17084416,
+   "dst_arena_off": 16777216,
+   "traffic_read": 25600,
+   "traffic_write": 153600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 30,
+    "in_band_bytes": 5120,
+    "out_band_bytes": 30720
+   }
+  },
+  {
+   "op_id": 42,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 49,
+   "tensor_in": {
+    "tid": 35,
+    "h": 40,
+    "w": 40,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 153600
+   },
+   "tensor_out": {
+    "tid": 36,
+    "h": 40,
+    "w": 40,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 153600
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16930816,
+   "traffic_read": 153600,
+   "traffic_write": 153600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 30,
+    "in_band_bytes": 38400,
+    "out_band_bytes": 30720
+   }
+  },
+  {
+   "op_id": 43,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 50,
+   "tensor_in": {
+    "tid": 36,
+    "h": 40,
+    "w": 40,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 153600
+   },
+   "tensor_out": {
+    "tid": 37,
+    "h": 40,
+    "w": 40,
+    "c": 16,
+    "pad8": 16,
+    "bytes": 25600
+   },
+   "src_arena_off": 16930816,
+   "dst_arena_off": 16777216,
+   "traffic_read": 153600,
+   "traffic_write": 25600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 5,
+    "in_band_bytes": 30720,
+    "out_band_bytes": 5120
+   }
+  },
+  {
+   "op_id": 44,
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 52,
+   "tensor_in": {
+    "tid": 37,
+    "h": 40,
+    "w": 40,
+    "c": 16,
+    "pad8": 16,
+    "bytes": 25600
+   },
+   "tensor_out": {
+    "tid": 28,
+    "h": 40,
+    "w": 40,
+    "c": 16,
+    "pad8": 16,
+    "bytes": 25600
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 17084416,
+   "traffic_read": 51200,
+   "traffic_write": 25600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 5,
+    "in_band_bytes": 5120,
+    "out_band_bytes": 5120
+   },
+   "in_place": true,
+   "dst_tensor_total_bytes": 25600
+  },
+  {
+   "op_id": 45,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 53,
+   "tensor_in": {
+    "tid": 28,
+    "h": 40,
+    "w": 40,
+    "c": 16,
+    "pad8": 16,
+    "bytes": 25600
+   },
+   "tensor_out": {
+    "tid": 38,
+    "h": 40,
+    "w": 40,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 153600
+   },
+   "src_arena_off": 17084416,
+   "dst_arena_off": 16777216,
+   "traffic_read": 25600,
+   "traffic_write": 153600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 30,
+    "in_band_bytes": 5120,
+    "out_band_bytes": 30720
+   }
+  },
+  {
+   "op_id": 46,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 54,
+   "tensor_in": {
+    "tid": 38,
+    "h": 40,
+    "w": 40,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 153600
+   },
+   "tensor_out": {
+    "tid": 39,
+    "h": 40,
+    "w": 40,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 153600
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16930816,
+   "traffic_read": 153600,
+   "traffic_write": 153600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 30,
+    "in_band_bytes": 38400,
+    "out_band_bytes": 30720
+   }
+  },
+  {
+   "op_id": 47,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 55,
+   "tensor_in": {
+    "tid": 39,
+    "h": 40,
+    "w": 40,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 153600
+   },
+   "tensor_out": {
+    "tid": 40,
+    "h": 40,
+    "w": 40,
+    "c": 16,
+    "pad8": 16,
+    "bytes": 25600
+   },
+   "src_arena_off": 16930816,
+   "dst_arena_off": 16777216,
+   "traffic_read": 153600,
+   "traffic_write": 25600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 5,
+    "in_band_bytes": 30720,
+    "out_band_bytes": 5120
+   }
+  },
+  {
+   "op_id": 48,
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 57,
+   "tensor_in": {
+    "tid": 40,
+    "h": 40,
+    "w": 40,
+    "c": 16,
+    "pad8": 16,
+    "bytes": 25600
+   },
+   "tensor_out": {
+    "tid": 28,
+    "h": 40,
+    "w": 40,
+    "c": 16,
+    "pad8": 16,
+    "bytes": 25600
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 17084416,
+   "traffic_read": 51200,
+   "traffic_write": 25600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 5,
+    "in_band_bytes": 5120,
+    "out_band_bytes": 5120
+   },
+   "in_place": true,
+   "dst_tensor_total_bytes": 25600
+  },
+  {
+   "op_id": 49,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 58,
+   "tensor_in": {
+    "tid": 28,
+    "h": 40,
+    "w": 40,
+    "c": 16,
+    "pad8": 16,
+    "bytes": 25600
+   },
+   "tensor_out": {
+    "tid": 41,
+    "h": 40,
+    "w": 40,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 153600
+   },
+   "src_arena_off": 17084416,
+   "dst_arena_off": 16777216,
+   "traffic_read": 25600,
+   "traffic_write": 153600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 30,
+    "in_band_bytes": 5120,
+    "out_band_bytes": 30720
+   }
+  },
+  {
+   "op_id": 50,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 59,
+   "tensor_in": {
+    "tid": 41,
+    "h": 40,
+    "w": 40,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 153600
+   },
+   "tensor_out": {
+    "tid": 42,
+    "h": 20,
+    "w": 20,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 38400
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16930816,
+   "traffic_read": 153600,
+   "traffic_write": 38400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 18,
+    "in_band_bytes": 65280,
+    "out_band_bytes": 15360
+   }
+  },
+  {
+   "op_id": 51,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 60,
+   "tensor_in": {
+    "tid": 42,
+    "h": 20,
+    "w": 20,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 38400
+   },
+   "tensor_out": {
+    "tid": 43,
+    "h": 20,
+    "w": 20,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 9600
+   },
+   "src_arena_off": 16930816,
+   "dst_arena_off": 16886016,
+   "traffic_read": 38400,
+   "traffic_write": 9600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 15360,
+    "out_band_bytes": 3840
+   }
+  },
+  {
+   "op_id": 52,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 61,
+   "tensor_in": {
+    "tid": 43,
+    "h": 20,
+    "w": 20,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 9600
+   },
+   "tensor_out": {
+    "tid": 44,
+    "h": 20,
+    "w": 20,
+    "c": 136,
+    "pad8": 136,
+    "bytes": 54400
+   },
+   "src_arena_off": 16886016,
+   "dst_arena_off": 16777216,
+   "traffic_read": 9600,
+   "traffic_write": 54400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 27,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 21760
+   }
+  },
+  {
+   "op_id": 53,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 62,
+   "tensor_in": {
+    "tid": 44,
+    "h": 20,
+    "w": 20,
+    "c": 136,
+    "pad8": 136,
+    "bytes": 54400
+   },
+   "tensor_out": {
+    "tid": 45,
+    "h": 20,
+    "w": 20,
+    "c": 136,
+    "pad8": 136,
+    "bytes": 54400
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16831616,
+   "traffic_read": 54400,
+   "traffic_write": 54400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 27,
+    "in_band_bytes": 27200,
+    "out_band_bytes": 21760
+   }
+  },
+  {
+   "op_id": 54,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 63,
+   "tensor_in": {
+    "tid": 45,
+    "h": 20,
+    "w": 20,
+    "c": 136,
+    "pad8": 136,
+    "bytes": 54400
+   },
+   "tensor_out": {
+    "tid": 46,
+    "h": 20,
+    "w": 20,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 9600
+   },
+   "src_arena_off": 16831616,
+   "dst_arena_off": 16777216,
+   "traffic_read": 54400,
+   "traffic_write": 9600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 21760,
+    "out_band_bytes": 3840
+   }
+  },
+  {
+   "op_id": 55,
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 65,
+   "tensor_in": {
+    "tid": 46,
+    "h": 20,
+    "w": 20,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 9600
+   },
+   "tensor_out": {
+    "tid": 43,
+    "h": 20,
+    "w": 20,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 9600
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16886016,
+   "traffic_read": 19200,
+   "traffic_write": 9600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 3840
+   },
+   "in_place": true,
+   "dst_tensor_total_bytes": 9600
+  },
+  {
+   "op_id": 56,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 66,
+   "tensor_in": {
+    "tid": 43,
+    "h": 20,
+    "w": 20,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 9600
+   },
+   "tensor_out": {
+    "tid": 47,
+    "h": 20,
+    "w": 20,
+    "c": 136,
+    "pad8": 136,
+    "bytes": 54400
+   },
+   "src_arena_off": 16886016,
+   "dst_arena_off": 16777216,
+   "traffic_read": 9600,
+   "traffic_write": 54400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 27,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 21760
+   }
+  },
+  {
+   "op_id": 57,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 67,
+   "tensor_in": {
+    "tid": 47,
+    "h": 20,
+    "w": 20,
+    "c": 136,
+    "pad8": 136,
+    "bytes": 54400
+   },
+   "tensor_out": {
+    "tid": 48,
+    "h": 20,
+    "w": 20,
+    "c": 136,
+    "pad8": 136,
+    "bytes": 54400
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16831616,
+   "traffic_read": 54400,
+   "traffic_write": 54400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 27,
+    "in_band_bytes": 27200,
+    "out_band_bytes": 21760
+   }
+  },
+  {
+   "op_id": 58,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 68,
+   "tensor_in": {
+    "tid": 48,
+    "h": 20,
+    "w": 20,
+    "c": 136,
+    "pad8": 136,
+    "bytes": 54400
+   },
+   "tensor_out": {
+    "tid": 49,
+    "h": 20,
+    "w": 20,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 9600
+   },
+   "src_arena_off": 16831616,
+   "dst_arena_off": 16777216,
+   "traffic_read": 54400,
+   "traffic_write": 9600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 21760,
+    "out_band_bytes": 3840
+   }
+  },
+  {
+   "op_id": 59,
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 70,
+   "tensor_in": {
+    "tid": 49,
+    "h": 20,
+    "w": 20,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 9600
+   },
+   "tensor_out": {
+    "tid": 43,
+    "h": 20,
+    "w": 20,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 9600
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16886016,
+   "traffic_read": 19200,
+   "traffic_write": 9600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 3840
+   },
+   "in_place": true,
+   "dst_tensor_total_bytes": 9600
+  },
+  {
+   "op_id": 60,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 71,
+   "tensor_in": {
+    "tid": 43,
+    "h": 20,
+    "w": 20,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 9600
+   },
+   "tensor_out": {
+    "tid": 50,
+    "h": 20,
+    "w": 20,
+    "c": 136,
+    "pad8": 136,
+    "bytes": 54400
+   },
+   "src_arena_off": 16886016,
+   "dst_arena_off": 16777216,
+   "traffic_read": 9600,
+   "traffic_write": 54400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 27,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 21760
+   }
+  },
+  {
+   "op_id": 61,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 72,
+   "tensor_in": {
+    "tid": 50,
+    "h": 20,
+    "w": 20,
+    "c": 136,
+    "pad8": 136,
+    "bytes": 54400
+   },
+   "tensor_out": {
+    "tid": 51,
+    "h": 20,
+    "w": 20,
+    "c": 136,
+    "pad8": 136,
+    "bytes": 54400
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16831616,
+   "traffic_read": 54400,
+   "traffic_write": 54400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 27,
+    "in_band_bytes": 27200,
+    "out_band_bytes": 21760
+   }
+  },
+  {
+   "op_id": 62,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 73,
+   "tensor_in": {
+    "tid": 51,
+    "h": 20,
+    "w": 20,
+    "c": 136,
+    "pad8": 136,
+    "bytes": 54400
+   },
+   "tensor_out": {
+    "tid": 52,
+    "h": 20,
+    "w": 20,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 9600
+   },
+   "src_arena_off": 16831616,
+   "dst_arena_off": 16777216,
+   "traffic_read": 54400,
+   "traffic_write": 9600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 21760,
+    "out_band_bytes": 3840
+   }
+  },
+  {
+   "op_id": 63,
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 75,
+   "tensor_in": {
+    "tid": 52,
+    "h": 20,
+    "w": 20,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 9600
+   },
+   "tensor_out": {
+    "tid": 43,
+    "h": 20,
+    "w": 20,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 9600
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16886016,
+   "traffic_read": 19200,
+   "traffic_write": 9600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 3840
+   },
+   "in_place": true,
+   "dst_tensor_total_bytes": 9600
+  },
+  {
+   "op_id": 64,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 76,
+   "tensor_in": {
+    "tid": 43,
+    "h": 20,
+    "w": 20,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 9600
+   },
+   "tensor_out": {
+    "tid": 53,
+    "h": 20,
+    "w": 20,
+    "c": 136,
+    "pad8": 136,
+    "bytes": 54400
+   },
+   "src_arena_off": 16886016,
+   "dst_arena_off": 16777216,
+   "traffic_read": 9600,
+   "traffic_write": 54400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 27,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 21760
+   }
+  },
+  {
+   "op_id": 65,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 77,
+   "tensor_in": {
+    "tid": 53,
+    "h": 20,
+    "w": 20,
+    "c": 136,
+    "pad8": 136,
+    "bytes": 54400
+   },
+   "tensor_out": {
+    "tid": 54,
+    "h": 20,
+    "w": 20,
+    "c": 136,
+    "pad8": 136,
+    "bytes": 54400
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16831616,
+   "traffic_read": 54400,
+   "traffic_write": 54400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 27,
+    "in_band_bytes": 27200,
+    "out_band_bytes": 21760
+   }
+  },
+  {
+   "op_id": 66,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 78,
+   "tensor_in": {
+    "tid": 54,
+    "h": 20,
+    "w": 20,
+    "c": 136,
+    "pad8": 136,
+    "bytes": 54400
+   },
+   "tensor_out": {
+    "tid": 55,
+    "h": 20,
+    "w": 20,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 9600
+   },
+   "src_arena_off": 16831616,
+   "dst_arena_off": 16777216,
+   "traffic_read": 54400,
+   "traffic_write": 9600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 21760,
+    "out_band_bytes": 3840
+   }
+  },
+  {
+   "op_id": 67,
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 80,
+   "tensor_in": {
+    "tid": 55,
+    "h": 20,
+    "w": 20,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 9600
+   },
+   "tensor_out": {
+    "tid": 43,
+    "h": 20,
+    "w": 20,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 9600
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16886016,
+   "traffic_read": 19200,
+   "traffic_write": 9600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 3840
+   },
+   "in_place": true,
+   "dst_tensor_total_bytes": 9600
+  },
+  {
+   "op_id": 68,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 81,
+   "tensor_in": {
+    "tid": 43,
+    "h": 20,
+    "w": 20,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 9600
+   },
+   "tensor_out": {
+    "tid": 56,
+    "h": 20,
+    "w": 20,
+    "c": 136,
+    "pad8": 136,
+    "bytes": 54400
+   },
+   "src_arena_off": 16886016,
+   "dst_arena_off": 16777216,
+   "traffic_read": 9600,
+   "traffic_write": 54400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 27,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 21760
+   }
+  },
+  {
+   "op_id": 69,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 82,
+   "tensor_in": {
+    "tid": 56,
+    "h": 20,
+    "w": 20,
+    "c": 136,
+    "pad8": 136,
+    "bytes": 54400
+   },
+   "tensor_out": {
+    "tid": 57,
+    "h": 10,
+    "w": 10,
+    "c": 136,
+    "pad8": 136,
+    "bytes": 13600
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16831616,
+   "traffic_read": 54400,
+   "traffic_write": 13600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 18,
+    "in_band_bytes": 46240,
+    "out_band_bytes": 10880
+   }
+  },
+  {
+   "op_id": 70,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 83,
+   "tensor_in": {
+    "tid": 57,
+    "h": 10,
+    "w": 10,
+    "c": 136,
+    "pad8": 136,
+    "bytes": 13600
+   },
+   "tensor_out": {
+    "tid": 58,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "src_arena_off": 16831616,
+   "dst_arena_off": 16822016,
+   "traffic_read": 13600,
+   "traffic_write": 4800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 10880,
+    "out_band_bytes": 3840
+   }
+  },
+  {
+   "op_id": 71,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 84,
+   "tensor_in": {
+    "tid": 58,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "tensor_out": {
+    "tid": 59,
+    "h": 10,
+    "w": 10,
+    "c": 224,
+    "pad8": 224,
+    "bytes": 22400
+   },
+   "src_arena_off": 16822016,
+   "dst_arena_off": 16777216,
+   "traffic_read": 4800,
+   "traffic_write": 22400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 28,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 17920
+   }
+  },
+  {
+   "op_id": 72,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 85,
+   "tensor_in": {
+    "tid": 59,
+    "h": 10,
+    "w": 10,
+    "c": 224,
+    "pad8": 224,
+    "bytes": 22400
+   },
+   "tensor_out": {
+    "tid": 60,
+    "h": 10,
+    "w": 10,
+    "c": 224,
+    "pad8": 224,
+    "bytes": 22400
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16799616,
+   "traffic_read": 22400,
+   "traffic_write": 22400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 28,
+    "in_band_bytes": 22400,
+    "out_band_bytes": 17920
+   }
+  },
+  {
+   "op_id": 73,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 86,
+   "tensor_in": {
+    "tid": 60,
+    "h": 10,
+    "w": 10,
+    "c": 224,
+    "pad8": 224,
+    "bytes": 22400
+   },
+   "tensor_out": {
+    "tid": 61,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "src_arena_off": 16799616,
+   "dst_arena_off": 16777216,
+   "traffic_read": 22400,
+   "traffic_write": 4800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 17920,
+    "out_band_bytes": 3840
+   }
+  },
+  {
+   "op_id": 74,
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 88,
+   "tensor_in": {
+    "tid": 61,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "tensor_out": {
+    "tid": 58,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16822016,
+   "traffic_read": 9600,
+   "traffic_write": 4800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 3840
+   },
+   "in_place": true,
+   "dst_tensor_total_bytes": 4800
+  },
+  {
+   "op_id": 75,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 89,
+   "tensor_in": {
+    "tid": 58,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "tensor_out": {
+    "tid": 62,
+    "h": 10,
+    "w": 10,
+    "c": 224,
+    "pad8": 224,
+    "bytes": 22400
+   },
+   "src_arena_off": 16822016,
+   "dst_arena_off": 16777216,
+   "traffic_read": 4800,
+   "traffic_write": 22400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 28,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 17920
+   }
+  },
+  {
+   "op_id": 76,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 90,
+   "tensor_in": {
+    "tid": 62,
+    "h": 10,
+    "w": 10,
+    "c": 224,
+    "pad8": 224,
+    "bytes": 22400
+   },
+   "tensor_out": {
+    "tid": 63,
+    "h": 10,
+    "w": 10,
+    "c": 224,
+    "pad8": 224,
+    "bytes": 22400
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16799616,
+   "traffic_read": 22400,
+   "traffic_write": 22400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 28,
+    "in_band_bytes": 22400,
+    "out_band_bytes": 17920
+   }
+  },
+  {
+   "op_id": 77,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 91,
+   "tensor_in": {
+    "tid": 63,
+    "h": 10,
+    "w": 10,
+    "c": 224,
+    "pad8": 224,
+    "bytes": 22400
+   },
+   "tensor_out": {
+    "tid": 64,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "src_arena_off": 16799616,
+   "dst_arena_off": 16777216,
+   "traffic_read": 22400,
+   "traffic_write": 4800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 17920,
+    "out_band_bytes": 3840
+   }
+  },
+  {
+   "op_id": 78,
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 93,
+   "tensor_in": {
+    "tid": 64,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "tensor_out": {
+    "tid": 58,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16822016,
+   "traffic_read": 9600,
+   "traffic_write": 4800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 3840
+   },
+   "in_place": true,
+   "dst_tensor_total_bytes": 4800
+  },
+  {
+   "op_id": 79,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 94,
+   "tensor_in": {
+    "tid": 58,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "tensor_out": {
+    "tid": 65,
+    "h": 10,
+    "w": 10,
+    "c": 224,
+    "pad8": 224,
+    "bytes": 22400
+   },
+   "src_arena_off": 16822016,
+   "dst_arena_off": 16777216,
+   "traffic_read": 4800,
+   "traffic_write": 22400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 28,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 17920
+   }
+  },
+  {
+   "op_id": 80,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 95,
+   "tensor_in": {
+    "tid": 65,
+    "h": 10,
+    "w": 10,
+    "c": 224,
+    "pad8": 224,
+    "bytes": 22400
+   },
+   "tensor_out": {
+    "tid": 66,
+    "h": 10,
+    "w": 10,
+    "c": 224,
+    "pad8": 224,
+    "bytes": 22400
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16799616,
+   "traffic_read": 22400,
+   "traffic_write": 22400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 28,
+    "in_band_bytes": 22400,
+    "out_band_bytes": 17920
+   }
+  },
+  {
+   "op_id": 81,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 96,
+   "tensor_in": {
+    "tid": 66,
+    "h": 10,
+    "w": 10,
+    "c": 224,
+    "pad8": 224,
+    "bytes": 22400
+   },
+   "tensor_out": {
+    "tid": 67,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "src_arena_off": 16799616,
+   "dst_arena_off": 16777216,
+   "traffic_read": 22400,
+   "traffic_write": 4800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 17920,
+    "out_band_bytes": 3840
+   }
+  },
+  {
+   "op_id": 82,
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 98,
+   "tensor_in": {
+    "tid": 67,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "tensor_out": {
+    "tid": 58,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16822016,
+   "traffic_read": 9600,
+   "traffic_write": 4800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 3840
+   },
+   "in_place": true,
+   "dst_tensor_total_bytes": 4800
+  },
+  {
+   "op_id": 83,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 99,
+   "tensor_in": {
+    "tid": 58,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "tensor_out": {
+    "tid": 68,
+    "h": 10,
+    "w": 10,
+    "c": 224,
+    "pad8": 224,
+    "bytes": 22400
+   },
+   "src_arena_off": 16822016,
+   "dst_arena_off": 16777216,
+   "traffic_read": 4800,
+   "traffic_write": 22400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 28,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 17920
+   }
+  },
+  {
+   "op_id": 84,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 100,
+   "tensor_in": {
+    "tid": 68,
+    "h": 10,
+    "w": 10,
+    "c": 224,
+    "pad8": 224,
+    "bytes": 22400
+   },
+   "tensor_out": {
+    "tid": 69,
+    "h": 10,
+    "w": 10,
+    "c": 224,
+    "pad8": 224,
+    "bytes": 22400
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16799616,
+   "traffic_read": 22400,
+   "traffic_write": 22400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 28,
+    "in_band_bytes": 22400,
+    "out_band_bytes": 17920
+   }
+  },
+  {
+   "op_id": 85,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 101,
+   "tensor_in": {
+    "tid": 69,
+    "h": 10,
+    "w": 10,
+    "c": 224,
+    "pad8": 224,
+    "bytes": 22400
+   },
+   "tensor_out": {
+    "tid": 70,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "src_arena_off": 16799616,
+   "dst_arena_off": 16777216,
+   "traffic_read": 22400,
+   "traffic_write": 4800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 17920,
+    "out_band_bytes": 3840
+   }
+  },
+  {
+   "op_id": 86,
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 103,
+   "tensor_in": {
+    "tid": 70,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "tensor_out": {
+    "tid": 58,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16822016,
+   "traffic_read": 9600,
+   "traffic_write": 4800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 3840
+   },
+   "in_place": true,
+   "dst_tensor_total_bytes": 4800
+  },
+  {
+   "op_id": 87,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 104,
+   "tensor_in": {
+    "tid": 58,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "tensor_out": {
+    "tid": 71,
+    "h": 10,
+    "w": 10,
+    "c": 224,
+    "pad8": 224,
+    "bytes": 22400
+   },
+   "src_arena_off": 16822016,
+   "dst_arena_off": 16777216,
+   "traffic_read": 4800,
+   "traffic_write": 22400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 28,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 17920
+   }
+  },
+  {
+   "op_id": 88,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 105,
+   "tensor_in": {
+    "tid": 71,
+    "h": 10,
+    "w": 10,
+    "c": 224,
+    "pad8": 224,
+    "bytes": 22400
+   },
+   "tensor_out": {
+    "tid": 72,
+    "h": 10,
+    "w": 10,
+    "c": 224,
+    "pad8": 224,
+    "bytes": 22400
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16799616,
+   "traffic_read": 22400,
+   "traffic_write": 22400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 28,
+    "in_band_bytes": 22400,
+    "out_band_bytes": 17920
+   }
+  },
+  {
+   "op_id": 89,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 106,
+   "tensor_in": {
+    "tid": 72,
+    "h": 10,
+    "w": 10,
+    "c": 224,
+    "pad8": 224,
+    "bytes": 22400
+   },
+   "tensor_out": {
+    "tid": 73,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "src_arena_off": 16799616,
+   "dst_arena_off": 16777216,
+   "traffic_read": 22400,
+   "traffic_write": 4800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 17920,
+    "out_band_bytes": 3840
+   }
+  },
+  {
+   "op_id": 90,
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 108,
+   "tensor_in": {
+    "tid": 73,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "tensor_out": {
+    "tid": 58,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16822016,
+   "traffic_read": 9600,
+   "traffic_write": 4800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 3840
+   },
+   "in_place": true,
+   "dst_tensor_total_bytes": 4800
+  },
+  {
+   "op_id": 91,
+   "kind": "pool",
+   "flags": 0,
+   "layer_idx": 109,
+   "tensor_in": {
+    "tid": 58,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "tensor_out": {
+    "tid": 74,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "src_arena_off": 16822016,
+   "dst_arena_off": 16796416,
+   "traffic_read": 4800,
+   "traffic_write": 4800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 4800,
+    "out_band_bytes": 3840
+   }
+  },
+  {
+   "op_id": 92,
+   "kind": "pool",
+   "flags": 0,
+   "layer_idx": 111,
+   "tensor_in": {
+    "tid": 58,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "tensor_out": {
+    "tid": 75,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "src_arena_off": 16822016,
+   "dst_arena_off": 16801216,
+   "traffic_read": 4800,
+   "traffic_write": 4800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 5760,
+    "out_band_bytes": 3840
+   }
+  },
+  {
+   "op_id": 93,
+   "kind": "pool",
+   "flags": 0,
+   "layer_idx": 113,
+   "tensor_in": {
+    "tid": 58,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "tensor_out": {
+    "tid": 76,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "src_arena_off": 16822016,
+   "dst_arena_off": 16806016,
+   "traffic_read": 4800,
+   "traffic_write": 4800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 6,
+    "in_band_bytes": 7680,
+    "out_band_bytes": 3840
+   }
+  },
+  {
+   "op_id": 94,
+   "kind": "copy",
+   "flags": 0,
+   "layer_idx": 114,
+   "tensor_in": {
+    "tid": 76,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "tensor_out": {
+    "tid": 77,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "src_arena_off": 16806016,
+   "dst_arena_off": 16777216,
+   "traffic_read": 4800,
+   "traffic_write": 4800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 12,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 3840
+   },
+   "c_src": 0,
+   "c_dst": 0,
+   "dst_tensor_total_bytes": 19200,
+   "dst_tensor_total_c": 192
+  },
+  {
+   "op_id": 95,
+   "kind": "copy",
+   "flags": 0,
+   "layer_idx": 114,
+   "tensor_in": {
+    "tid": 75,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "tensor_out": {
+    "tid": 77,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "src_arena_off": 16801216,
+   "dst_arena_off": 16777264,
+   "traffic_read": 4800,
+   "traffic_write": 4800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 12,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 3840
+   },
+   "c_src": 0,
+   "c_dst": 48,
+   "dst_tensor_total_bytes": 19200,
+   "dst_tensor_total_c": 192
+  },
+  {
+   "op_id": 96,
+   "kind": "copy",
+   "flags": 0,
+   "layer_idx": 114,
+   "tensor_in": {
+    "tid": 74,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "tensor_out": {
+    "tid": 77,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "src_arena_off": 16796416,
+   "dst_arena_off": 16777312,
+   "traffic_read": 4800,
+   "traffic_write": 4800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 12,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 3840
+   },
+   "c_src": 0,
+   "c_dst": 96,
+   "dst_tensor_total_bytes": 19200,
+   "dst_tensor_total_c": 192
+  },
+  {
+   "op_id": 97,
+   "kind": "copy",
+   "flags": 0,
+   "layer_idx": 114,
+   "tensor_in": {
+    "tid": 58,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "tensor_out": {
+    "tid": 77,
+    "h": 10,
+    "w": 10,
+    "c": 48,
+    "pad8": 48,
+    "bytes": 4800
+   },
+   "src_arena_off": 16822016,
+   "dst_arena_off": 16777360,
+   "traffic_read": 4800,
+   "traffic_write": 4800,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 12,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 3840
+   },
+   "c_src": 0,
+   "c_dst": 144,
+   "dst_tensor_total_bytes": 19200,
+   "dst_tensor_total_c": 192
+  },
+  {
+   "op_id": 98,
+   "kind": "conv",
+   "flags": 2,
+   "layer_idx": 115,
+   "tensor_in": {
+    "tid": 77,
+    "h": 10,
+    "w": 10,
+    "c": 192,
+    "pad8": 192,
+    "bytes": 19200
+   },
+   "tensor_out": {
+    "tid": 78,
+    "h": 10,
+    "w": 10,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 9600
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16796416,
+   "traffic_read": 19200,
+   "traffic_write": 9600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 12,
+    "in_band_bytes": 15360,
+    "out_band_bytes": 7680
+   }
+  },
+  {
+   "op_id": 99,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 116,
+   "tensor_in": {
+    "tid": 78,
+    "h": 10,
+    "w": 10,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 9600
+   },
+   "tensor_out": {
+    "tid": 79,
+    "h": 10,
+    "w": 10,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 9600
+   },
+   "src_arena_off": 16796416,
+   "dst_arena_off": 16777216,
+   "traffic_read": 9600,
+   "traffic_write": 9600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 12,
+    "in_band_bytes": 11520,
+    "out_band_bytes": 7680
+   }
+  },
+  {
+   "op_id": 100,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 117,
+   "tensor_in": {
+    "tid": 79,
+    "h": 10,
+    "w": 10,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 9600
+   },
+   "tensor_out": {
+    "tid": 80,
+    "h": 10,
+    "w": 10,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 9600
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16786816,
+   "traffic_read": 9600,
+   "traffic_write": 9600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 12,
+    "in_band_bytes": 7680,
+    "out_band_bytes": 7680
+   }
+  },
+  {
+   "op_id": 101,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 118,
+   "tensor_in": {
+    "tid": 80,
+    "h": 10,
+    "w": 10,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 9600
+   },
+   "tensor_out": {
+    "tid": 81,
+    "h": 10,
+    "w": 10,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 9600
+   },
+   "src_arena_off": 16786816,
+   "dst_arena_off": 16777216,
+   "traffic_read": 9600,
+   "traffic_write": 9600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 12,
+    "in_band_bytes": 11520,
+    "out_band_bytes": 7680
+   }
+  },
+  {
+   "op_id": 102,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 119,
+   "tensor_in": {
+    "tid": 81,
+    "h": 10,
+    "w": 10,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 9600
+   },
+   "tensor_out": {
+    "tid": 82,
+    "h": 10,
+    "w": 10,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 9600
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16786816,
+   "traffic_read": 9600,
+   "traffic_write": 9600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 12,
+    "in_band_bytes": 7680,
+    "out_band_bytes": 7680
+   }
+  },
+  {
+   "op_id": 103,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 120,
+   "tensor_in": {
+    "tid": 82,
+    "h": 10,
+    "w": 10,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 9600
+   },
+   "tensor_out": {
+    "tid": 83,
+    "h": 10,
+    "w": 10,
+    "c": 255,
+    "pad8": 256,
+    "bytes": 25600
+   },
+   "src_arena_off": 16786816,
+   "dst_arena_off": 16927616,
+   "traffic_read": 9600,
+   "traffic_write": 25600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 32,
+    "in_band_bytes": 7680,
+    "out_band_bytes": 20480
+   }
+  },
+  {
+   "op_id": 104,
+   "kind": "upsample",
+   "flags": 0,
+   "layer_idx": 123,
+   "tensor_in": {
+    "tid": 78,
+    "h": 10,
+    "w": 10,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 9600
+   },
+   "tensor_out": {
+    "tid": 84,
+    "h": 20,
+    "w": 20,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 38400
+   },
+   "src_arena_off": 16796416,
+   "dst_arena_off": 16825216,
+   "traffic_read": 9600,
+   "traffic_write": 38400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 18,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 15360
+   }
+  },
+  {
+   "op_id": 105,
+   "kind": "copy",
+   "flags": 0,
+   "layer_idx": 124,
+   "tensor_in": {
+    "tid": 84,
+    "h": 20,
+    "w": 20,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 38400
+   },
+   "tensor_out": {
+    "tid": 85,
+    "h": 20,
+    "w": 20,
+    "c": 96,
+    "pad8": 96,
+    "bytes": 38400
+   },
+   "src_arena_off": 16825216,
+   "dst_arena_off": 16777216,
+   "traffic_read": 38400,
+   "traffic_write": 38400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 36,
+    "in_band_bytes": 15360,
+    "out_band_bytes": 15360
+   },
+   "c_src": 0,
+   "c_dst": 0,
+   "dst_tensor_total_bytes": 48000,
+   "dst_tensor_total_c": 120
+  },
+  {
+   "op_id": 106,
+   "kind": "copy",
+   "flags": 0,
+   "layer_idx": 124,
+   "tensor_in": {
+    "tid": 43,
+    "h": 20,
+    "w": 20,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 9600
+   },
+   "tensor_out": {
+    "tid": 85,
+    "h": 20,
+    "w": 20,
+    "c": 24,
+    "pad8": 24,
+    "bytes": 9600
+   },
+   "src_arena_off": 16886016,
+   "dst_arena_off": 16777312,
+   "traffic_read": 9600,
+   "traffic_write": 9600,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 9,
+    "in_band_bytes": 3840,
+    "out_band_bytes": 3840
+   },
+   "c_src": 0,
+   "c_dst": 96,
+   "dst_tensor_total_bytes": 48000,
+   "dst_tensor_total_c": 120
+  },
+  {
+   "op_id": 107,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 125,
+   "tensor_in": {
+    "tid": 85,
+    "h": 20,
+    "w": 20,
+    "c": 120,
+    "pad8": 120,
+    "bytes": 48000
+   },
+   "tensor_out": {
+    "tid": 86,
+    "h": 20,
+    "w": 20,
+    "c": 120,
+    "pad8": 120,
+    "bytes": 48000
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16825216,
+   "traffic_read": 48000,
+   "traffic_write": 48000,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 24,
+    "in_band_bytes": 28800,
+    "out_band_bytes": 19200
+   }
+  },
+  {
+   "op_id": 108,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 126,
+   "tensor_in": {
+    "tid": 86,
+    "h": 20,
+    "w": 20,
+    "c": 120,
+    "pad8": 120,
+    "bytes": 48000
+   },
+   "tensor_out": {
+    "tid": 87,
+    "h": 20,
+    "w": 20,
+    "c": 120,
+    "pad8": 120,
+    "bytes": 48000
+   },
+   "src_arena_off": 16825216,
+   "dst_arena_off": 16777216,
+   "traffic_read": 48000,
+   "traffic_write": 48000,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 24,
+    "in_band_bytes": 19200,
+    "out_band_bytes": 19200
+   }
+  },
+  {
+   "op_id": 109,
+   "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 127,
+   "tensor_in": {
+    "tid": 87,
+    "h": 20,
+    "w": 20,
+    "c": 120,
+    "pad8": 120,
+    "bytes": 48000
+   },
+   "tensor_out": {
+    "tid": 88,
+    "h": 20,
+    "w": 20,
+    "c": 120,
+    "pad8": 120,
+    "bytes": 48000
+   },
+   "src_arena_off": 16777216,
+   "dst_arena_off": 16825216,
+   "traffic_read": 48000,
+   "traffic_write": 48000,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 24,
+    "in_band_bytes": 28800,
+    "out_band_bytes": 19200
+   }
+  },
+  {
+   "op_id": 110,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 128,
+   "tensor_in": {
+    "tid": 88,
+    "h": 20,
+    "w": 20,
+    "c": 120,
+    "pad8": 120,
+    "bytes": 48000
+   },
+   "tensor_out": {
+    "tid": 89,
+    "h": 20,
+    "w": 20,
+    "c": 120,
+    "pad8": 120,
+    "bytes": 48000
+   },
+   "src_arena_off": 16825216,
+   "dst_arena_off": 16879616,
+   "traffic_read": 48000,
+   "traffic_write": 48000,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 24,
+    "in_band_bytes": 19200,
+    "out_band_bytes": 19200
+   }
+  },
+  {
+   "op_id": 111,
+   "kind": "conv",
+   "flags": 0,
+   "layer_idx": 129,
+   "tensor_in": {
+    "tid": 89,
+    "h": 20,
+    "w": 20,
+    "c": 120,
+    "pad8": 120,
+    "bytes": 48000
+   },
+   "tensor_out": {
+    "tid": 90,
+    "h": 20,
+    "w": 20,
+    "c": 255,
+    "pad8": 256,
+    "bytes": 102400
+   },
+   "src_arena_off": 16879616,
+   "dst_arena_off": 16777216,
+   "traffic_read": 48000,
+   "traffic_write": 102400,
+   "tile_est": {
+    "row_band_rows": 8,
+    "n_tiles": 48,
+    "in_band_bytes": 19200,
+    "out_band_bytes": 40960
+   }
+  }
+ ]
+}

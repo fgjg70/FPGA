@@ -207,7 +207,7 @@ module nn_conv_engine
   logic signed [15:0] mpos_q [0:OCL-1];
   logic signed [15:0] mneg_q [0:OCL-1];
   logic signed [31:0] mpos32 [0:OCL-1];
-  logic signed [31:0] mtmp   [0:OCL-1];
+  (* use_dsp = "no" *) logic signed [31:0] mtmp   [0:OCL-1];
   logic signed [7:0]  zp_out, zp_in;
   logic [7:0]         shift_q;
   logic               leaky_q;

@@ -619,6 +619,22 @@ op 统计：**112 ops** = conv 56 / dwconv 28 / add 18 / copy 6 / pool 3 / upsam
 - **C320 = P3**（DDR3 中间激活 + tile DMA + 更宽 ROM 变体；当前 `nn_rom_t.src/dst` 为 19 位，只够片上 A/B 窗口口径）。**本轮以 C128 为集成口径**；`sim/prog/yolo320/` 仅作为模型侧参考产物，已冻结、不再变更。
 - **冻结哈希（C128，模型侧）**：plan `685beded…`、`yolo_w.hex` `09ce6ffe…`（W 区字节 = 冻结 v0.5 值）、`yolo_q.hex` `2be86cb7…`、`checksums.txt` `effb0efb…`、`model.json` `400b3003…`；canonical ROM 表由 `nn_gen_rom.py` 从同一 plan 生成（当前 112 项）。
 
+### 11.8 C320 DDR3 激活 arena（P3 模型侧数据）
+
+320 档中间激活按 MODEL-FREEZE D2 放 DDR3。模型侧已产出 `sim/prog/yolo320/arena_map.json`（生成脚本 `tools/yolo/gen_arena_map.py`；按 cfg 重建张量图并与冻结 plan320 逐 op 交叉校验 `CROSS-CHECK: PASS`），汇总说明见 `results/ai-accel/P3-320-ARENA.md`。要点：
+
+| 项 | 数值 |
+|---|---|
+| 唯一张量数 / 不复用总字节 | 91 个张量，**7,077,600 B**（7.078 MB）|
+| 生命周期最大并发 / 最小 arena | **819,200 B / 819,200 B**（16 B 对齐，静态生命周期打包，0 碎片）|
+| DDR3 arena 窗口 | **基址 0x0100_0000，预留 2 MB**（0x0100_0000..0x011F_FFFF；视频帧缓冲占 0x0000_0000..0x00FF_FFFF）；实际使用 **0x0100_0000..0x010C_7FFF**（819,200 B，余量 2.56×）|
+| 逐层 in+out 流量 | **15.246 MB/帧**（读 7.978 / 写 7.268 MB）；30 fps = **457.4 MB/s**（DDR3-400 的 28.6%）|
+| 320 输入 | PACKED3 3 B/像素 = 307,200 B @ **0x0100_0000**；conv0 按 8 输出行 band 流式读，20 个 band，含行 halo 共读 325,440 B（+5.9%）|
+| ROM 位宽 | **21-bit 字节地址（Lead 拍板）**：arena 0.819 MB，19 b byte 只够 512 KB、20 b 无余量；21 b = 2 MB 覆盖预留窗口（2.56× 余量）。代价：`nn_rom_t` 200→208 bit（src/dst 各 19→21），128 项 LUTRAM +128 B；C128 现有地址值不受影响（P3 开工时 Lead 统一改 nn_pkg/gen_rom 并重生成两套 ROM）|
+| tile / 循环 | 1,854 tile（row band=8、OC 16 lane）；最大单层 48；ROM 仍按 **112 项 + 内层循环**，不摊平 tile |
+
+精度复核（引用冻结产物，未重跑流水线）：320 golden **mismatch=0**（112 ops），端到端 **73.1%**（38/52），mean IoU **0.843** —— 见 §11.5 与 `data/eval_320.json`。
+
 ---
 
 *报告由 `tools/yolo/gen_report.py` 自动生成；所有数字均可由 §1 命令重放。*
