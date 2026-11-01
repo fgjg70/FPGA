@@ -118,6 +118,7 @@ def build_plan_json(net, plan, q, op_csum, input_csum, a_base, b_base, alloc):
     for op_id, op in enumerate(plan["ops"]):
         kind = op["kind"]
         d = {"id": op_id, "kind": kind, "flags": int(op.get("flags", 0)),
+             "layer_idx": int(op["layer_idx"]),
              "k": int(op["k"]), "stride": int(op["stride"]), "pad": int(op["pad"]),
              "leaky": int(op["leaky"]), "ih": int(op["ih"]), "iw": int(op["iw"]),
              "ic": int(op["ic"]), "oc": int(op["oc"]),
@@ -306,17 +307,21 @@ def write_vectors(plan, q, golden_store, golden_out, reps, outdir, input_pattern
     return files
 
 
-def load_frozen():
+def load_frozen(hw):
     d = os.path.join(HERE, "data", "v05_frozen")
     out = {}
     fp = os.path.join(d, "plan.json")
-    if os.path.exists(fp):
+    fnpz = os.path.join(d, "model_int8_%d.npz" % hw)
+    if os.path.exists(fp) and os.path.exists(fnpz):
         frozen = json.load(open(fp, encoding="utf-8"))
+        zf = np.load(fnpz, allow_pickle=False)
+        mf = json.loads(bytes(zf["meta"]).decode("utf-8"))
         norm = {"cpu_conv0": "conv", "cpu_add": "add", "cpu_concat": "concat"}
         m = {}
-        for op in frozen["ops"]:
-            k = norm.get(op["kind"], op["kind"])
-            m[(k, int(op["layer_idx"]))] = int(op["csum"])
+        assert len(frozen["ops"]) == len(mf["ops"])
+        for op, mo in zip(frozen["ops"], mf["ops"]):
+            k = norm.get(mo["kind"], mo["kind"])
+            m[(k, int(mo["layer_idx"]))] = int(op["csum"])
         out["csums"] = m
         out["plan_sha256"] = sha256(fp)
     fwq = os.path.join(d, "yolo_wq.hex")
@@ -383,8 +388,11 @@ def main():
         concat_csum[int(op["layer_idx"])] = vio.fnv1a_int8(
             store_g[op["dst"]][:, :, :dt.C])
 
-    frozen = {} if args.skip_frozen_check else load_frozen()
-    if frozen.get("csums"):
+    frozen = {} if args.skip_frozen_check else load_frozen(hw)
+    # csum regression is only meaningful for C128 (frozen v0.5 plan is the
+    # 128 plan); C320 keeps the resolution-independent W-region check below.
+    do_csum = bool(frozen.get("csums")) and hw == 128
+    if do_csum:
         n_ok = 0
         regress = []
         for op_id, op in enumerate(plan["ops"]):
@@ -413,6 +421,11 @@ def main():
         print("REGRESSION CHECK: skipped (no frozen plan)")
 
     fwq = None if args.skip_frozen_check else frozen.get("wq_bytes")
+    if hw != 128 and fwq is not None:
+        print("W-region check: comparing C320 weights against frozen v0.5 W image"
+              " (resolution independent)")
+    if not do_csum:
+        print("csun regression: skipped for hw=%d (frozen plan is C128 only)" % hw)
     w_img, q_img, n_conv, n_add = build_wq_images(plan, q, fwq)
     archive = flat_archive(w_img, q_img)
     for name, img, want_lines in (

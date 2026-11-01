@@ -1,7 +1,11 @@
 [
  {
   "op": 0,
-  "label": "cpu_conv0"
+  "label": "conv0_packed3"
+ },
+ {
+  "op": 94,
+  "label": "copy(concat)"
  },
  {
   "op": 70,
@@ -12,7 +16,7 @@
   "label": "dwconv3x3"
  },
  {
-  "op": 96,
+  "op": 99,
   "label": "dwconv5x5"
  },
  {
@@ -21,14 +25,14 @@
  },
  {
   "op": 7,
-  "label": "cpu_add"
+  "label": "add_ADD_R"
  },
  {
-  "op": 100,
+  "op": 103,
   "label": "head_conv255"
  },
  {
-  "op": 101,
+  "op": 104,
   "label": "upsample"
  }
 ]

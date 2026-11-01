@@ -107,7 +107,7 @@ module nn_subsys
   logic [7:0]  eng_err;
 
   logic        eng_w_re;
-  logic [18:0] eng_w_addr;
+  logic [23:0] eng_w_addr;
   logic [127:0] eng_w_rdata;
   logic        eng_q_re;
   logic [12:0] eng_q_addr;
@@ -120,6 +120,7 @@ module nn_subsys
   logic        eng_b_we;
   logic [23:0] eng_b_addr;
   logic [127:0] eng_b_wdata;
+  logic [15:0] eng_b_wstrb;
 
   // nn_seq <-> 本模块
   nn_desc_t    desc_seq;               // nn_seq 输出的描述符
@@ -177,7 +178,13 @@ module nn_subsys
     .b_sel     (eng_b_sel),
     .b_we      (eng_b_we),
     .b_addr    (eng_b_addr),
-    .b_wdata   (eng_b_wdata)
+    .b_wdata   (eng_b_wdata),
+    .b_wstrb   (eng_b_wstrb),
+    // v0.7 debug 装载口: module-level TB 用它初始化/回读 W、Q; SoC 中恒 0
+    .dbg_we    (1'b0),
+    .dbg_space (1'b0),
+    .dbg_addr  (17'd0),
+    .dbg_wdata (32'd0)
   );
 
   // ==========================================================================
@@ -208,7 +215,8 @@ module nn_subsys
     .b_sel     (eng_b_sel),
     .b_we      (eng_b_we),
     .b_addr    (eng_b_addr),
-    .b_wdata   (eng_b_wdata)
+    .b_wdata_128 (eng_b_wdata),
+    .b_wstrb   (eng_b_wstrb)
   );
 
   // ==========================================================================

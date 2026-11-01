@@ -1,4 +1,5 @@
 {
+ "format": "yolo-fastest-v1.1-int8-plan-v0.6",
  "input": {
   "ih": 128,
   "iw": 128,
@@ -13,14 +14,35 @@
  },
  "wq_bytes": 376832,
  "w_bytes": 319792,
- "q_base": 327680,
  "q_bytes": 49152,
+ "q_window_off": 327680,
+ "woff_units": "w_region_relative",
+ "qoff_units": "q_region_relative",
+ "src_dst_units": "buf_relative (A=0x60000, B=0x78000 bases)",
+ "q_conv_end": 44256,
+ "q_total_payload": 44544,
  "a_base": 393216,
  "b_base": 491520,
+ "alloc": {
+  "peak_A": 98304,
+  "peak_B": 32768,
+  "peak_total": 131072
+ },
+ "n_ops": 112,
+ "kinds": {
+  "add": 18,
+  "conv": 56,
+  "copy": 6,
+  "dwconv": 28,
+  "pool": 3,
+  "upsample": 1
+ },
  "ops": [
   {
    "id": 0,
-   "kind": "cpu_conv0",
+   "kind": "conv",
+   "flags": 6,
+   "layer_idx": 0,
    "k": 3,
    "stride": 2,
    "pad": 1,
@@ -29,8 +51,10 @@
    "iw": 128,
    "ic": 3,
    "oc": 8,
+   "oh": 64,
+   "ow": 64,
    "woff": 0,
-   "qoff": 327680,
+   "qoff": 0,
    "csum": 625189111,
    "src": {
     "buf": "A",
@@ -44,6 +68,8 @@
   {
    "id": 1,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 1,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -52,8 +78,10 @@
    "iw": 64,
    "ic": 8,
    "oc": 8,
+   "oh": 64,
+   "ow": 64,
    "woff": 576,
-   "qoff": 327744,
+   "qoff": 64,
    "csum": 1313826932,
    "src": {
     "buf": "A",
@@ -67,6 +95,8 @@
   {
    "id": 2,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 2,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -75,8 +105,10 @@
    "iw": 64,
    "ic": 8,
    "oc": 8,
+   "oh": 64,
+   "ow": 64,
    "woff": 640,
-   "qoff": 327808,
+   "qoff": 128,
    "csum": 1723157848,
    "src": {
     "buf": "A",
@@ -90,6 +122,8 @@
   {
    "id": 3,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 3,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -98,8 +132,10 @@
    "iw": 64,
    "ic": 8,
    "oc": 4,
+   "oh": 64,
+   "ow": 64,
    "woff": 712,
-   "qoff": 327872,
+   "qoff": 192,
    "csum": 714696870,
    "src": {
     "buf": "A",
@@ -113,6 +149,8 @@
   {
    "id": 4,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 4,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -121,8 +159,10 @@
    "iw": 64,
    "ic": 4,
    "oc": 8,
+   "oh": 64,
+   "ow": 64,
    "woff": 776,
-   "qoff": 327936,
+   "qoff": 256,
    "csum": 976692823,
    "src": {
     "buf": "B",
@@ -136,6 +176,8 @@
   {
    "id": 5,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 5,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -144,8 +186,10 @@
    "iw": 64,
    "ic": 8,
    "oc": 8,
+   "oh": 64,
+   "ow": 64,
    "woff": 840,
-   "qoff": 328000,
+   "qoff": 320,
    "csum": 1693338130,
    "src": {
     "buf": "A",
@@ -159,6 +203,8 @@
   {
    "id": 6,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 6,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -167,8 +213,10 @@
    "iw": 64,
    "ic": 8,
    "oc": 4,
+   "oh": 64,
+   "ow": 64,
    "woff": 912,
-   "qoff": 328064,
+   "qoff": 384,
    "csum": 2724721887,
    "src": {
     "buf": "A",
@@ -181,7 +229,9 @@
   },
   {
    "id": 7,
-   "kind": "cpu_add",
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 8,
    "k": 0,
    "stride": 1,
    "pad": 0,
@@ -190,12 +240,11 @@
    "iw": 64,
    "ic": 4,
    "oc": 4,
+   "oh": 64,
+   "ow": 64,
    "woff": -1,
-   "qoff": -1,
+   "qoff": 44256,
    "csum": 3739264765,
-   "r_scale": 29651,
-   "k_add": 15,
-   "zp_s": -52,
    "src": {
     "buf": "A",
     "off": 0
@@ -203,11 +252,17 @@
    "dst": {
     "buf": "B",
     "off": 0
-   }
+   },
+   "r_scale": 29651,
+   "k_add": 15,
+   "zp_s": -52,
+   "zp_d": -21
   },
   {
    "id": 8,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 9,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -216,8 +271,10 @@
    "iw": 64,
    "ic": 4,
    "oc": 24,
+   "oh": 64,
+   "ow": 64,
    "woff": 976,
-   "qoff": 328128,
+   "qoff": 448,
    "csum": 3303783591,
    "src": {
     "buf": "B",
@@ -231,6 +288,8 @@
   {
    "id": 9,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 10,
    "k": 3,
    "stride": 2,
    "pad": 1,
@@ -239,8 +298,10 @@
    "iw": 64,
    "ic": 24,
    "oc": 24,
+   "oh": 32,
+   "ow": 32,
    "woff": 1168,
-   "qoff": 328288,
+   "qoff": 608,
    "csum": 1389180648,
    "src": {
     "buf": "A",
@@ -254,6 +315,8 @@
   {
    "id": 10,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 11,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -262,8 +325,10 @@
    "iw": 32,
    "ic": 24,
    "oc": 8,
+   "oh": 32,
+   "ow": 32,
    "woff": 1384,
-   "qoff": 328448,
+   "qoff": 768,
    "csum": 3867788034,
    "src": {
     "buf": "B",
@@ -277,6 +342,8 @@
   {
    "id": 11,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 12,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -285,8 +352,10 @@
    "iw": 32,
    "ic": 8,
    "oc": 32,
+   "oh": 32,
+   "ow": 32,
    "woff": 1576,
-   "qoff": 328512,
+   "qoff": 832,
    "csum": 2670261520,
    "src": {
     "buf": "B",
@@ -300,6 +369,8 @@
   {
    "id": 12,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 13,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -308,8 +379,10 @@
    "iw": 32,
    "ic": 32,
    "oc": 32,
+   "oh": 32,
+   "ow": 32,
    "woff": 1832,
-   "qoff": 328720,
+   "qoff": 1040,
    "csum": 2936693602,
    "src": {
     "buf": "A",
@@ -323,6 +396,8 @@
   {
    "id": 13,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 14,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -331,8 +406,10 @@
    "iw": 32,
    "ic": 32,
    "oc": 8,
+   "oh": 32,
+   "ow": 32,
    "woff": 2120,
-   "qoff": 328928,
+   "qoff": 1248,
    "csum": 4245908416,
    "src": {
     "buf": "A",
@@ -345,7 +422,9 @@
   },
   {
    "id": 14,
-   "kind": "cpu_add",
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 16,
    "k": 0,
    "stride": 1,
    "pad": 0,
@@ -354,12 +433,11 @@
    "iw": 32,
    "ic": 8,
    "oc": 8,
+   "oh": 32,
+   "ow": 32,
    "woff": -1,
-   "qoff": -1,
+   "qoff": 44272,
    "csum": 693556524,
-   "r_scale": 9752,
-   "k_add": 15,
-   "zp_s": 27,
    "src": {
     "buf": "A",
     "off": 0
@@ -367,11 +445,17 @@
    "dst": {
     "buf": "B",
     "off": 24576
-   }
+   },
+   "r_scale": 9752,
+   "k_add": 15,
+   "zp_s": 27,
+   "zp_d": 36
   },
   {
    "id": 15,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 17,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -380,8 +464,10 @@
    "iw": 32,
    "ic": 8,
    "oc": 32,
+   "oh": 32,
+   "ow": 32,
    "woff": 2376,
-   "qoff": 328992,
+   "qoff": 1312,
    "csum": 4195567778,
    "src": {
     "buf": "B",
@@ -395,6 +481,8 @@
   {
    "id": 16,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 18,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -403,8 +491,10 @@
    "iw": 32,
    "ic": 32,
    "oc": 32,
+   "oh": 32,
+   "ow": 32,
    "woff": 2632,
-   "qoff": 329200,
+   "qoff": 1520,
    "csum": 3051056984,
    "src": {
     "buf": "A",
@@ -418,6 +508,8 @@
   {
    "id": 17,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 19,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -426,8 +518,10 @@
    "iw": 32,
    "ic": 32,
    "oc": 8,
+   "oh": 32,
+   "ow": 32,
    "woff": 2920,
-   "qoff": 329408,
+   "qoff": 1728,
    "csum": 239989550,
    "src": {
     "buf": "A",
@@ -440,7 +534,9 @@
   },
   {
    "id": 18,
-   "kind": "cpu_add",
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 21,
    "k": 0,
    "stride": 1,
    "pad": 0,
@@ -449,12 +545,11 @@
    "iw": 32,
    "ic": 8,
    "oc": 8,
+   "oh": 32,
+   "ow": 32,
    "woff": -1,
-   "qoff": -1,
+   "qoff": 44288,
    "csum": 4095187334,
-   "r_scale": 12923,
-   "k_add": 15,
-   "zp_s": -5,
    "src": {
     "buf": "A",
     "off": 0
@@ -462,11 +557,17 @@
    "dst": {
     "buf": "B",
     "off": 24576
-   }
+   },
+   "r_scale": 12923,
+   "k_add": 15,
+   "zp_s": -5,
+   "zp_d": 36
   },
   {
    "id": 19,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 22,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -475,8 +576,10 @@
    "iw": 32,
    "ic": 8,
    "oc": 32,
+   "oh": 32,
+   "ow": 32,
    "woff": 3176,
-   "qoff": 329472,
+   "qoff": 1792,
    "csum": 4019625332,
    "src": {
     "buf": "B",
@@ -490,6 +593,8 @@
   {
    "id": 20,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 23,
    "k": 3,
    "stride": 2,
    "pad": 1,
@@ -498,8 +603,10 @@
    "iw": 32,
    "ic": 32,
    "oc": 32,
+   "oh": 16,
+   "ow": 16,
    "woff": 3432,
-   "qoff": 329680,
+   "qoff": 2000,
    "csum": 2265022879,
    "src": {
     "buf": "A",
@@ -513,6 +620,8 @@
   {
    "id": 21,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 24,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -521,8 +630,10 @@
    "iw": 16,
    "ic": 32,
    "oc": 8,
+   "oh": 16,
+   "ow": 16,
    "woff": 3720,
-   "qoff": 329888,
+   "qoff": 2208,
    "csum": 70417514,
    "src": {
     "buf": "A",
@@ -536,6 +647,8 @@
   {
    "id": 22,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 25,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -544,8 +657,10 @@
    "iw": 16,
    "ic": 8,
    "oc": 48,
+   "oh": 16,
+   "ow": 16,
    "woff": 3976,
-   "qoff": 329952,
+   "qoff": 2272,
    "csum": 1838251095,
    "src": {
     "buf": "B",
@@ -559,6 +674,8 @@
   {
    "id": 23,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 26,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -567,8 +684,10 @@
    "iw": 16,
    "ic": 48,
    "oc": 48,
+   "oh": 16,
+   "ow": 16,
    "woff": 4360,
-   "qoff": 330256,
+   "qoff": 2576,
    "csum": 1790216242,
    "src": {
     "buf": "A",
@@ -582,6 +701,8 @@
   {
    "id": 24,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 27,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -590,8 +711,10 @@
    "iw": 16,
    "ic": 48,
    "oc": 8,
+   "oh": 16,
+   "ow": 16,
    "woff": 4792,
-   "qoff": 330560,
+   "qoff": 2880,
    "csum": 1850987430,
    "src": {
     "buf": "A",
@@ -604,7 +727,9 @@
   },
   {
    "id": 25,
-   "kind": "cpu_add",
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 29,
    "k": 0,
    "stride": 1,
    "pad": 0,
@@ -613,12 +738,11 @@
    "iw": 16,
    "ic": 8,
    "oc": 8,
+   "oh": 16,
+   "ow": 16,
    "woff": -1,
-   "qoff": -1,
+   "qoff": 44304,
    "csum": 3597636698,
-   "r_scale": 3908,
-   "k_add": 15,
-   "zp_s": -32,
    "src": {
     "buf": "A",
     "off": 0
@@ -626,11 +750,17 @@
    "dst": {
     "buf": "B",
     "off": 0
-   }
+   },
+   "r_scale": 3908,
+   "k_add": 15,
+   "zp_s": -32,
+   "zp_d": -15
   },
   {
    "id": 26,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 30,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -639,8 +769,10 @@
    "iw": 16,
    "ic": 8,
    "oc": 48,
+   "oh": 16,
+   "ow": 16,
    "woff": 5176,
-   "qoff": 330624,
+   "qoff": 2944,
    "csum": 1841500154,
    "src": {
     "buf": "B",
@@ -654,6 +786,8 @@
   {
    "id": 27,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 31,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -662,8 +796,10 @@
    "iw": 16,
    "ic": 48,
    "oc": 48,
+   "oh": 16,
+   "ow": 16,
    "woff": 5560,
-   "qoff": 330928,
+   "qoff": 3248,
    "csum": 2297398824,
    "src": {
     "buf": "A",
@@ -677,6 +813,8 @@
   {
    "id": 28,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 32,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -685,8 +823,10 @@
    "iw": 16,
    "ic": 48,
    "oc": 8,
+   "oh": 16,
+   "ow": 16,
    "woff": 5992,
-   "qoff": 331232,
+   "qoff": 3552,
    "csum": 1584632957,
    "src": {
     "buf": "A",
@@ -699,7 +839,9 @@
   },
   {
    "id": 29,
-   "kind": "cpu_add",
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 34,
    "k": 0,
    "stride": 1,
    "pad": 0,
@@ -708,12 +850,11 @@
    "iw": 16,
    "ic": 8,
    "oc": 8,
+   "oh": 16,
+   "ow": 16,
    "woff": -1,
-   "qoff": -1,
+   "qoff": 44320,
    "csum": 2480014908,
-   "r_scale": 3971,
-   "k_add": 15,
-   "zp_s": -14,
    "src": {
     "buf": "A",
     "off": 0
@@ -721,11 +862,17 @@
    "dst": {
     "buf": "B",
     "off": 0
-   }
+   },
+   "r_scale": 3971,
+   "k_add": 15,
+   "zp_s": -14,
+   "zp_d": -15
   },
   {
    "id": 30,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 35,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -734,8 +881,10 @@
    "iw": 16,
    "ic": 8,
    "oc": 48,
+   "oh": 16,
+   "ow": 16,
    "woff": 6376,
-   "qoff": 331296,
+   "qoff": 3616,
    "csum": 2177343975,
    "src": {
     "buf": "B",
@@ -749,6 +898,8 @@
   {
    "id": 31,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 36,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -757,8 +908,10 @@
    "iw": 16,
    "ic": 48,
    "oc": 48,
+   "oh": 16,
+   "ow": 16,
    "woff": 6760,
-   "qoff": 331600,
+   "qoff": 3920,
    "csum": 2907386343,
    "src": {
     "buf": "A",
@@ -772,6 +925,8 @@
   {
    "id": 32,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 37,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -780,8 +935,10 @@
    "iw": 16,
    "ic": 48,
    "oc": 16,
+   "oh": 16,
+   "ow": 16,
    "woff": 7192,
-   "qoff": 331904,
+   "qoff": 4224,
    "csum": 3913469732,
    "src": {
     "buf": "A",
@@ -795,6 +952,8 @@
   {
    "id": 33,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 38,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -803,8 +962,10 @@
    "iw": 16,
    "ic": 16,
    "oc": 96,
+   "oh": 16,
+   "ow": 16,
    "woff": 7960,
-   "qoff": 332016,
+   "qoff": 4336,
    "csum": 237092427,
    "src": {
     "buf": "B",
@@ -818,6 +979,8 @@
   {
    "id": 34,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 39,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -826,8 +989,10 @@
    "iw": 16,
    "ic": 96,
    "oc": 96,
+   "oh": 16,
+   "ow": 16,
    "woff": 9496,
-   "qoff": 332608,
+   "qoff": 4928,
    "csum": 727722195,
    "src": {
     "buf": "A",
@@ -841,6 +1006,8 @@
   {
    "id": 35,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 40,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -849,8 +1016,10 @@
    "iw": 16,
    "ic": 96,
    "oc": 16,
+   "oh": 16,
+   "ow": 16,
    "woff": 10360,
-   "qoff": 333200,
+   "qoff": 5520,
    "csum": 1212064073,
    "src": {
     "buf": "A",
@@ -863,7 +1032,9 @@
   },
   {
    "id": 36,
-   "kind": "cpu_add",
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 42,
    "k": 0,
    "stride": 1,
    "pad": 0,
@@ -872,12 +1043,11 @@
    "iw": 16,
    "ic": 16,
    "oc": 16,
+   "oh": 16,
+   "ow": 16,
    "woff": -1,
-   "qoff": -1,
+   "qoff": 44336,
    "csum": 2146157565,
-   "r_scale": 7765,
-   "k_add": 15,
-   "zp_s": 8,
    "src": {
     "buf": "A",
     "off": 0
@@ -885,11 +1055,17 @@
    "dst": {
     "buf": "B",
     "off": 0
-   }
+   },
+   "r_scale": 7765,
+   "k_add": 15,
+   "zp_s": 8,
+   "zp_d": 14
   },
   {
    "id": 37,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 43,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -898,8 +1074,10 @@
    "iw": 16,
    "ic": 16,
    "oc": 96,
+   "oh": 16,
+   "ow": 16,
    "woff": 11896,
-   "qoff": 333312,
+   "qoff": 5632,
    "csum": 455118440,
    "src": {
     "buf": "B",
@@ -913,6 +1091,8 @@
   {
    "id": 38,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 44,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -921,8 +1101,10 @@
    "iw": 16,
    "ic": 96,
    "oc": 96,
+   "oh": 16,
+   "ow": 16,
    "woff": 13432,
-   "qoff": 333904,
+   "qoff": 6224,
    "csum": 478746251,
    "src": {
     "buf": "A",
@@ -936,6 +1118,8 @@
   {
    "id": 39,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 45,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -944,8 +1128,10 @@
    "iw": 16,
    "ic": 96,
    "oc": 16,
+   "oh": 16,
+   "ow": 16,
    "woff": 14296,
-   "qoff": 334496,
+   "qoff": 6816,
    "csum": 2427730924,
    "src": {
     "buf": "A",
@@ -958,7 +1144,9 @@
   },
   {
    "id": 40,
-   "kind": "cpu_add",
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 47,
    "k": 0,
    "stride": 1,
    "pad": 0,
@@ -967,12 +1155,11 @@
    "iw": 16,
    "ic": 16,
    "oc": 16,
+   "oh": 16,
+   "ow": 16,
    "woff": -1,
-   "qoff": -1,
+   "qoff": 44352,
    "csum": 3914167182,
-   "r_scale": 9243,
-   "k_add": 15,
-   "zp_s": 0,
    "src": {
     "buf": "A",
     "off": 0
@@ -980,11 +1167,17 @@
    "dst": {
     "buf": "B",
     "off": 0
-   }
+   },
+   "r_scale": 9243,
+   "k_add": 15,
+   "zp_s": 0,
+   "zp_d": 14
   },
   {
    "id": 41,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 48,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -993,8 +1186,10 @@
    "iw": 16,
    "ic": 16,
    "oc": 96,
+   "oh": 16,
+   "ow": 16,
    "woff": 15832,
-   "qoff": 334608,
+   "qoff": 6928,
    "csum": 3793385082,
    "src": {
     "buf": "B",
@@ -1008,6 +1203,8 @@
   {
    "id": 42,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 49,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -1016,8 +1213,10 @@
    "iw": 16,
    "ic": 96,
    "oc": 96,
+   "oh": 16,
+   "ow": 16,
    "woff": 17368,
-   "qoff": 335200,
+   "qoff": 7520,
    "csum": 2384313166,
    "src": {
     "buf": "A",
@@ -1031,6 +1230,8 @@
   {
    "id": 43,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 50,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1039,8 +1240,10 @@
    "iw": 16,
    "ic": 96,
    "oc": 16,
+   "oh": 16,
+   "ow": 16,
    "woff": 18232,
-   "qoff": 335792,
+   "qoff": 8112,
    "csum": 4006165215,
    "src": {
     "buf": "A",
@@ -1053,7 +1256,9 @@
   },
   {
    "id": 44,
-   "kind": "cpu_add",
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 52,
    "k": 0,
    "stride": 1,
    "pad": 0,
@@ -1062,12 +1267,11 @@
    "iw": 16,
    "ic": 16,
    "oc": 16,
+   "oh": 16,
+   "ow": 16,
    "woff": -1,
-   "qoff": -1,
+   "qoff": 44368,
    "csum": 4018503341,
-   "r_scale": 10469,
-   "k_add": 15,
-   "zp_s": 8,
    "src": {
     "buf": "A",
     "off": 0
@@ -1075,11 +1279,17 @@
    "dst": {
     "buf": "B",
     "off": 0
-   }
+   },
+   "r_scale": 10469,
+   "k_add": 15,
+   "zp_s": 8,
+   "zp_d": 14
   },
   {
    "id": 45,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 53,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1088,8 +1298,10 @@
    "iw": 16,
    "ic": 16,
    "oc": 96,
+   "oh": 16,
+   "ow": 16,
    "woff": 19768,
-   "qoff": 335904,
+   "qoff": 8224,
    "csum": 1652528675,
    "src": {
     "buf": "B",
@@ -1103,6 +1315,8 @@
   {
    "id": 46,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 54,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -1111,8 +1325,10 @@
    "iw": 16,
    "ic": 96,
    "oc": 96,
+   "oh": 16,
+   "ow": 16,
    "woff": 21304,
-   "qoff": 336496,
+   "qoff": 8816,
    "csum": 3682069405,
    "src": {
     "buf": "A",
@@ -1126,6 +1342,8 @@
   {
    "id": 47,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 55,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1134,8 +1352,10 @@
    "iw": 16,
    "ic": 96,
    "oc": 16,
+   "oh": 16,
+   "ow": 16,
    "woff": 22168,
-   "qoff": 337088,
+   "qoff": 9408,
    "csum": 2607053360,
    "src": {
     "buf": "A",
@@ -1148,7 +1368,9 @@
   },
   {
    "id": 48,
-   "kind": "cpu_add",
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 57,
    "k": 0,
    "stride": 1,
    "pad": 0,
@@ -1157,12 +1379,11 @@
    "iw": 16,
    "ic": 16,
    "oc": 16,
+   "oh": 16,
+   "ow": 16,
    "woff": -1,
-   "qoff": -1,
+   "qoff": 44384,
    "csum": 1143094664,
-   "r_scale": 11726,
-   "k_add": 15,
-   "zp_s": 1,
    "src": {
     "buf": "A",
     "off": 0
@@ -1170,11 +1391,17 @@
    "dst": {
     "buf": "B",
     "off": 0
-   }
+   },
+   "r_scale": 11726,
+   "k_add": 15,
+   "zp_s": 1,
+   "zp_d": 14
   },
   {
    "id": 49,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 58,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1183,8 +1410,10 @@
    "iw": 16,
    "ic": 16,
    "oc": 96,
+   "oh": 16,
+   "ow": 16,
    "woff": 23704,
-   "qoff": 337200,
+   "qoff": 9520,
    "csum": 1372431036,
    "src": {
     "buf": "B",
@@ -1198,6 +1427,8 @@
   {
    "id": 50,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 59,
    "k": 3,
    "stride": 2,
    "pad": 1,
@@ -1206,8 +1437,10 @@
    "iw": 16,
    "ic": 96,
    "oc": 96,
+   "oh": 8,
+   "ow": 8,
    "woff": 25240,
-   "qoff": 337792,
+   "qoff": 10112,
    "csum": 1885810244,
    "src": {
     "buf": "A",
@@ -1221,6 +1454,8 @@
   {
    "id": 51,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 60,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1229,8 +1464,10 @@
    "iw": 8,
    "ic": 96,
    "oc": 24,
+   "oh": 8,
+   "ow": 8,
    "woff": 26104,
-   "qoff": 338384,
+   "qoff": 10704,
    "csum": 4096552111,
    "src": {
     "buf": "A",
@@ -1244,6 +1481,8 @@
   {
    "id": 52,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 61,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1252,8 +1491,10 @@
    "iw": 8,
    "ic": 24,
    "oc": 136,
+   "oh": 8,
+   "ow": 8,
    "woff": 28408,
-   "qoff": 338544,
+   "qoff": 10864,
    "csum": 1232734723,
    "src": {
     "buf": "B",
@@ -1267,6 +1508,8 @@
   {
    "id": 53,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 62,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -1275,8 +1518,10 @@
    "iw": 8,
    "ic": 136,
    "oc": 136,
+   "oh": 8,
+   "ow": 8,
    "woff": 31672,
-   "qoff": 339376,
+   "qoff": 11696,
    "csum": 3232610746,
    "src": {
     "buf": "A",
@@ -1290,6 +1535,8 @@
   {
    "id": 54,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 63,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1298,8 +1545,10 @@
    "iw": 8,
    "ic": 136,
    "oc": 24,
+   "oh": 8,
+   "ow": 8,
    "woff": 32896,
-   "qoff": 340208,
+   "qoff": 12528,
    "csum": 420678559,
    "src": {
     "buf": "A",
@@ -1312,7 +1561,9 @@
   },
   {
    "id": 55,
-   "kind": "cpu_add",
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 65,
    "k": 0,
    "stride": 1,
    "pad": 0,
@@ -1321,12 +1572,11 @@
    "iw": 8,
    "ic": 24,
    "oc": 24,
+   "oh": 8,
+   "ow": 8,
    "woff": -1,
-   "qoff": -1,
+   "qoff": 44400,
    "csum": 1373586797,
-   "r_scale": 8424,
-   "k_add": 15,
-   "zp_s": -2,
    "src": {
     "buf": "A",
     "off": 0
@@ -1334,11 +1584,17 @@
    "dst": {
     "buf": "B",
     "off": 0
-   }
+   },
+   "r_scale": 8424,
+   "k_add": 15,
+   "zp_s": -2,
+   "zp_d": -2
   },
   {
    "id": 56,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 66,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1347,8 +1603,10 @@
    "iw": 8,
    "ic": 24,
    "oc": 136,
+   "oh": 8,
+   "ow": 8,
    "woff": 36160,
-   "qoff": 340368,
+   "qoff": 12688,
    "csum": 3166185716,
    "src": {
     "buf": "B",
@@ -1362,6 +1620,8 @@
   {
    "id": 57,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 67,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -1370,8 +1630,10 @@
    "iw": 8,
    "ic": 136,
    "oc": 136,
+   "oh": 8,
+   "ow": 8,
    "woff": 39424,
-   "qoff": 341200,
+   "qoff": 13520,
    "csum": 3869280327,
    "src": {
     "buf": "A",
@@ -1385,6 +1647,8 @@
   {
    "id": 58,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 68,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1393,8 +1657,10 @@
    "iw": 8,
    "ic": 136,
    "oc": 24,
+   "oh": 8,
+   "ow": 8,
    "woff": 40648,
-   "qoff": 342032,
+   "qoff": 14352,
    "csum": 3423093665,
    "src": {
     "buf": "A",
@@ -1407,7 +1673,9 @@
   },
   {
    "id": 59,
-   "kind": "cpu_add",
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 70,
    "k": 0,
    "stride": 1,
    "pad": 0,
@@ -1416,12 +1684,11 @@
    "iw": 8,
    "ic": 24,
    "oc": 24,
+   "oh": 8,
+   "ow": 8,
    "woff": -1,
-   "qoff": -1,
+   "qoff": 44416,
    "csum": 3222574022,
-   "r_scale": 10277,
-   "k_add": 15,
-   "zp_s": -4,
    "src": {
     "buf": "A",
     "off": 0
@@ -1429,11 +1696,17 @@
    "dst": {
     "buf": "B",
     "off": 0
-   }
+   },
+   "r_scale": 10277,
+   "k_add": 15,
+   "zp_s": -4,
+   "zp_d": -2
   },
   {
    "id": 60,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 71,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1442,8 +1715,10 @@
    "iw": 8,
    "ic": 24,
    "oc": 136,
+   "oh": 8,
+   "ow": 8,
    "woff": 43912,
-   "qoff": 342192,
+   "qoff": 14512,
    "csum": 2297686186,
    "src": {
     "buf": "B",
@@ -1457,6 +1732,8 @@
   {
    "id": 61,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 72,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -1465,8 +1742,10 @@
    "iw": 8,
    "ic": 136,
    "oc": 136,
+   "oh": 8,
+   "ow": 8,
    "woff": 47176,
-   "qoff": 343024,
+   "qoff": 15344,
    "csum": 1570132262,
    "src": {
     "buf": "A",
@@ -1480,6 +1759,8 @@
   {
    "id": 62,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 73,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1488,8 +1769,10 @@
    "iw": 8,
    "ic": 136,
    "oc": 24,
+   "oh": 8,
+   "ow": 8,
    "woff": 48400,
-   "qoff": 343856,
+   "qoff": 16176,
    "csum": 1677069310,
    "src": {
     "buf": "A",
@@ -1502,7 +1785,9 @@
   },
   {
    "id": 63,
-   "kind": "cpu_add",
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 75,
    "k": 0,
    "stride": 1,
    "pad": 0,
@@ -1511,12 +1796,11 @@
    "iw": 8,
    "ic": 24,
    "oc": 24,
+   "oh": 8,
+   "ow": 8,
    "woff": -1,
-   "qoff": -1,
+   "qoff": 44432,
    "csum": 2522865257,
-   "r_scale": 10019,
-   "k_add": 15,
-   "zp_s": 10,
    "src": {
     "buf": "A",
     "off": 0
@@ -1524,11 +1808,17 @@
    "dst": {
     "buf": "B",
     "off": 0
-   }
+   },
+   "r_scale": 10019,
+   "k_add": 15,
+   "zp_s": 10,
+   "zp_d": -2
   },
   {
    "id": 64,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 76,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1537,8 +1827,10 @@
    "iw": 8,
    "ic": 24,
    "oc": 136,
+   "oh": 8,
+   "ow": 8,
    "woff": 51664,
-   "qoff": 344016,
+   "qoff": 16336,
    "csum": 2894571700,
    "src": {
     "buf": "B",
@@ -1552,6 +1844,8 @@
   {
    "id": 65,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 77,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -1560,8 +1854,10 @@
    "iw": 8,
    "ic": 136,
    "oc": 136,
+   "oh": 8,
+   "ow": 8,
    "woff": 54928,
-   "qoff": 344848,
+   "qoff": 17168,
    "csum": 1834210991,
    "src": {
     "buf": "A",
@@ -1575,6 +1871,8 @@
   {
    "id": 66,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 78,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1583,8 +1881,10 @@
    "iw": 8,
    "ic": 136,
    "oc": 24,
+   "oh": 8,
+   "ow": 8,
    "woff": 56152,
-   "qoff": 345680,
+   "qoff": 18000,
    "csum": 778082224,
    "src": {
     "buf": "A",
@@ -1597,7 +1897,9 @@
   },
   {
    "id": 67,
-   "kind": "cpu_add",
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 80,
    "k": 0,
    "stride": 1,
    "pad": 0,
@@ -1606,12 +1908,11 @@
    "iw": 8,
    "ic": 24,
    "oc": 24,
+   "oh": 8,
+   "ow": 8,
    "woff": -1,
-   "qoff": -1,
+   "qoff": 44448,
    "csum": 3442603748,
-   "r_scale": 8726,
-   "k_add": 15,
-   "zp_s": 1,
    "src": {
     "buf": "A",
     "off": 0
@@ -1619,11 +1920,17 @@
    "dst": {
     "buf": "B",
     "off": 0
-   }
+   },
+   "r_scale": 8726,
+   "k_add": 15,
+   "zp_s": 1,
+   "zp_d": -2
   },
   {
    "id": 68,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 81,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1632,8 +1939,10 @@
    "iw": 8,
    "ic": 24,
    "oc": 136,
+   "oh": 8,
+   "ow": 8,
    "woff": 59416,
-   "qoff": 345840,
+   "qoff": 18160,
    "csum": 4079579793,
    "src": {
     "buf": "B",
@@ -1647,6 +1956,8 @@
   {
    "id": 69,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 82,
    "k": 3,
    "stride": 2,
    "pad": 1,
@@ -1655,8 +1966,10 @@
    "iw": 8,
    "ic": 136,
    "oc": 136,
+   "oh": 4,
+   "ow": 4,
    "woff": 62680,
-   "qoff": 346672,
+   "qoff": 18992,
    "csum": 270916494,
    "src": {
     "buf": "A",
@@ -1670,6 +1983,8 @@
   {
    "id": 70,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 83,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1678,8 +1993,10 @@
    "iw": 4,
    "ic": 136,
    "oc": 48,
+   "oh": 4,
+   "ow": 4,
    "woff": 63904,
-   "qoff": 347504,
+   "qoff": 19824,
    "csum": 4082521368,
    "src": {
     "buf": "A",
@@ -1693,6 +2010,8 @@
   {
    "id": 71,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 84,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1701,8 +2020,10 @@
    "iw": 4,
    "ic": 48,
    "oc": 224,
+   "oh": 4,
+   "ow": 4,
    "woff": 70432,
-   "qoff": 347808,
+   "qoff": 20128,
    "csum": 2890499785,
    "src": {
     "buf": "B",
@@ -1716,6 +2037,8 @@
   {
    "id": 72,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 85,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -1724,8 +2047,10 @@
    "iw": 4,
    "ic": 224,
    "oc": 224,
+   "oh": 4,
+   "ow": 4,
    "woff": 81184,
-   "qoff": 349168,
+   "qoff": 21488,
    "csum": 3165985439,
    "src": {
     "buf": "A",
@@ -1739,6 +2064,8 @@
   {
    "id": 73,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 86,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1747,8 +2074,10 @@
    "iw": 4,
    "ic": 224,
    "oc": 48,
+   "oh": 4,
+   "ow": 4,
    "woff": 83200,
-   "qoff": 350528,
+   "qoff": 22848,
    "csum": 2978547164,
    "src": {
     "buf": "A",
@@ -1761,7 +2090,9 @@
   },
   {
    "id": 74,
-   "kind": "cpu_add",
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 88,
    "k": 0,
    "stride": 1,
    "pad": 0,
@@ -1770,12 +2101,11 @@
    "iw": 4,
    "ic": 48,
    "oc": 48,
+   "oh": 4,
+   "ow": 4,
    "woff": -1,
-   "qoff": -1,
+   "qoff": 44464,
    "csum": 1075139141,
-   "r_scale": 6928,
-   "k_add": 15,
-   "zp_s": -16,
    "src": {
     "buf": "A",
     "off": 0
@@ -1783,11 +2113,17 @@
    "dst": {
     "buf": "B",
     "off": 1536
-   }
+   },
+   "r_scale": 6928,
+   "k_add": 15,
+   "zp_s": -16,
+   "zp_d": 6
   },
   {
    "id": 75,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 89,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1796,8 +2132,10 @@
    "iw": 4,
    "ic": 48,
    "oc": 224,
+   "oh": 4,
+   "ow": 4,
    "woff": 93952,
-   "qoff": 350832,
+   "qoff": 23152,
    "csum": 1683141305,
    "src": {
     "buf": "B",
@@ -1811,6 +2149,8 @@
   {
    "id": 76,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 90,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -1819,8 +2159,10 @@
    "iw": 4,
    "ic": 224,
    "oc": 224,
+   "oh": 4,
+   "ow": 4,
    "woff": 104704,
-   "qoff": 352192,
+   "qoff": 24512,
    "csum": 4161013446,
    "src": {
     "buf": "A",
@@ -1834,6 +2176,8 @@
   {
    "id": 77,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 91,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1842,8 +2186,10 @@
    "iw": 4,
    "ic": 224,
    "oc": 48,
+   "oh": 4,
+   "ow": 4,
    "woff": 106720,
-   "qoff": 353552,
+   "qoff": 25872,
    "csum": 2219084921,
    "src": {
     "buf": "A",
@@ -1856,7 +2202,9 @@
   },
   {
    "id": 78,
-   "kind": "cpu_add",
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 93,
    "k": 0,
    "stride": 1,
    "pad": 0,
@@ -1865,12 +2213,11 @@
    "iw": 4,
    "ic": 48,
    "oc": 48,
+   "oh": 4,
+   "ow": 4,
    "woff": -1,
-   "qoff": -1,
+   "qoff": 44480,
    "csum": 3405407824,
-   "r_scale": 8945,
-   "k_add": 15,
-   "zp_s": -13,
    "src": {
     "buf": "A",
     "off": 0
@@ -1878,11 +2225,17 @@
    "dst": {
     "buf": "B",
     "off": 1536
-   }
+   },
+   "r_scale": 8945,
+   "k_add": 15,
+   "zp_s": -13,
+   "zp_d": 6
   },
   {
    "id": 79,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 94,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1891,8 +2244,10 @@
    "iw": 4,
    "ic": 48,
    "oc": 224,
+   "oh": 4,
+   "ow": 4,
    "woff": 117472,
-   "qoff": 353856,
+   "qoff": 26176,
    "csum": 1326294717,
    "src": {
     "buf": "B",
@@ -1906,6 +2261,8 @@
   {
    "id": 80,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 95,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -1914,8 +2271,10 @@
    "iw": 4,
    "ic": 224,
    "oc": 224,
+   "oh": 4,
+   "ow": 4,
    "woff": 128224,
-   "qoff": 355216,
+   "qoff": 27536,
    "csum": 22418388,
    "src": {
     "buf": "A",
@@ -1929,6 +2288,8 @@
   {
    "id": 81,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 96,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1937,8 +2298,10 @@
    "iw": 4,
    "ic": 224,
    "oc": 48,
+   "oh": 4,
+   "ow": 4,
    "woff": 130240,
-   "qoff": 356576,
+   "qoff": 28896,
    "csum": 3894202537,
    "src": {
     "buf": "A",
@@ -1951,7 +2314,9 @@
   },
   {
    "id": 82,
-   "kind": "cpu_add",
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 98,
    "k": 0,
    "stride": 1,
    "pad": 0,
@@ -1960,12 +2325,11 @@
    "iw": 4,
    "ic": 48,
    "oc": 48,
+   "oh": 4,
+   "ow": 4,
    "woff": -1,
-   "qoff": -1,
+   "qoff": 44496,
    "csum": 3238962982,
-   "r_scale": 8871,
-   "k_add": 15,
-   "zp_s": -4,
    "src": {
     "buf": "A",
     "off": 0
@@ -1973,11 +2337,17 @@
    "dst": {
     "buf": "B",
     "off": 1536
-   }
+   },
+   "r_scale": 8871,
+   "k_add": 15,
+   "zp_s": -4,
+   "zp_d": 6
   },
   {
    "id": 83,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 99,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -1986,8 +2356,10 @@
    "iw": 4,
    "ic": 48,
    "oc": 224,
+   "oh": 4,
+   "ow": 4,
    "woff": 140992,
-   "qoff": 356880,
+   "qoff": 29200,
    "csum": 635865026,
    "src": {
     "buf": "B",
@@ -2001,6 +2373,8 @@
   {
    "id": 84,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 100,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -2009,8 +2383,10 @@
    "iw": 4,
    "ic": 224,
    "oc": 224,
+   "oh": 4,
+   "ow": 4,
    "woff": 151744,
-   "qoff": 358240,
+   "qoff": 30560,
    "csum": 3207068382,
    "src": {
     "buf": "A",
@@ -2024,6 +2400,8 @@
   {
    "id": 85,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 101,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -2032,8 +2410,10 @@
    "iw": 4,
    "ic": 224,
    "oc": 48,
+   "oh": 4,
+   "ow": 4,
    "woff": 153760,
-   "qoff": 359600,
+   "qoff": 31920,
    "csum": 549239554,
    "src": {
     "buf": "A",
@@ -2046,7 +2426,9 @@
   },
   {
    "id": 86,
-   "kind": "cpu_add",
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 103,
    "k": 0,
    "stride": 1,
    "pad": 0,
@@ -2055,12 +2437,11 @@
    "iw": 4,
    "ic": 48,
    "oc": 48,
+   "oh": 4,
+   "ow": 4,
    "woff": -1,
-   "qoff": -1,
+   "qoff": 44512,
    "csum": 1319359108,
-   "r_scale": 9864,
-   "k_add": 15,
-   "zp_s": 13,
    "src": {
     "buf": "A",
     "off": 0
@@ -2068,11 +2449,17 @@
    "dst": {
     "buf": "B",
     "off": 1536
-   }
+   },
+   "r_scale": 9864,
+   "k_add": 15,
+   "zp_s": 13,
+   "zp_d": 6
   },
   {
    "id": 87,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 104,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -2081,8 +2468,10 @@
    "iw": 4,
    "ic": 48,
    "oc": 224,
+   "oh": 4,
+   "ow": 4,
    "woff": 164512,
-   "qoff": 359904,
+   "qoff": 32224,
    "csum": 1912191636,
    "src": {
     "buf": "B",
@@ -2096,6 +2485,8 @@
   {
    "id": 88,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 105,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -2104,8 +2495,10 @@
    "iw": 4,
    "ic": 224,
    "oc": 224,
+   "oh": 4,
+   "ow": 4,
    "woff": 175264,
-   "qoff": 361264,
+   "qoff": 33584,
    "csum": 2061187452,
    "src": {
     "buf": "A",
@@ -2119,6 +2512,8 @@
   {
    "id": 89,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 106,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -2127,8 +2522,10 @@
    "iw": 4,
    "ic": 224,
    "oc": 48,
+   "oh": 4,
+   "ow": 4,
    "woff": 177280,
-   "qoff": 362624,
+   "qoff": 34944,
    "csum": 338682952,
    "src": {
     "buf": "A",
@@ -2141,7 +2538,9 @@
   },
   {
    "id": 90,
-   "kind": "cpu_add",
+   "kind": "add",
+   "flags": 8,
+   "layer_idx": 108,
    "k": 0,
    "stride": 1,
    "pad": 0,
@@ -2150,12 +2549,11 @@
    "iw": 4,
    "ic": 48,
    "oc": 48,
+   "oh": 4,
+   "ow": 4,
    "woff": -1,
-   "qoff": -1,
+   "qoff": 44528,
    "csum": 503539617,
-   "r_scale": 22394,
-   "k_add": 15,
-   "zp_s": 28,
    "src": {
     "buf": "A",
     "off": 0
@@ -2163,11 +2561,17 @@
    "dst": {
     "buf": "B",
     "off": 1536
-   }
+   },
+   "r_scale": 22394,
+   "k_add": 15,
+   "zp_s": 28,
+   "zp_d": 6
   },
   {
    "id": 91,
    "kind": "pool",
+   "flags": 0,
+   "layer_idx": 109,
    "k": 3,
    "stride": 1,
    "pad": 1,
@@ -2176,6 +2580,8 @@
    "iw": 4,
    "ic": 48,
    "oc": 48,
+   "oh": 4,
+   "ow": 4,
    "woff": -1,
    "qoff": -1,
    "csum": 991054471,
@@ -2191,6 +2597,8 @@
   {
    "id": 92,
    "kind": "pool",
+   "flags": 0,
+   "layer_idx": 111,
    "k": 5,
    "stride": 1,
    "pad": 2,
@@ -2199,9 +2607,38 @@
    "iw": 4,
    "ic": 48,
    "oc": 48,
+   "oh": 4,
+   "ow": 4,
    "woff": -1,
    "qoff": -1,
    "csum": 3143400671,
+   "src": {
+    "buf": "B",
+    "off": 1536
+   },
+   "dst": {
+    "buf": "B",
+    "off": 3072
+   }
+  },
+  {
+   "id": 93,
+   "kind": "pool",
+   "flags": 0,
+   "layer_idx": 113,
+   "k": 9,
+   "stride": 1,
+   "pad": 4,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 48,
+   "oc": 48,
+   "oh": 4,
+   "ow": 4,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 3688028037,
    "src": {
     "buf": "B",
     "off": 1536
@@ -2212,31 +2649,10 @@
    }
   },
   {
-   "id": 93,
-   "kind": "pool",
-   "k": 9,
-   "stride": 1,
-   "pad": 4,
-   "leaky": 0,
-   "ih": 4,
-   "iw": 4,
-   "ic": 48,
-   "oc": 48,
-   "woff": -1,
-   "qoff": -1,
-   "csum": 3688028037,
-   "src": {
-    "buf": "B",
-    "off": 1536
-   },
-   "dst": {
-    "buf": "A",
-    "off": 768
-   }
-  },
-  {
    "id": 94,
-   "kind": "cpu_concat",
+   "kind": "copy",
+   "flags": 0,
+   "layer_idx": 114,
    "k": 0,
    "stride": 1,
    "pad": 0,
@@ -2245,40 +2661,114 @@
    "iw": 4,
    "ic": 48,
    "oc": 192,
+   "oh": 4,
+   "ow": 4,
    "woff": -1,
    "qoff": -1,
-   "csum": 3973490205,
-   "sources": [
-    {
-     "buf": "A",
-     "off": 768,
-     "c": 48
-    },
-    {
-     "buf": "A",
-     "off": 0,
-     "c": 48
-    },
-    {
-     "buf": "B",
-     "off": 2304,
-     "c": 48
-    },
-    {
-     "buf": "B",
-     "off": 1536,
-     "c": 48
-    }
-   ],
-   "dst": {
+   "csum": 3688028037,
+   "c_src": 0,
+   "c_dst": 0,
+   "src": {
     "buf": "A",
-    "off": 1536
+    "off": 0
    },
-   "oc_tensor": 192
+   "dst": {
+    "buf": "B",
+    "off": 3840
+   }
   },
   {
    "id": 95,
+   "kind": "copy",
+   "flags": 0,
+   "layer_idx": 114,
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 48,
+   "oc": 192,
+   "oh": 4,
+   "ow": 4,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 3143400671,
+   "c_src": 0,
+   "c_dst": 48,
+   "src": {
+    "buf": "B",
+    "off": 3072
+   },
+   "dst": {
+    "buf": "B",
+    "off": 3888
+   }
+  },
+  {
+   "id": 96,
+   "kind": "copy",
+   "flags": 0,
+   "layer_idx": 114,
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 48,
+   "oc": 192,
+   "oh": 4,
+   "ow": 4,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 991054471,
+   "c_src": 0,
+   "c_dst": 96,
+   "src": {
+    "buf": "B",
+    "off": 2304
+   },
+   "dst": {
+    "buf": "B",
+    "off": 3936
+   }
+  },
+  {
+   "id": 97,
+   "kind": "copy",
+   "flags": 0,
+   "layer_idx": 114,
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 4,
+   "iw": 4,
+   "ic": 48,
+   "oc": 192,
+   "oh": 4,
+   "ow": 4,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 503539617,
+   "c_src": 0,
+   "c_dst": 144,
+   "src": {
+    "buf": "B",
+    "off": 1536
+   },
+   "dst": {
+    "buf": "B",
+    "off": 3984
+   }
+  },
+  {
+   "id": 98,
    "kind": "conv",
+   "flags": 2,
+   "layer_idx": 115,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -2287,12 +2777,14 @@
    "iw": 4,
    "ic": 192,
    "oc": 96,
+   "oh": 4,
+   "ow": 4,
    "woff": 188032,
-   "qoff": 362928,
+   "qoff": 35248,
    "csum": 1789271969,
    "src": {
-    "buf": "A",
-    "off": 1536
+    "buf": "B",
+    "off": 3840
    },
    "dst": {
     "buf": "B",
@@ -2300,8 +2792,10 @@
    }
   },
   {
-   "id": 96,
+   "id": 99,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 116,
    "k": 5,
    "stride": 1,
    "pad": 2,
@@ -2310,8 +2804,10 @@
    "iw": 4,
    "ic": 96,
    "oc": 96,
+   "oh": 4,
+   "ow": 4,
    "woff": 206464,
-   "qoff": 363520,
+   "qoff": 35840,
    "csum": 2861618668,
    "src": {
     "buf": "B",
@@ -2323,8 +2819,10 @@
    }
   },
   {
-   "id": 97,
+   "id": 100,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 117,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -2333,8 +2831,10 @@
    "iw": 4,
    "ic": 96,
    "oc": 96,
+   "oh": 4,
+   "ow": 4,
    "woff": 208864,
-   "qoff": 364112,
+   "qoff": 36432,
    "csum": 3523913480,
    "src": {
     "buf": "A",
@@ -2346,8 +2846,10 @@
    }
   },
   {
-   "id": 98,
+   "id": 101,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 118,
    "k": 5,
    "stride": 1,
    "pad": 2,
@@ -2356,8 +2858,10 @@
    "iw": 4,
    "ic": 96,
    "oc": 96,
+   "oh": 4,
+   "ow": 4,
    "woff": 218080,
-   "qoff": 364704,
+   "qoff": 37024,
    "csum": 813174060,
    "src": {
     "buf": "A",
@@ -2369,8 +2873,10 @@
    }
   },
   {
-   "id": 99,
+   "id": 102,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 119,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -2379,8 +2885,10 @@
    "iw": 4,
    "ic": 96,
    "oc": 96,
+   "oh": 4,
+   "ow": 4,
    "woff": 220480,
-   "qoff": 365296,
+   "qoff": 37616,
    "csum": 3066213406,
    "src": {
     "buf": "A",
@@ -2392,8 +2900,10 @@
    }
   },
   {
-   "id": 100,
+   "id": 103,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 120,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -2402,8 +2912,10 @@
    "iw": 4,
    "ic": 96,
    "oc": 255,
+   "oh": 4,
+   "ow": 4,
    "woff": 229696,
-   "qoff": 365888,
+   "qoff": 38208,
    "csum": 1018849941,
    "src": {
     "buf": "A",
@@ -2415,8 +2927,10 @@
    }
   },
   {
-   "id": 101,
+   "id": 104,
    "kind": "upsample",
+   "flags": 0,
+   "layer_idx": 123,
    "k": 2,
    "stride": 2,
    "pad": 0,
@@ -2425,6 +2939,8 @@
    "iw": 4,
    "ic": 96,
    "oc": 96,
+   "oh": 8,
+   "ow": 8,
    "woff": -1,
    "qoff": -1,
    "csum": 3378434973,
@@ -2438,8 +2954,10 @@
    }
   },
   {
-   "id": 102,
-   "kind": "cpu_concat",
+   "id": 105,
+   "kind": "copy",
+   "flags": 0,
+   "layer_idx": 124,
    "k": 0,
    "stride": 1,
    "pad": 0,
@@ -2448,30 +2966,56 @@
    "iw": 8,
    "ic": 96,
    "oc": 120,
+   "oh": 8,
+   "ow": 8,
    "woff": -1,
    "qoff": -1,
-   "csum": 91029576,
-   "sources": [
-    {
-     "buf": "A",
-     "off": 7168,
-     "c": 96
-    },
-    {
-     "buf": "B",
-     "off": 0,
-     "c": 24
-    }
-   ],
+   "csum": 3378434973,
+   "c_src": 0,
+   "c_dst": 0,
+   "src": {
+    "buf": "A",
+    "off": 7168
+   },
    "dst": {
     "buf": "A",
     "off": 13312
-   },
-   "oc_tensor": 120
+   }
   },
   {
-   "id": 103,
+   "id": 106,
+   "kind": "copy",
+   "flags": 0,
+   "layer_idx": 124,
+   "k": 0,
+   "stride": 1,
+   "pad": 0,
+   "leaky": 0,
+   "ih": 8,
+   "iw": 8,
+   "ic": 24,
+   "oc": 120,
+   "oh": 8,
+   "ow": 8,
+   "woff": -1,
+   "qoff": -1,
+   "csum": 3442603748,
+   "c_src": 0,
+   "c_dst": 96,
+   "src": {
+    "buf": "B",
+    "off": 0
+   },
+   "dst": {
+    "buf": "A",
+    "off": 13408
+   }
+  },
+  {
+   "id": 107,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 125,
    "k": 5,
    "stride": 1,
    "pad": 2,
@@ -2480,8 +3024,10 @@
    "iw": 8,
    "ic": 120,
    "oc": 120,
+   "oh": 8,
+   "ow": 8,
    "woff": 254272,
-   "qoff": 367440,
+   "qoff": 39760,
    "csum": 3632296235,
    "src": {
     "buf": "A",
@@ -2493,8 +3039,10 @@
    }
   },
   {
-   "id": 104,
+   "id": 108,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 126,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -2503,8 +3051,10 @@
    "iw": 8,
    "ic": 120,
    "oc": 120,
+   "oh": 8,
+   "ow": 8,
    "woff": 257272,
-   "qoff": 368176,
+   "qoff": 40496,
    "csum": 2082121008,
    "src": {
     "buf": "A",
@@ -2516,8 +3066,10 @@
    }
   },
   {
-   "id": 105,
+   "id": 109,
    "kind": "dwconv",
+   "flags": 3,
+   "layer_idx": 127,
    "k": 5,
    "stride": 1,
    "pad": 2,
@@ -2526,8 +3078,10 @@
    "iw": 8,
    "ic": 120,
    "oc": 120,
+   "oh": 8,
+   "ow": 8,
    "woff": 271672,
-   "qoff": 368912,
+   "qoff": 41232,
    "csum": 2204282632,
    "src": {
     "buf": "A",
@@ -2539,8 +3093,10 @@
    }
   },
   {
-   "id": 106,
+   "id": 110,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 128,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -2549,8 +3105,10 @@
    "iw": 8,
    "ic": 120,
    "oc": 120,
+   "oh": 8,
+   "ow": 8,
    "woff": 274672,
-   "qoff": 369648,
+   "qoff": 41968,
    "csum": 474106299,
    "src": {
     "buf": "A",
@@ -2562,8 +3120,10 @@
    }
   },
   {
-   "id": 107,
+   "id": 111,
    "kind": "conv",
+   "flags": 0,
+   "layer_idx": 129,
    "k": 1,
    "stride": 1,
    "pad": 0,
@@ -2572,8 +3132,10 @@
    "iw": 8,
    "ic": 120,
    "oc": 255,
+   "oh": 8,
+   "ow": 8,
    "woff": 289072,
-   "qoff": 370384,
+   "qoff": 42704,
    "csum": 2651586772,
    "src": {
     "buf": "A",
@@ -2586,7 +3148,7 @@
   }
  ],
  "final_ops": [
-  100,
-  107
+  103,
+  111
  ]
 }

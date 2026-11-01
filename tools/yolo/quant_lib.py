@@ -471,6 +471,51 @@ def int8_forward(plan, q, x_packed):
     return store, op_out
 
 
+def _conv_golden(x, p, zp_in):
+    k, s, pad = p["k"], p["stride"], p["pad"]
+    k2 = k * k
+    H, W, ic_pad = x.shape
+    oc_pad = p["oc_pad"]
+    oc = p["oc"]
+    xp = np.full((H + 2 * pad, W + 2 * pad, ic_pad), zp_in, dtype=np.int8)
+    xp[pad:pad + H, pad:pad + W, :] = x
+    oh = (H + 2 * pad - k) // s + 1
+    ow = (W + 2 * pad - k) // s + 1
+    acc = np.zeros((oh, ow, oc_pad), dtype=np.int64)
+    if p["depthwise"]:
+        for tap in range(k2):
+            ky, kx = divmod(tap, k)
+            patch = xp[ky:ky + (oh - 1) * s + 1:s, kx:kx + (ow - 1) * s + 1:s, :]
+            w_tap = p["wq"][tap]
+            for c in range(oc_pad):
+                acc[:, :, c] += patch[:, :, c].astype(np.int64) * int(w_tap[c])
+    else:
+        for tap in range(k2):
+            ky, kx = divmod(tap, k)
+            patch = xp[ky:ky + (oh - 1) * s + 1:s, kx:kx + (ow - 1) * s + 1:s, :]
+            w_tap = p["wq"][tap]
+            for icc in range(ic_pad):
+                col = patch[:, :, icc].reshape(oh, ow, 1).astype(np.int64)
+                acc += col * w_tap[icc][None, None, :].astype(np.int64)
+    for c in range(oc_pad):
+        acc[:, :, c] += int(p["bias_adj"][c])
+    mpos = p["mpos"]
+    mneg = ((p["mpos"] * 3277 + 16384) >> 15) if p["leaky"] else p["mpos"]
+    y = np.empty((oh, ow, oc_pad), dtype=np.int64)
+    den = 1 << p["shift"]
+    for c in range(oc_pad):
+        prod_pos = acc[:, :, c] * int(mpos[c])
+        prod_neg = acc[:, :, c] * int(mneg[c])
+        y[:, :, c] = np.where(acc[:, :, c] >= 0,
+                              np.floor_divide(prod_pos, den),
+                              np.floor_divide(prod_neg, den))
+    y += int(p["zp_out"])
+    y = np.clip(y, -128, 127).astype(np.int8)
+    out = np.full((oh, ow, oc_pad), p["zp_out"], dtype=np.int8)
+    out[:, :, :oc] = y[:, :, :oc]
+    return out
+
+
 def _pool_golden(x, op):
     k, s, pad = op["k"], op["stride"], op["pad"]
     H, W, C = x.shape
@@ -566,6 +611,10 @@ def golden_forward(plan, q, x_packed):
             op_out[op_id] = out[:, :, :tensors[op["dst"]].C]
     return store, op_out
 
+
+
+def dequantize(q_arr, s, zp):
+    return s * (q_arr.astype(np.float64) - float(zp))
 
 
 def op_real_shape(op, tensor):

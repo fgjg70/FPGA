@@ -103,7 +103,7 @@ def main():
         dst = a_base + int(op["dst"]["off"]) if op["dst"]["buf"] == "A" \
             else b_base + int(op["dst"]["off"])
         entries.append({
-            "op": i, "layer": int(op["layer_idx"]), "kind": KIND[kind],
+            "op": i, "layer": int(op.get("layer_idx", -1)), "kind": KIND[kind],
             "kind_name": kind, "flags": flags,
             "pad": pad, "stride": stride,
             "icb": icb, "ocb": ocb, "ih": ih, "iw": iw,

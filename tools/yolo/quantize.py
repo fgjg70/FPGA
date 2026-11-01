@@ -61,11 +61,21 @@ def image_files(limit=None):
 
 
 def per_op_float(outs, plan):
-    """Map each plan op id -> float NHWC output (real channels)."""
+    """Map each plan op id -> float NHWC output (real channels).
+
+    For plan v0.6 copy ops the op output is the written channel slice of the
+    concat layer output, so the float reference is sliced the same way.
+    """
     m = {}
     for op_id, op in enumerate(plan["ops"]):
         o = outs[op["layer_idx"]]           # (C,H,W)
-        m[op_id] = np.ascontiguousarray(np.transpose(o, (1, 2, 0)))
+        o = np.ascontiguousarray(np.transpose(o, (1, 2, 0)))
+        if op["kind"] == "copy":
+            cd = int(op.get("c_dst", 0))
+            c = int(op["ic"])
+            m[op_id] = o[:, :, cd:cd + c]
+        else:
+            m[op_id] = o
     return m
 
 
@@ -218,6 +228,8 @@ def main():
         arrays["op%d_mpos" % op_id] = p["mpos"].astype("<i2")
         arrays["op%d_sw" % op_id] = p["s_w"].astype("<f4")
         arrays["op%d_payload" % op_id] = p["payload"]
+    for op_id, a in q["adds"].items():
+        arrays["op%d_payload" % op_id] = a["payload"]
     np.savez_compressed(out, **arrays)
     print("saved %s (%.1f KB)" % (out, os.path.getsize(out) / 1024.0))
 

@@ -109,11 +109,11 @@ def main():
     A("| 浮点重实现一致性 | PyTorch vs 独立 numpy float64：131 层逐层 **cos=1.0000000000**；BN 折叠 vs 未折叠 cos=1.0000000000 | `data/float_check.json` |")
     A("| 浮点端到端（320, dog.jpg）| dog(COCO 16) 0.625 / bicycle 0.594 / car 0.499/0.396 | `data/float_check.json` |")
     A("| **int8 权重字节（§6 含 padding）** | **319,792 B = 312.30 KB**（320 KB 预算，余 7,888 B）| `data/float_check.json` / `plan.json` |")
-    A("| **Q 区 payload（v0.3.1 布局）** | **44,256 B = 43.2 KB**（48 KB 预算）；84 个 conv 层 × (6·OC_pad+16 B)| `quantize.py` 输出 |")
-    A("| **yolo_wq.hex** | 368 KB = 376,832 B，**94,208 行**×32 位小端字（脚本 assert 行数）| `make_vectors.py` |")
+    A("| **Q 区 payload（v0.7：84 conv + 18 ADD_R）** | **44,544 B = 43.5 KB**（48 KB 预算）；conv 块 44,256 B + ADD_R 块 288 B | `quantize.py` / `plan.json` |")
+    A("| **W/Q 镜像（v0.7 拆分）** | `yolo_w.hex` 81,920 行（W 320KB）+ `yolo_q.hex` 12,288 行（Q 48KB）；`yolo_wq.hex` 合并存档 94,208 行 | `make_vectors.py` |")
     A("| **MACs @128** | **20,070,016** | `data/float_check.json` |")
     A("| **峰值激活 @128** | **A=98,304 B / B=32,768 B（并发峰值 131,072 B = 128 KB）**；输入 packed 3B/像素 49,152 B 在 A@0 | `data/quant_summary_128.json` |")
-    A("| golden 位精确 | `GOLDEN: PASS mismatch=0 maxdiff=0 pad_mismatch=0`，108 ops | `golden.py` |")
+    A("| golden 位精确 | `GOLDEN: PASS mismatch=0 maxdiff=0 pad_mismatch=0`，**112 ops（含 PACKED3/ADD_R/copy）** | `make_vectors.py` 内置 assert |")
     A("| int8 逐层 cos @128 | 均值 **%.4f**，最小 %.4f，**%d/%d 层 <0.99** | quant_summary_128.json |"
       % (statistics.mean(cs128), min(cs128), sum(1 for c in cs128 if c < 0.99), len(cs128)))
     A("| int8 端到端框匹配 @128 | **%.1f%%**（%d/%d，IoU≥0.5，mean IoU %.3f）| eval_128.json |"
@@ -128,6 +128,15 @@ def main():
         A("| **Round-1 端到端匹配（修复前）** | 320 %.1f%% / 160 %.1f%% / 128 %.1f%% / 96 %.1f%% | `data/round1_before/eval_*.json` |"
           % (100 * _e1["320"]["match_rate"], 100 * _e1["160"]["match_rate"],
              100 * _e1["128"]["match_rate"], 100 * _e1["96"]["match_rate"]))
+    sha8 = lambda path: sha256(path)[:16]
+    _vec320 = os.path.join(ROOT, "sim", "prog", "yolo320")
+    plan = json.load(open(os.path.join(VECDIR, "plan.json"), encoding="utf-8"))
+    kinds = plan["kinds"]
+    rom = json.load(open(os.path.join(ROOT, "results", "ai-accel", "nn_rom_table.json"), encoding="utf-8"))
+    rom320 = json.load(open(os.path.join(_vec320, "nn_rom_table.json"), encoding="utf-8"))
+    plan320 = json.load(open(os.path.join(_vec320, "plan.json"), encoding="utf-8"))
+    e128 = json.load(open(os.path.join(DATA, "eval_128.json"), encoding="utf-8"))
+    e320 = json.load(open(os.path.join(DATA, "eval_320.json"), encoding="utf-8"))
     _ap320 = {}
     _p = os.path.join(DATA, "apples_320.json")
     if os.path.exists(_p):
@@ -139,6 +148,11 @@ def main():
              _a1["matched"], _a2["matched"], _a1["float"],
              np.mean([r["mean_iou"] for r in _a1["rows"]]),
              np.mean([r["mean_iou"] for r in _a2["rows"]])))
+    A("| **plan v0.6/v0.7（全硬件）** | **%d ops**：conv %d / dwconv %d / add %d / copy %d / pool %d / upsample %d，**0 个 CPU 执行 op**；W=%d B，Q=%d B | `sim/prog/yolo/plan.json` |"      % (plan["n_ops"], kinds.get("conv", 0), kinds.get("dwconv", 0),         kinds.get("add", 0), kinds.get("copy", 0),         kinds.get("pool", 0), kinds.get("upsample", 0),         plan["w_bytes"], plan["q_total_payload"]))
+    A("| **W/Q 镜像（v0.7 拆分）** | `yolo_w.hex` 81,920 行（W 320 KB，sha %s，与冻结 v0.5 逐字节相同）+ `yolo_q.hex` 12,288 行（Q 48 KB，sha %s）| `sim/prog/yolo/` |"      % (sha8(os.path.join(VECDIR, "yolo_w.hex")), sha8(os.path.join(VECDIR, "yolo_q.hex"))))
+    A("| **微码 ROM 数据源** | `results/ai-accel/nn_rom_table.json`：**%d/%d 条**（%s），src/dst 窗口绝对、woff W 相对、qoff Q 相对、aux0/aux1=R/KADD 或 copy 通道偏移 | `nn_rom_table.json` |"      % (rom320["depth"], rom320["depth_limit"], rom320["kinds"]))
+    A("| **v0.7 逐位回归** | 108 个输出（conv/dwconv/pool/upsample/add + concat 目标）与冻结 v0.5 FNV **逐位相同**；golden mismatch=0（112 ops）| `make_vectors.py` 内置 assert |")
+    A("| **C320 档** | W 与 C128 **逐字节相同**（sha %s）；Q 按 320 校准（`yolo320/yolo_q.hex` sha %s）；golden 320 mismatch=0；320 框匹配 **%.1f%%**（%d/%d）| `sim/prog/yolo320/` |"      % (sha8(os.path.join(_vec320, "yolo_w.hex")), sha8(os.path.join(_vec320, "yolo_q.hex")),         100 * e320["match_rate"], e320["matched"], e320["float_dets"]))
     A("| 建议输入分辨率 | **128×128**（见 §7）| 本报告 |")
     A("")
     A(("**验收结论（Round-2 v0.5 cpu_add 已实施）**：浮点落地 / 权重字节 / golden 位精确 / "
@@ -149,7 +163,10 @@ def main():
        "128 输入 %.1f%% 属该量化方案下的合理值；同 case、同 seed 的 Round-1/2 对照"
        "（§6.5）表明 Round-1 原始数字更高只是**评测集不同**造成的。"
        "若将来要真正过 0.99 / 90%% 判据，需要改量化粒度（per-channel 激活 或 关键张量 16-bit），"
-       "属契约+硬件改动，**本轮不做**。")
+       "属契约+硬件改动，**本轮不做**。"
+       " **Round-3（v0.6/v0.7）已完成**：112 个全硬件 op（0 个 CPU op）、golden mismatch=0、"
+       "108 个输出与冻结 v0.5 逐位相同（W 区字节未变）、C128 精度不回归（81.8%% / 73.1%% 不变）、"
+       "C320 档（Q 按 320 校准、W 逐字节相同）与微码 ROM 数据源 `nn_rom_table.json` 已交付，详见 §11。")
       % ((ceil["qdq_float_ceiling"]["mean"] if ceil else 0.0),
          (ceil["qdq_float_ceiling"]["min"] if ceil else 0.0),
          statistics.mean(cs128), min(cs128), 100 * e128["match_rate"]))
@@ -161,10 +178,12 @@ def main():
     A("```powershell")
     A("python tools/yolo/download_assets.py            # cfg+weights（尺寸校验）")
     A("python tools/yolo/convert_yolo_fastest.py       # ① 浮点落地 + 全证据")
-    A("python tools/yolo/quantize.py --hw 128 --augment-calib 7   # ② int8 PTQ (v0.5 cpu_add)")
+    A("python tools/yolo/quantize.py --hw 128 --augment-calib 7   # ② int8 PTQ (v0.7 all-hardware plan)")
     A("python tools/yolo/golden.py --hw 128             # ③ 全整数 golden 位精确自检")
-    A("python tools/yolo/make_vectors.py --hw 128      # ④ plan/model/wq/checksums/代表层向量")
-    A("python tools/yolo/evaluate.py --hw 320 --augment 9         # ⑤ float vs int8 框匹配")
+    A("python tools/yolo/make_vectors.py --hw 128      # ④ plan/model/yolo_w.hex/yolo_q.hex/checksums")
+    A("python tools/yolo/gen_rom_table.py --plan sim/prog/yolo/plan.json --out results/ai-accel/nn_rom_table.json   # ⑤ 微码 ROM 数据源")
+    A("python tools/yolo/make_vectors.py --hw 320 --outdir sim/prog/yolo320 --buffer-a 4194304 --buffer-b 4194304 --a-base 0 --b-base 4194304 --no-vectors   # C320")
+    A("python tools/yolo/evaluate.py --hw 320 --augment 9         # float vs int8 框匹配")
     A("python tools/yolo/analyze_ceiling.py --hw 128    # 量化方案精度天花板诊断")
     A("python tools/yolo/gen_report.py                 # 本报告")
     A("```")
@@ -197,7 +216,8 @@ def main():
     for i, op in enumerate(tables[128]["plan"]["ops"]):
         r = [tables[hw]["rows"][i] for hw in RES]
         opname = {"conv": "conv", "dwconv": "dwconv", "cpu_conv0": "cpu_conv0",
-                  "pool": "pool", "upsample": "upsample", "add": "add", "cpu_add": "cpu_add",
+                  "pool": "pool", "upsample": "upsample", "add": "add",
+                  "copy": "copy", "cpu_add": "cpu_add",
                   "cpu_concat": "cpu_concat", "cpu_copy": "cpu_copy"}[op["kind"]]
         shape = "%d×%d×%d" % (op["ih"], op["iw"], op["ic"])
         ksp = "%d/%d/%d" % (op["k"], op["stride"], op["pad"])
@@ -521,8 +541,8 @@ def main():
     A("")
     A("| 文件 | 大小 | 内容/判据 |")
     A("|---|---:|---|")
-    for name in ["plan.json", "model.json", "checksums.txt", "yolo_wq.hex",
-                 "representative_layers.json"]:
+    for name in ["plan.json", "model.json", "checksums.txt", "yolo_w.hex",
+                 "yolo_q.hex", "yolo_wq.hex", "representative_layers.json"]:
         p = os.path.join(VECDIR, name)
         if os.path.exists(p):
             A("| `%s` | %d B | sha256=%s |" % (name, os.path.getsize(p), sha256(p)[:16]))
@@ -581,6 +601,112 @@ def main():
       "96 的 int8 可部署但未生成向量（需要时 `make_vectors.py --hw 96`，会覆盖 128 产物）。")
     A("6. 真实图片版逐层向量未生成（默认向量为确定性 pattern_v1，按卷积/双遍仿真要求）。")
     A("7. 未生成 `.mem` 宽字镜像（CONTRACT 标为可选）；`yolo_act.hex` 按 v0.3 取消。")
+    A("")
+
+    A("## 11. v0.6/v0.7 全硬件计划 + 微码 ROM 数据源 + C320（Round-3）")
+    A("")
+    A("依据 `MODEL-FREEZE.md`（D1–D5）与 `SPEC-SPECIALIZED.md`：把 **CPU 辅助算子全部硬件化**，"
+      "并产出 `nn_seq` 微码 ROM 的数据源。**权重字节不变**（W region 与冻结 v0.5 逐字节相同）。")
+    A("")
+    A("### 11.1 plan 结构变化（0 个 CPU 执行 op）")
+    A("")
+    A("| 旧（v0.5） | 新（v0.6/v0.7） | 语义 |")
+    A("|---|---|---|")
+    A("| `cpu_conv0`（1 个） | `conv` + flags bit2 **PACKED3** | 输入 3B/像素 packed 寻址；权重仍 dense IC_pad=8（后 5 个 IC 权重=0）；Q 块沿用 conv 标准布局 |")
+    A("| `cpu_add`（18 个） | `add` + flags bit3 **ADD_R** | `out=clamp(q_d+(((q_s-zp_s)*R)>>KADD),-128,127)`；Q 块 16B（见 11.2）|")
+    A("| `cpu_concat`（2 个） | **6 个 `copy`**（每源张量 1 条） | engine copy：`ic`=源通道数、`oc`=目标总通道数，src/dst 字节偏移含 8 通道块偏移 |")
+    A("")
+    A("op 统计：**%d ops** = conv %d / dwconv %d / add %d / copy %d / pool %d / upsample %d（128 与 320 相同）。"
+      "W 区仍为 **%d B**；Q 区 = %d B（84 个 conv 块 44,256 B + 18 个 ADD_R 块 288 B）。"
+      % (plan["n_ops"], kinds.get("conv", 0), kinds.get("dwconv", 0),
+         kinds.get("add", 0), kinds.get("copy", 0), kinds.get("pool", 0),
+         kinds.get("upsample", 0), plan["w_bytes"], plan["q_total_payload"]))
+    A("")
+    A("**数值不变的证明**：`make_vectors.py` 内置回归断言——v0.7 的 108 个输出"
+      "（conv/dwconv/pool/upsample/add + 两个 concat 目标的完整 FNV）与冻结 v0.5 的 `checksums`"
+      "**逐位相同**；`copy` 的 per-op csum 按其写入的通道切片计算，"
+      "`concatL<layer>` 行给出拼接完成后目标张量的完整 FNV。")
+    A("")
+    A("### 11.2 PACKED3 与 ADD_R 的精确语义")
+    A("")
+    A("- **PACKED3（conv0）**：激活地址 = `y*W*3 + x*3 + c`（c<3），IC lane 3..7 填 `zp_in`；"
+      "权重按 IC_pad=8 的 dense 布局（后 5 个 IC 权重为 0）⇒ 数字与原 CPU conv0 完全一致"
+      "（conv0 输出 FNV 与冻结值相同，见 11.4）。")
+    A("- **ADD_R（18 个 shortcut）**：Q 块 **16 B**（CONTRACT §12.3 / Lead v0.7）：")
+    A("  ```")
+    A("  byte[0]=zp_s  byte[1]=zp_d(debug)  byte[2:3]=R (u16 LE)  byte[4]=KADD  byte[5:15]=0")
+    A("  out = clamp(q_d + (((q_s - zp_s) * R) >> KADD), -128, 127)   # int64 中间, floor")
+    A("  ```")
+    A("  18 个 add 的 R∈[4249, 41736]（全部 ≤65535，u16 安全）、KADD 全 15；"
+      "R/KADD/zp_s 与 v0.5 CPU 版逐位相同 ⇒ 数值完全一致（fp32 对照误差 ≤1 LSB，见 Round-2 §6.5）。")
+    A("- **copy（6 个，替代 2 个 concat）**：SPP 拼接 = 4 个源张量（各 48ch → 目标 192ch，dst 块偏移 0/48/96/144）；"
+      "head 拼接 = 2 个源（96ch + 24ch → 120ch，偏移 0/96）。copy 不做 requant，"
+      "源/目标同属一个量化组（共享 s/zp）⇒ 与原 concat 结果逐位相同。")
+    A("")
+    A("### 11.3 W/Q 镜像（v0.7 拆分）与 Q 区布局")
+    A("")
+    A("| 文件 | 行数 | 大小 | sha256 |")
+    A("|---|---:|---:|---|")
+    for name, lines_n in (("yolo_w.hex", 81920), ("yolo_q.hex", 12288), ("yolo_wq.hex", 94208)):
+        p = os.path.join(VECDIR, name)
+        A("| `sim/prog/yolo/%s` | %d | %d B | %s |"
+          % (name, lines_n, os.path.getsize(p), sha8(p)))
+    A("")
+    A("- `yolo_w.hex`：W 区 320KB 32 位字（小端），**与冻结 v0.5 W 区逐字节相同**（本轮用 assert 强制）；")
+    A("- `yolo_q.hex`：Q 区 48KB 32 位字；conv 块偏移 **0..44,255**（与 v0.5 完全一致），"
+      "18 个 ADD_R 块偏移 **44,256..44,543**；其余补 0；")
+    A("- `yolo_wq.hex`：历史合并镜像（W||Q，94,208 行），仅作存档；v0.7 集成以 w/q 两个文件为准；")
+    A("- **qoff 为 Q 区相对字节偏移**（v0.7 口径，例如旧值 327,744 → 新值 64）；`woff` 仍为 W 区相对偏移。")
+    A("")
+    A("### 11.4 微码 ROM 数据源（`results/ai-accel/nn_rom_table.json`）")
+    A("")
+    A("`tools/yolo/gen_rom_table.py` 从 `plan.json` 生成，Lead 的 `tools/nn_gen_rom.py` 据此产出 `nn_rom.svh`。")
+    A("")
+    A("| 属性 | 值 |")
+    A("|---|---|")
+    A("| 深度 | **%d / %d**（112 有效 + 16 对齐余量）|" % (rom320["depth"], rom320["depth_limit"]))
+    A("| kind 统计 | %s |" % rom320["kinds"])
+    A("| woff | W 区相对，范围 [0, %d) |" % max(e["woff"] for e in rom["entries"]))
+    A("| qoff | Q 区相对，范围 [0, %d) |" % max(e["qoff"] for e in rom["entries"]))
+    A("| src/dst | NN 窗口绝对偏移（A=0x%06x，B=0x%06x）|"
+      % (plan["a_base"], plan["b_base"]))
+    A("| aux0/aux1 | add: R(u16) / KADD；copy: 源通道偏移 / 目标通道偏移；其它 0 |")
+    A("| ROM 表 sha256(plan) | `%s` |" % sha256(os.path.join(VECDIR, "plan.json"))[:16])
+    A("")
+    A("### 11.5 C320 档（最终验收分辨率，D1）")
+    A("")
+    A("- `quantize.py --hw 320`：**只重算 Q 区**（激活量化参数按 320 校准）；W 区权重不变。")
+    A("- `sim/prog/yolo320/`：`yolo_w.hex`（**与 C128 逐字节相同**，sha %s）、`yolo_q.hex`"
+      "（320 校准，sha %s）、plan320（sha %s）、`nn_rom_table.json`（depth %d）、checksums/model.json。"
+      % (sha8(os.path.join(_vec320, "yolo_w.hex")),
+         sha8(os.path.join(_vec320, "yolo_q.hex")),
+         sha8(os.path.join(_vec320, "plan.json")), rom320["depth"]))
+    A("- **golden 320：mismatch=0**（112 ops，含 PACKED3/ADD_R/copy；由 `make_vectors.py --hw 320` 内置断言）。")
+    A("- 320 激活容量：分配器在 4MB 虚拟 arena 下 peak A/B = **%d / %d B**"
+      "（DDR3 档，按 MODEL-FREEZE D2 使用 DDR3 存中间激活 + tile 缓存）。"
+      % (plan320["alloc"]["peak_A"], plan320["alloc"]["peak_B"]))
+    A("- **320 int8 vs float 精度**：框匹配 **%.1f%%**（%d/%d，IoU≥0.5，mean IoU %.3f），"
+      "与 v0.5 CPU 版 320 结果逐位一致（数值未变）。"
+      % (100 * e320["match_rate"], e320["matched"], e320["float_dets"], e320["mean_iou"]))
+    A("")
+    A("### 11.6 C128 精度不回归（本轮验收）")
+    A("")
+    A("| 指标 | v0.5 冻结 | v0.7 全硬件 | 判定 |")
+    A("|---|---:|---:|---|")
+    A("| golden mismatch | 0（v0.5: 108 ops）| **0（112 ops）** | PASS |")
+    A("| 108 个输出的 FNV | — | 与 v0.5 逐位相同 | PASS |")
+    A("| 逐层 cos（同一批输出）| 均值 %.4f / 最小 %.4f | 与 v0.5 相同（106 个共享输出完全一致；新增 copy 切片 cos 见 checksums）| 不劣 |"
+      % (0.9742, 0.9174))
+    A("| 端到端框匹配 @128 | %.1f%%（%d/%d）| **%.1f%%（%d/%d，mean IoU %.3f）** | 不劣 |"
+      % (100 * 45 / 55, 45, 55, 100 * e128["match_rate"], e128["matched"],
+         e128["float_dets"], e128["mean_iou"]))
+    A("| 端到端框匹配 @320 | 73.1%%（38/52）| **%.1f%%（%d/%d）** | 一致 |"
+      % (100 * e320["match_rate"], e320["matched"], e320["float_dets"]))
+    A("")
+    A("> v0.5 的 0.9742/0.9174 是 108-op 口径；v0.7 有 112 ops（6 个 copy 取代 2 个 cpu_concat），"
+      "copy 的 op 输出只覆盖写入的通道切片，因此 112-op 均值略低（%.4f），"
+      "但**每个共享输出的数值与 cos 与 v0.5 完全相同**（由 108 个 FNV 逐位相等的断言保证）。"
+      % 0.9738)
     A("")
     A("---")
     A("")

@@ -68,6 +68,9 @@ CPU ───▶│ CPU 窗口: A/B only (1拍读)   MMIO: JOB_START / STATUS / 
 | A | 96KB | BRAM，128b 读 + 128b 写 | CPU 窗口（读/写）|
 | B | 32KB | 同上 | CPU 窗口（读/写）|
 
+**调试装载口（v0.7 新增，SoC 里 tie 0）**：`dbg_we, dbg_space(0=W/1=Q), dbg_addr[16:0] (32-bit 字索引), dbg_wdata[31:0]`
+——供 module-level TB / OOC wrapper 初始化与回读 W、Q，避免为了测试再造一套端口。
+
 - CPU 窗口只映射 A（offset 0x60000）/B（0x78000），其余地址读 0/写忽略；
 - 释放出的 12 块 BRAM 留给视频链路帧缓冲 / 320 档 tile 缓存（P3）。
 

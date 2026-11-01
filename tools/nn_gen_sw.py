@@ -274,21 +274,28 @@ def main():
     cat_index = 0
     for op in ops:
         kind = KIND[op['kind']]
+        # 【flags 口径】plan.json (T-model v0.6) 的 flags 位约定与 C 侧 YF_* **不是同一张表**:
+        #   plan: bit0=depthwise, bit1=leaky, bit2=PACKED3, bit3=ADD_R
+        #   C   : 0x01 depthwise, 0x02 leaky, 0x04 add, 0x08 up2x, 0x10 poolmax,
+        #         0x20 PACKED3, 0x40 ADD_R
+        # 必须显式映射; 首版只查 op['packed3'] 字段, 而 v0.6 plan 把 PACKED3 编码在 flags.bit2
+        # -> conv0 会按普通卷积跑 (输入布局错, 全模型从第 1 层起全错)。2026-11-01 实测踩到。
+        pf = int(op.get('flags', 0) or 0)
         flags = 0
-        if kind == 1 or op.get('depthwise'):
-            flags |= 0x01                 # NN_F_DEPTHWISE
-        if op.get('leaky'):
-            flags |= 0x02                 # NN_F_LEAKY
+        if kind == 1 or (pf & 1) or op.get('depthwise'):
+            flags |= 0x01                 # depthwise
+        if (pf & 2) or op.get('leaky'):
+            flags |= 0x02                 # leaky
         if op['kind'] == 'upsample':
-            flags |= 0x08                 # NN_F_UP2X
+            flags |= 0x08                 # UP2X
         if kind == 2:
-            flags |= 0x10                 # NN_F_POOLMAX
-        if op.get('packed3') or op['kind'] == 'cpu_conv0':
-            flags |= 0x20                 # NN_F_PACKED3 (conv0: 3B/像素 packed 输入)
-        if op['kind'] == 'add' and ('r_scale' in op or 'R' in op):
-            flags |= 0x40                 # NN_F_ADD_R (per-tensor 源 requant)
+            flags |= 0x10                 # POOLMAX
+        if (pf & 4) or op.get('packed3') or op['kind'] == 'cpu_conv0':
+            flags |= 0x20                 # PACKED3 (conv0: 3B/像素 packed 输入)
+        if (pf & 8) or (op['kind'] == 'add' and ('r_scale' in op or 'R' in op)):
+            flags |= 0x40                 # ADD_R (per-tensor 源 requant)
         if op['kind'] == 'add' and not (flags & 0x40):
-            flags |= 0x04                 # NN_F_ADD (纯 add)
+            flags |= 0x04                 # 纯 add
         if kind in (5, 6):
             src_abs = cat_index
             cat_index += 1
