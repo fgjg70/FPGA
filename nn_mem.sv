@@ -12,8 +12,10 @@
 //   2. Q 区 48KB 拆成 **2 个子 ROM** (q_mem_lo 4096 深 + q_mem_hi 2048 深, 64-bit 宽);
 //      q_re/q_addr[12:0]/q_rdata[63:0], 1 拍; CPU 不可访问。
 //      仿真行为与"单块 6144 深 ROM"完全等价 (dbg 预装/loader 按 idx<4096 写 lo)。
-//      [2026-11-01 build fix] 综合落 BRAM ROM: lo 8 + hi 4 = **12 tiles**
-//      (单块 6144 深会被 Vivado 按 8192 取整成 16 tiles; 见 mem-report.md §3.7)。
+//      [2026-11-01 build fix] 综合版: lo = **BRAM ROM (8 tiles)**;
+//      hi = **分布式 ROM (实际落 LUT 逻辑, ~1.6K LUT, 0 BRAM)**。
+//      为过 place: 整机 core 实占 12 tiles (124+12=136>135 差 1 tile),
+//      故 hi 改 LUTRAM -> nn_mem **120 tiles**, 整机 120+12=132/135 ✓ (见 mem-report §3.7)。
 //   3. 激活 A/B: 读 128-bit 不变; 写口升级 128-bit + b_wstrb[15:0] (配引擎 v3 的
 //      16 lane 写回; copy/concat 的 8 字节半字写只写 half word, **不做 RMW**)。
 //   4. CPU 窗口只映射 A(0x60000)/B(0x78000): 其余窗口地址读 0/写忽略 (1 拍寄存读)。
@@ -49,10 +51,11 @@
 //        用到 64-bit, Vivado 会额外复制 64-bit 存储 (实测 W 147.5 tiles 超预算;
 //        用 keep 又会落 54K LUT)。64-bit 宽 + 满宽双读 = 80 tiles, 干净。
 //        为什么必须拆 4 段: 64-bit 宽 ROM 深度 >16384 会按 32768 取整。
-//   Q  : 2 个 64-bit 宽 BRAM ROM: lo 4096 深 (32KB -> 8 tiles) + hi 2048 深
-//        (16KB -> 4 tiles) = **12 tiles**; 读时两路并行、按 q_addr[12] 选择。
-//        为什么拆: 6144 深单块会被 Vivado 按 8192 取整 -> 16 tiles (多 4 块,
-//        整机 128+9.5=137.5 超 135); 拆成 4096+2048 后正好 12 tiles。
+//   Q  : lo = 64-bit 宽 4096 深 **BRAM ROM (8 tiles)**;
+//        hi = 64-bit 宽 2048 深 **分布式 ROM (LUT 逻辑, ~1.6K LUT, 0 tiles)**。
+//        读时两路并行、按 q_addr[12] 选择 (hi 是异步读 + 输出寄存器, 时延仍 1 拍)。
+//        历史: 单块 6144 深 BRAM 会被按 8192 取整 -> 16 tiles; 拆 4096+2048 BRAM -> 12;
+//        最后因整机 place 差 1 tile, hi 改 LUTRAM -> 8 tiles (mem 120)。
 //   A/B: 128KB 128-bit 宽一块阵列 -> 32 BRAM36 (精确 4KB/BRAM)。
 //   => nn_mem 合计 **124 tiles**; + 交付档核心约 9.5 ≈ **133.5/135**。
 //
@@ -328,13 +331,15 @@ module nn_mem
   // ==========================================================================
   // Q 区: 2 个 64-bit 宽 BRAM ROM (lo 4096 深 + hi 2048 深), 行为与单块 6144 深等价
   //   读: q_addr = 64-bit Q 字索引; 写: 只给 dbg 装载 (SoC 恒 0 -> ROM)
-  //   [2026-11-01 build fix] 综合落 BRAM ROM: 48KB 常量 ROM 若落 LUT/常量网络,
-  //   Vivado 会展开成 5.2M 单元 (实测 cross-boundary 32min + timing opt 68min)。
-  //   拆 4096+2048 而不是单块 6144: Vivado 对 6144 深 64-bit 按 8192 取整 ->
-  //   16 tiles; 拆成 4096 (8 tiles) + 2048 (4 tiles) = 12 tiles, 整机 133.5/135。
+  //   [2026-11-01 build fix] 综合落 ROM: lo 4096 深用 BRAM (8 tiles);
+  //   hi 2048 深改分布式 LUTRAM (~2.1K LUT, 0 BRAM) —— r10 整机 place 报
+  //   "272 units needed / 270 sites" (core 实占 12 tiles), 124+12=136 差 1 tile,
+  //   hi 改 LUTRAM 后 mem 120 tiles, 整机 120+12=132/135 ✓。
+  //   48KB 全 LUT 常量网络曾 5.2M cells (综合 3h), 但 hi 只 16KB 且是 LUTRAM 推断,
+  //   不会再出现该问题 (OOC 综合 ~1min)。
   // ==========================================================================
-  (* rom_style = "block" *) logic [63:0] q_mem_lo [0:QLO-1];
-  (* rom_style = "block" *) logic [63:0] q_mem_hi [0:QHI-1];
+  (* rom_style = "block" *) logic [63:0] q_mem_lo [0:QLO-1];        // 8 BRAM36
+  (* rom_style = "distributed" *) logic [63:0] q_mem_hi [0:QHI-1];  // distributed ROM -> LUT 逻辑, ~1.6K LUT, 0 BRAM
 
   logic [63:0] q_rd_lo, q_rd_hi, q_rd;
   logic        q_hi_r;

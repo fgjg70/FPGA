@@ -118,11 +118,11 @@
 
 ### 4.1 可用 BRAM
 
-- 器件 135 tiles。**2026-11-01 19:1x 构建修复后口径变化**：Q 从 LUTRAM 改为 **2 个 BRAM ROM**
-  （lo 4096 深 8 tiles + hi 2048 深 4 tiles = **12 tiles**，为修整机综合 5.2M 单元问题），
-  ⇒ 整机 = **nn_mem 124**（W 80 + Q 12 + A/B 32）+ 核心 ~9.5 ≈ **133.5/135**。
-- ⇒ **tile 缓存可用只剩 ~1.5 tiles ≈ 6.75KB**（原来按 Q=0 BRAM 估的是 ~13.5 tiles）。
-  **推荐 tile cache 设计 12.4 tiles（56KB）已放不下** —— 这是 P3 的**前置阻塞项**，必须先腾 BRAM：
+- 器件 135 tiles。**2026-11-01 19:2x 构建口径（r10 place 修复后）**：Q = lo BRAM ROM 8 tiles
+  + hi 分布式 LUTRAM 0 tiles；nn_mem = **120 tiles**（W 80 + Q 8 + A/B 32）；**核心实占 12 tiles**
+  （r10 place 实测：124+12=136 时报 `272 units/270 sites`，故按 12 计），整机 = **132/135 ✓**。
+- ⇒ **tile 缓存可用只剩 ~3 tiles ≈ 13.5KB**（原来按 Q=0 BRAM 估的是 ~13.5 tiles）。
+  **推荐 tile cache 设计 12.4 tiles（56KB）仍放不下** —— 这是 P3 的**前置阻塞项**，必须先腾 BRAM：
   (a) C320 模式把 Q 改回 LUTRAM（+48KB 片上 RAM 换回 12 tiles；但会重现"LUT 常量网络"综合慢，
       可配合"Q 黑盒 + 小 ROM"或 Q 放 DDR3 解决）；
   (b) 权重 W 流式化/分时复用（W 80 tiles 是最大块，C320 每层只驻留当前层权重可大幅缩小，

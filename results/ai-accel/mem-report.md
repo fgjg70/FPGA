@@ -218,34 +218,34 @@ Q 分布式 ROM 的组合逻辑不是 100MHz 瓶颈；真实 fmax 以 Lead 的 O
 act 地址路径**。后者已在 `P3-DDR3-TILECACHE.md` §5 给出"NPU act 写命令在 nn_mem 侧打一拍"
 （写延迟 1→2，引擎周期 0 成本）的方案与影响面。
 
-### 3.7 nn_mem OOC DCP（整机"黑盒 + OOC checkpoint"构建，2026-11-01 19:1x **当前口径**）
+### 3.7 nn_mem OOC DCP（整机"黑盒 + OOC checkpoint"构建，2026-11-01 19:2x **当前口径**）
 
 背景：整机 in-context 综合曾卡 ~2.5h（W 320KB ROM 被展开成 5.2M 未映射寄存器，等 Technology
-Mapping 才落 BRAM）。Lead 改为"nn_mem 黑盒 + 链接本 DCP"；Q 在 OOC 下若仍为 LUT 常量 ROM
-同样有 5.2M 单元问题，故 Q 改为 **BRAM ROM**，又因单块 6144 深会被 Vivado 按 8192 取整成
-16 tiles（整机 137.5 超 135），**拆成 4096+2048 两个子 ROM = 12 tiles**（`NN_Q_INIT_LO/HI`）。
+Mapping 才落 BRAM）。Lead 改为"nn_mem 黑盒 + 链接本 DCP"；Q 在 OOC 下若为 LUT 常量 ROM 同样
+有 5.2M 单元问题，故先改 BRAM ROM；r10 整机 place 报 `272 units needed / 270 sites`
+（mem 124 tiles + core 12 tiles = 136 > 135，差 1 tile），故最终 **hi 段改分布式 LUTRAM**：
+lo = BRAM ROM 8 tiles，hi = LUTRAM ROM 0 tiles ⇒ **mem 120 tiles，整机 120+12 = 132/135 ✓**。
 
 | 项 | 数值 |
 |---|---|
-| DCP | `results/ai-accel/impl/nn_mem_ooc/nn_mem.dcp`，1,385,653 B，sha256 `8e447a468ea47ebe0d3a8c621e1afd69f4ab5dd7efe20b63fce8f04631390ecd` |
-| Block RAM | **124 tiles（RAMB36 124 / RAMB18 0）**：W **80**（`w_cur_*`）+ Q **12**（`q_rd_lo_reg_*` **8** + `q_rd_hi_reg_*` **4**）+ A/B **32**（`act_mem_*`） |
-| LUT / FF / DSP | 830 / 26 / 0（数据全在 BRAM） |
-| OOC WNS | **+2.306 ns @8ns（MET，3,677 端点）**；worst = `w_cur_a_reg CLKBWRK → w_rdata`（2 级 LUT，4.371ns） |
+| DCP | `results/ai-accel/impl/nn_mem_ooc/nn_mem.dcp`，1,729,729 B，sha256 `c56bb34759bfe42f21a7df0ad304bb2fe6216c7a7cceeb2e45ead7f8b816cda6` |
+| Block RAM | **120 tiles（RAMB36 120 / RAMB18 0）**：W **80**（`w_cur_*`）+ Q lo **8**（`q_rd_lo_reg_*`）+ Q hi **0**（LUTRAM）+ A/B **32**（`act_mem_*`） |
+| LUT / FF / DSP | **2,456 / 90 / 0**（hi LUTRAM ≈ +1,626 LUT；q_rd_hi 输出寄存器 +64 FF） |
+| OOC WNS | **+2.306 ns @8ns（MET，3,697 端点）**；worst = `w_cur_a_reg CLKBWRK → w_rdata`（2 级 LUT，4.371ns） |
+| Q 读路径 | **worst slack +3.013 ns @8ns**（`q_rd_lo_reg CLKARDCLK → q_rdata[0]`，1 级 LUT）；hi LUTRAM 路径更松，**1 拍时延不变** |
 | 约束口径 | DCP 内仅 `create_clock -name clk -period 8.000`（无 I/O delay，黑盒链接友好）；timing.rpt 的 WNS 是报告时临时加 0.5ns 虚拟 I/O 所得，不写入 DCP |
-| 复现 | `cd results\ai-accel\impl\nn_mem_ooc && vivado -mode batch -source synth_nn_mem_ooc.tcl`（~1min）；`check_nn_mem_dcp.tcl` 做 open_checkpoint 复验（RAMB36=124/WNS=2.306） |
-| Q 初始化镜像 | `.fpga-cache/nn_wq_split/q_lo.hex`（4096 行 64-bit，69,632 B，sha256 `12b33d2300277d98869cec9577852f3922eb2d19cdf63bd1a876fd99ebfa36b8`）+ `q_hi.hex`（2048 行，34,816 B，sha256 `37e4183ccbd8c5da820ee017b73004523c7866dc9006b86c4ae750280c61c687`）；由 `q_packed.hex`（6144 行，sha256 `438bd9619e63b13fa4ed960128e860c4461b721b654ab9f7bd496180b445d7d3`）前 4096/后 2048 行切分 |
+| 复现 | `cd results\ai-accel\impl\nn_mem_ooc && vivado -mode batch -source synth_nn_mem_ooc.tcl`（~1min）；`check_nn_mem_dcp.tcl` 做 open_checkpoint 复验（RAMB36=120/WNS=2.306） |
+| Q 初始化镜像 | `.fpga-cache/nn_wq_split/q_lo.hex`（4096 行 64-bit，69,632 B，sha256 `12b33d2300277d98869cec9577852f3922eb2d19cdf63bd1a876fd99ebfa36b8`）+ `q_hi.hex`（2048 行，34,816 B，sha256 `37e4183ccbd8c5da820ee017b73004523c7866dc9006b86c4ae750280c61c687`）；由 `q_packed.hex`（6144 行，sha256 `438bd9619e63b13fa4ed960128e860c4461b721b654ab9f7bd496180b445d7d3`）前 4096/后 2048 行切分（hi 改 LUTRAM 后**文件不变**） |
 | 行为自证 | **tb_nn_mem 三种模式 PASS（47,146 / 47,146 / 40 checks，mismatch=0）**；引擎×真 mem `tb_nn_engine` 47/47 + 4/4 PASS |
 
-**P3 tile 缓存影响**：整机 ≈133.5/135 只剩 **~1.5 tiles**；P3 原计划需 ~12.4 tiles tile cache
-⇒ P3 必须另行腾 BRAM（C320 模式把 Q 改回 LUTRAM / 权重流式化 / 缩 tile），详见
+**P3 tile 缓存影响**：整机 132/135 只剩 **~3 tiles**；P3 原计划需 ~12.4 tiles tile cache
+⇒ P3 仍必须另行腾 BRAM（C320 模式把 Q lo 也改回 LUTRAM / 权重流式化 / 缩 tile），详见
 `P3-DDR3-TILECACHE.md` §4.1 更新说明。
 
 端口清单（逐字）：`results/ai-accel/impl/nn_mem_ooc/nn_mem_ports.txt`（UTF-8 原样）与
 `nn_mem_ports_ascii.txt`（去注释 ASCII，供黑盒 stub 生成）。宏名是 `NN_W_INIT_A..D` +
 `NN_Q_INIT_LO/HI`（不是 `NN_WQ_INIT_A..D`），镜像 64-bit/行：W A 16384 / B·C·D 8192；
-Q lo 4096 / hi 2048。
-
----
+Q lo 4096 / hi 2048。端口未变（Q 只是内部实现变化）。
 
 ---
 

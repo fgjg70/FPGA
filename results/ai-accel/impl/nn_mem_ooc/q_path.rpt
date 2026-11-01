@@ -1,0 +1,246 @@
+Copyright 1986-2018 Xilinx, Inc. All Rights Reserved.
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2018.3 (win64) Build 2405991 Thu Dec  6 23:38:27 MST 2018
+| Date         : Sun Nov  1 19:12:35 2026
+| Host         : fgjg running 64-bit major release  (build 9200)
+| Command      : report_timing -to [get_ports {q_rdata[*]}] -max_paths 5 -delay_type max -file D:/USER/Desktop/FPGA/FPGA/results/ai-accel/impl/nn_mem_ooc/q_path.rpt
+| Design       : nn_mem
+| Device       : 7a100t-fgg484
+| Speed File   : -2  PRODUCTION 1.23 2018-06-13
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Timing Report
+
+Slack (MET) :             3.013ns  (required time - arrival time)
+  Source:                 q_rd_lo_reg_0/CLKARDCLK
+                            (rising edge-triggered cell RAMB36E1 clocked by clk  {rise@0.000ns fall@4.000ns period=8.000ns})
+  Destination:            q_rdata[0]
+                            (output port clocked by clk  {rise@0.000ns fall@4.000ns period=8.000ns})
+  Path Group:             clk
+  Path Type:              Max at Slow Process Corner
+  Requirement:            8.000ns  (clk rise@8.000ns - clk rise@0.000ns)
+  Data Path Delay:        3.664ns  (logic 2.230ns (60.855%)  route 1.434ns (39.145%))
+  Logic Levels:           1  (LUT4=1)
+  Output Delay:           0.500ns
+  Clock Path Skew:        -0.787ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.000ns = ( 8.000 - 8.000 ) 
+    Source Clock Delay      (SCD):    0.787ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=321, unset)          0.787     0.787    clk
+                         RAMB36E1                                     r  q_rd_lo_reg_0/CLKARDCLK
+  -------------------------------------------------------------------    -------------------
+                         RAMB36E1 (Prop_ramb36e1_CLKARDCLK_DOADO[0])
+                                                      2.125     2.912 r  q_rd_lo_reg_0/DOADO[0]
+                         net (fo=1, unplaced)         0.647     3.559    q_rd_lo_reg[0]
+                         LUT4 (Prop_lut4_I1_O)        0.105     3.664 r  q_rdata[0]_INST_0/O
+                         net (fo=0)                   0.787     4.451    q_rdata[0]
+                                                                      r  q_rdata[0] (OUT)
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        8.000     8.000 r  
+                         clock pessimism              0.000     8.000    
+                         clock uncertainty           -0.035     7.965    
+                         output delay                -0.500     7.465    
+  -------------------------------------------------------------------
+                         required time                          7.465    
+                         arrival time                          -4.451    
+  -------------------------------------------------------------------
+                         slack                                  3.013    
+
+Slack (MET) :             3.013ns  (required time - arrival time)
+  Source:                 q_rd_lo_reg_1/CLKARDCLK
+                            (rising edge-triggered cell RAMB36E1 clocked by clk  {rise@0.000ns fall@4.000ns period=8.000ns})
+  Destination:            q_rdata[10]
+                            (output port clocked by clk  {rise@0.000ns fall@4.000ns period=8.000ns})
+  Path Group:             clk
+  Path Type:              Max at Slow Process Corner
+  Requirement:            8.000ns  (clk rise@8.000ns - clk rise@0.000ns)
+  Data Path Delay:        3.664ns  (logic 2.230ns (60.855%)  route 1.434ns (39.145%))
+  Logic Levels:           1  (LUT4=1)
+  Output Delay:           0.500ns
+  Clock Path Skew:        -0.787ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.000ns = ( 8.000 - 8.000 ) 
+    Source Clock Delay      (SCD):    0.787ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=321, unset)          0.787     0.787    clk
+                         RAMB36E1                                     r  q_rd_lo_reg_1/CLKARDCLK
+  -------------------------------------------------------------------    -------------------
+                         RAMB36E1 (Prop_ramb36e1_CLKARDCLK_DOADO[2])
+                                                      2.125     2.912 r  q_rd_lo_reg_1/DOADO[2]
+                         net (fo=1, unplaced)         0.647     3.559    q_rd_lo_reg[10]
+                         LUT4 (Prop_lut4_I1_O)        0.105     3.664 r  q_rdata[10]_INST_0/O
+                         net (fo=0)                   0.787     4.451    q_rdata[10]
+                                                                      r  q_rdata[10] (OUT)
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        8.000     8.000 r  
+                         clock pessimism              0.000     8.000    
+                         clock uncertainty           -0.035     7.965    
+                         output delay                -0.500     7.465    
+  -------------------------------------------------------------------
+                         required time                          7.465    
+                         arrival time                          -4.451    
+  -------------------------------------------------------------------
+                         slack                                  3.013    
+
+Slack (MET) :             3.013ns  (required time - arrival time)
+  Source:                 q_rd_lo_reg_1/CLKARDCLK
+                            (rising edge-triggered cell RAMB36E1 clocked by clk  {rise@0.000ns fall@4.000ns period=8.000ns})
+  Destination:            q_rdata[11]
+                            (output port clocked by clk  {rise@0.000ns fall@4.000ns period=8.000ns})
+  Path Group:             clk
+  Path Type:              Max at Slow Process Corner
+  Requirement:            8.000ns  (clk rise@8.000ns - clk rise@0.000ns)
+  Data Path Delay:        3.664ns  (logic 2.230ns (60.855%)  route 1.434ns (39.145%))
+  Logic Levels:           1  (LUT4=1)
+  Output Delay:           0.500ns
+  Clock Path Skew:        -0.787ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.000ns = ( 8.000 - 8.000 ) 
+    Source Clock Delay      (SCD):    0.787ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=321, unset)          0.787     0.787    clk
+                         RAMB36E1                                     r  q_rd_lo_reg_1/CLKARDCLK
+  -------------------------------------------------------------------    -------------------
+                         RAMB36E1 (Prop_ramb36e1_CLKARDCLK_DOADO[3])
+                                                      2.125     2.912 r  q_rd_lo_reg_1/DOADO[3]
+                         net (fo=1, unplaced)         0.647     3.559    q_rd_lo_reg[11]
+                         LUT4 (Prop_lut4_I1_O)        0.105     3.664 r  q_rdata[11]_INST_0/O
+                         net (fo=0)                   0.787     4.451    q_rdata[11]
+                                                                      r  q_rdata[11] (OUT)
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        8.000     8.000 r  
+                         clock pessimism              0.000     8.000    
+                         clock uncertainty           -0.035     7.965    
+                         output delay                -0.500     7.465    
+  -------------------------------------------------------------------
+                         required time                          7.465    
+                         arrival time                          -4.451    
+  -------------------------------------------------------------------
+                         slack                                  3.013    
+
+Slack (MET) :             3.013ns  (required time - arrival time)
+  Source:                 q_rd_lo_reg_1/CLKARDCLK
+                            (rising edge-triggered cell RAMB36E1 clocked by clk  {rise@0.000ns fall@4.000ns period=8.000ns})
+  Destination:            q_rdata[12]
+                            (output port clocked by clk  {rise@0.000ns fall@4.000ns period=8.000ns})
+  Path Group:             clk
+  Path Type:              Max at Slow Process Corner
+  Requirement:            8.000ns  (clk rise@8.000ns - clk rise@0.000ns)
+  Data Path Delay:        3.664ns  (logic 2.230ns (60.855%)  route 1.434ns (39.145%))
+  Logic Levels:           1  (LUT4=1)
+  Output Delay:           0.500ns
+  Clock Path Skew:        -0.787ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.000ns = ( 8.000 - 8.000 ) 
+    Source Clock Delay      (SCD):    0.787ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=321, unset)          0.787     0.787    clk
+                         RAMB36E1                                     r  q_rd_lo_reg_1/CLKARDCLK
+  -------------------------------------------------------------------    -------------------
+                         RAMB36E1 (Prop_ramb36e1_CLKARDCLK_DOADO[4])
+                                                      2.125     2.912 r  q_rd_lo_reg_1/DOADO[4]
+                         net (fo=1, unplaced)         0.647     3.559    q_rd_lo_reg[12]
+                         LUT4 (Prop_lut4_I1_O)        0.105     3.664 r  q_rdata[12]_INST_0/O
+                         net (fo=0)                   0.787     4.451    q_rdata[12]
+                                                                      r  q_rdata[12] (OUT)
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        8.000     8.000 r  
+                         clock pessimism              0.000     8.000    
+                         clock uncertainty           -0.035     7.965    
+                         output delay                -0.500     7.465    
+  -------------------------------------------------------------------
+                         required time                          7.465    
+                         arrival time                          -4.451    
+  -------------------------------------------------------------------
+                         slack                                  3.013    
+
+Slack (MET) :             3.013ns  (required time - arrival time)
+  Source:                 q_rd_lo_reg_1/CLKARDCLK
+                            (rising edge-triggered cell RAMB36E1 clocked by clk  {rise@0.000ns fall@4.000ns period=8.000ns})
+  Destination:            q_rdata[13]
+                            (output port clocked by clk  {rise@0.000ns fall@4.000ns period=8.000ns})
+  Path Group:             clk
+  Path Type:              Max at Slow Process Corner
+  Requirement:            8.000ns  (clk rise@8.000ns - clk rise@0.000ns)
+  Data Path Delay:        3.664ns  (logic 2.230ns (60.855%)  route 1.434ns (39.145%))
+  Logic Levels:           1  (LUT4=1)
+  Output Delay:           0.500ns
+  Clock Path Skew:        -0.787ns (DCD - SCD + CPR)
+    Destination Clock Delay (DCD):    0.000ns = ( 8.000 - 8.000 ) 
+    Source Clock Delay      (SCD):    0.787ns
+    Clock Pessimism Removal (CPR):    0.000ns
+  Clock Uncertainty:      0.035ns  ((TSJ^2 + TIJ^2)^1/2 + DJ) / 2 + PE
+    Total System Jitter     (TSJ):    0.071ns
+    Total Input Jitter      (TIJ):    0.000ns
+    Discrete Jitter          (DJ):    0.000ns
+    Phase Error              (PE):    0.000ns
+
+    Location             Delay type                Incr(ns)  Path(ns)    Netlist Resource(s)
+  -------------------------------------------------------------------    -------------------
+                         (clock clk rise edge)        0.000     0.000 r  
+                                                      0.000     0.000 r  clk (IN)
+                         net (fo=321, unset)          0.787     0.787    clk
+                         RAMB36E1                                     r  q_rd_lo_reg_1/CLKARDCLK
+  -------------------------------------------------------------------    -------------------
+                         RAMB36E1 (Prop_ramb36e1_CLKARDCLK_DOADO[5])
+                                                      2.125     2.912 r  q_rd_lo_reg_1/DOADO[5]
+                         net (fo=1, unplaced)         0.647     3.559    q_rd_lo_reg[13]
+                         LUT4 (Prop_lut4_I1_O)        0.105     3.664 r  q_rdata[13]_INST_0/O
+                         net (fo=0)                   0.787     4.451    q_rdata[13]
+                                                                      r  q_rdata[13] (OUT)
+  -------------------------------------------------------------------    -------------------
+
+                         (clock clk rise edge)        8.000     8.000 r  
+                         clock pessimism              0.000     8.000    
+                         clock uncertainty           -0.035     7.965    
+                         output delay                -0.500     7.465    
+  -------------------------------------------------------------------
+                         required time                          7.465    
+                         arrival time                          -4.451    
+  -------------------------------------------------------------------
+                         slack                                  3.013    
+
+
+
+

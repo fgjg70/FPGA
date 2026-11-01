@@ -3,7 +3,7 @@
 # ----------------------------------------------------------------------------
 # ASCII only. Run: vivado -mode batch -source check_nn_mem_dcp.tcl
 # Verifies from the DCP itself (not from the synth log):
-#   - Block RAM Tile count (expect W80 + Q12 + A/B32 = 124)
+#   - Block RAM Tile count (expect W80 + Qlo8 + A/B32 = 120; Q hi = LUTRAM)
 #   - RAMB36/RAMB18 cell counts
 #   - WNS @8ns clock (create_clock is already inside the DCP)
 # Writes nn_mem_check.rpt (util) + nn_mem_check_timing.rpt.

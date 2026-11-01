@@ -1,7 +1,7 @@
 Copyright 1986-2018 Xilinx, Inc. All Rights Reserved.
 ------------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2018.3 (win64) Build 2405991 Thu Dec  6 23:38:27 MST 2018
-| Date         : Sun Nov  1 18:57:19 2026
+| Date         : Sun Nov  1 19:11:41 2026
 | Host         : fgjg running 64-bit major release  (build 9200)
 | Command      : report_timing -max_paths 20 -file D:/USER/Desktop/FPGA/FPGA/results/ai-accel/impl/nn_mem_ooc/paths.rpt
 | Design       : nn_mem
@@ -36,7 +36,7 @@ Slack (MET) :             2.306ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=261, unset)          0.787     0.787    clk
+                         net (fo=321, unset)          0.787     0.787    clk
                          RAMB36E1                                     r  w_cur_a_reg_18/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
                          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[1])
@@ -84,7 +84,7 @@ Slack (MET) :             2.306ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=261, unset)          0.787     0.787    clk
+                         net (fo=321, unset)          0.787     0.787    clk
                          RAMB36E1                                     r  w_cur_a_reg_19/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
                          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[1])
@@ -132,7 +132,7 @@ Slack (MET) :             2.306ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=261, unset)          0.787     0.787    clk
+                         net (fo=321, unset)          0.787     0.787    clk
                          RAMB36E1                                     r  w_cur_a_reg_20/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
                          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[1])
@@ -180,7 +180,7 @@ Slack (MET) :             2.306ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=261, unset)          0.787     0.787    clk
+                         net (fo=321, unset)          0.787     0.787    clk
                          RAMB36E1                                     r  w_cur_a_reg_21/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
                          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[1])
@@ -228,7 +228,7 @@ Slack (MET) :             2.306ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=261, unset)          0.787     0.787    clk
+                         net (fo=321, unset)          0.787     0.787    clk
                          RAMB36E1                                     r  w_cur_a_reg_22/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
                          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[1])
@@ -276,7 +276,7 @@ Slack (MET) :             2.306ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=261, unset)          0.787     0.787    clk
+                         net (fo=321, unset)          0.787     0.787    clk
                          RAMB36E1                                     r  w_cur_a_reg_23/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
                          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[1])
@@ -324,7 +324,7 @@ Slack (MET) :             2.306ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=261, unset)          0.787     0.787    clk
+                         net (fo=321, unset)          0.787     0.787    clk
                          RAMB36E1                                     r  w_cur_a_reg_24/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
                          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[1])
@@ -372,7 +372,7 @@ Slack (MET) :             2.306ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=261, unset)          0.787     0.787    clk
+                         net (fo=321, unset)          0.787     0.787    clk
                          RAMB36E1                                     r  w_cur_a_reg_25/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
                          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[1])
@@ -420,7 +420,7 @@ Slack (MET) :             2.306ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=261, unset)          0.787     0.787    clk
+                         net (fo=321, unset)          0.787     0.787    clk
                          RAMB36E1                                     r  w_cur_a_reg_26/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
                          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[1])
@@ -468,7 +468,7 @@ Slack (MET) :             2.306ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=261, unset)          0.787     0.787    clk
+                         net (fo=321, unset)          0.787     0.787    clk
                          RAMB36E1                                     r  w_cur_a_reg_27/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
                          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[1])
@@ -516,7 +516,7 @@ Slack (MET) :             2.306ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=261, unset)          0.787     0.787    clk
+                         net (fo=321, unset)          0.787     0.787    clk
                          RAMB36E1                                     r  w_cur_a_reg_28/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
                          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[1])
@@ -564,7 +564,7 @@ Slack (MET) :             2.306ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=261, unset)          0.787     0.787    clk
+                         net (fo=321, unset)          0.787     0.787    clk
                          RAMB36E1                                     r  w_cur_a_reg_29/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
                          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[1])
@@ -612,7 +612,7 @@ Slack (MET) :             2.306ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=261, unset)          0.787     0.787    clk
+                         net (fo=321, unset)          0.787     0.787    clk
                          RAMB36E1                                     r  w_cur_a_reg_30/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
                          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[1])
@@ -660,7 +660,7 @@ Slack (MET) :             2.306ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=261, unset)          0.787     0.787    clk
+                         net (fo=321, unset)          0.787     0.787    clk
                          RAMB36E1                                     r  w_cur_a_reg_31/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
                          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[1])
@@ -708,7 +708,7 @@ Slack (MET) :             2.306ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=261, unset)          0.787     0.787    clk
+                         net (fo=321, unset)          0.787     0.787    clk
                          RAMB36E1                                     r  w_cur_a_reg_2/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
                          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[1])
@@ -756,7 +756,7 @@ Slack (MET) :             2.306ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=261, unset)          0.787     0.787    clk
+                         net (fo=321, unset)          0.787     0.787    clk
                          RAMB36E1                                     r  w_cur_a_reg_3/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
                          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[0])
@@ -804,7 +804,7 @@ Slack (MET) :             2.306ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=261, unset)          0.787     0.787    clk
+                         net (fo=321, unset)          0.787     0.787    clk
                          RAMB36E1                                     r  w_cur_a_reg_3/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
                          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[1])
@@ -852,7 +852,7 @@ Slack (MET) :             2.306ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=261, unset)          0.787     0.787    clk
+                         net (fo=321, unset)          0.787     0.787    clk
                          RAMB36E1                                     r  w_cur_a_reg_4/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
                          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[0])
@@ -900,7 +900,7 @@ Slack (MET) :             2.306ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=261, unset)          0.787     0.787    clk
+                         net (fo=321, unset)          0.787     0.787    clk
                          RAMB36E1                                     r  w_cur_a_reg_4/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
                          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[1])
@@ -948,7 +948,7 @@ Slack (MET) :             2.306ns  (required time - arrival time)
   -------------------------------------------------------------------    -------------------
                          (clock clk rise edge)        0.000     0.000 r  
                                                       0.000     0.000 r  clk (IN)
-                         net (fo=261, unset)          0.787     0.787    clk
+                         net (fo=321, unset)          0.787     0.787    clk
                          RAMB36E1                                     r  w_cur_a_reg_5/CLKBWRCLK
   -------------------------------------------------------------------    -------------------
                          RAMB36E1 (Prop_ramb36e1_CLKBWRCLK_DOBDO[1])

@@ -7,7 +7,7 @@
 # Purpose (Lead 2026-11-01 18:4x): in-context synthesis of the whole machine was
 # stuck ~2.5h in Cross-Boundary/XDC/Timing-Opt because nn_mem W 320KB ROM was
 # expanded to 5.2M unmapped registers. nn_mem maps cleanly in OOC (W80/Q12/AB32),
-# so the whole-machine flow will link this DCP as a black box.
+# so the whole-machine flow will link this DCP as a black box. Q hi is LUTRAM (r10 place fix).
 #
 # Contract with whole-machine flow:
 #   - top = nn_mem (single module, OOC)
