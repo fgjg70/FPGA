@@ -798,4 +798,113 @@ module tb_sw;
     $fatal(1);
   end
 
+// ============================================================================
+// [NN_SOC_DBG] AI 集成调试: 打印每次 NN start 的描述符 + 引擎前若干拍的总线地址
+//   只在 +define+NN_SOC_DBG 时编译; 正常回归不受影响。
+//   用途: SoC E2E 结果全错但引擎 TB 通过时, 定位"desc/端口在 SoC 里到底收到了什么"。
+// ============================================================================
+`ifdef NN_SOC_DBG
+  int dbg_nn_start_cnt = 0;
+  int fd_dbg = 0;
+  int dbg_op0 = 0;
+  int dbg_cpu_rd = 0;
+  always @(posedge clk) begin
+    if (ext_we && (ext_addr == 32'hA000_0100) && ext_wdata[0]) begin
+      // MMIO_NN_CTRL start 写 (rv32_pkg: MMIO_NN_CTRL = 0xA000_0100)
+      #1;
+      dbg_nn_start_cnt++;
+      if (dbg_nn_start_cnt == 2) begin
+        fd_dbg = $fopen("op0_out.bin", "wb");
+        for (int wi = 0; wi < 2048; wi++) begin
+          for (int bi = 0; bi < 16; bi++) $fwrite(fd_dbg, "%c", u_nn.u_mem.act_mem[((32'h6C000 - 32'h60000)>>4)+wi][bi*8 +: 8]);
+        end
+        $fclose(fd_dbg);
+        $display("NN_SOC_DUMP op0_out.bin written");
+      end
+      $display("NN_SOC_MEM a0=%032h a1=%032h a2=%032h", 
+               u_nn.u_mem.act_mem[(32'h6C000 - 32'h60000)>>4],
+               u_nn.u_mem.act_mem[((32'h6C000 - 32'h60000)>>4)+1],
+               u_nn.u_mem.act_mem[((32'h6C000 - 32'h60000)>>4)+2]);
+      $display("NN_SOC_START #%0d: op=%0d flags=%b ks=%0d st=%0d pad=%0d ih=%0d iw=%0d ic=%0d oc=%0d src=%h dst=%h woff=%h qoff=%h",
+               dbg_nn_start_cnt,
+               u_nn.desc_r.op, u_nn.desc_r.flags, u_nn.desc_r.ks,
+               u_nn.desc_r.stride, u_nn.desc_r.pad,
+               u_nn.desc_r.ih, u_nn.desc_r.iw,
+               u_nn.desc_r.ic, u_nn.desc_r.oc,
+               u_nn.desc_r.src, u_nn.desc_r.dst,
+               u_nn.desc_r.woff, u_nn.desc_r.qoff);
+    end else if (ext_we && (ext_addr >= 32'hA000_0100) && (ext_addr <= 32'hA000_0148)) begin
+      $display("NN_SOC_REG addr=%h data=%h", ext_addr, ext_wdata);
+    end
+  end
+
+  // CPU 读 NN 窗口的实测数据路径: 记录地址拍, 下一拍打印 core 实际收到的 nn_rdata
+  logic        dbg_prev_nn_re = 1'b0;
+  logic [31:0] dbg_prev_nn_addr = 32'd0;
+  int          dbg_nnrd = 0;
+  always @(posedge clk) begin
+    if (dbg_prev_nn_re && (dbg_nnrd < 16) && (dbg_prev_nn_addr >= 32'h900A_C000) && (dbg_prev_nn_addr < 32'h900B_0000)) begin
+      dbg_nnrd = dbg_nnrd + 1;
+      $display("NN_CORE_RD #%0d addr=%h rdata=%h", dbg_nnrd, dbg_prev_nn_addr, nn_rdata);
+    end
+    dbg_prev_nn_re   <= nn_re;
+    dbg_prev_nn_addr <= nn_addr;
+  end
+
+  // CPU 读 NN 窗口的实测路径 (只在 op0 之后、目标地址 >= 0x68000 时打印)
+  always @(posedge clk) begin
+    if (u_nn.cpu_re && u_nn.cpu_we == 1'b0 && dbg_op0 >= 1 &&
+        (u_nn.cpu_addr - 32'h9004_0000) >= 32'h68000 && dbg_cpu_rd < 24) begin
+      dbg_cpu_rd = dbg_cpu_rd + 1;
+      $display("NN_CPU_RD #%0d abs=%h off=%h sel_r=%b lane_r=%0d rd_idx=%0d act_rd=%032h rdata=%h mem=%032h",
+               dbg_cpu_rd, u_nn.cpu_addr, u_nn.cpu_addr - 32'h9004_0000,
+               u_nn.u_mem.cpu_sel_r, u_nn.u_mem.cpu_lane_r, u_nn.u_mem.act_rd_idx,
+               u_nn.u_mem.act_rd, u_nn.cpu_rdata,
+               u_nn.u_mem.act_mem[u_nn.u_mem.act_rd_idx]);
+    end
+  end
+
+  // op0 (首个 NN start) 的总线数据采样: 前几次 W/A 读返回 + 所有 B 写
+  int dbg_cnt_w = 0, dbg_cnt_a = 0, dbg_cnt_q = 0, dbg_cnt_b = 0;
+  always @(posedge clk) begin
+    if (ext_we && (ext_addr == 32'hA000_0100) && ext_wdata[0]) dbg_op0 = dbg_op0 + 1;
+    if (dbg_op0 == 1) begin
+      if (u_nn.eng_w_re && dbg_cnt_w < 12) begin
+        $display("NN_OP0_W #%0d addr=%h data=%032h", dbg_cnt_w, u_nn.eng_w_addr, u_nn.eng_w_rdata);
+        dbg_cnt_w = dbg_cnt_w + 1;
+      end
+      if (u_nn.eng_a_re && dbg_cnt_a < 12) begin
+        $display("NN_OP0_A #%0d addr=%h data=%032h", dbg_cnt_a, u_nn.eng_a_addr, u_nn.eng_a_rdata);
+        dbg_cnt_a = dbg_cnt_a + 1;
+      end
+      if (u_nn.eng_q_re && dbg_cnt_q < 12) begin
+        $display("NN_OP0_Q #%0d addr=%h data=%016h", dbg_cnt_q, u_nn.eng_q_addr, u_nn.eng_q_rdata);
+        dbg_cnt_q = dbg_cnt_q + 1;
+      end
+      if (u_nn.eng_b_we && dbg_cnt_b < 48) begin
+        $display("NN_OP0_B #%0d addr=%h sel=%b strobe=%h data=%032h", dbg_cnt_b,
+                 u_nn.eng_b_addr, u_nn.eng_b_sel, u_nn.eng_b_wstrb, u_nn.eng_b_wdata);
+        dbg_cnt_b = dbg_cnt_b + 1;
+      end
+    end
+  end
+
+  // 每个 op 的引擎前 24 个拍: 打印 W/A/B/Q 的读写地址
+  int dbg_busy_cc = 0;
+  always @(posedge clk) begin
+    if (u_nn.eng_busy) begin
+      if (dbg_busy_cc < 24) begin
+        $display("NN_SOC_BUS t=%0d w_re=%b w_addr=%h a_re=%b a_sel=%b a_addr=%h q_re=%b q_addr=%h b_we=%b b_sel=%b b_addr=%h b_wstrb=%h",
+                 $time, u_nn.eng_w_re, u_nn.eng_w_addr,
+                 u_nn.eng_a_re, u_nn.eng_a_sel, u_nn.eng_a_addr,
+                 u_nn.eng_q_re, u_nn.eng_q_addr,
+                 u_nn.eng_b_we, u_nn.eng_b_sel, u_nn.eng_b_addr, u_nn.eng_b_wstrb);
+      end
+      dbg_busy_cc++;
+    end else begin
+      dbg_busy_cc = 0;
+    end
+  end
+`endif
+
 endmodule

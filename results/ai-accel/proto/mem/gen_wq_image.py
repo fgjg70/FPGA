@@ -11,18 +11,21 @@
 #
 # 【综合格式 (物理字宽/行)】
 #   --split-prefix <pre> :
-#     <pre>_a.hex : 8192 行 x 128-bit (W 段 A: 32-bit 字 0..32767)
-#     <pre>_b.hex : 4096 行 x 128-bit (W 段 B: 32768..49151)
-#     <pre>_c.hex : 4096 行 x 128-bit (W 段 C: 49152..65535)
-#     <pre>_d.hex : 4096 行 x 128-bit (W 段 D: 65536..81919)
-#     <pre>_q.hex : 6144 行 x  64-bit (Q 区; 行 k = Q32[2k] | Q32[2k+1]<<32)
+#     <pre>_a.hex : 16384 行 x 64-bit  (W 段 A: 32-bit 字 0..32767, 128KB)
+#     <pre>_b.hex :  8192 行 x 64-bit  (W 段 B: 32768..49151, 64KB)
+#     <pre>_c.hex :  8192 行 x 64-bit  (W 段 C: 49152..65535, 64KB)
+#     <pre>_d.hex :  8192 行 x 64-bit  (W 段 D: 65536..81919, 64KB)
+#     <pre>_q.hex :  6144 行 x 64-bit  (Q 区; 行 k = Q32[2k] | Q32[2k+1]<<32)
+#   W 行打包: 行 k = W32[2k] | W32[2k+1]<<32 (低字在低 32 位)。
+#   （v0.7 R3: W 物理阵列从 128-bit 宽改为 64-bit 宽 —— 8B 对齐窗口需要两个
+#     满宽读口, 128-bit 宽会让第二读口被裁成 64-bit 造成存储复制。）
 #
 # 内容模式:
 #   默认 (不给 --seed): 测试样图, 与 sim/tb_nn_mem.sv 的 wpat32()/qpat32() 一致:
 #     wpat32(i) = (i * 0x9E3779B9) ^ 0xC0DE0000
 #     qpat32(i) = (i * 0x85EBCA6B) ^ 0x5A5A1234
 #   --seed N: 用伪随机内容 (每 32-bit 字都不同), 用于综合取证 —— 真实权重/量化
-#     参数不可压缩, 而测试样图是线性结构, Vivado 会把它优化成 LUT 压缩实现,
+#     参数不可压缩, 而测试样图是线性结构, Vivado 会把它优化成压缩实现,
 #     导致综合资源数字偏小 (W/Q 都会被低估)。TB 期望值仍用测试样图。
 #
 # Usage:
@@ -33,9 +36,9 @@ import argparse
 import os
 import random
 
-W_WORDS = 320 * 1024 // 4      # 81,920
-Q_WORDS = 48 * 1024 // 4       # 12,288
-WSEG128 = [8192, 4096, 4096, 4096]   # 128-bit 字的段大小 (W)
+W_WORDS = 320 * 1024 // 4      # 81,920 (32-bit 字)
+Q_WORDS = 48 * 1024 // 4       # 12,288 (32-bit 字)
+WSEG64 = [16384, 8192, 8192, 8192]   # 64-bit 字的段大小 (W, 单位=64-bit 字)
 
 
 def wpat32(i: int) -> int:
@@ -91,20 +94,17 @@ def main() -> int:
         print("gen_wq_image: Q image %d lines -> %s" % (Q_WORDS, args.q_out))
 
     if args.split_prefix:
-        base = 0
-        for seg, n128 in zip("abcd", WSEG128):
+        base32 = 0                    # 32-bit word offset
+        for seg, n64 in zip("abcd", WSEG64):
             path = args.split_prefix + "_" + seg + ".hex"
             lines = []
-            for k in range(n128):
-                w0 = W[base + 4 * k + 0]
-                w1 = W[base + 4 * k + 1]
-                w2 = W[base + 4 * k + 2]
-                w3 = W[base + 4 * k + 3]
-                val = w0 | (w1 << 32) | (w2 << 64) | (w3 << 96)
-                lines.append("%032x\n" % val)
+            for k in range(n64):
+                w0 = W[base32 + 2 * k + 0]
+                w1 = W[base32 + 2 * k + 1]
+                lines.append("%016x\n" % (w0 | (w1 << 32)))
             write_lines(path, lines)
-            print("gen_wq_image: W seg %s %d lines (128-bit) -> %s" % (seg, n128, path))
-            base += n128 * 4
+            print("gen_wq_image: W seg %s %d lines (64-bit) -> %s" % (seg, n64, path))
+            base32 += n64 * 2
         qpath = args.split_prefix + "_q.hex"
         lines = []
         for k in range(Q_WORDS // 2):
@@ -113,7 +113,7 @@ def main() -> int:
             lines.append("%016x\n" % (lo | (hi << 32)))
         write_lines(qpath, lines)
         print("gen_wq_image: Q %d lines (64-bit) -> %s" % (Q_WORDS // 2, qpath))
-        print("gen_wq_image: W words covered = %d (expected %d)" % (base, W_WORDS))
+        print("gen_wq_image: W words covered = %d (expected %d)" % (base32, W_WORDS))
     return 0
 
 

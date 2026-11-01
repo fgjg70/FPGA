@@ -7,7 +7,8 @@
 //
 // 【v0.7 相对 v0.3 的 5 个变化】
 //   1. W 区独立 320KB, 只给 NPU 128-bit 读口 (w_re/w_addr/w_rdata[127:0], 1 拍);
-//      CPU 不可访问。4 段 $readmemh 初始化 (NN_W_INIT_A..D, 每段 128-bit/行)。
+//      CPU 不可访问。4 段 $readmemh 初始化 (NN_W_INIT_A..D, 每段 64-bit/行)。
+//      读地址 **8B 对齐** (引擎 v3 的 8-lane tile 会发 w_addr[3]=1, 见 R3 修复)。
 //   2. Q 区 48KB 迁**分布式 RAM/ROM (LUTRAM)** (q_re/q_addr[12:0]/q_rdata[63:0],
 //      1 拍); CPU 不可访问; 不占 BRAM (实测约 7,000 LUT / 0 BRAM, 见 mem-report.md)。
 //   3. 激活 A/B: 读 128-bit 不变; 写口升级 128-bit + b_wstrb[15:0] (配引擎 v3 的
@@ -37,20 +38,22 @@
 //         b_wstrb 按字节使能 (copy 的 8B 写只置 [7:0] 或 [15:8])。
 //
 // 【物理组织与 BRAM 账 (v0.7 综合实测)】
-//   W  : 4 段 128-bit 宽阵列 (8192/4096/4096/4096 个 128-bit 字), 每段 2 个读口
-//        (cur/next, 复用 BRAM36 真双口, 0 额外 BRAM —— 实测 1 读口 vs 2 读口
-//        同为 32 BRAM36 @8192x128);
-//        段 A=128KB, B/C/D=64KB; 综合 -> 74 RAMB36 + 3 RAMB18 = 75.5 tiles
-//        (随机数据实测; 见 mem-report.md)。为什么必须拆 4 段: 128-bit 宽 ROM
-//        深度 >16384 时 Vivado 按 32768 取整 (单块 20480 深 -> 128 块)。
+//   W  : 4 段 **64-bit 宽** ROM: A=16384 字 (128KB), B/C/D=8192 字 (64KB);
+//        每段两个读口 cur=mem[base] / next=mem[base+1] (base = 2*w_idx+w_addr[3]),
+//        两个 64-bit 读数据都满宽使用 -> BRAM36 真双口, 综合 -> 80 RAMB36
+//        (4KB/BRAM, 随机数据实测)。
+//        为什么必须 64-bit 宽: 8B 窗口跨 128b 字时, 128-bit 宽阵列的第二读口只
+//        用到 64-bit, Vivado 会额外复制 64-bit 存储 (实测 W 147.5 tiles 超预算;
+//        用 keep 又会落 54K LUT)。64-bit 宽 + 满宽双读 = 80 tiles, 干净。
+//        为什么必须拆 4 段: 64-bit 宽 ROM 深度 >16384 会按 32768 取整。
 //   Q  : 64-bit 宽、6144 深的分布式 ROM (`ram_style="distributed"`),
 //        综合 -> 0 BRAM, 约 7,000 LUT (ROM 内容 6144 LUT + 地址/输出逻辑)。
 //   A/B: 128KB 128-bit 宽一块阵列 -> 32 BRAM36 (精确 4KB/BRAM)。
-//   => nn_mem 合计 **107.5 tiles**; + 交付档核心约 9.5 ≈ 117/135 (≤121.5 目标)。
+//   => nn_mem 合计 **112 tiles**; + 交付档核心约 9.5 ≈ 121.5/135 (≤121.5 目标)。
 //
 // 【初始化镜像】
-//   综合: W 4 段 `NN_W_INIT_A..D` (每行 32 hex = 128-bit 字, 行数 8192/4096/4096/
-//         4096); Q `NN_Q_INIT_FILE` (每行 16 hex = 64-bit 字, 6144 行)。
+//   综合: W 4 段 `NN_W_INIT_A..D` (每行 16 hex = 64-bit 字, 行数 16384/8192/
+//         8192/8192); Q `NN_Q_INIT_FILE` (每行 16 hex = 64-bit 字, 6144 行)。
 //         文件由 build flow 从 yolo_w / yolo_q 的 32-bit 行镜像打包 (低字在低 32 位)。
 //   仿真: `+nnw=<yolo_w.hex>` (81920 行 32-bit) + `+nnq=<yolo_q.hex>` (12288 行
 //         32-bit); 或旧 `+nnwq=<yolo_wq.hex>` (94208 行 = W 81920 + Q 12288 顺序)。
@@ -106,15 +109,16 @@ module nn_mem
   // 布局常量
   // --------------------------------------------------------------------------
   localparam int W_WORDS  = W_BYTES / 4;        // 81,920 个 32-bit 字
-  localparam int W128     = W_BYTES / 16;       // 20,480 个 128-bit 字
+  localparam int W64      = W_BYTES / 8;        // 40,960 个 64-bit 字
   localparam int Q_WORDS  = Q_BYTES / 4;        // 12,288 个 32-bit 字
   localparam int Q64      = Q_WORDS / 2;        // 6,144 个 64-bit 字
 
-  // W 4 段 (128-bit 字): A=8192, B/C/D=4096 (默认 20,480)
-  localparam int WSEG_A = 8192;
-  localparam int WSEG_B = 4096;
-  localparam int WSEG_C = 4096;
-  localparam int WSEG_D = W128 - WSEG_A - WSEG_B - WSEG_C;   // 默认 4096
+  // W 4 段 (64-bit 字): A=16384, B/C/D=8192 (默认 40,960 = 320KB)
+  //   byte 段边界与旧版一致: A=128KB, B/C/D=64KB (仅物理字宽变 64-bit)
+  localparam int WSEG_A = 16384;
+  localparam int WSEG_B = 8192;
+  localparam int WSEG_C = 8192;
+  localparam int WSEG_D = W64 - WSEG_A - WSEG_B - WSEG_C;   // 默认 8192
 
   localparam int ACT_BYTES = A_BYTES + B_BYTES;  // 128KB (A/B 连续)
   localparam int ACT_WORDS = ACT_BYTES / 16;     // 128-bit 物理字数
@@ -151,145 +155,132 @@ module nn_mem
   assign q_dbg_we = dbg_we && (dbg_space == 1'b1) && (32'(dbg_addr) < 32'(Q_WORDS));
 
   // ==========================================================================
-  // W 区: 4 段 128-bit 宽阵列, 每拍 4 段并行读, 输出按段选择
+  // W 区: 4 段 64-bit 宽 ROM, 每段两个满宽读口 (cur = mem[base], next = mem[base+1])
+  // --------------------------------------------------------------------------
+  //   v0.7 fix(集成阻塞项): 引擎 v3 按 **8B 粒度** 发 w_addr (8-lane tile 的
+  //   row + ic*8, 奇数 ic 时 w_addr[3]=1), 需要 16B 窗口 [w_addr, w_addr+15]。
+  //   物理: 64-bit 宽阵列, base = 2*w_idx + w_addr[3]; 两个读口分别读 base/base+1,
+  //   两个 64-bit 读数据都是满宽使用 -> BRAM36 真双口, 0 额外 BRAM;
+  //   w_rdata = {next64, cur64} (小端: cur64 = 低 8B, next64 = 高 8B)。
+  //   为什么不用 128-bit 宽阵列: 8B 窗口跨 128b 字时第二读口只用 64-bit,
+  //   Vivado 会额外复制 64-bit 存储 (实测 W 147.5 tiles, 超 135 预算; 加 keep
+  //   又会落 54K LUT); 64-bit 宽 + 满宽双读最干净: 80 tiles (4KB/BRAM)。
+  //   段: A=16384 个 64b 字 (128KB), B/C/D=8192 (64KB), 共 40960 = 320KB。
   // ==========================================================================
-  logic [127:0] w_mem_a [0:WSEG_A-1];
-  logic [127:0] w_mem_b [0:WSEG_B-1];
-  logic [127:0] w_mem_c [0:WSEG_C-1];
-  logic [127:0] w_mem_d [0:WSEG_D-1];
+  logic [63:0] w_mem_a [0:WSEG_A-1];
+  logic [63:0] w_mem_b [0:WSEG_B-1];
+  logic [63:0] w_mem_c [0:WSEG_C-1];
+  logic [63:0] w_mem_d [0:WSEG_D-1];
 
-  // 读地址: w_addr[18:4] = 128-bit 字索引 (低 4 位忽略; w_addr[3] 见下)
-  //   v0.7 fix: 引擎按 **8B 粒度** 发 w_addr (8-lane tile 的 row + ic*8, 奇数 ic 时
-  //   w_addr[3]=1)。所以 W 读口必须支持 8B 对齐的 16B 窗口: 低 3 位忽略,
-  //   返回字节 [w_addr, w_addr+15] (小端)。实现: 每段两个读口 (BRAM36 真双口,
-  //   0 额外 BRAM), cur = mem[idx] (A 口), next = mem[idx+1] (B 口),
-  //   w_rdata = w_addr[3] ? {next[63:0], cur[127:64]} : cur。
+  // 读地址: w_addr[18:4]=128b 字索引, w_addr[3]=8B 相位
   logic [14:0] w_idx;
-  logic [1:0]  w_seg;
   logic        w_odd;
-  assign w_idx = w_addr[18:4];
-  assign w_odd = w_addr[3];
+  logic [15:0] w_base;      // 64-bit 字索引 = 2*w_idx + w_odd (0..40959)
+  logic [1:0]  w_seg;
+  assign w_idx  = w_addr[18:4];
+  assign w_odd  = w_addr[3];
+  assign w_base = {w_idx, 1'b0} | {15'd0, w_odd};
   always_comb begin
     w_seg = 2'd3;
-    if (w_idx < 15'd8192)       w_seg = 2'd0;
-    else if (w_idx < 15'd12288) w_seg = 2'd1;
-    else if (w_idx < 15'd16384) w_seg = 2'd2;
+    if (w_base < 16'd16384)      w_seg = 2'd0;
+    else if (w_base < 16'd24576) w_seg = 2'd1;
+    else if (w_base < 16'd32768) w_seg = 2'd2;
   end
 
-  // 写地址 (dbg): 32-bit 字索引 -> 128-bit 字索引 + lane
-  logic [14:0] w_wr_idx;
-  logic [1:0]  w_wr_seg, w_wr_lane;
-  assign w_wr_idx  = dbg_addr[16:2];
-  assign w_wr_lane = dbg_addr[1:0];
+  // 写地址 (dbg): 32-bit 字索引 -> 64-bit 字索引 + half
+  logic [15:0] w_wr_idx;
+  logic [1:0]  w_wr_seg;
+  logic        w_wr_half;
+  assign w_wr_idx  = dbg_addr[16:1];
+  assign w_wr_half = dbg_addr[0];
   always_comb begin
     w_wr_seg = 2'd3;
-    if (w_wr_idx < 15'd8192)       w_wr_seg = 2'd0;
-    else if (w_wr_idx < 15'd12288) w_wr_seg = 2'd1;
-    else if (w_wr_idx < 15'd16384) w_wr_seg = 2'd2;
+    if (w_wr_idx < 16'd16384)      w_wr_seg = 2'd0;
+    else if (w_wr_idx < 16'd24576) w_wr_seg = 2'd1;
+    else if (w_wr_idx < 16'd32768) w_wr_seg = 2'd2;
   end
 
-  // next 读地址 (B 口):
-  //   · 本段内: cur 局部索引 +1 (末字回绕, 该拍不使用);
-  //   · 段边界 (A/B/C 末字): 让**下一段**的 B 口读它的第 0 个字, 供跨段窗口用;
-  //   · 其余段不被选中, 地址给 0 即可 (数据不使用)。
-  logic [12:0] w_nxt_ia;
-  logic [11:0] w_nxt_ib, w_nxt_ic, w_nxt_id;
-  assign w_nxt_ia = (w_idx < 15'd8192)                               ? (w_idx[12:0] + 13'd1) : 13'd0;
-  assign w_nxt_ib = ((w_idx >= 15'd8192) && (w_idx < 15'd12288))     ? (w_idx[11:0] + 12'd1) : 12'd0;
-  assign w_nxt_ic = ((w_idx >= 15'd12288) && (w_idx < 15'd16384))    ? (w_idx[11:0] + 12'd1) : 12'd0;
-  assign w_nxt_id = (w_idx >= 15'd16384)                             ? (w_idx[11:0] + 12'd1) : 12'd0;
+  // next 读地址 (第二读口): 段内 base+1; 段边界时由**下一段**的读口读第 0 个字
+  logic [13:0] w_nxt_ia;
+  logic [12:0] w_nxt_ib, w_nxt_ic, w_nxt_id;
+  assign w_nxt_ia = (w_base < 16'd16384)                            ? (w_base[13:0] + 14'd1) : 14'd0;
+  assign w_nxt_ib = ((w_base >= 16'd16384) && (w_base < 16'd24576)) ? (w_base[12:0] + 13'd1) : 13'd0;
+  assign w_nxt_ic = ((w_base >= 16'd24576) && (w_base < 16'd32768)) ? (w_base[12:0] + 13'd1) : 13'd0;
+  assign w_nxt_id = (w_base >= 16'd32768)                           ? (w_base[12:0] + 13'd1) : 13'd0;
 
-  logic [127:0] w_cur_a, w_cur_b, w_cur_c, w_cur_d;
-  // 第二读口 (next) 的寄存器必须加 keep 保持 128-bit 数据宽度:
-  //   功能上 odd 读只用 next[63:0], 若被综合裁成 64-bit, Vivado 会额外复制一份
-  //   64-bit 存储 (实测 W 从 75.5 tiles 涨到 147.5 tiles, 超 135 预算)。
-  //   keep 后两个 128-bit 读口共用 BRAM36 真双口, W 保持 75.5 tiles (实测见报告)。
-  (* keep = "true" *) logic [127:0] w_nxt_a;
-  (* keep = "true" *) logic [127:0] w_nxt_b;
-  (* keep = "true" *) logic [127:0] w_nxt_c;
-  (* keep = "true" *) logic [127:0] w_nxt_d;
-  logic [14:0]  w_idx_r;
-  logic [1:0]   w_seg_r;
-  logic         w_odd_r;
-  logic         w_rd_valid_r;
+  logic [63:0] w_cur_a, w_cur_b, w_cur_c, w_cur_d;
+  logic [63:0] w_nxt_a, w_nxt_b, w_nxt_c, w_nxt_d;
+  logic [15:0] w_base_r;
+  logic [1:0]  w_seg_r;
+  logic        w_rd_valid_r;
 
   always @(posedge clk) begin
-    w_cur_a <= w_mem_a[w_idx[12:0]];
+    w_cur_a <= w_mem_a[w_base[13:0]];
     w_nxt_a <= w_mem_a[w_nxt_ia];
   end
 `ifndef SYNTHESIS
-  // dbg 装载写口只存在于仿真: 综合时写口整体不存在 -> W 阵列是纯 ROM,
-  // 两个读口才能映射成 BRAM36 真双口 (SoC 里 dbg 本来就 tie 0)。
+  // dbg 装载写口只存在于仿真 (综合时整个写口不存在 -> W 是纯 ROM, 两个满宽读口
+  // 才能映射成 BRAM36 真双口; SoC 里 dbg 本来就 tie 0)。
   always @(posedge clk) begin
     if (w_dbg_we && (w_wr_seg == 2'd0)) begin
-      if (w_wr_lane == 2'd0) w_mem_a[w_wr_idx[12:0]][31:0]   <= dbg_wdata;
-      if (w_wr_lane == 2'd1) w_mem_a[w_wr_idx[12:0]][63:32]  <= dbg_wdata;
-      if (w_wr_lane == 2'd2) w_mem_a[w_wr_idx[12:0]][95:64]  <= dbg_wdata;
-      if (w_wr_lane == 2'd3) w_mem_a[w_wr_idx[12:0]][127:96] <= dbg_wdata;
+      if (w_wr_half) w_mem_a[w_wr_idx[13:0]][63:32] <= dbg_wdata;
+      else           w_mem_a[w_wr_idx[13:0]][31:0]  <= dbg_wdata;
     end
   end
 `endif
 
   always @(posedge clk) begin
-    w_cur_b <= w_mem_b[w_idx[11:0]];
+    w_cur_b <= w_mem_b[w_base[12:0]];
     w_nxt_b <= w_mem_b[w_nxt_ib];
   end
 `ifndef SYNTHESIS
   always @(posedge clk) begin
     if (w_dbg_we && (w_wr_seg == 2'd1)) begin
-      if (w_wr_lane == 2'd0) w_mem_b[w_wr_idx[11:0]][31:0]   <= dbg_wdata;
-      if (w_wr_lane == 2'd1) w_mem_b[w_wr_idx[11:0]][63:32]  <= dbg_wdata;
-      if (w_wr_lane == 2'd2) w_mem_b[w_wr_idx[11:0]][95:64]  <= dbg_wdata;
-      if (w_wr_lane == 2'd3) w_mem_b[w_wr_idx[11:0]][127:96] <= dbg_wdata;
+      if (w_wr_half) w_mem_b[w_wr_idx[12:0]][63:32] <= dbg_wdata;
+      else           w_mem_b[w_wr_idx[12:0]][31:0]  <= dbg_wdata;
     end
   end
 `endif
 
   always @(posedge clk) begin
-    w_cur_c <= w_mem_c[w_idx[11:0]];
+    w_cur_c <= w_mem_c[w_base[12:0]];
     w_nxt_c <= w_mem_c[w_nxt_ic];
   end
 `ifndef SYNTHESIS
   always @(posedge clk) begin
     if (w_dbg_we && (w_wr_seg == 2'd2)) begin
-      if (w_wr_lane == 2'd0) w_mem_c[w_wr_idx[11:0]][31:0]   <= dbg_wdata;
-      if (w_wr_lane == 2'd1) w_mem_c[w_wr_idx[11:0]][63:32]  <= dbg_wdata;
-      if (w_wr_lane == 2'd2) w_mem_c[w_wr_idx[11:0]][95:64]  <= dbg_wdata;
-      if (w_wr_lane == 2'd3) w_mem_c[w_wr_idx[11:0]][127:96] <= dbg_wdata;
+      if (w_wr_half) w_mem_c[w_wr_idx[12:0]][63:32] <= dbg_wdata;
+      else           w_mem_c[w_wr_idx[12:0]][31:0]  <= dbg_wdata;
     end
   end
 `endif
 
   always @(posedge clk) begin
-    w_cur_d <= w_mem_d[w_idx[11:0]];
+    w_cur_d <= w_mem_d[w_base[12:0]];
     w_nxt_d <= w_mem_d[w_nxt_id];
   end
 `ifndef SYNTHESIS
   always @(posedge clk) begin
     if (w_dbg_we && (w_wr_seg == 2'd3)) begin
-      if (w_wr_lane == 2'd0) w_mem_d[w_wr_idx[11:0]][31:0]   <= dbg_wdata;
-      if (w_wr_lane == 2'd1) w_mem_d[w_wr_idx[11:0]][63:32]  <= dbg_wdata;
-      if (w_wr_lane == 2'd2) w_mem_d[w_wr_idx[11:0]][95:64]  <= dbg_wdata;
-      if (w_wr_lane == 2'd3) w_mem_d[w_wr_idx[11:0]][127:96] <= dbg_wdata;
+      if (w_wr_half) w_mem_d[w_wr_idx[12:0]][63:32] <= dbg_wdata;
+      else           w_mem_d[w_wr_idx[12:0]][31:0]  <= dbg_wdata;
     end
   end
 `endif
 
   always @(posedge clk) begin
     if (rst) begin
-      w_idx_r      <= 15'd0;
+      w_base_r     <= 16'd0;
       w_seg_r      <= 2'd0;
-      w_odd_r      <= 1'b0;
       w_rd_valid_r <= 1'b0;
     end else begin
-      w_idx_r      <= w_idx;
+      w_base_r     <= w_base;
       w_seg_r      <= w_seg;
-      w_odd_r      <= w_odd;
       w_rd_valid_r <= w_re && (32'(w_addr) < 32'(W_BYTES));
     end
   end
 
-  logic [127:0] w_cur_r, w_nxt_r;
+  logic [63:0] w_cur_r, w_nxt_r;
   always_comb begin
     case (w_seg_r)
       2'd0:    w_cur_r = w_cur_a;
@@ -299,16 +290,17 @@ module nn_mem
     endcase
   end
 
-  // next 字: 正常用本段 B 口; 段边界用下一段 B 口读到的第 0 个字; W 末字越界给 0
+  // next 64-bit 字: 正常用本段第二读口; 段边界用下一段读口读到的第 0 个字;
+  // W 末字 (base=40959) 的 next 越界 -> 0
   always_comb begin
-    if (w_idx_r == 15'd8191)
+    if (w_base_r == 16'd16383)
       w_nxt_r = w_nxt_b;             // A 末字 -> B[0]
-    else if (w_idx_r == 15'd12287)
+    else if (w_base_r == 16'd24575)
       w_nxt_r = w_nxt_c;             // B 末字 -> C[0]
-    else if (w_idx_r == 15'd16383)
+    else if (w_base_r == 16'd32767)
       w_nxt_r = w_nxt_d;             // C 末字 -> D[0]
-    else if (w_idx_r == 15'd20479)
-      w_nxt_r = 128'b0;              // W 末字, 窗口后半越界 -> 0
+    else if (w_base_r == 16'd40959)
+      w_nxt_r = 64'b0;               // W 末字, 高 8B 越界 -> 0
     else case (w_seg_r)
       2'd0:    w_nxt_r = w_nxt_a;
       2'd1:    w_nxt_r = w_nxt_b;
@@ -317,10 +309,8 @@ module nn_mem
     endcase
   end
 
-  // 8B 对齐的 16B 窗口: w_addr[3]=1 时取 {下一 128b 字的低 64b, 当前 128b 字的高 64b}
-  logic [127:0] w_win_r;
-  assign w_win_r = w_odd_r ? {w_nxt_r[63:0], w_cur_r[127:64]} : w_cur_r;
-  assign w_rdata = w_rd_valid_r ? w_win_r : 128'b0;
+  // 16B 窗口 = {高 8B (next), 低 8B (cur)}, 小端
+  assign w_rdata = w_rd_valid_r ? {w_nxt_r, w_cur_r} : 128'b0;
 
   // ==========================================================================
   // Q 区: 64-bit 宽、6144 深 -> 分布式 RAM/ROM (LUTRAM, 0 BRAM)
@@ -460,7 +450,7 @@ module nn_mem
 
   // ==========================================================================
   // 初始化
-  //   综合: W 4 段 128-bit/行 + Q 6144 行 64-bit/行
+  //   综合: W 4 段 64-bit/行 (16384/8192/8192/8192 行) + Q 6144 行 64-bit/行
   //   仿真: 零填充 + loader 把 32-bit/行镜像打包 (nnw / nnq / 旧 nnwq)
   // ==========================================================================
   initial begin
@@ -485,19 +475,18 @@ module nn_mem
       string fname;
       int    fd;
       int    code;
-      int    widx;
-      int    wlane;
+      int    widx;    // W: 已装入的 64-bit 字个数 (0..W64)
+      int    whalf;   // W: 当前 64-bit 字内的 32-bit 半字 (0/1)
       int    qidx;
       int    qword;
       logic [31:0]  v32;
-      logic [127:0] acc128;
       logic [63:0]  acc64;
       string line;
 
-      for (int i = 0; i < WSEG_A; i++)    w_mem_a[i] = 128'b0;
-      for (int i = 0; i < WSEG_B; i++)    w_mem_b[i] = 128'b0;
-      for (int i = 0; i < WSEG_C; i++)    w_mem_c[i] = 128'b0;
-      for (int i = 0; i < WSEG_D; i++)    w_mem_d[i] = 128'b0;
+      for (int i = 0; i < WSEG_A; i++)    w_mem_a[i] = 64'b0;
+      for (int i = 0; i < WSEG_B; i++)    w_mem_b[i] = 64'b0;
+      for (int i = 0; i < WSEG_C; i++)    w_mem_c[i] = 64'b0;
+      for (int i = 0; i < WSEG_D; i++)    w_mem_d[i] = 64'b0;
       for (int i = 0; i < Q64; i++)       q_mem[i]   = 64'b0;
       for (int i = 0; i < ACT_WORDS; i++) act_mem[i] = 128'b0;
 
@@ -507,26 +496,27 @@ module nn_mem
         if (fd == 0) begin
           $display("[nn_mem] WARN: cannot open +nnwq file: %s", fname);
         end else begin
-          widx = 0; wlane = 0; acc128 = '0;
-          qidx = 0; qword = 0; acc64 = '0;
+          widx = 0; whalf = 0; acc64 = '0;
+          qidx = 0; qword = 0;
           code = $fgets(line, fd);
-          while (code != 0 && widx < W128) begin
+          while (code != 0 && widx < W64) begin
             if ($sscanf(line, "%h", v32) == 1) begin
-              acc128[wlane*32 +: 32] = v32;
-              if (wlane == 3) begin
-                if (widx < WSEG_A)
-                  w_mem_a[widx] = acc128;
-                else if (widx < WSEG_A + WSEG_B)
-                  w_mem_b[widx - WSEG_A] = acc128;
-                else if (widx < WSEG_A + WSEG_B + WSEG_C)
-                  w_mem_c[widx - WSEG_A - WSEG_B] = acc128;
-                else
-                  w_mem_d[widx - WSEG_A - WSEG_B - WSEG_C] = acc128;
-                widx  = widx + 1;
-                wlane = 0;
-                acc128 = '0;
+              if (whalf == 0) begin
+                acc64[31:0] = v32;
+                whalf = 1;
               end else begin
-                wlane = wlane + 1;
+                acc64[63:32] = v32;
+                if (widx < WSEG_A)
+                  w_mem_a[widx] = acc64;
+                else if (widx < WSEG_A + WSEG_B)
+                  w_mem_b[widx - WSEG_A] = acc64;
+                else if (widx < WSEG_A + WSEG_B + WSEG_C)
+                  w_mem_c[widx - WSEG_A - WSEG_B] = acc64;
+                else
+                  w_mem_d[widx - WSEG_A - WSEG_B - WSEG_C] = acc64;
+                widx  = widx + 1;
+                whalf = 0;
+                acc64 = '0;
               end
             end
             code = $fgets(line, fd);
@@ -546,10 +536,10 @@ module nn_mem
             code = $fgets(line, fd);
           end
           $fclose(fd);
-          $display("[nn_mem] WQ image loaded: %s (W %0d x128b, Q %0d x64b)", fname, widx, qidx);
-          if ((widx != W128) || (qword != Q_WORDS))
+          $display("[nn_mem] WQ image loaded: %s (W %0d x64b, Q %0d x64b)", fname, widx, qidx);
+          if ((widx != W64) || (qword != Q_WORDS))
             $display("[nn_mem] WARN: +nnwq line count W=%0d/%0d Q=%0d/%0d",
-                     widx, W_WORDS, qword, Q_WORDS);
+                     widx, W64, qword, Q_WORDS);
         end
       end else begin
         // ---- 模式 2: 分开的 W / Q 文件 (32-bit 行) ----
@@ -558,31 +548,32 @@ module nn_mem
           if (fd == 0) begin
             $display("[nn_mem] WARN: cannot open +nnw file: %s", fname);
           end else begin
-            widx = 0; wlane = 0; acc128 = '0;
+            widx = 0; whalf = 0; acc64 = '0;
             code = $fgets(line, fd);
-            while (code != 0 && widx < W128) begin
+            while (code != 0 && widx < W64) begin
               if ($sscanf(line, "%h", v32) == 1) begin
-                acc128[wlane*32 +: 32] = v32;
-                if (wlane == 3) begin
-                  if (widx < WSEG_A)
-                    w_mem_a[widx] = acc128;
-                  else if (widx < WSEG_A + WSEG_B)
-                    w_mem_b[widx - WSEG_A] = acc128;
-                  else if (widx < WSEG_A + WSEG_B + WSEG_C)
-                    w_mem_c[widx - WSEG_A - WSEG_B] = acc128;
-                  else
-                    w_mem_d[widx - WSEG_A - WSEG_B - WSEG_C] = acc128;
-                  widx  = widx + 1;
-                  wlane = 0;
-                  acc128 = '0;
+                if (whalf == 0) begin
+                  acc64[31:0] = v32;
+                  whalf = 1;
                 end else begin
-                  wlane = wlane + 1;
+                  acc64[63:32] = v32;
+                  if (widx < WSEG_A)
+                    w_mem_a[widx] = acc64;
+                  else if (widx < WSEG_A + WSEG_B)
+                    w_mem_b[widx - WSEG_A] = acc64;
+                  else if (widx < WSEG_A + WSEG_B + WSEG_C)
+                    w_mem_c[widx - WSEG_A - WSEG_B] = acc64;
+                  else
+                    w_mem_d[widx - WSEG_A - WSEG_B - WSEG_C] = acc64;
+                  widx  = widx + 1;
+                  whalf = 0;
+                  acc64 = '0;
                 end
               end
               code = $fgets(line, fd);
             end
             $fclose(fd);
-            $display("[nn_mem] W image loaded: %s (%0d / %0d words)", fname, widx, W_WORDS);
+            $display("[nn_mem] W image loaded: %s (%0d / %0d x64b)", fname, widx, W64);
           end
         end else begin
           $display("[nn_mem] WARN: no +nnw / +nnwq; W arrays stay zero");
@@ -593,7 +584,7 @@ module nn_mem
           if (fd == 0) begin
             $display("[nn_mem] WARN: cannot open +nnq file: %s", fname);
           end else begin
-            qidx = 0; qword = 0; acc64 = '0;
+            qidx = 0; qword = 0;
             code = $fgets(line, fd);
             while (code != 0 && qword < Q_WORDS) begin
               if ($sscanf(line, "%h", v32) == 1) begin
