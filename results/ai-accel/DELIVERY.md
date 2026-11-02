@@ -238,9 +238,10 @@ CoreMark/MHz 2.7063（交付档 CPU 未受影响）
 | **100 MHz** | 12/6 | **+0.136** | **PASS（主交付）** | `fpga/cpu_a100t_nn.bit` sha `537af245…` |
 | 115 MHz | 23/10 | +0.022 | PASS（零余量） | `impl/ai115/` sha `33f3e844…` |
 | 120 MHz | 12/5 | +0.003 | PASS（零余量） | `impl/ai120/` sha `d60c80a0…` |
-| 125 MHz | 15/6 | **−0.077**（fmax 123.8） | FAIL（不写 bitstream） | — |
+| **122.22 MHz** | 22/9 | **+0.058** | **PASS（当前最高已验证）** | `impl/ai122/` sha `2bb8c184…` |
+| 125 MHz | 15/6 | **−0.077**（fmax 123.8，两次构建完全一致） | FAIL（不写 bitstream） | — |
 
-> 说明：不同频点各自重新 P&R，run-to-run 布局差异 ±0.2ns 量级，因此 115/120 的"零余量 PASS"不建议作为硅上稳定工作点；**主交付取 100MHz（+0.136ns）**，115/120 作为"已验证可达上限"归档。125MHz 只差 0.077ns，下一步用 pblock/floorplan 或 `wa_r` 前移流水仍有机会。
+> 说明：同指令的 P&R 是确定性的（125MHz 两次构建结果完全一致 −0.077），所以不是运气问题。**主交付取 100MHz（+0.136ns，余量最大）**；**122.22MHz（+0.058）为已验证最高频点**；125MHz 只差 0.077ns，下一步用 pblock/floorplan 或 `wa_r` 前移流水仍有机会。
 - 最差路径：`u_nn/u_eng/wa_r[*] → u_nn/u_mem/w_cur_*`（**route 8.881ns，logic 0 级**，纯物理距离）；
 - 时钟：`sys_clk_core` 125→100MHz（`--nn-freq-mhz 100`，MMCM 12/6，XDC/CLK_HZ 三处同源自证）。
 

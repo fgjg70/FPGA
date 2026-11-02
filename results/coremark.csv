@@ -285,3 +285,4 @@ date,tag,iters,ticks,coremark_per_mhz,lut,ff,bram,dsp,fmax_mhz,status,notes
 2026-11-01,ai-yolo-125-r11,1,369506,2.7063,37337,16571,132,168,119.7,timing_fail,fpga_workflow.py synth (PROG=yolo_board)
 2026-11-01,delivery-parity,1,369506,2.7063,2892,1476,9,8,141.9,timing_fail,fpga_workflow.py synth (PROG=cm_hw)
 2026-11-01,ai-yolo-125-et,1,369506,2.7063,36879,17760,132,168,123.8,timing_fail,fpga_workflow.py synth (PROG=yolo_board)
+2026-11-02,ai-yolo-125-et4,1,369506,2.7063,36879,17760,132,168,123.8,timing_fail,fpga_workflow.py synth (PROG=yolo_board)
