@@ -1,0 +1,60 @@
+[
+  null,
+  {
+    "category": 12,
+    "name": "digit 0",
+    "objectness": 120,
+    "box": [
+      9,
+      15,
+      37,
+      49
+    ]
+  },
+  {
+    "category": 14,
+    "name": "digit 2",
+    "objectness": 123,
+    "box": [
+      17,
+      10,
+      35,
+      36
+    ]
+  },
+  null,
+  {
+    "category": 19,
+    "name": "digit 7",
+    "objectness": 120,
+    "box": [
+      20,
+      9,
+      58,
+      47
+    ]
+  },
+  null,
+  {
+    "category": 21,
+    "name": "digit 9",
+    "objectness": 120,
+    "box": [
+      6,
+      5,
+      44,
+      41
+    ]
+  },
+  {
+    "category": 19,
+    "name": "digit 7",
+    "objectness": 120,
+    "box": [
+      13,
+      33,
+      33,
+      57
+    ]
+  }
+]

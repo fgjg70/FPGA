@@ -1,0 +1,4 @@
+build/
+validation/
+__pycache__/
+model/checkpoints/

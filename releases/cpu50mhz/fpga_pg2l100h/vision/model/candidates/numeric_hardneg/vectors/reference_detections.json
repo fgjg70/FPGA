@@ -1,0 +1,80 @@
+[
+  null,
+  {
+    "category": 18,
+    "name": "digit 6",
+    "objectness": 113,
+    "box": [
+      13,
+      20,
+      43,
+      52
+    ]
+  },
+  {
+    "category": 18,
+    "name": "digit 6",
+    "objectness": 112,
+    "box": [
+      12,
+      7,
+      40,
+      41
+    ]
+  },
+  {
+    "category": 18,
+    "name": "digit 6",
+    "objectness": 111,
+    "box": [
+      14,
+      18,
+      46,
+      52
+    ]
+  },
+  {
+    "category": 20,
+    "name": "digit 8",
+    "objectness": 109,
+    "box": [
+      31,
+      27,
+      57,
+      55
+    ]
+  },
+  {
+    "category": 18,
+    "name": "digit 6",
+    "objectness": 109,
+    "box": [
+      12,
+      2,
+      42,
+      40
+    ]
+  },
+  {
+    "category": 13,
+    "name": "digit 1",
+    "objectness": 109,
+    "box": [
+      33,
+      8,
+      57,
+      34
+    ]
+  },
+  {
+    "category": 18,
+    "name": "digit 6",
+    "objectness": 108,
+    "box": [
+      9,
+      8,
+      45,
+      48
+    ]
+  }
+]

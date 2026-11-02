@@ -1,0 +1,80 @@
+[
+  null,
+  {
+    "category": 6,
+    "name": "hand 4",
+    "objectness": 127,
+    "box": [
+      7,
+      6,
+      61,
+      60
+    ]
+  },
+  {
+    "category": 10,
+    "name": "hand 8",
+    "objectness": 127,
+    "box": [
+      7,
+      6,
+      61,
+      60
+    ]
+  },
+  {
+    "category": 8,
+    "name": "hand 6",
+    "objectness": 127,
+    "box": [
+      7,
+      6,
+      61,
+      60
+    ]
+  },
+  {
+    "category": 10,
+    "name": "hand 8",
+    "objectness": 127,
+    "box": [
+      7,
+      6,
+      61,
+      60
+    ]
+  },
+  {
+    "category": 10,
+    "name": "hand 8",
+    "objectness": 127,
+    "box": [
+      7,
+      6,
+      61,
+      60
+    ]
+  },
+  {
+    "category": 10,
+    "name": "hand 8",
+    "objectness": 127,
+    "box": [
+      7,
+      6,
+      61,
+      60
+    ]
+  },
+  {
+    "category": 3,
+    "name": "hand 1",
+    "objectness": 127,
+    "box": [
+      7,
+      6,
+      61,
+      60
+    ]
+  }
+]

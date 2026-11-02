@@ -1,0 +1,128 @@
+{
+  "seed": 2026,
+  "steps": 8000,
+  "train_source": "MNIST train, synthetic placement/noise/blank augmentation",
+  "validation_source": "MNIST test with independent synthetic placement; no physical camera images",
+  "validation_samples": 512,
+  "positive_samples": 419,
+  "detections": 419,
+  "correct_class_detections": 386,
+  "blank_false_positives": 0,
+  "correct_class_and_iou50": 386,
+  "mean_iou_of_detections": 0.75082540688301,
+  "evaluation_arithmetic": "exact INT64 reference with INT8 weights and activations, signed right shift",
+  "validation_precision_domain": "synthetic digits only; not COCO or hand gestures",
+  "elapsed_seconds": 239.45,
+  "classes": [
+    "people",
+    "bike",
+    "cup",
+    "hand 1",
+    "hand 2",
+    "hand 3",
+    "hand 4",
+    "hand 5",
+    "hand 6",
+    "hand 7",
+    "hand 8",
+    "hand 9",
+    "digit 0",
+    "digit 1",
+    "digit 2",
+    "digit 3",
+    "digit 4",
+    "digit 5",
+    "digit 6",
+    "digit 7",
+    "digit 8",
+    "digit 9"
+  ],
+  "enabled_classes": [
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21
+  ],
+  "input": [
+    64,
+    64,
+    1
+  ],
+  "grid": [
+    4,
+    4
+  ],
+  "architecture": [
+    [
+      1,
+      8,
+      3,
+      2
+    ],
+    [
+      8,
+      16,
+      3,
+      2
+    ],
+    [
+      16,
+      24,
+      3,
+      2
+    ],
+    [
+      24,
+      32,
+      3,
+      2
+    ],
+    [
+      32,
+      32,
+      3,
+      1
+    ],
+    [
+      32,
+      27,
+      1,
+      1
+    ]
+  ],
+  "weight_bytes": 21672,
+  "bias_bytes": 556,
+  "activation_bytes": 16384,
+  "result_bytes": 2048,
+  "object_threshold": 72,
+  "input_preprocessing": "central 128x128 crop, 4 blank rows top/bottom, inverted luminance / 2",
+  "model_type": "custom YOLO-style single-box-per-cell detector; not a stock YOLO checkpoint",
+  "hardware_tested": false,
+  "supported_domain": "dark handwritten digits on a light plain background",
+  "unsupported_classes": [
+    "people",
+    "bike",
+    "cup",
+    "hand 1",
+    "hand 2",
+    "hand 3",
+    "hand 4",
+    "hand 5",
+    "hand 6",
+    "hand 7",
+    "hand 8",
+    "hand 9"
+  ],
+  "sha256": {
+    "micro_yolo.npz": "c00a580293240855a3049862fc4d25992cae12aede4ecf0578ae6bb6225097c6",
+    "weights.hex": "142f221a8a2d88c77c66c430773c83f8e0e652bca4ab11f2ba062ed1440b11c4",
+    "biases.hex": "a5dbdc89b6ac0f71844a0e12cbca0b249faa4751e395ba050d974e2ac2402e75",
+    "shifts.hex": "549ec0141dd968e2e7fc680ff648c1a8e39c792e5ad927013291115de0455ae9"
+  }
+}

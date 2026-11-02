@@ -4,6 +4,8 @@ PG2L100H视觉工程入口见 [fpga_pg2l100h/vision/README.md](fpga_pg2l100h/vis
 
 该版本已通过原生布局布线和时序检查，并成功下载到FPGA RAM；配置状态中的PLL锁定标志仍为0，板上时钟启动和应用运行待确认。最新记录见 [BOARD_VALIDATION.md](fpga_pg2l100h/vision/BOARD_VALIDATION.md)。北方一到十手势尚待实拍训练，COCO80模型尚未部署，功能边界见 [MODES.md](fpga_pg2l100h/vision/MODES.md)。
 
+之前的CPU/NPU均为50 MHz的源码基线保存在 [releases/cpu50mhz](releases/cpu50mhz/README.md)，来自2026-11-02 20:22的完整备份，包含独立构建入口、模型和历史验证记录。
+
 SystemVerilog 实现的 **RV32IM** 处理器：**5 级流水线 (IF/ID/EX/MEM/WB)** —— 其中 IF/ID 由 IMEM 的输出寄存器承担，
 含动态分支预测、完整 M-mode 异常/中断、冒险处理、非对齐访存 2 拍自动拆分。
 
