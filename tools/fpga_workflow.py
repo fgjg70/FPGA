@@ -2197,7 +2197,9 @@ def cmd_synth(args) -> int:
                 _pbr = getattr(args, "nn_pblock_range", None)
                 if _pbr:
                     benv["NN_PBLOCK_RANGE"] = _pbr
-                    print(f"  [NN] u_nn pblock: {_pbr}")
+                    _pbc = getattr(args, "nn_pblock_cells", None) or "u_nn"
+                    benv["NN_PBLOCK_CELLS"] = _pbc
+                    print(f"  [NN] pblock: {_pbc} -> {_pbr}")
                 # 【绝不覆盖交付档 bitstream】build.tcl 默认写 fpga/cpu_a100t.bit，
                 # AI 档另存 cpu_a100t_nn.bit；显式 --bit-name 优先。
                 bn = getattr(args, "bit_name", None)
@@ -3369,6 +3371,8 @@ def main() -> int:
                         "标准值: 7=150, 8=131.25, 10=105, 11=95.45, 12=87.5, 14=75, 21=50 MHz")
     p.add_argument("--nn-q", default=None,
                    help="Q 区 (LUTRAM) 初始化镜像; 默认 sim/prog/yolo/yolo_q.hex")
+    p.add_argument("--nn-pblock-cells", default=None,
+                   help="pblock 作用的 cell (默认 u_nn; 可试 u_nn/u_eng 等)")
     p.add_argument("--nn-pblock-range", default=None,
                    help="给 u_nn 加 pblock 的范围 (如 CLOCKREGION_X0Y0:CLOCKREGION_X0Y3), "
                         "用于把 engine 拉到左侧 BRAM 附近、缩短 engine->mem 长走线。仅 AI 档生效。")
