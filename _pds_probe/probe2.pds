@@ -1,0 +1,35 @@
+(_flow fab_demo "2022.1"
+    (_comment "probe")
+    (_version "1.0.9")
+    (_status "initial")
+    (_project
+        (_option prj_work_dir (_string "."))
+        (_option prj_impl_dir (_string "."))
+    )
+    (_task tsk_setup
+        (_widget wgt_select_arch
+            (_input
+                (_part
+                    (_family Logos)
+                    (_device PGL22G)
+                    (_speedgrade -6)
+                    (_package BG256)
+                )
+            )
+        )
+        (_widget wgt_my_design_src
+            (_input
+                (_file "probe.v"
+                    (_format verilog)
+                    (_timespec "2026-10-20T20:00:00")
+                )
+            )
+        )
+    )
+    (_task tsk_compile
+        (_command cmd_compile
+            (_gci_state (_integer 0))
+        )
+    )
+)
+

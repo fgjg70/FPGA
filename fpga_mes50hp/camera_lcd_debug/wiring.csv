@@ -1,0 +1,61 @@
+﻿port,ball,direction,board_connector,board_pin,peripheral,peripheral_pin,signal
+clk_27m,K21,INPUT,ONBOARD,27MHz,BOARD,,27MHz
+reset_n,K18,INPUT,ONBOARD,KEY1,BOARD,,reset active low
+keys_n[0],L15,INPUT,ONBOARD,KEY2,BOARD,,key active low
+keys_n[1],J17,INPUT,ONBOARD,KEY3,BOARD,,key active low
+keys_n[2],K16,INPUT,ONBOARD,KEY4,BOARD,,key active low
+keys_n[3],J16,INPUT,ONBOARD,KEY5,BOARD,,key active low
+keys_n[4],J19,INPUT,ONBOARD,KEY6,BOARD,,key active low
+keys_n[5],H20,INPUT,ONBOARD,KEY7,BOARD,,key active low
+led[0],B2,OUTPUT,ONBOARD,LED1,BOARD,,LED active high
+led[1],A2,OUTPUT,ONBOARD,LED2,BOARD,,LED active high
+led[2],B3,OUTPUT,ONBOARD,LED3,BOARD,,LED active high
+led[3],A3,OUTPUT,ONBOARD,LED4,BOARD,,LED active high
+led[4],C5,OUTPUT,ONBOARD,LED5,BOARD,,LED active high
+led[5],A5,OUTPUT,ONBOARD,LED6,BOARD,,LED active high
+led[6],F7,OUTPUT,ONBOARD,LED7,BOARD,,LED active high
+led[7],F8,OUTPUT,ONBOARD,LED8,BOARD,,LED active high
+uart_rxd,R8,INPUT,ONBOARD,USB-UART,BOARD,,FPGA RX
+uart_txd,R9,OUTPUT,ONBOARD,USB-UART,BOARD,,FPGA TX
+lcd_r[0],AB13,OUTPUT,40PIN J8 (manual drawing J16),3,AN430 J3,6,R3
+lcd_r[1],Y13,OUTPUT,40PIN J8 (manual drawing J16),4,AN430 J3,7,R4
+lcd_r[2],AB11,OUTPUT,40PIN J8 (manual drawing J16),5,AN430 J3,8,R5
+lcd_r[3],Y11,OUTPUT,40PIN J8 (manual drawing J16),6,AN430 J3,9,R6
+lcd_r[4],W11,OUTPUT,40PIN J8 (manual drawing J16),7,AN430 J3,10,R7
+lcd_g[0],V11,OUTPUT,40PIN J8 (manual drawing J16),8,AN430 J3,13,G2
+lcd_g[1],AB10,OUTPUT,40PIN J8 (manual drawing J16),9,AN430 J3,14,G3
+lcd_g[2],AA10,OUTPUT,40PIN J8 (manual drawing J16),10,AN430 J3,15,G4
+lcd_g[3],Y10,OUTPUT,40PIN J8 (manual drawing J16),11,AN430 J3,16,G5
+lcd_g[4],W10,OUTPUT,40PIN J8 (manual drawing J16),12,AN430 J3,17,G6
+lcd_g[5],T11,OUTPUT,40PIN J8 (manual drawing J16),13,AN430 J3,18,G7
+lcd_b[0],R11,OUTPUT,40PIN J8 (manual drawing J16),14,AN430 J3,22,B3
+lcd_b[1],Y12,OUTPUT,40PIN J8 (manual drawing J16),15,AN430 J3,23,B4
+lcd_b[2],W12,OUTPUT,40PIN J8 (manual drawing J16),16,AN430 J3,24,B5
+lcd_b[3],U12,OUTPUT,40PIN J8 (manual drawing J16),17,AN430 J3,25,B6
+lcd_b[4],T12,OUTPUT,40PIN J8 (manual drawing J16),18,AN430 J3,26,B7
+lcd_dclk,U10,OUTPUT,40PIN J8 (manual drawing J16),19,AN430 J3,27,LCD_DCLK
+lcd_hsync,T10,OUTPUT,40PIN J8 (manual drawing J16),20,AN430 J3,28,LCD_HSYNC
+lcd_vsync,AB9,OUTPUT,40PIN J8 (manual drawing J16),21,AN430 J3,29,LCD_VSYNC
+lcd_de,Y9,OUTPUT,40PIN J8 (manual drawing J16),22,AN430 J3,30,LCD_DE
+touch_sclk,V9,OUTPUT,40PIN J8 (manual drawing J16),23,AN430 J3,31,"SPI_DCLK reserved, idle 0"
+touch_cs_n,U9,OUTPUT,40PIN J8 (manual drawing J16),24,AN430 J3,32,"SPI_CS reserved, idle 1"
+touch_mosi,U8,OUTPUT,40PIN J8 (manual drawing J16),25,AN430 J3,33,"SPI_DIN reserved, idle 0"
+touch_busy,T8,INPUT,40PIN J8 (manual drawing J16),26,AN430 J3,34,SPI_BUSY raw input
+touch_miso,W8,INPUT,40PIN J8 (manual drawing J16),27,AN430 J3,35,SPI_DOUT raw input
+touch_irq_n,V7,INPUT,40PIN J8 (manual drawing J16),28,AN430 J3,36,PENIRQ active low
+cam_scl,AB8,OUTPUT,40PIN J8 (manual drawing J16),29,OV7670 P1,3,SIO_C
+cam_sda,AA8,INOUT,40PIN J8 (manual drawing J16),30,OV7670 P1,4,SIO_D open drain
+cam_vsync,Y6,INPUT,40PIN J8 (manual drawing J16),31,OV7670 P1,5,VSYNC
+cam_rclk,W6,OUTPUT,40PIN J8 (manual drawing J16),32,OV7670 P1,18,FIFO_RCK
+cam_we,AB5,OUTPUT,40PIN J8 (manual drawing J16),33,OV7670 P1,19,FIFO_WR / WR_CTR active high
+cam_oe_n,Y5,OUTPUT,40PIN J8 (manual drawing J16),34,OV7670 P1,20,FIFO_OE active low
+cam_wrst_n,AB4,OUTPUT,40PIN J8 (manual drawing J16),35,OV7670 P1,21,FIFO_WRST active low
+cam_rrst_n,AA4,OUTPUT,40PIN J8 (manual drawing J16),36,OV7670 P1,22,FIFO_RRST active low
+cam_data[0],AB6,INPUT,PMOD J12 (manual drawing J11),1,OV7670 P1,14,D0
+cam_data[1],AA6,INPUT,PMOD J12 (manual drawing J11),2,OV7670 P1,13,D1
+cam_data[2],AB7,INPUT,PMOD J12 (manual drawing J11),3,OV7670 P1,12,D2
+cam_data[3],Y7,INPUT,PMOD J12 (manual drawing J11),4,OV7670 P1,11,D3
+cam_data[4],Y8,INPUT,PMOD J12 (manual drawing J11),5,OV7670 P1,10,D4
+cam_data[5],W9,INPUT,PMOD J12 (manual drawing J11),6,OV7670 P1,9,D5
+cam_data[6],U6,INPUT,PMOD J12 (manual drawing J11),7,OV7670 P1,8,D6
+cam_data[7],T7,INPUT,PMOD J12 (manual drawing J11),8,OV7670 P1,7,D7

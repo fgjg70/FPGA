@@ -108,3 +108,40 @@ fpga/*_webtalk.*
 
 # ---- 手动备份 (不进仓库) ----
 sim/prog/*.bak
+
+# Local FPGA/ML tools, downloaded archives, and generated outputs
+*.zip
+/_pds_ug.txt
+/torchinductor_chenq/
+/log/
+**/validation/
+**/__pycache__/
+**/.pytest_cache/
+**/train_env/
+**/obj_dir/
+**/obj_abi0/
+**/sim/work/
+**/xelab.pb
+**/model/checkpoints/
+**/model/candidates/**/training_checkpoint.pt
+**/tools/sv2v/sv2v.exe
+**/compile/
+**/constraint_check/
+**/synthesize/
+**/device_map/
+**/place_route/
+**/report_timing/
+**/report_power/
+**/generate_netlist/
+**/generate_bitstream/
+**/logbackup/
+**/rdfile*
+*.sbit
+*.gch
+*.pyc
+*.pyo
+.env
+.env.*
+*.pem
+*.p12
+*.pfx

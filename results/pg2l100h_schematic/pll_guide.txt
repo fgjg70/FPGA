@@ -1,0 +1,2957 @@
+  
+ 
+ 
+ 
+深圳市紫光同创电子有限公司 
+版权所有  侵权必究 
+28nm 系列产品PLL IP 
+用户指南 
+（UG041001,V1.3） 
+（2021-04-21） 
+  
+2/52 
+ UG041001 
+www.pangomicro.com 
+文档版本修订记录 
+日期 
+文档版本 
+修订记录 
+适用IP 及
+对应版本 
+2019-11-11 
+V1.0 
+1. 
+初稿。 
+V1.0 
+2019-11-27 
+V1.01 
+1. 
+“表4 Advanced Configurations 页参数表”增加 
+“Show Calculation Results of PLL”参数说明； 
+2. 
+增加“表5 Calculation Results of PLL”； 
+3. 
+删除clkout4_n 端口相关内容； 
+4. 
+增加有关PPLL 部分输出时钟去向说明。 
+V1.0 
+2020-01-17 
+V1.02 
+1. 
+增加三、（二）Basic Configurations 页输出频率计算优
+先级说明。 
+V1.0 
+2020-02-22 
+V1.03 
+1. 
+“表2 Basic Configurations 页参数表”增加Enable 
+clkout DPS 相关说明；  
+2. 
+“表 2 Basic Configurations 页参数表”增加“Enable 
+Dynamic Phase Bus”相关说明； 
+3. 
+“表4 Advanced Configurations 页参数表”增加
+“Enable Dynamic Phase Bus”相关说明； 
+4. 
+“表 4 Advanced Configurations 页参数表”增加“Insert 
+Phase Shift Static Value”相关说明； 
+5. 
+增加注意事项三、（三）。 
+V1.0 
+2021-01-06 
+V1.1 
+1. 
+“表4 Advanced Configurations 页参数表”中“IDIV 
+Static Value”参数范围更新； 
+2. 
+从该版本起，手册版本号与IP 版本号保持一致。 
+V1.1 
+2021-01-12 
+V1.11 
+1. 
+更新用户配置界面截图。 
+V1.1 
+2021-01-15 
+V1.12 
+1. 
+三、（一）占空比计算小节更新参数“STATIC_ DUTY”
+的可配置值范围。 
+V1.1 
+2021-03-11 
+V1.13 
+1. 
+二、（一）中增加时钟驱动功能描述； 
+2. 
+“表1 PLL 接口列表说明”中增加“clkin{1,2}_p”、
+“clkin{1,2}_n”及“clkout{0..f}_bufce”端口及端口说
+明； 
+3. 
+“表 2 Basic Configurations 页参数表”及“表4 
+Advanced Configurations 页参数表”中增加“Input 
+clkin1 Source Option”、“Input clkin2 Source Option”、
+“clkout{0..f}_Buffer_Option”参数及相关说明； 
+4. 
+增加注意事项三、(四)。 
+V1.1 
+2021-04-09 
+V1.14 
+1. 
+“表4 Advanced Configurations 页参数表”中订正
+“Bandwidth Configuration”参数的说明。 
+V1.1 
+2021-09-16 
+V1.1_i1 
+1. 
+更新文档修订记录，增加“适用IP 及对应版本列”； 
+2. 
+更新文档版本命名规则，当前UG 版本为V1.1_i1； 
+3. 
+“表 2 Basic Configurations 页参数表”中增加“Enable 
+clkoutf_n”及clkout6 的“Desired frequency”参数及
+参数说明； 
+4. 
+“表 3 Internal Settings of PLL 相关配置参数说明”中
+V1.1 
+  
+3/52 
+ UG041001 
+www.pangomicro.com 
+日期 
+文档版本 
+修订记录 
+适用IP 及
+对应版本 
+删除参数DPS0_EN~DPS7_EN 及参数说明； 
+5. 
+“表4 Advanced Configurations 页参数表”中增加 
+“Coarse Phase Shift Static Value”、“SSC Mode”及
+“SSC Frequency”参数及参数说明； 
+6. 
+添加IP 界面配置参数默认值描述，参见表 2、表 3、
+表 4、表 5。 
+2021-12-06 
+V1.2 
+1. 
+调整手册架构，增加前言及附录章节，规范格式； 
+2. 
+添加IP 版本变更记录； 
+3. 
+完善模块例化相关描述，更新IP 选择路径及配置参数
+页面截图，添加PDS 版本说明，参见“2.3  模块例
+化”； 
+4. 
+完善配置参数说明列表样式，增加“IP 配置界面默认
+值”列，参见表 2-4、表 2-5、表 2-6、表 2-7； 
+5. 
+更新频率算法的优先级描述，参见“2.4.2 1  频率计
+算”； 
+6. 
+更新说明与注意事项章节架构，增加相关标题描述，
+参见“2.4  说明与注意事项”。 
+V1.2 
+2021-04-21 
+V1.3 
+1. 
+更新“表 2-4 Basic Configurations 页面配置参数说明”
+中“Input Clock clkin Frequency”、“Desired Frequency”
+的界面默认值； 
+2. 
+更新IP 配置页面截图。 
+V1.3 
+ 
+ 
+ 
+  
+4/52 
+ UG041001 
+www.pangomicro.com 
+IP 版本变更记录 
+IP 版本 
+更新说明 
+发布时间 
+V1.0 
+1. 
+PLL IP 初始版本。 
+2019-11-11 
+V1.1 
+1. 
+IP 功能优化； 
+2. 
+UG 更新。 
+2021-01-06 
+V1.2 
+1. 
+优化IP 频率计算算法； 
+2. 
+IP 版本号升级； 
+3. 
+UG 更新。 
+2021-12-06 
+V1.3 
+1. 
+优化IP 频率计算算法； 
+2. 
+增加频率检查及告警提示功能； 
+3. 
+UG 更新。 
+2022-04-21 
+ 
+ 
+ 
+  
+5/52 
+ UG041001 
+www.pangomicro.com 
+目录 
+文档版本修订记录 .................................................................................................................................................................. 2 
+IP 版本变更记录 ...................................................................................................................................................................... 4 
+第1 章 前言 ............................................................................................................................................................................. 8 
+1.1 关于本手册 .............................................................................................................................................................. 8 
+1.2 手册行文规范 .......................................................................................................................................................... 8 
+第2 章 IP 使用指南 .............................................................................................................................................................. 9 
+2.1 IP 简介....................................................................................................................................................................... 9 
+2.1.1 主要特性 ...................................................................................................................................................... 9 
+2.1.2 PLL 简图 ....................................................................................................................................................... 9 
+2.1.3 适用器件及封装....................................................................................................................................... 11 
+2.2 接口说明................................................................................................................................................................. 11 
+2.2.1 接口框图 .................................................................................................................................................... 11 
+2.2.2 接口列表 .................................................................................................................................................... 13 
+2.3 模块例化................................................................................................................................................................. 15 
+2.3.1 选择IP ........................................................................................................................................................ 15 
+2.3.2 配置IP 参数 .............................................................................................................................................. 16 
+2.3.3 生成IP ........................................................................................................................................................ 18 
+2.3.4 参数描述 .................................................................................................................................................... 19 
+2.4 说明与注意事项 ................................................................................................................................................... 44 
+2.4.1 计算公式说明 ........................................................................................................................................... 44 
+2.4.2 算法优先级说明....................................................................................................................................... 46 
+2.4.3 时钟驱动功能使用说明 ......................................................................................................................... 48 
+第3 章 附录 ........................................................................................................................................................................... 50 
+3.1 参考文档................................................................................................................................................................. 50 
+3.2 术语表 ..................................................................................................................................................................... 50 
+3.3 缩略语表................................................................................................................................................................. 51 
+3.4 声明.......................................................................................................................................................................... 51 
+3.4.1 版权声明 .................................................................................................................................................... 51 
+3.4.2 免责声明 .................................................................................................................................................... 51 
+ 
+ 
+  
+6/52 
+ UG041001 
+www.pangomicro.com 
+表目录 
+表 1-1 行文规范说明 ............................................................................................................................................................ 8 
+表 2-1 PLL IP 适用器件及封装 ......................................................................................................................................... 11 
+表 2-2 PLL 接口列表 ........................................................................................................................................................... 13 
+表 2-3 PLL IP 生成后的输出文件 .................................................................................................................................... 18 
+表 2-4 Basic Configurations 页面配置参数说明............................................................................................................ 19 
+表 2-5 Internal Settings of PLL 相关配置参数说明 ...................................................................................................... 29 
+表 2-6 Advanced Configurations 页配置参数说明 ........................................................................................................ 31 
+表 2-7 Calculation Results of PLL 相关配置参数说明................................................................................................. 41 
+表 2-8 频率计算公式 .......................................................................................................................................................... 44 
+表 2-9 Feedback from 对照表............................................................................................................................................ 45 
+表 2-10 相位配置范围 ......................................................................................................................................................... 46 
+表 2-11 相位调整组合方式 ................................................................................................................................................ 46 
+ 
+ 
+  
+7/52 
+ UG041001 
+www.pangomicro.com 
+图目录 
+图 2-1 GPLL 框图 ................................................................................................................................................................. 10 
+图 2-2 PPLL 框图.................................................................................................................................................................. 10 
+图 2-3 GPLL 接口示意图 ................................................................................................................................................... 11 
+图 2-4 PPLL 接口示意图 .................................................................................................................................................... 12 
+图 2-5 PLL IPI 选择路径..................................................................................................................................................... 16 
+图 2-6 工程例化界面 ........................................................................................................................................................... 16 
+图 2-7 配置PLL IP 参数界面 ........................................................................................................................................... 16 
+图 2-8 Basic Configurations 页面 ...................................................................................................................................... 17 
+图 2-9 Advanced Configurations 页面 .............................................................................................................................. 18 
+图 2-10 PLL IP 生成报告界面 ........................................................................................................................................... 18 
+图 2-11 PLL IP 典型应用频率计算示例.......................................................................................................................... 45 
+ 
+ 
+                                   第1 章  前言 
+8/52 
+ UG041001 
+www.pangomicro.com 
+第1章 前言 
+本章讲述本手册的适用范围、手册结构及相关行文规范，帮助用户快速查找所需的
+信息。 
+1.1 关于本手册 
+本手册为紫光同创推出的PLL IP 产品用户指南，适用于Titan2 及Logos2 系列FPGA
+产品。本手册内容主要包括IP 使用指南及相关附录。通过本手册用户可以快速了解PLL 
+IP 相关特性及使用方法。 
+1.2 手册行文规范 
+表 1-1 行文规范说明 
+文字 
+使用原则 
+注意 
+若用户忽略注意内容，可能会因误操作而带来一定的不良后果或者
+无法成功操作。 
+说明 
+提供给用户的说明和提示。 
+推荐 
+推荐给用户的设置和使用说明。 
+ 
+ 
+                             第2 章  IP 使用指南 
+9/52 
+ UG041001 
+www.pangomicro.com 
+第2章 IP 使用指南 
+本章讲述PLL IP 相关使用指南，内容包括IP 简介、接口说明、模块例化、说明与
+注意事项。更多设计流程相关详细信息可以参见下述PDS 帮助文档。 
+ 
+Pango_Design_Suite_Quick_Start_Tutorial[1] 
+ 
+Pango_Design_Suite_User_Guide[2] 
+ 
+IP_Compiler_User_Guide[3] 
+ 
+Simulation_User_Guide[4] 
+2.1 IP 简介 
+PLL IP 是紫光同创基于PLL 及时钟网络资源设计的IP，通过不同的参数配置，可
+实现时钟信号的调频、调相、同步、频率综合等功能。用户可以通过公司PDS ( Pango 
+Design Suite) 套件中的IPC (IP Compiler ) 工具完成IP 模块的配置和生成。 
+2.1.1 主要特性 
+PLL IP 的主要特性如下。详细配置规则请参见“2.3.4  参数描述”。 
+ 
+支持PLL 输入/反馈时钟选择； 
+ 
+支持Power Down 模式； 
+ 
+支持输出时钟频率编程； 
+ 
+支持输出时钟相位调整； 
+ 
+支持输出时钟占空比编程； 
+ 
+支持时钟扩频； 
+ 
+支持时钟级联； 
+ 
+支持时钟Gate； 
+ 
+支持选择时钟驱动类型1 
+ 
+支持APB 接口动态配置； 
+2.1.2 PLL 简图 
+PLL 主要由鉴频鉴相器（PFD）、环路滤波器（LF）和压控振荡器（VCO）等组成，
+                                                 
+1 此功能仅支持Titan2 系列器件，详细信息请参见“2.4.3  时钟驱动功能使用说明”。 
+                             第2 章  IP 使用指南 
+10/52 
+ UG041001 
+www.pangomicro.com 
+PLL IP 支持对GPLL 及PPLL 进行配置，对应电路框图如图 2-1 及图 2-2 所示： 
+IDIV
+MDIV
+PFD
+CP
+LPF
+VCO
+clkin1
+clkin2
+clkin_sel
+ODIV0
+ODIV1
+ODIV2
+ODIV3
+ODIV4
+ODIV5
+ODIV6
+GATE
+GATE
+GATE
+GATE
+GATE
+GATE
+GATE
+clkfb
+pll_pwd
+rst
+apb_clk
+apb_rst_n
+apb_addr[4:0]
+apb_sel
+apb_en
+apb_write
+apb_wdata[15:0]
+clkout6
+clkou1
+clkou1_n
+clkou2
+clkou2_n
+clkout3
+clkout3_n
+clkout4
+clkout5
+clkout0
+clkout0_n
+apb_rdata[15:0]
+apb_ready
+FDIV
+GATE
+clkoutf
+clkoutf_n
+Cascade
+dps_clk
+dps_en
+dps_dir
+dps_done
+ 
+图 2-1 GPLL 框图 
+IDIV
+MDIV
+PFD
+CP
+LPF
+VCO
+clkin1
+clkin2
+clkin_sel
+ODIVPHY
+ODIV0
+ODIV1
+ODIV2
+ODVI3
+ODIV4
+FDIV
+GATE
+GATE
+GATE
+GATE
+GATE
+GATE
+GATE
+clkfb
+APB
+pll_pwd
+rst
+apb_clk
+apb_rst_n
+apb_addr[4:0]
+apb_sel
+apb_en
+apb_write
+apb_wdata[15:0]
+clkoutf
+clkoutf_n
+clkout0
+clkout0_n
+clkout1
+clkout1_n
+clkout2
+clkout2_n
+clkout3
+clkout3_n
+clkout4
+clkout4_n
+clkoutphy
+clkoutphy_n
+apb_rdata[15:0]
+apb_ready
+ 
+图 2-2 PPLL 框图 
+ 
+ 
+                             第2 章  IP 使用指南 
+11/52 
+ UG041001 
+www.pangomicro.com 
+2.1.3 适用器件及封装 
+表 2-1 PLL IP 适用器件及封装 
+适用器件 
+支持封装类型 
+Titan2 系列器件 
+All 
+Logos2 系列器件 
+All 
+ 
+2.2 接口说明 
+2.2.1 接口框图 
+ 1. GPLL 
+ 
+图 2-3 GPLL 接口示意图 
+                             第2 章  IP 使用指南 
+12/52 
+ UG041001 
+www.pangomicro.com 
+图 2-3 所示为一个典型的GPLL 接口示意框图。其中，反馈模式为外部反馈，输入
+参考时钟为单端信号。  
+ 2. PPLL 
+ 
+图 2-4 PPLL 接口示意图 
+图 2-4 所示为一个典型的PPLL 接口示意框图。其中，反馈模式为外部反馈，输入
+参考时钟为单端信号。 
+                             第2 章  IP 使用指南 
+13/52 
+ UG041001 
+www.pangomicro.com 
+2.2.2 接口列表 
+PLL IP 接口如表 2-2 所示： 
+表 2-2 PLL 接口列表 
+接口 
+方向 
+功能描述 
+GPLL/PPLL 共有接口 
+clkout0 
+O 
+PLL 第0 路正相输出时钟。 
+clkout0_n 
+O 
+PLL 第0 路反相输出时钟。 
+clkout1 
+O 
+PLL 第1 路正相输出时钟。 
+clkout1_n 
+O 
+PLL 第1 路反相输出时钟。 
+clkout2 
+O 
+PLL 第2 路正相输出时钟。 
+clkout2_n 
+O 
+PLL 第2 路反相输出时钟。 
+clkout3 
+O 
+PLL 第3 路正相输出时钟。 
+clkout3_n 
+O 
+PLL 第3 路反相输出时钟。 
+clkout4 
+O 
+PLL 第4 路正相输出时钟。 
+clkoutf 
+O 
+PLL 第f 路正相输出时钟。 
+clkoutf_n 
+O 
+PLL 第f 路反相输出时钟。 
+lock 
+O 
+PLL 频率锁定指示信号，指示PLL 反馈时钟信号已锁定到参考时钟
+信号。 
+clkin1 
+I 
+PLL 参考时钟单端输入1。 
+clkin2 
+I 
+PLL 参考时钟单端输入2。 
+clkfb 
+I 
+PLL 反馈时钟输入。 
+clkin_sel 
+I 
+参考时钟选择信号； 
+1’b0 b0：选择clkin1； 
+1’b1 b1：选择clkin2。 
+clkout0_syn 
+I 
+clkout0 门控使能控制； 
+1’b0 b0：clkout0 打开； 
+1’b1 b1：clkout0 关闭，输出常0。 
+clkout1_syn 
+I 
+clkout1 门控使能控制； 
+1’b0 b0：clkout1 打开； 
+1’b1 b1：clkout1 关闭，输出常0。 
+clkout2_syn 
+I 
+clkout2 门控使能控制； 
+1’b0 b0：clkout2 打开； 
+1’b1 b1：clkout2 关闭，输出常0。 
+clkout3_syn 
+I 
+clkout3 门控使能控制； 
+1’b0 b0：clkout3 打开； 
+1’b1 b1：clkout3 关闭，输出常0。 
+clkout4_syn 
+I 
+clkout4 门控使能控制； 
+1’b0 b0：clkout4 打开； 
+1’b1 b1：clkout4 关闭，输出常0。 
+                             第2 章  IP 使用指南 
+14/52 
+ UG041001 
+www.pangomicro.com 
+接口 
+方向 
+功能描述 
+clkoutf_syn 
+I 
+clkoutf 门控使能控制； 
+1’b0 b0：clkoutf 打开； 
+1’b1 b1：clkoutf 关闭，输出常0。 
+pll_pwd 
+I 
+PLL Power Down 信号，高电平有效。 
+rst 
+I 
+PLL 复位信号，高电平有效。 
+apb_rdata[15:0] 
+O 
+PLL APB 接口，具体功能详见《Titan2 系列FPGA 时钟资源（Clock）
+用户指南(UG050004)》[8]、《Logos2 系列FPGA 时钟资源（Clock）
+用户指南(UG040004)》[10]。 
+apb_ready 
+O 
+apb_clk 
+I 
+apb_rst_n 
+I 
+apb_addr 
+I 
+apb_sel 
+I 
+apb_en 
+I 
+apb_write 
+I 
+apb_wdata[15:0] 
+I 
+GPLL 独有接口 
+clkout5 
+O 
+PLL 第5 路正相输出时钟，具体功能详见《Titan2 系列FPGA 时钟
+资源（Clock）用户指南(UG050004)》[8]、《Logos2 系列FPGA 时钟
+资源（Clock）用户指南(UG040004)》[10]。 
+clkout6 
+O 
+PLL 第6 路正相输出时钟，具体功能详见《Titan2 系列FPGA 时钟
+资源（Clock）用户指南(UG050004)》[8]、《Logos2 系列FPGA 时钟
+资源（Clock）用户指南(UG040004)》[10]。 
+dps_done 
+O 
+相位动态调整（DPS）接口信号，具体功能详见《Titan2 系列FPGA
+时钟资源（Clock）用户指南(UG050004)》[8]、《Logos2 系列FPGA
+时钟资源（Clock）用户指南(UG040004)》[10]。 
+dps_clk 
+I 
+dps_en 
+I 
+dps_dir 
+I 
+clkout5_syn 
+I 
+clkout5 门控使能控制； 
+1’b0 b0：clkout5 打开； 
+1’b1 b1：clkout5 关闭，输出常0。 
+clkout6_syn 
+I 
+clkout6 门控使能控制； 
+1’b0 b0：clkout6 打开； 
+1’b1 b1：clkout6 关闭，输出常0。 
+PPLL 独有接口 
+clkoutphy 
+O 
+PLL 给DDR PHY 正相输出时钟。 
+clkoutphy_n 
+O 
+PLL 给DDR PHY 反相输出时钟。 
+clkoutphy_syn 
+I 
+clkoutphy 门控使能控制； 
+1’b0 b0：clkoutphy 打开； 
+1’b1 b1：clkoutphy 关闭，输出常0。 
+Titan2 系列GPLL/PPLL 接口2 
+clkin1_p 
+I 
+PLL 正相差分参考时钟输入1。 
+clkin1_n 
+I 
+PLL 反相差分参考时钟输入1。 
+                                                 
+2 以下接口仅对Titan2 系列器件开放。 
+                             第2 章  IP 使用指南 
+15/52 
+ UG041001 
+www.pangomicro.com 
+接口 
+方向 
+功能描述 
+clkin2_p 
+I 
+PLL 正相差分参考时钟输入2。 
+clkin2_n 
+I 
+PLL 反相差分参考时钟输入2。 
+clkout0_bufce 
+I 
+clkout0 时钟驱动使能控制，具体功能参见《Titan2 系列FPGA 时钟
+资源（Clock）用户指南(UG050004)[8]。 
+clkout1_bufce 
+I 
+clkout1 时钟驱动使能控制，具体功能参见《Titan2 系列FPGA 时钟
+资源（Clock）用户指南(UG050004)[8]。 
+clkout2_bufce 
+I 
+clkout2 时钟驱动使能控制，具体功能参见《Titan2 系列FPGA 时钟
+资源（Clock）用户指南(UG050004)[8]。 
+clkout3_bufce 
+I 
+clkout3 时钟驱动使能控制，具体功能参见《Titan2 系列FPGA 时钟
+资源（Clock）用户指南(UG050004)[8]。 
+clkout4_bufce 
+I 
+clkout4 时钟驱动使能控制，具体功能参见《Titan2 系列FPGA 时钟
+资源（Clock）用户指南(UG050004)[8]。 
+clkout5_bufce 
+(GPLL Only) 
+I 
+clkout5 时钟驱动使能控制，具体功能参见《Titan2 系列FPGA 时钟
+资源（Clock）用户指南(UG050004)[8]。 
+clkout6_bufce 
+(GPLL Only) 
+I 
+clkout6 时钟驱动使能控制，具体功能参见《Titan2 系列FPGA 时钟
+资源（Clock）用户指南(UG050004)[8]。 
+clkoutf_bufce 
+I 
+clkoutf 时钟驱动使能控制，具体功能参见《Titan2 系列FPGA 时钟
+资源（Clock）用户指南(UG050004)[8]。 
+ 
+2.3 模块例化 
+通过IPC 工具可以完成PLL 的定制化配置，例化生成所需的IP 模块。关于IPC 工
+具的具体使用方法，请参见IP_Compiler_User_Guide[3]。 
+PLL 模块例化的主要操作步骤描述如下。 
+2.3.1 选择IP 
+打开IPC，在主窗口中点击File->Update 打开Update IP 对话框，添加对应版本的
+IP 模型。 
+选择FPGA 的器件类型之后Catalog 界面可以显示已装载的IP 模型。选取
+Moudle/PLL 目录下对应的IP 版本，IP 选择路径如图 2-5 所示。然后在右侧页面设置
+Pathname 和Instance Name 名称，工程例化界面如图 2-6 所示。 
+                             第2 章  IP 使用指南 
+16/52 
+ UG041001 
+www.pangomicro.com 
+ 
+推荐： 
+ 
+PDS 建议为2021.1 及以上版本。 
+ 
+ 
+图 2-5 PLL IPI 选择路径 
+ 
+图 2-6 工程例化界面 
+2.3.2 配置IP 参数 
+IP 选择完成后点击 <Customize> 进入PLL IP 参数配置界面。参数配置窗口如图 
+2-7 所示。 
+ 
+图 2-7 配置PLL IP 参数界面 
+用户可以通过两种模式来配置IP，Basic Configurations 界面对应Basic 配置模式，
+Advanced Configurations 界面对应Advanced 配置模式。 
+ 1. Basic 配置模式 
+Basic 配置模式下，用户无需关心PLL 的内部参数配置，只需输入期望的频率值、
+相位值等，IP 将自动计算得到最佳的配置参数。Basic Configurations 页的配置界面如图 
+                             第2 章  IP 使用指南 
+17/52 
+ UG041001 
+www.pangomicro.com 
+2-8 所示。具体配置参数说明请参见“2.3.4 1  Basic Configurations 页配置说明”。 
+ 
+图 2-8 Basic Configurations 页面 
+ 2. Advanced 配置模式 
+Advanced 配置模式下，PLL 的内部参数配置完全开放，用户需要根据应用需求自行
+配置参数，PLL 才能正常工作。Advanced Configurations 页的配置界面如图 2-9 所示。 
+具体配置参数说明请参见“2.3.4 2  Advanced Configurations 页配置说明”。 
+                             第2 章  IP 使用指南 
+18/52 
+ UG041001 
+www.pangomicro.com 
+ 
+图 2-9 Advanced Configurations 页面 
+2.3.3 生成IP 
+参数配置完成后，点击左上角的 <Generate> 按钮，即可生成相应于用户特定设置
+的PLL IP 代码。生成IP 的信息报告界面如图 2-10 所示。 
+ 
+图 2-10 PLL IP 生成报告界面 
+成功生成IP 后会在图 2-6 中指定的Project 路径下输出表 2-3 所示文件。 
+表 2-3 PLL IP 生成后的输出文件 
+输出文件 
+说明 
+<instance_name>.idf 
+所生成IP 的配置文件。 
+<instance_name>.v 
+所生成IP 的顶层.v 文件。 
+<instance_name>_tb.v 
+所生成IP 的Test Bench .v 文件。 
+                             第2 章  IP 使用指南 
+19/52 
+ UG041001 
+www.pangomicro.com 
+2.3.4 参数描述 
+ 1. Basic Configurations 页配置说明 
+表 2-4 Basic Configurations 页面配置参数说明 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+PLL Mode Configurations 
+Mode Select 
+选择PLL： 
+GPLL：选择GPLL；PPLL：选择PPLL。 
+GPLL 
+Public Configurations 
+Enable Port rst 
+PLL 复位接口使能： 
+勾选时，使能rst 接口； 
+不勾选时，禁用rst 接口。 
+不勾选 
+Enable 
+clkin 
+Dynamic 
+Select 
+PLL 参考时钟输入动态切换使能： 
+勾选时，使能clkin2、clkin_sel 接口； 
+不勾选时，禁用clkin2、clkin_sel 接口。 
+不勾选 
+Enable Dynamic Phase Bus 
+(GPLL Only) 
+相位动态调整接口使能： 
+勾选时，使能dps_clk、dps_en、dps_dir、dps_done
+接口； 
+不勾选时，禁用dps_clk、dps_en、dps_dir、dps_done
+接口。 
+注：该端口需要在任意通道打开Enable clkout DPS 后
+有效，否则不可配置。 
+不勾选 
+Enable APB Bus 
+APB 接口数据总线使能： 
+勾选时，使能apb_clk、apb_rst_n、apb_addr[4:0]、
+apb_sel、apb_en、apb_write、apb_wdata[15:0]、
+apb_ready、apb_rdata[15:0]接口； 
+不勾选时，禁用apb_clk、apb_rst_n、apb_addr[4:0]、
+apb_sel、apb_en、apb_write、apb_wdata[15:0]、
+apb_ready、apb_rdata[15:0]接口。 
+不勾选 
+Enable Port pll_pwd 
+Power down 模式： 
+勾选时，使能pll_pwd 接口； 
+不勾选时，禁用pll_pwd 接口。 
+不勾选 
+Feedback Clock Mode 
+选择反馈模式： 
+Internal Feedback：内部反馈模式，同时禁用clkfb 接
+口； 
+External Feedback：外部反馈模式，同时使能clkfb 接
+口。 
+Internal 
+Feedback 
+                             第2 章  IP 使用指南 
+20/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+Feedback from 
+选择反馈源： 
+CLKOUTF：反馈源为clkoutf； 
+CLKOUT0：反馈源为clkout0； 
+CLKOUT1：反馈源为clkout1； 
+CLKOUT2：反馈源为clkout2； 
+CLKOUT3：反馈源为clkout3； 
+CLKOUT4：反馈源为clkout4； 
+CLKOUT5：反馈源为clkout5 (GPLL Only)； 
+CLKOUT6：反馈源为clkout6 (GPLL Only)。 
+CLKOUTF 
+Input 
+Clock 
+clkin 
+Frequency 
+PLL 参考时钟clkin1/clkin2 频率配置； 
+配置范围：GPLL Mode：10MHz~800MHz； 
+PPLL Mode：19MHz~800MHz。 
+50.000000 
+SSC Mode 
+(GPLL Only) 
+选择SSC 模式： 
+DISABLE：关闭SSC 功能 
+DOWN_LOW：开启DOWN_LOW 工作模式； 
+DOWN_HIGH：开启DOWN_HIGH 工作模式； 
+CENTER_LOW：开启CENTER_LOW 工作模式； 
+CENTER_HIGH：开启CENTER_HIGH 工作模式。 
+当SSC_Mode 配置参数不是‘DISABLE’时，clkout2 和
+clkout3 将强制关闭。 
+DISABLE 
+SSC Frequency 
+(GPLL Only) 
+配置SSC 调制频率； 
+调制范围：25KHz~ 250KHz 
+25 
+Input Clock clkin1 Source 
+Option 
+(Titan2 Device Only) 
+PLL 参考时钟clkin1 时钟驱动配置： 
+Global Buffer:参考时钟clkin1 由CLKBUFG 驱动； 
+Single ended clk Pin: 参考时钟clkin1 由INBUF 驱动； 
+Differential ended clk Pin: 参考时钟clkin1 由
+INBUFDS 驱动； 
+No Buffer: 参考时钟clkin1 未增加时钟驱动。 
+No Buffer 
+Input Clock clkin2 Source 
+Option 
+(Titan2 Device Only) 
+PLL 参考时钟clkin2 时钟驱动配置： 
+Global Buffer:参考时钟clkin2 由CLKBUFG 驱动； 
+Single ended clk Pin: 参考时钟clkin2 由INBUF 驱动； 
+Differential ended clk Pin: 参考时钟clkin2 由
+INBUFDS 驱动； 
+No Buffer: 参考时钟clkin2 未增加时钟驱动。 
+No Buffer 
+Clockoutphy Configurations (PPLL 专有时钟，用于DDRPHY 专用，不可单独使用) 
+Enable clkoutphy 
+clkouthy 使能配置： 
+勾选时，使能clkoutphy，并显示Clockoutphy 
+Configurations 对应选项； 
+不勾选时，禁用clkoutphy，并隐藏Clockoutphy 
+Configurations 对应选项； 
+不勾选 
+                             第2 章  IP 使用指南 
+21/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+Enable 
+Clock 
+Gate 
+for 
+clkoutphy 
+勾选时，使能clkoutphy_syn 接口； 
+不勾选时，禁用clkoutphy_syn 接口； 
+当 Enable clkoutphy 不勾选时，此选项也被强制不勾
+选。 
+不勾选 
+Enable clkoutphy_n 
+勾选时，使能clkoutphy_n 反向时钟输出接口； 
+不勾选时，禁用clkoutphy_n 反向时钟输出接口。 
+当 Enable clkoutphy 不勾选时，此选项也被强制不勾
+选。 
+不勾选 
+Desired Frequency 
+clkoutphy 期望频率配置； 
+配置范围：10.39MHz~ 2133MHz。 
+50.00000000 
+Actual Frequency 
+clkoutphy 实际频率，显示最接近期望频率的合法值。 
+50.0 
+Desired Phase Shift 
+clkoutphy 期望相位配置，配置范围为0~359.999999°。 
+0 
+Actual Phase Shift 
+clkoutphy 实际相位，显示最接近期望相位的合法值。 
+0 
+Desired Duty Cycle 
+clkoutphy 期望Duty Cycle 配置，配置范围为：
+0~99.999999%。 
+50.000000 
+Actual Duty Cycle 
+clkoutphy 实际Duty Cycle，显示最接近Duty Cycle 的
+合法值。 
+50.00000000 
+Clockout0 Configurations 
+Enable clkout0 
+clkout0 使能配置： 
+勾选时，使能clkout0，并显示Clockout0 Configurations
+对应选项； 
+不勾选时，禁用clkout0，并隐藏Clockout0 
+Configurations 对应选项； 
+当选择反馈模式为External Feedback 且选择反馈源为
+CLKOUT0 时，此选项被强制勾选。 
+勾选 
+Enable 
+Clock 
+Gate 
+for 
+clkout0 
+勾选时，使能clkout0_syn 接口； 
+不勾选时，禁用clkout0_syn 接口； 
+当 Enable clkout0 不勾选时，此选项也被强制不勾选。 
+不勾选 
+Enable clkout0 DPS 
+(GPLL Only) 
+clkout0 DPS 调相使能： 
+勾选时，使能clkout0 DPS 调相； 
+不勾选时，禁用cklout0 DPS 调相。 
+当ODIV0 Value 为小数时，此项不可配置; 
+当作为反馈通道时，此项不可配置 
+不勾选 
+Enable clkout0_n 
+勾选时，使能clkout0_n 反向时钟输出接口； 
+不勾选时，禁用clkout0_n 反向时钟输出接口。 
+当 Enable clkout0 不勾选时，此选项也被强制不勾选。 
+不勾选 
+                             第2 章  IP 使用指南 
+22/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+Clkout0_Buffer_Option 
+(Titan2 Device Only) 
+clkout0 输出驱动配置： 
+NO BUFFER:clkout0 不增加时钟驱动； 
+BUFG: clkout0 由CLKBUFG 驱动； 
+BUFX: clkout0 由CLKBUFX 驱动； 
+BUFR: clkout0 由CLKBUFR 驱动； 
+BUFGCE: clkout0 由CLKBUFGCE 驱动； 
+BUFXCE: clkout0 由CLKBUFXCE 驱动； 
+IOCLKBUF: clkout0 由IOCLKBUF 驱动。 
+NO 
+BUFFER 
+Desired Frequency 
+clkout0 期望频率配置； 
+配置范围：GPLL Mode：4.69MHz~800MHz； 
+PPLL Mode：10.39MHz~800MHz。 
+50.00000000 
+Actual Frequency 
+clkout0 实际频率，显示最接近期望频率的合法值。 
+50.00000000  
+Desired Phase Shift 
+clkout0 期望相位配置，配置范围为0~359.999999°。 
+当反馈源选择clkout0 时，此配置不可配。 
+0 
+Actual Phase Shift 
+clkout0 实际相位，显示最接近期望相位的合法值。 
+当反馈源选择clkout0 时，实际相位被强制为0。 
+0 
+Desired Duty Cycle 
+clkout0 期望Duty Cycle 配置，配置范围为：
+0~99.999999%。 
+当ODIV0 Value 为小数时，此选项不可配置。 
+50.000000 
+Actual Duty Cycle 
+clkout0 实际Duty Cycle，显示最接近Duty Cycle 的合
+法值。 
+50.00000000  
+Clockout1 Configurations 
+Enable clkout1 
+clkout1 使能配置： 
+勾选时，使能clkout1，并显示Clockout1 Configurations
+对应选项； 
+不勾选时，禁用clkout1，并隐藏Clockout1 
+Configurations 对应选项； 
+当选择反馈模式为External Feedback 且选择反馈源为
+CLKOUT1 时，此选项被强制勾选。 
+不勾选 
+Enable 
+Clock 
+Gate 
+for 
+clkout1 
+勾选时，使能clkout1_syn 接口； 
+不勾选时，禁用clkout1_syn 接口； 
+当 Enable clkout1 不勾选时，此选项也被强制不勾选。 
+不勾选 
+Enable clkout1 DPS 
+(GPLL Only) 
+clkout1 DPS 调相使能： 
+勾选时，使能clkout1 DPS 调相； 
+不勾选时，禁用cklout1 DPS 调相。 
+当作为反馈通道时，此项不可配置。 
+不勾选 
+Enable clkout1_n 
+勾选时，使能clkout1_n 反向时钟输出接口； 
+不勾选时，禁用clkout1_n 反向时钟输出接口。 
+当 Enable clkout1 不勾选时，此选项也被强制不勾选。 
+“Mode Select”选择为PPLL 时，该端口只能连接到
+I/O Clock 时钟网络。 
+ 
+                             第2 章  IP 使用指南 
+23/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+Clkout1_Buffer_Option 
+(Titan2 Device Only) 
+clkout1 输出驱动配置： 
+NO BUFFER:clkout1 不增加时钟驱动； 
+BUFG: clkout1 由CLKBUFG 驱动； 
+BUFX: clkout1 由CLKBUFX 驱动； 
+BUFR: clkout1 由CLKBUFR 驱动； 
+BUFGCE: clkout1 由CLKBUFGCE 驱动； 
+BUFXCE: clkout1 由CLKBUFXCE 驱动； 
+IOCLKBUF: clkout1 由IOCLKBUF 驱动。 
+NO 
+BUFFER 
+Desired Frequency 
+clkout1 期望频率配置； 
+配置范围：GPLL Mode：4.69MHz~800MHz； 
+PPLL Mode：10.39MHz~800MHz。 
+50.00000000 
+Actual Frequency 
+clkout1 实际频率，显示最接近期望频率的合法值。 
+50.00000000 
+Desired Phase Shift 
+clkout1 期望相位配置，配置范围为0~359.999999°。 
+当反馈源选择clkout1 时，此配置不可配。 
+0 
+Actual Phase Shift 
+clkout1 实际相位，显示最接近期望相位的合法值。 
+当反馈源选择clkout1 时，实际相位被强制为0。 
+0 
+Desired Duty Cycle 
+clkout1 期望Duty Cycle 配置，配置范围为：
+0~99.999999%。 
+50.000000 
+Actual Duty Cycle 
+clkout1 实际Duty Cycle，显示最接近Duty Cycle 的合
+法值。 
+50.00000000 
+Clockout2 Configurations 
+Enable clkout2 
+clkout2 使能配置： 
+勾选时，使能clkout2，并显示Clockout2 Configurations
+对应选项； 
+不勾选时，禁用clkout2，并隐藏Clockout2 
+Configurations 对应选项； 
+当选择反馈模式为External Feedback 且选择反馈源为
+CLKOUT2 时，此选项被强制勾选。 
+不勾选 
+Enable 
+Clock 
+Gate 
+for 
+clkout2 
+勾选时，使能clkout2_syn 接口； 
+不勾选时，禁用clkout2_syn 接口； 
+当 Enable clkout2 不勾选时，此选项也被强制不勾选。 
+不勾选 
+Enable clkout2 DPS 
+(GPLL Only) 
+clkout2 DPS 调相使能： 
+勾选时，使能clkout2 DPS 调相； 
+不勾选时，禁用cklout2 DPS 调相。 
+当作为反馈通道时，此项不可配置。 
+不勾选 
+Enable clkout2_n 
+勾选时，使能clkout2_n 反向时钟输出接口； 
+不勾选时，禁用clkout2_n 反向时钟输出接口。 
+当 Enable clkout2 不勾选时，此选项也被强制不勾选。 
+“Mode Select”选择为PPLL 时，该端口只能连接到
+I/O Clock 时钟网络。 
+不勾选 
+                             第2 章  IP 使用指南 
+24/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+Clkout2_Buffer_Option 
+(Titan2 Device Only) 
+Clkout2 输出驱动配置： 
+NO BUFFER:clkout2 不增加时钟驱动； 
+BUFG: clkout2 由CLKBUFG 驱动； 
+BUFX: clkout2 由CLKBUFX 驱动； 
+BUFR: clkout2 由CLKBUFR 驱动； 
+BUFGCE: clkout2 由CLKBUFGCE 驱动； 
+BUFXCE: clkout2 由CLKBUFXCE 驱动； 
+IOCLKBUF: clkout2 由IOCLKBUF 驱动。 
+NO 
+BUFFER 
+Desired Frequency 
+clkout2 期望频率配置； 
+配置范围：GPLL Mode：4.69MHz~800MHz； 
+PPLL Mode：10.39MHz~800MHz。 
+50.00000000  
+Actual Frequency 
+clkout2 实际频率，显示最接近期望频率的合法值。 
+50.00000000  
+Desired Phase Shift 
+clkout2 期望相位配置，配置范围为0~359.999999°。 
+当反馈源选择clkout2 时，此配置不可配。 
+0 
+Actual Phase Shift 
+clkout2 实际相位，显示最接近期望相位的合法值。 
+当反馈源选择clkout2 时，实际相位被强制为0。 
+0 
+Desired Duty Cycle 
+clkout2 期望Duty Cycle 配置，配置范围为：
+0~99.999999%。 
+50.000000  
+Actual Duty Cycle 
+clkout2 实际Duty Cycle，显示最接近Duty Cycle 的合
+法值。 
+50.00000000  
+Clockout3 Configurations 
+Enable clkout3 
+clkout3 使能配置： 
+勾选时，使能clkout3，并显示Clockout3 Configurations
+对应选项； 
+不勾选时，禁用clkout3，并隐藏Clockout3 
+Configurations 对应选项； 
+当选择反馈模式为External Feedback 且选择反馈源为
+CLKOUT3 时，此选项被强制勾选。 
+不勾选 
+Enable 
+Clock 
+Gate 
+for 
+clkout3 
+勾选时，使能clkout3_syn 接口； 
+不勾选时，禁用clkout3_syn 接口； 
+当 Enable clkout3 不勾选时，此选项也被强制不勾选。 
+不勾选 
+Enable clkout3 DPS 
+(GPLL Only) 
+clkout3 DPS 调相使能： 
+勾选时，使能clkout3 DPS 调相； 
+不勾选时，禁用cklout3 DPS 调相。 
+当作为反馈通道时，此项不可配置。 
+不勾选 
+Enable clkout3_n 
+勾选时，使能clkout3_n 反向时钟输出接口； 
+不勾选时，禁用clkout3_n 反向时钟输出接口。 
+当 Enable clkout3 不勾选时，此选项也被强制不勾选。 
+“Mode Select”选择为PPLL 时，该端口只能连接到
+I/O Clock 时钟网络。 
+不勾选 
+                             第2 章  IP 使用指南 
+25/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+Clkout3_Buffer_Option 
+(Titan2 Device Only) 
+clkout3 输出驱动配置： 
+NO BUFFER:clkout3 不增加时钟驱动； 
+BUFG: clkout3 由CLKBUFG 驱动； 
+BUFX: clkout3 由CLKBUFX 驱动； 
+BUFR: clkout3 由CLKBUFR 驱动； 
+BUFGCE: clkout3 由CLKBUFGCE 驱动； 
+BUFXCE: clkout3 由CLKBUFXCE 驱动； 
+IOCLKBUF: clkout3 由IOCLKBUF 驱动。 
+NO 
+BUFFER 
+Desired Frequency 
+clkout3 期望频率配置； 
+配置范围：GPLL Mode：4.69MHz~800MHz； 
+PPLL Mode：10.39MHz~800MHz。 
+50.00000000  
+Actual Frequency 
+clkout3 实际频率，显示最接近期望频率的合法值。 
+50.00000000  
+Desired Phase Shift 
+clkout3 期望相位配置，配置范围为0~359.999999°。 
+当反馈源选择clkout3 时，此配置不可配。 
+0 
+Actual Phase Shift 
+clkout3 实际相位，显示最接近期望相位的合法值。 
+当反馈源选择clkout3 时，实际相位被强制为0。 
+0 
+Desired Duty Cycle 
+clkout3 期望Duty Cycle 配置，配置范围为：
+0~99.999999%。 
+50.000000  
+Actual Duty Cycle 
+clkout3 实际Duty Cycle，显示最接近Duty Cycle 的合
+法值。 
+50.00000000  
+Clockout4 Configurations 
+Enable clkout4 
+clkout4 使能配置： 
+勾选时，使能clkout4，并显示Clockout4 Configurations
+对应选项； 
+不勾选时，禁用clkout4，并隐藏Clockout4 
+Configurations 对应选项； 
+当选择反馈模式为External Feedback 且选择反馈源为
+CLKOUT4 时，此选项被强制勾选。 
+不勾选 
+Enable 
+Clock 
+Gate 
+for 
+clkout4 
+勾选时，使能clkout4_syn 接口； 
+不勾选时，禁用clkout4_syn 接口； 
+当 Enable clkout4 不勾选时，此选项也被强制不勾选。 
+不勾选 
+Enable clkout4 DPS 
+(GPLL Only) 
+clkout4 DPS 调相使能： 
+勾选时，使能clkout4 DPS 调相； 
+不勾选时，禁用cklout4 DPS 调相。 
+当作为反馈通道时，此项不可配置。 
+不勾选 
+Clkout4_Buffer_Option 
+(Titan2 Device Only) 
+clkout4 输出驱动配置： 
+NO BUFFER:clkout4 不增加时钟驱动； 
+BUFG: clkout4 由CLKBUFG 驱动； 
+BUFX: clkout4 由CLKBUFX 驱动； 
+BUFGCE: clkout4 由CLKBUFGCE 驱动； 
+BUFXCE: clkout4 由CLKBUFXCE 驱动。 
+NO 
+BUFFER 
+                             第2 章  IP 使用指南 
+26/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+Desired Frequency 
+clkout4 期望频率配置； 
+配置范围：GPLL Mode：4.69MHz~800MHz； 
+PPLL Mode：10.39MHz~800MHz。 
+50.00000000  
+Actual Frequency 
+clkout4 实际频率，显示最接近期望频率的合法值。 
+50.00000000  
+Desired Phase Shift 
+clkout4 期望相位配置，配置范围为0~359.999999°。 
+当反馈源选择clkout4 时，此配置不可配。 
+0 
+Actual Phase Shift 
+clkout4 实际相位，显示最接近期望相位的合法值。 
+当反馈源选择clkout4 时，实际相位被强制为0。 
+0 
+Desired Duty Cycle 
+clkout4 期望Duty Cycle 配置，配置范围为：
+0~99.999999%。 
+50.000000  
+Actual Duty Cycle 
+clkout4 实际Duty Cycle，显示最接近Duty Cycle 的合
+法值。 
+50.00000000  
+Clockout5 Configurations (GPLL Only) 
+Enable clkout5 
+clkout5 使能配置： 
+勾选时，使能clkout5，并显示Clockout5 Configurations
+对应选项； 
+不勾选时，禁用clkout5，并隐藏Clockout5 
+Configurations 对应选项； 
+当选择反馈模式为External Feedback 且选择反馈源为
+CLKOUT5 时，此选项被强制勾选。 
+不勾选 
+Enable 
+Clock 
+Gate 
+for 
+clkout5 
+勾选时，使能clkout5_syn 接口； 
+不勾选时，禁用clkout5_syn 接口； 
+当 Enable clkout5 不勾选时，此选项也被强制不勾选。 
+不勾选 
+Enable clkout5 DPS 
+clkout5 DPS 调相使能： 
+勾选时，使能clkout5 DPS 调相； 
+不勾选时，禁用cklout5 DPS 调相。 
+当作为反馈通道时，此项不可配置。 
+不勾选 
+Enable 
+Cascade 
+from 
+ODIV6 
+clkout5 级联使能配置： 
+勾选时，将ODIV6 的输出频率作为ODIV5 的输入频
+率，ODIV5 输出级联后的频率； 
+不勾选时，将VCO 频率作为ODIV5 的输入频率。 
+当选择反馈模式为External Feedback 且选择反馈源为
+CLKOUT5 时，此选项不能勾选。 
+当 Enable clkout5 不勾选时，此选项也被强制不勾选。 
+不勾选 
+Clkout5_Buffer_Option 
+(Titan2 Device GPLL Only) 
+clkout5 输出驱动配置： 
+NO BUFFER:clkout5 不增加时钟驱动； 
+BUFG: clkout5 由CLKBUFG 驱动； 
+BUFX: clkout5 由CLKBUFX 驱动； 
+BUFGCE: clkout5 由CLKBUFGCE 驱动； 
+BUFXCE: clkout5 由CLKBUFXCE 驱动。 
+NO 
+BUFFER 
+                             第2 章  IP 使用指南 
+27/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+ODIV5 Input  
+ODIV5 分频参数，当勾选‘Enable Cascade from 
+ODIV6’ 时可配置； 
+配置范围为：整数 1~128。 
+1 
+Desired Frequency 
+clkout5 期望频率配置； 
+配置范围：GPLL Mode：4.69MHz~800MHz。 
+当‘Enable Cascade from ODIV6’勾选时，此选项不可
+配置。 
+50.00000000  
+Actual Frequency 
+clkout5 实际频率，显示最接近期望频率的合法值。 
+50.00000000  
+Desired Phase Shift 
+clkout5 期望相位配置，配置范围为0~359.999999°。 
+当反馈源选择clkout5 时，此配置不可配。 
+当‘Enable Cascade from ODIV6’勾选时，此选项不可
+配置。 
+0 
+Actual Phase Shift 
+clkout5 实际相位，显示最接近期望相位的合法值。 
+当反馈源选择clkout5 时，实际相位被强制为0。 
+当‘Enable Cascade from ODIV6’ 勾选时，此选项不更
+新显示。 
+0 
+Desired Duty Cycle 
+clkout5 期望Duty Cycle 配置，配置范围为：
+0~99.999999%。 
+当‘Enable Cascade from ODIV6’勾选时，此选项不可
+配置。 
+50.000000  
+Actual Duty Cycle 
+clkout5 实际Duty Cycle，显示最接近Duty Cycle 的合
+法值。 
+当‘Enable Cascade from ODIV6’勾选时，此选项固定
+显示50%。 
+50.00000000  
+Clockout6 Configurations (GPLL Only) 
+Enable clkout6 
+clkout6 使能配置： 
+勾选时，使能clkout6，并显示Clockout6 Configurations
+对应选项； 
+不勾选时，禁用clkout6，并隐藏Clockout6 
+Configurations 对应选项； 
+当选择反馈模式为External Feedback 且选择反馈源为
+CLKOUT6 时，此选项被强制勾选。 
+不勾选 
+Enable 
+Clock 
+Gate 
+for 
+clkout6 
+勾选时，使能clkout6_syn 接口； 
+不勾选时，禁用clkout6_syn 接口； 
+当 Enable clkout6 不勾选时，此选项也被强制不勾选。 
+不勾选 
+Enable clkout6 DPS 
+clkout6 DPS 调相使能： 
+勾选时，使能clkout6 DPS 调相； 
+不勾选时，禁用cklout6 DPS 调相。 
+当作为反馈通道时，此项不可配置。 
+不勾选 
+                             第2 章  IP 使用指南 
+28/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+Clkout6_Buffer_Option 
+(Titan2 Device GPLL Only) 
+clkout6 输出驱动配置： 
+NO BUFFER:clkout6 不增加时钟驱动； 
+BUFG: clkout6 由CLKBUFG 驱动； 
+BUFX: clkout6 由CLKBUFX 驱动； 
+BUFGCE: clkout6 由CLKBUFGCE 驱动； 
+BUFXCE: clkout6 由CLKBUFXCE 驱动。 
+NO 
+BUFFER 
+Desired Frequency 
+clkout6 期望频率配置； 
+配置范围：GPLL Mode：4.69MHz~800MHz。 
+50.00000000  
+Actual Frequency 
+clkout6 实际频率，显示最接近期望频率的合法值。 
+50.00000000  
+Desired Phase Shift 
+clkout6 期望相位配置，配置范围为0~359.999999°。 
+当反馈源选择clkout6 时，此配置不可配。 
+0 
+Actual Phase Shift 
+clkout6 实际相位，显示最接近期望相位的合法值。 
+当反馈源选择clkout6 时，实际相位被强制为0。 
+0 
+Desired Duty Cycle 
+clkout6 期望Duty Cycle 配置，配置范围为：
+0~99.999999%。 
+当‘Enable Cascade from ODIV6’勾选时，此选项不可
+配置。 
+50.000000  
+Actual Duty Cycle 
+clkout6 实际Duty Cycle，显示最接近Duty Cycle 的合
+法值。 
+当‘Enable Cascade from ODIV6’勾选时，此选项固定
+显示50%。 
+50.000000 
+Clockoutf Configurations 
+Enable clkoutf 
+clkoutf 使能配置： 
+勾选时，使能clkoutf，并显示Clockoutf Configurations
+对应选项； 
+不勾选时，禁用clkoutf，并隐藏Clockoutf 
+Configurations 对应选项； 
+当选择反馈模式为External Feedback 且选择反馈源为
+CLKOUTF 时，此选项被强制勾选。 
+不勾选 
+Enable 
+Clock 
+Gate 
+for 
+clkoutf 
+勾选时，使能clkoutf_syn 接口； 
+不勾选时，禁用clkoutf_syn 接口； 
+当 Enable clkoutf 不勾选时，此选项也被强制不勾选。 
+不勾选 
+Enable clkoutf  DPS 
+(GPLL Only) 
+clkoutf  DPS 调相使能： 
+勾选时，使能clkoutf DPS 调相； 
+不勾选时，禁用ckloutf DPS 调相。 
+当FDIV Value 为小数时，此项不可配置； 
+当作为反馈通道时，此项不可配置。 
+不勾选 
+Enable clkoutf_n 
+勾选时，使能clkoutf_n 反向时钟输出接口； 
+不勾选时，禁用clkoutf_n 反向时钟输出接口。 
+当 Enable clkoutf 不勾选时，此选项也被强制不勾选。 
+不勾选 
+                             第2 章  IP 使用指南 
+29/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+Clkoutf_Buffer_Option 
+(Titan2 Device Only) 
+clkoutf 输出驱动配置： 
+NO BUFFER:clkoutf 不增加时钟驱动； 
+BUFG: clkoutf 由CLKBUFG 驱动； 
+BUFX: clkoutf 由CLKBUFX 驱动； 
+BUFGCE: clkoutf 由CLKBUFGCE 驱动； 
+BUFXCE: clkoutf 由CLKBUFXCE 驱动。 
+NO 
+BUFFER 
+Desired Frequency 
+clkoutf 期望频率配置； 
+配置范围：GPLL Mode：4.69MHz~800MHz； 
+PPLL Mode：10.39MHz~800MHz。 
+50.00000000  
+Actual Frequency 
+clkoutf 实际频率，显示最接近期望频率的合法值。 
+50.00000000  
+Desired Phase Shift 
+clkoutf 期望相位配置，配置范围为0~359.999999°。 
+当反馈源选择clkoutf 时，此配置不可配置。 
+0 
+Actual Phase Shift 
+clkoutf 实际相位，显示最接近期望相位的合法值。 
+当反馈源选择clkoutf 时，实际相位被强制为0。 
+0 
+Desired Duty Cycle 
+clkoutf 期望Duty Cycle 配置，配置范围为：
+0~99.999999%。 
+当FDIV Value 时，此选项不可配置。 
+50.000000  
+Actual Duty Cycle 
+clkoutf 实际Duty Cycle，显示最接近Duty Cycle 的合
+法值。 
+50.00000000 
+Internal Settings of PLL 
+Show Internal Settings of 
+PLL 
+勾选时，显示PLL 的内部配置参数，详细信息请参见
+表 2-5。 
+不勾选时，隐藏PLL 的内部配置参数。 
+不勾选 
+ 
+表 2-5 Internal Settings of PLL 相关配置参数说明 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+VCO Clock 
+Frequency(MHz） 
+PLL 的VCO 频率。 
+NA 
+IDIV Value 
+IDIV 配置值。 
+NA 
+MDIV Value 
+MDIV 配置值。 
+NA 
+IPHASE Valuse 
+插值相移寄存器静态配置值。 
+NA 
+ODIV0 Value 
+ODIV0 配置值。 
+NA 
+ODIV1 Value 
+ODIV1 配置值。 
+NA 
+ODIV2 Value 
+ODIV2 配置值。 
+NA 
+ODIV3 Value 
+ODIV3 配置值。 
+NA 
+ODIV4 Value 
+ODIV4 配置值。 
+NA 
+ODIV5 Value 
+ODIV5 配置值。 
+NA 
+ODIV6 Value 
+ODIV6 配置值。 
+NA 
+                             第2 章  IP 使用指南 
+30/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+FDIV Value 
+ODIVF 配置值。 
+NA 
+ODIVPHY Value 
+ODIVPHY 配置值。 
+NA 
+DUTY0 Value 
+clkout0 Duty Cycle 配置值。 
+NA 
+DUTY1 Value 
+clkout1 Duty Cycle 配置值。 
+NA 
+DUTY2 Value 
+clkout2 Duty Cycle 配置值。 
+NA 
+DUTY3 Value 
+clkout3 Duty Cycle 配置值。 
+NA 
+DUTY4 Value 
+clkout4 Duty Cycle 配置值。 
+NA 
+DUTY5 Value 
+clkout5 Duty Cycle 配置值。 
+NA 
+DUTY6 Value 
+clkout6 Duty Cycle 配置值。 
+NA 
+DUTYF Value 
+clkoutf Duty Cycle 配置值。 
+NA 
+DUTYPHY Value 
+clkoutphy Duty Cycle 配置值。 
+NA 
+CPHASE0 Value 
+clkout0 粗调配置值，单位为1*VCO 周期。 
+NA 
+CPHASE1 Value 
+clkout1 粗调配置值，单位为1*VCO 周期。 
+NA 
+CPHASE2 Value 
+clkout2 粗调配置值，单位为1*VCO 周期。 
+NA 
+CPHASE3 Value 
+clkout3 粗调配置值，单位为1*VCO 周期。 
+NA 
+CPHASE4 Value 
+clkout4 粗调配置值，单位为1*VCO 周期。 
+NA 
+CPHASE5 Value 
+clkout5 粗调配置值，单位为1*VCO 周期。 
+NA 
+CPHASE6 Value 
+clkout6 粗调配置值，单位为1*VCO 周期。 
+NA 
+CPHASEF Value 
+clkoutf 粗调配置值，单位为1*VCO 周期。 
+NA 
+CPHASEPHY Value 
+clkoutphy 粗调配置值，单位为1*VCO 周期。 
+NA 
+FPHASE0 Value 
+clkout0 细调配置值，单位为1/8*VCO 周期。 
+NA 
+FPHASE1 Value 
+clkout1 细调配置值，单位为1/8*VCO 周期。 
+NA 
+FPHASE2 Value 
+clkout2 细调配置值，单位为1/8*VCO 周期。 
+NA 
+FPHASE3 Value 
+clkout3 细调配置值，单位为1/8*VCO 周期。 
+NA 
+FPHASE4 Value 
+clkout4 细调配置值，单位为1/8*VCO 周期。 
+NA 
+FPHASE5 Value 
+clkout5 细调配置值，单位为1/8*VCO 周期。 
+NA 
+FPHASE6 Value 
+clkout6 细调配置值，单位为1/8*VCO 周期。 
+NA 
+FPHASEF Value 
+clkoutf 细调配置值，单位为1/8*VCO 周期。 
+NA 
+FPHASEPHY Value 
+clkoutphy 细调配置值，单位为1/8*VCO 周期。 
+NA 
+注：“NA”表示该参数由IPC 自动计算出对应值，不可配置。 
+ 
+                             第2 章  IP 使用指南 
+31/52 
+ UG041001 
+www.pangomicro.com 
+ 2. Advanced Configurations 页配置说明 
+表 2-6 Advanced Configurations 页配置参数说明 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+PLL Mode Configurations 
+Mode Select 
+选择PLL： 
+GPLL：选择GPLL；PPLL：选择PPLL。 
+GPLL 
+Public Configurations 
+Enable Port rst 
+PLL 复位接口使能： 
+勾选时，使能rst 接口； 
+不勾选时，禁用rst 接口。 
+不勾选 
+Enable clkin Dynamic Select 
+PLL 参考时钟输入动态切换使能： 
+勾选时，使能clkin2、clkin_sel 接口； 
+不勾选时，禁用clkin2、clkin_sel 接口。 
+不勾选 
+Enable Dynamic Phase Bus 
+(GPLL Only) 
+相位动态调整接口使能： 
+勾选时，使能dps_clk、dps_en、dps_dir、dps_done
+接口； 
+不勾选时，禁用dps_clk、dps_en、dps_dir、dps_done
+接口。 
+该端口需要在任意通道打开Enable clkout DPS 后有
+效，否则不可配置。 
+不勾选 
+Enable APB Bus 
+APB 接口数据总线使能： 
+勾选时，使能apb_clk、apb_rst_n、apb_addr[4:0]、
+apb_sel 、apb_en 、apb_write 、apb_wdata[15:0] 、
+apb_ready、apb_rdata[15:0]接口； 
+不勾选时，禁用apb_clk、apb_rst_n、apb_addr[4:0]、
+apb_sel 、apb_en 、apb_write 、apb_wdata[15:0] 、
+apb_ready、apb_rdata[15:0]接口。 
+不勾选 
+Enable Port pll_pwd 
+Power down 模式： 
+勾选时，使能pll_pwd 接口； 
+不勾选时，禁用pll_pwd 接口。 
+不勾选 
+LOCK Latch Mode 
+PLL 频率检测模式配置； 
+勾选时，频率锁定之后状态保持； 
+不勾选时，正常频率检测。 
+不勾选 
+Feedback Clock Mode 
+选择反馈模式： 
+Internal Feedback：内部反馈模式，同时禁用clkfb 接
+口； 
+External Feedback：外部反馈模式，同时使能clkfb 接
+口。 
+Internal 
+Feedback 
+                             第2 章  IP 使用指南 
+32/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+Feedback from 
+选择反馈源： 
+CLKOUTF：反馈源为clkoutf； 
+CLKOUT0：反馈源为clkout0； 
+CLKOUT1：反馈源为clkout1； 
+CLKOUT2：反馈源为clkout2； 
+CLKOUT3：反馈源为clkout3； 
+CLKOUT4：反馈源为clkout4； 
+CLKOUT5：反馈源为clkout5 (GPLL Only)； 
+CLKOUT6：反馈源为clkout6 (GPLL Only)。 
+CLKOUTF 
+Input Clock clkin Frequency 
+PLL 参考时钟clkin1/clkin2 频率配置； 
+配置范围：GPLL Mode[10: 800]；PPLL Mode[19: 
+800]。 
+50.000000 
+SSC Mode 
+(GPLL Only) 
+选择SSC 模式： 
+DISABLE：关闭SSC 功能 
+DOWN_LOW：开启DOWN_LOW 工作模式； 
+DOWN_HIGH：开启DOWN_HIGH 工作模式； 
+CENTER_LOW：开启CENTER_LOW 工作模式； 
+CENTER_HIGH：开启CENTER_HIGH 工作模式。 
+当SSC_Mode 配置参数不是‘DISABLE’时，clkout2
+和clkout3 将强制关闭。 
+DISABLE 
+SSC Frequency 
+(GPLL Only) 
+配置SSC 调制频率； 
+调制范围：25KHz~250KHz 
+25 
+Input Clock clkin1 Source 
+Option 
+(Titan2 Device Only) 
+PLL 参考时钟clkin1 时钟驱动配置： 
+Global Buffer:参考时钟clkin1 由CLKBUFG 驱动； 
+Single ended clk Pin: 参考时钟clkin1 由INBUF 驱动； 
+Differential ended clk Pin: 参考时钟clkin1 由
+INBUFDS 驱动； 
+No Buffer: 参考时钟clkin1 未增加时钟驱动。 
+No Buffer 
+Input Clock clkin2 Source 
+Option 
+(Titan2 Device Only) 
+PLL 参考时钟clkin2 时钟驱动配置： 
+Global Buffer:参考时钟clkin2 由CLKBUFG 驱动； 
+Single ended clk Pin: 参考时钟clkin2 由INBUF 驱动； 
+Differential ended clk Pin: 参考时钟clkin2 由
+INBUFDS 驱动； 
+No Buffer: 参考时钟clkin2 未增加时钟驱动。 
+No Buffer 
+IDIV Static Value 
+输入divider 的静态配置值， 
+配置范围为：GPLL：整数 1~ 80； 
+PPLL：整数 1~ 42。 
+1 
+MDIV Static Value 
+反馈dividerM 的静态配置值， 
+配置范围为 整数 1~128。 
+1 
+                             第2 章  IP 使用指南 
+33/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+Bandwidth Configuration 
+带宽选择配置： 
+LOW、OPTIMIZED、HIGH； 
+该配置选项需满足以下对应关系： 
+GPLL： 
+PFD 频率3在范围(10~40MHz)内时，需配置为LOW/ 
+OPTIMIZED； 
+PFD 频率在范围(40~450MHz)内时，需配置为HIGH； 
+PPLL： 
+PFD 频率在范围(19~80MHz)内时，需配置为LOW/ 
+OPTIMIZED； 
+PFD 频率在范围(80~450MHz)内时，需配置为HIGH； 
+注：LOW 及OPTIMIZED 两种带宽模式下PLL 功能
+及性能特性一致。 
+具体功能详见Titan2 系列FPGA 时钟资源（Clock）
+用户指南(UG050004)[8] 
+HIGH 
+Insert Phase Shift Static 
+Value 
+(GPLL Only) 
+输入插值相位寄存器配置值，单位为1/64*VCO 周期。 
+该端口需要在任意通道打开Enable clkout DPS 后有
+效，否则不可配置 
+0 
+Clockoutphy Configurations (PPLL 专有时钟，用于DDRPHY 专用，不可单独使用) 
+Enable clkoutphy 
+clkoutphy 使能配置： 
+勾选时，使能clkoutphy ，并显示Clockoutphy 
+Configurations 对应选项； 
+不勾选时，禁用clkoutphy，并隐藏Clockoutphy 
+Configurations 对应选项。 
+不勾选 
+Enable 
+Clock 
+Gate 
+for 
+clkoutphy 
+勾选时，使能clkoutphy_syn 接口； 
+不勾选时，禁用clkoutphy_syn 接口； 
+当 Enable clkoutphy 不勾选时，此选项也被强制不勾
+选。 
+不勾选 
+Enable clkoutphy_n 
+勾选时，使能clkoutphy_n 反向时钟输出接口； 
+不勾选时，禁用clkoutphy_n 反向时钟输出接口。 
+当 Enable clkoutphy 不勾选时，此选项也被强制不勾
+选。 
+不勾选 
+Coarse Phase Shift Static 
+Value 
+clkoutphy 的相位细调静态配置值，单位为1*VCO 周
+期。 
+0 
+Fine Phase Shift Static Value 
+clkoutphy 的相位细调静态配置值，单位为1/8*VCO
+周期。 
+0 
+ODIVphy (Output Divider 
+phy) Static Value 
+ODIVphy 静态整数配置值，配置范围为整数1~128。 
+42 
+Desired STATIC_DUTYphy 
+clkoutphy 的Duty Cycle 寄存器配置值，配置范围为
+整数 2~255。 
+42 
+                                                 
+3 PFD 频率=输入参考时钟频率/IDIV。 
+                             第2 章  IP 使用指南 
+34/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+Clockout0 Configurations 
+ 
+Enable clkout0 
+clkout0 使能配置： 
+勾选时，使能clkout0，并显示Clockout0 Configurations
+对应选项； 
+不勾选时，禁用clkout0 ，并隐藏Clockout0 
+Configurations 对应选项； 
+当选择反馈模式为External Feedback 且选择反馈源为
+CLKOUT0 时，此选项被强制勾选。 
+勾选 
+Enable 
+Clock 
+Gate 
+for 
+clkout0 
+勾选时，使能clkout0_syn 接口； 
+不勾选时，禁用clkout0_syn 接口； 
+当 Enable clkout0 不勾选时，此选项也被强制不勾选。 
+不勾选 
+Enable clkout0 DPS 
+(GPLL Only) 
+勾选时，使能clkout0 相位插值模式； 
+不勾选时，禁用clkout0 相位插值模式。 
+当ODIV0 Value 为小数时，此项不可配置。 
+不勾选 
+Enable clkout0_n 
+勾选时，使能clkout0_n 反向时钟输出接口； 
+不勾选时，禁用clkout0_n 反向时钟输出接口。 
+当 Enable clkout0 不勾选时，此选项也被强制不勾选。 
+不勾选 
+Clkout0_Buffer_Option 
+(Titan2 Device Only) 
+clkout0 输出驱动配置： 
+NO BUFFER:clkout0 不增加时钟驱动； 
+BUFG: clkout0 由CLKBUFG 驱动； 
+BUFX: clkout0 由CLKBUFX 驱动； 
+BUFR: clkout0 由CLKBUFR 驱动； 
+BUFGCE: clkout0 由CLKBUFGCE 驱动； 
+BUFXCE: clkout0 由CLKBUFXCE 驱动； 
+IOCLKBUF: clkout0 由IOCLKBUF 驱动。 
+NO BUFFER 
+Coarse Phase Shift Static 
+Value 
+clkout0 的相位粗调静态配置值，单位为1*VCO 周期。 
+clkout0 作为反馈时钟时，不可配置。 
+0 
+Fine Phase Shift Static Value 
+clkout0 的相位细调静态配置值，单位为1/8*VCO 周
+期。 
+clkout0 作为反馈时钟时，不可配置。 
+0 
+ODIV0(Output Divider0)  
+Static Value 
+ODIV0 静态整数配置值，配置范围为整数1~128。 
+GPLL:24; 
+PPLL:42 
+ODIV0 Fraction Value (n/8) 
+(GPLL Only) 
+ODIV0 静态小数配置值，配置范围为整数 0~7，对
+应小数：0/8~7/8。 
+0 
+Desired STATIC_DUTY0 
+clkout0 的Duty Cycle 寄存器配置值，配置范围为整
+数 2~255。 
+当ODVI0 Value 为小数时，此项不可配置。 
+GPLL:24; 
+PPLL:42 
+                             第2 章  IP 使用指南 
+35/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+Clockout1 Configurations 
+Enable clkout1 
+Clkout1 使能配置： 
+勾选时，使能clkout1，并显示Clockout1 Configurations
+对应选项； 
+不勾选时，禁用clkout1 ，并隐藏Clockout1 
+Configurations 对应选项； 
+当选择反馈模式为External Feedback 且选择反馈源为
+CLKOUT1 时，此选项被强制勾选。 
+不勾选 
+Enable 
+Clock 
+Gate 
+for 
+clkout1 
+勾选时，使能clkout1_syn 接口； 
+不勾选时，禁用clkout1_syn 接口； 
+当 Enable clkout1 不勾选时，此选项也被强制不勾选。 
+不勾选 
+Enable clkout1 DPS 
+(GPLL Only) 
+勾选时，使能clkout1 相位插值模式； 
+不勾选时，禁用clkout1 相位插值模式。 
+不勾选 
+Enable clkout1_n 
+勾选时，使能clkout1_n 反向时钟输出接口； 
+不勾选时，禁用clkout1_n 反向时钟输出接口。 
+当 Enable clkout1 不勾选时，此选项也被强制不勾选。 
+“Mode Select”选择为PPLL 时，该端口只能连接到
+I/O Clock 时钟网络。 
+不勾选 
+Clkout1_Buffer_Option 
+(Titan2 Device Only) 
+clkout1 输出驱动配置： 
+NO BUFFER:clkout1 不增加时钟驱动； 
+BUFG: clkout1 由CLKBUFG 驱动； 
+BUFX: clkout1 由CLKBUFX 驱动； 
+BUFR: clkout1 由CLKBUFR 驱动； 
+BUFGCE: clkout1 由CLKBUFGCE 驱动； 
+BUFXCE: clkout1 由CLKBUFXCE 驱动； 
+IOCLKBUF: clkout1 由IOCLKBUF 驱动。 
+NO BUFFER 
+Coarse Phase Shift Static 
+Value 
+clkout1 的相位粗调静态配置值，单位为1*VCO 周期。 
+clkout1 作为反馈时钟时，不可配置。 
+0 
+Fine Phase Shift Static Value 
+clkout1 的相位细调静态配置值，单位为1/8*VCO 周
+期。 
+clkout1 作为反馈时钟时，不可配置。 
+0 
+ODIV1(Output Divider1)  
+Static Value 
+ODIV1 静态整数配置值，配置范围为整数1~128。 
+GPLL:24; 
+PPLL:42 
+Desired STATIC_DUTY1 
+clkout1 的Duty Cycle 寄存器配置值，配置范围为整
+数 2~255。 
+GPLL:24; 
+PPLL:42 
+                             第2 章  IP 使用指南 
+36/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+Clockout2 Configurations 
+Enable clkout2 
+Clkout2 使能配置： 
+勾选时，使能clkout2，并显示Clockout2 Configurations
+对应选项； 
+不勾选时，禁用clkout2 ，并隐藏Clockout2 
+Configurations 对应选项； 
+当选择反馈模式为External Feedback 且选择反馈源为
+CLKOUT2 时，此选项被强制勾选。 
+不勾选 
+Enable 
+Clock 
+Gate 
+for 
+clkout2 
+勾选时，使能clkout2_syn 接口； 
+不勾选时，禁用clkout2_syn 接口； 
+当 Enable clkout2 不勾选时，此选项也被强制不勾选。 
+不勾选 
+Enable clkout2 DPS 
+(GPLL Only) 
+勾选时，使能clkout2 相位插值模式； 
+不勾选时，禁用clkout2 相位插值模式。 
+不勾选 
+Enable clkout2_n 
+勾选时，使能clkout2_n 反向时钟输出接口； 
+不勾选时，禁用clkout2_n 反向时钟输出接口。 
+当 Enable clkout2 不勾选时，此选项也被强制不勾选。 
+“Mode Select”选择为PPLL 时，该端口只能连接到
+I/O Clock 时钟网络。 
+不勾选 
+Clkout2_Buffer_Option 
+(Titan2 Device Only) 
+clkout2 输出驱动配置： 
+NO BUFFER:clkout2 不增加时钟驱动； 
+BUFG: clkout2 由CLKBUFG 驱动； 
+BUFX: clkout2 由CLKBUFX 驱动； 
+BUFR: clkout2 由CLKBUFR 驱动； 
+BUFGCE: clkout2 由CLKBUFGCE 驱动； 
+BUFXCE: clkout2 由CLKBUFXCE 驱动； 
+IOCLKBUF: clkout2 由IOCLKBUF 驱动。 
+NO BUFFER 
+Coarse Phase Shift Static 
+Value 
+clkout2 的相位粗调静态配置值，单位为1*VCO 周期。 
+clkout2 作为反馈时钟时，不可配置。 
+0 
+Fine Phase Shift Static Value 
+clkout2 的相位细调静态配置值，单位为1/8*VCO 周
+期。 
+clkout2 作为反馈时钟时，不可配置。 
+0 
+ODIV2(Output Divider2)  
+Static Value 
+ODIV2 静态整数配置值，配置范围为整数1~128。 
+GPLL:24; 
+PPLL:42 
+Desired STATIC_DUTY2 
+clkout2 的Duty Cycle 寄存器配置值，配置范围为整
+数 2~255。 
+GPLL:24; 
+PPLL:42 
+                             第2 章  IP 使用指南 
+37/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+Clockout3 Configurations 
+Enable clkout3 
+clkout3 使能配置： 
+勾选时，使能clkout3，并显示Clockout3 Configurations
+对应选项； 
+不勾选时，禁用clkout3 ，并隐藏Clockout3 
+Configurations 对应选项； 
+当选择反馈模式为External Feedback 且选择反馈源为
+CLKOUT3 时，此选项被强制勾选。 
+不勾选 
+Enable 
+Clock 
+Gate 
+for 
+clkout3 
+勾选时，使能clkout3_syn 接口； 
+不勾选时，禁用clkout3_syn 接口； 
+当 Enable clkout3 不勾选时，此选项也被强制不勾选。 
+不勾选 
+Enable clkout3 DPS 
+(GPLL Only) 
+勾选时，使能clkout3 相位插值模式； 
+不勾选时，禁用clkout3 相位插值模式。 
+不勾选 
+Enable clkout3_n 
+勾选时，使能clkout3_n 反向时钟输出接口； 
+不勾选时，禁用clkout3_n 反向时钟输出接口。 
+当 Enable clkout3 不勾选时，此选项也被强制不勾选。 
+“Mode Select”选择为PPLL 时，该端口只能连接到
+I/O Clock 时钟网络。 
+不勾选 
+Clkout3_Buffer_Option 
+(Titan2 Device Only) 
+clkout3 输出驱动配置： 
+NO BUFFER:clkout3 不增加时钟驱动； 
+BUFG: clkout3 由CLKBUFG 驱动； 
+BUFX: clkout3 由CLKBUFX 驱动； 
+BUFR: clkout3 由CLKBUFR 驱动； 
+BUFGCE: clkout3 由CLKBUFGCE 驱动； 
+BUFXCE: clkout3 由CLKBUFXCE 驱动； 
+IOCLKBUF: clkout3 由IOCLKBUF 驱动。 
+NO BUFFER 
+Coarse Phase Shift Static 
+Value 
+clkout3 的相位粗调静态配置值，单位为1*VCO 周期。 
+clkout3 作为反馈时钟时，不可配置。 
+0 
+Fine Phase Shift Static Value 
+clkout3 的相位细调静态配置值，单位为1/8*VCO 周
+期。 
+clkout3 作为反馈时钟时，不可配置。 
+0 
+ODIV3(Output Divider3)  
+Static Value 
+ODIV3 静态整数配置值，配置范围为整数1~128。 
+GPLL:24; 
+PPLL:42 
+Desired STATIC_DUTY3 
+clkout3 的Duty Cycle 寄存器配置值，配置范围为整
+数2~255。 
+GPLL:24; 
+PPLL:42 
+                             第2 章  IP 使用指南 
+38/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+Clockout4 Configurations 
+Enable clkout4 
+clkout4 使能配置： 
+勾选时，使能clkout4，并显示Clockout4 Configurations
+对应选项； 
+不勾选时，禁用clkout4 ，并隐藏Clockout4 
+Configurations 对应选项； 
+当选择反馈模式为External Feedback 且选择反馈源为
+CLKOUT4 时，此选项被强制勾选。 
+不勾选 
+Enable 
+Clock 
+Gate 
+for 
+clkout4 
+勾选时，使能clkout4_syn 接口； 
+不勾选时，禁用clkout4_syn 接口； 
+当 Enable clkout4 不勾选时，此选项也被强制不勾选。 
+不勾选 
+Enable clkout4 DPS 
+(GPLL Only) 
+勾选时，使能clkout4 相位插值模式； 
+不勾选时，禁用clkout4 相位插值模式。 
+不勾选 
+Clkout4_Buffer_Option 
+(Titan2 Device Only) 
+clkout4 输出驱动配置： 
+NO BUFFER:clkout4 不增加时钟驱动； 
+BUFG: clkout4 由CLKBUFG 驱动； 
+BUFX: clkout4 由CLKBUFX 驱动； 
+BUFGCE: clkout4 由CLKBUFGCE 驱动； 
+BUFXCE: clkout4 由CLKBUFXCE 驱动。 
+NO BUFFER 
+Coarse Phase Shift Static 
+Value 
+clkout4 的相位细调静态配置值，单位为1*VCO 周期。 
+clkout4 作为反馈时钟时，不可配置。 
+0 
+Fine Phase Shift Static Value 
+clkout4 的相位细调静态配置值，单位为1/8*VCO 周
+期。 
+clkout4 作为反馈时钟时，不可配置。 
+0 
+ODIV4(Output Divider4)  
+Static Value 
+ODIV4 静态整数配置值，配置范围为整数1~128。 
+GPLL:24; 
+PPLL:42 
+Desired STATIC_DUTY4 
+clkout4 的Duty Cycle 寄存器配置值，配置范围为整
+数 2~255。 
+GPLL:24; 
+PPLL:42 
+Clockout5 Configurations (GPLL Only) 
+Enable clkout5 
+clkout5 使能配置： 
+勾选时，使能clkout5，并显示Clockout5 Configurations
+对应选项； 
+不勾选时，禁用clkout5 ，并隐藏Clockout5 
+Configurations 对应选项； 
+当选择反馈模式为External Feedback 且选择反馈源为
+CLKOUT5 时，此选项被强制勾选。 
+不勾选 
+Enable 
+Clock 
+Gate 
+for 
+clkout5 
+勾选时，使能clkout5_syn 接口； 
+不勾选时，禁用clkout5_syn 接口； 
+当 Enable clkout5 不勾选时，此选项也被强制不勾选。 
+不勾选 
+                             第2 章  IP 使用指南 
+39/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+Enable clkout5 DPS 
+(GPLL Only) 
+勾选时，使能clkout5 相位插值模式； 
+不勾选时，禁用clkout5 相位插值模式。 
+当‘Enable Cascade from ODIV6’勾选时，此选项不可
+配置。 
+不勾选 
+Enable 
+Cascade 
+from 
+ODIV6 
+clkout5 级联使能配置： 
+勾选时，将ODIV6 的输出频率作为ODIV5 的输入频
+率，ODIV5 输出级联后的频率； 
+不勾选时，将VCO 频率作为ODIV5 的输入频率。 
+当选择反馈模式为External Feedback 且选择反馈源为
+CLKOUT5 时，此选项不能勾选。 
+当 Enable clkout5 不勾选时，此选项也被强制不勾选。 
+不勾选 
+Clkout5_Buffer_Option 
+(Titan2 Device GPLL Only) 
+clkout5 输出驱动配置： 
+NO BUFFER:clkout5 不增加时钟驱动； 
+BUFG: clkout5 由CLKBUFG 驱动； 
+BUFX: clkout5 由CLKBUFX 驱动； 
+BUFGCE: clkout5 由CLKBUFGCE 驱动； 
+BUFXCE: clkout5 由CLKBUFXCE 驱动。 
+NO BUFFER 
+Coarse Phase Shift Static 
+Value 
+clkout5 的相位细调静态配置值，单位为1*VCO 周期。 
+当‘Enable Cascade from ODIV6’勾选或clkout5作为反
+馈时钟时，此选项不可配置。 
+0 
+Fine Phase Shift Static Value 
+clkout5 的相位细调静态配置值，单位为1/8*VCO 周
+期。 
+当‘Enable Cascade from ODIV6’勾选或clkout5作为反
+馈时钟时，此选项不可配置。 
+0 
+ODIV5(Output Divider5)  
+Static Value 
+ODIV5 静态整数配置值，配置范围为整数1~128。 
+GPLL:24; 
+PPLL:42 
+Desired STATIC_DUTY5 
+clkout5 的Duty Cycle 寄存器配置值，配置范围为整
+数 2~255。 
+当‘Enable Cascade from ODIV6’勾选时，此选项不可
+配置。 
+GPLL:24; 
+PPLL:42 
+Clockout6 Configurations (GPLL Only) 
+Enable clkout6 
+clkout6 使能配置： 
+勾选时，使能clkout6，并显示Clockout6 Configurations
+对应选项； 
+不勾选时，禁用clkout6 ，并隐藏Clockout6 
+Configurations 对应选项； 
+当选择反馈模式为External Feedback 且选择反馈源为
+CLKOUT6 时，此选项被强制勾选。 
+不勾选 
+Enable 
+Clock 
+Gate 
+for 
+clkout6 
+勾选时，使能clkout6_syn 接口； 
+不勾选时，禁用clkout6_syn 接口； 
+当 Enable clkout6 不勾选时，此选项也被强制不勾选。 
+不勾选 
+                             第2 章  IP 使用指南 
+40/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+Enable clkout6 DPS 
+(GPLL Only) 
+勾选时，使能clkout6 相位插值模式； 
+不勾选时，禁用clkout6 相位插值模式。 
+不勾选 
+Clkout6_Buffer_Option 
+(Titan2 Device GPLL Only) 
+clkout6 输出驱动配置： 
+NO BUFFER:clkout6 不增加时钟驱动； 
+BUFG: clkout6 由CLKBUFG 驱动； 
+BUFX: clkout6 由CLKBUFX 驱动； 
+BUFGCE: clkout6 由CLKBUFGCE 驱动； 
+BUFXCE: clkout6 由CLKBUFXCE 驱动。 
+NO BUFFER 
+Coarse Phase Shift Static 
+Value 
+clkout6 的相位细调静态配置值，单位为1*VCO 周期。 
+clkout6 作为反馈时钟时，不可配置。 
+0 
+Fine Phase Shift Static Value 
+clkout6 的相位细调静态配置值，单位为1/8*VCO 周
+期。 
+clkout6 作为反馈时钟时，不可配置。 
+0 
+ODIV6 (Output Divider6)  
+Static Value 
+ODIV6 静态整数配置值，配置范围为整数1~128。 
+GPLL:24; 
+PPLL:42 
+Desired STATIC_DUTY6 
+clkout6 的Duty Cycle 寄存器配置值，配置范围为整
+数 2~255。 
+当‘Enable Cascade from ODIV6’勾选时，此选项不可
+配置。 
+GPLL:24; 
+PPLL:42 
+Clockoutf Configurations 
+Enable clkoutf 
+clkoutf 使能配置： 
+勾选时，使能clkoutf，并显示Clockoutf Configurations
+对应选项； 
+不勾选时，禁用
+clkoutf ，并隐藏
+Clockoutf 
+Configurations 对应选项； 
+当选择反馈模式为External Feedback 且选择反馈源为
+CLKOUTF 时，此选项被强制勾选。 
+不勾选 
+Enable 
+Clock 
+Gate 
+for 
+clkoutf 
+勾选时，使能clkoutf_syn 接口； 
+不勾选时，禁用clkoutf_syn 接口； 
+当 Enable clkoutf 不勾选时，此选项也被强制不勾选。 
+不勾选 
+Enable clkoutf DPS 
+(GPLL Only) 
+勾选时，使能clkoutf 相位插值模式； 
+不勾选时，禁用clkoutf 相位插值模式。 
+当FDIV Value 为小数时，此项不可配置。 
+不勾选 
+Enable clkoutf_n 
+勾选时，使能clkoutf_n 反向时钟输出接口； 
+不勾选时，禁用clkoutf_n 反向时钟输出接口。 
+当 Enable clkoutf 不勾选时，此选项也被强制不勾选。 
+不勾选 
+Clkoutf_Buffer_Option 
+(Titan2 Device Only) 
+clkoutf 输出驱动配置： 
+NO BUFFER:clkoutf 不增加时钟驱动； 
+BUFG: clkoutf 由CLKBUFG 驱动； 
+BUFX: clkoutf 由CLKBUFX 驱动； 
+BUFGCE: clkoutf 由CLKBUFGCE 驱动； 
+BUFXCE: clkoutf 由CLKBUFXCE 驱动。 
+NO BUFFER 
+                             第2 章  IP 使用指南 
+41/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+Coarse Phase Shift Static 
+Value 
+clkoutf 的相位细调静态配置值，单位为1*VCO 周期。 
+clkoutf 作为反馈时钟时，不可配置。 
+0 
+Fine Phase Shift Static Value 
+clkoutf 的相位细调静态配置值，单位为1/8*VCO 周
+期。 
+clkoutf 作为反馈时钟时，不可配置。 
+0 
+ODIVf (Output Dividerf)  
+Static Value 
+FDIV 静态整数配置值，配置范围为整数1~128。 
+GPLL:24; 
+PPLL:42 
+ODIVf Fraction Value (n/8) 
+(GPLL Only) 
+FDIV 静态小数配置值，配置范围为整数 0~7，对应
+小数：0/8~7/8。 
+GPLL:0 
+Desired STATIC_DUTYf 
+clkoutf 的Duty Cycle 寄存器配置值，配置范围为整数 
+2~255。 
+当FDIV Value 为小数时，此项不可配置。 
+GPLL:24; 
+PPLL:42 
+Calculation Results of PLL 
+Show Calculation Results of 
+PLL 
+勾选时，显示PLL 实际计算参数，详细信息请参见表 
+2-7。 
+不勾选时，隐藏PLL 实际计算参数。 
+不勾选 
+ 
+表 2-7 Calculation Results of PLL 相关配置参数说明 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+VCO Frequency(MHz） 
+PLL 的VCO 频率。 
+NA 
+clkout0 Frequency(MHz) 
+显示clkout0 输出频率。 
+当“Enable clkout0”不勾选时，频率不显示。 
+NA 
+clkout1 Frequency(MHz) 
+显示clkout1 输出频率。 
+当“Enable clkout1”不勾选时，频率不显示。 
+NA 
+clkout2 Frequency(MHz) 
+显示clkout2 输出频率。 
+当“Enable clkout2”不勾选时，频率不显示。 
+NA 
+clkout3 Frequency(MHz) 
+显示clkout3 输出频率。 
+当“Enable clkout3”不勾选时，频率不显示。 
+NA 
+clkout4 Frequency(MHz) 
+显示clkout4 输出频率。 
+当“Enable clkout4”不勾选时，频率不显示。 
+NA 
+clkout5 Frequency(MHz) 
+显示clkout5 输出频率。 
+当“Enable clkout5”不勾选时，频率不显示。 
+NA 
+clkout6 Frequency(MHz) 
+显示clkout6 输出频率。 
+当“Enable clkout6”不勾选时，频率不显示。 
+NA 
+clkoutf Frequency(MHz) 
+显示clkoutf 输出频率。 
+当“Enable clkoutf”不勾选时，频率不显示。 
+NA 
+clkoutphy Frequency(MHz) 
+显示clkoutphy 输出频率。 
+当“Enable clkoutphy”不勾选时，频率不显示。 
+NA 
+                             第2 章  IP 使用指南 
+42/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+clkout0 Phase(degree) 
+显示clkout0 输出相位。 
+当“Enable clkout0”不勾选时，相位不显示。 
+NA 
+clkout1 Phase(degree) 
+显示clkout1 输出相位。 
+当“Enable clkout1”不勾选时，相位不显示。 
+NA 
+clkout2 Phase(degree) 
+显示clkout2 输出相位。 
+当“Enable clkout2”不勾选时，相位不显示。 
+NA 
+clkout3 Phase(degree) 
+显示clkout3 输出相位。 
+当“Enable clkout3”不勾选时，相位不显示。 
+NA 
+clkout4 Phase(degree) 
+显示clkout4 输出相位。 
+当“Enable clkout4”不勾选时，相位不显示。 
+NA 
+clkout5 Phase(degree) 
+显示clkout5 输出相位。 
+1、当“Enable clkout5”不勾选时，相位不显示。 
+2、当“Enable Cascade from ODIV6”勾选时，Clkout5
+输出相位不显示。 
+NA 
+clkout6 Phase(degree) 
+显示clkout6 输出相位。 
+当“Enable clkout6”不勾选时，相位不显示。 
+NA 
+clkoutf Phase(degree) 
+显示clkoutf 输出相位。 
+当“Enable clkoutf”不勾选时，相位不显示。 
+NA 
+clkoutphy Phase(degree) 
+显示clkoutphy 输出相位。 
+当“Enable clkoutphy”不勾选时，相位不显示。 
+NA 
+clkout0 Duty(%) 
+显示clkout0 输出占空比。 
+1. 当“Enable clkout0”不勾选时，占空比不显示。 
+2. 当（STATIC_DUTY0 > ODIV0*2-1）时，Clkout0
+输出占空比不显示。 
+NA 
+clkout1 Duty(%) 
+显示clkout1 输出占空比。 
+1．当“Enable clkout1”不勾选时，占空比不显示。 
+2．当（STATIC_DUTY1 > ODIV1*2-1）时，Clkout1
+输出占空比不显示。 
+NA 
+clkout2 Duty(%) 
+显示clkout2 输出占空比。 
+1．当“Enable clkout2”不勾选时，占空比不显示。 
+2.  当（STATIC_DUTY2 > ODIV2*2-1）时，Clkout2
+输出占空比不显示。 
+NA 
+clkout3 Duty(%) 
+显示clkout3 输出占空比。 
+1.  当“Enable clkout3”不勾选时，占空比不显示。 
+2.  当（STATIC_DUTY3 > ODIV3*2-1）时，Clkout3
+输出占空比不显示。 
+NA 
+clkout4 Duty(%) 
+显示clkout4 输出占空比。 
+1.  当“Enable clkout4”不勾选时，占空比不显示。 
+2.  当（STATIC_DUTY4 > ODIV4*2-1）时，Clkout4
+输出占空比不显示。 
+NA 
+                             第2 章  IP 使用指南 
+43/52 
+ UG041001 
+www.pangomicro.com 
+选项名/参数名 
+参数说明 
+IP 配置界面
+默认值 
+clkout5 Duty(%) 
+显示clkout5 输出占空比。 
+当“Enable clkout5”不勾选时，占空比不显示。 
+当（STATIC_DUTY5 > ODIV5*2-1）时，Clkout5 输
+出占空比不显示。 
+当“Enable Cascade from ODIV6”勾选时，Clkout5 输
+出占空比固定显示为50% 
+NA 
+clkout6 Duty(%) 
+显示clkout6 输出占空比。 
+当“Enable clkout6”不勾选时，占空比不显示。 
+当（STATIC_DUTY6 > ODIV6*2-1）时，Clkout6 输
+出占空比不显示。 
+当“Enable Cascade from ODIV6”勾选时，Clkout6 输
+出占空比固定显示为50% 
+NA 
+clkoutf Duty(%) 
+显示clkoutf 输出占空比。 
+当“Enable clkoutf”不勾选时，占空比不显示。 
+当（STATIC_DUTYf > ODIVf*2-1）时，Clkoutf 输出
+占空比不显示。 
+NA 
+clkoutphy Duty(%) 
+显示clkoutphy 输出占空比。 
+当“Enable clkoutphy”不勾选时，占空比不显示。 
+当（STATIC_DUTYphy > ODIVphy*2-1）时，Clkoutphy
+输出占空比不显示。 
+NA 
+注：“NA”表示该参数由IPC 自动计算出对应值，不可配置。 
+ 
+                             第2 章  IP 使用指南 
+44/52 
+ UG041001 
+www.pangomicro.com 
+2.4 说明与注意事项 
+2.4.1 计算公式说明 
+本节主要介绍Advanced 配置模式下相关的计算公式，包括频率计算、占空比计算、
+相位计算。 
+ 1. 频率计算 
+(1) 计算公式 
+GPLL/PPLL 频率计算公式如表 2-8 所示。 
+表 2-8 频率计算公式 
+频率 
+计算公式 
+说明 
+pfd_freq 
+𝑐𝑙𝑘𝑖𝑛
+𝐼𝐷𝐼𝑉 
+clkin 为PLL 输入参考时钟频率 
+vco_freq 
+𝑐𝑙𝑘𝑖𝑛∗𝐹𝐵𝐷𝐼𝑉∗𝑀𝐷𝐼𝑉
+𝐼𝐷𝐼𝑉
+ 
+FBDIV 的值等于PLL 反馈时钟的输出分频参数。 
+clkout0/1/2/3/4/5/6 作为反馈时钟时： 
+FBDIV = ODIV0/1/2/3/4/5/6 
+clkoutf 作为反馈时钟时： 
+FBDIV = ODIVf 
+clkoutX 
+𝑐𝑙𝑘𝑖𝑛∗𝐹𝐵𝐷𝐼𝑉∗𝑀𝐷𝐼𝑉
+𝐼𝐷𝐼𝑉∗𝑂𝐷𝐼𝑉
+ 
+ODIV 的值等于输出时钟的输出分频参数。 
+X=0~6 时：ODIV = ODIV(0~6) 
+X=f 时：ODIV = ODIVf 
+X=phy 时：ODIV = ODIVphy 
+ 
+ 
+说明： 
+ 
+表 2-8 中变量参数的取值范围根据GPLL/PPLL 的选取会有差异，详细信息请参见“2.3.4  参
+数描述”。 
+ 
+(2) Feedback from 对照 
+在Advanced Configurations 页面可通过Feedback from 选择反馈时钟源，各反馈时
+钟源与各分频器的对应关系如表 2-9 所示。 
+                             第2 章  IP 使用指南 
+45/52 
+ UG041001 
+www.pangomicro.com 
+表 2-9 Feedback from 对照表 
+Feedback from 
+对应ODIV 
+CLKOUTF 
+FDIV 
+CLKOUT0 
+ODIV0 
+CLKOUT1 
+ODIV1 
+CLKOUT2 
+ODIV2 
+CLKOUT3 
+ODIV3 
+CLKOUT4 
+ODIV4 
+CLKOUT5 
+ODIV5 
+CLKOUT6 
+ODIV6 
+ 
+(3) 计算示例 
+图 2-11 所示为典型应用场景下的频率计算示例。该场景中配置clkoutf 作为PLL
+内部反馈，并输出clkout0 和clkoutf 两路时钟，相关频率计算公式请参见图中标注。 
+IDIV
+MDIV
+PFD
+CP
+LPF
+VCO
+clkin
+ODIV0
+FDIV
+clkoutf
+clkout0
+pfd_freq= clkin/ IDIV
+vco_freq= clkin* FDIV* MDIV/ IDIV
+clkout0= clkin* FDIV* MDIV/ IDIV/ ODIV0
+clkoutf= clkin* FDIV* MDIV/ IDIV/ FDIV
+fb
+ 
+图 2-11 PLL IP 典型应用频率计算示例 
+ 
+ 2. 占空比计算 
+占空比计算公式如下： 
+Duty Cycle=(50%/ODIV)*STATIC_DUTY 
+式中，ODIV 为：ODIV(0~6)，ODIVPHY，FDIV； 
+STATIC_DUT 为：STATIC_DUTY(0~6)，STATIC_DUTYf，STATIC_DUTYphy。 
+                             第2 章  IP 使用指南 
+46/52 
+ UG041001 
+www.pangomicro.com 
+ 
+注意： 
+ 
+STATIC_DUTY 的设置值受到ODIV 的限制： 
+• ODIV>1， 2 ≤ STATIC_DUTY ≤ 2*ODIV-1； 
+• ODIV=1， STATIC_DUTY 不可配置，默认50%输出。 
+当ODIV 为小数时，STATIC_DUTY 不可配置。 
+ 
+ 3. 相位计算 
+相位调整分为粗调 “Coarse Phase Shift”(CPHASE)、细调“Fine Phase Shift” 
+(FPHASE)及相位插值“Insert Phase Shift”(IPHASE)三种方式。相位配置范围参见表 2-10，
+相位调整组合方式参见表 2-11。 
+表 2-10 相位配置范围 
+模式 
+静态配置范围 
+动态相移配置范围 
+调整步进值 
+相位粗调(CPHASE) 
+1~128 
+1~128 
+Tvco 
+相位细调(FPHASE) 
+1~7 
+1~7 
+Tvco/ 8 
+相位插值(IPHASE) 
+1~64 
+1~64 
+Tvco/ 64 
+注：Tvco= 1/vco_freq。 
+表 2-11 相位调整组合方式 
+Enable Clock* DPS 
+相位调整组合方式 
+不勾选 
+CPHASE + FPHASE 
+勾选 
+CPHASE + IPHASE 
+注：∗= 0~6, f。 
+2.4.2 算法优先级说明 
+本节主要介绍Basic 配置模式下相关的算法优先级说明，包括频率计算、DPS 相位
+计算。 
+ 1. 频率计算 
+当通过频率计算无法得到所配置的输出时钟期望频率（Desired Frequency）时，将
+取近似值作为实际频率（Actual Frequency）。 
+                             第2 章  IP 使用指南 
+47/52 
+ UG041001 
+www.pangomicro.com 
+(1) 算法优先级 
+IP 的频率计算算法遵循如下规则： 
+ 
+勾选反馈时钟使能配置时，反馈源为最高优先级； 
+ 
+没有勾选clkout 使能配置4的输出为最低优先级5。 
+(2) 初始优先级 
+IP 初始的频率计算优先级如下： 
+GPLL：clkout0>clkout1>clkout2>clkout3>clkout4>clkout5>clkout6>clkoutf 
+PPLL：clkoutphy>clkout0>clkout1>clkout2>clkout3>clkout4>clkoutf 
+ 
+说明： 
+ 
+实际优先级将根据IP 配置并结合上述算法规则对应调整。 
+ 
+ 2. DPS 相位计算 
+当用户勾选多个通道的DPS 使能6时，将取最佳接近值作为实际相位（Actual Phase 
+Shift）。 
+(1) 算法优先级 
+IP 的相位计算遵循如下规则： 
+ 
+输出时钟作为反馈源时不支持DPS 相位模式； 
+ 
+未勾选clkout 使能配置7的输出相位计算优先级最低8； 
+ 
+勾选DPS 使能的多个输出通道中，优先级最高的输出通道被用于计算DPS 相
+位寄存器配置值（Insert Phase Shift Static Value）；其余输出通道将复用该DPS
+相位寄存器配置值并计算各自的DPS 相位。 
+                                                 
+4 Enable clkout*，其中*=1～6、f 或phy。 
+5 目的是不影响勾选clkout 使能配置的输出时钟计算。 
+6 Enable clkout* DPS，其中*=0～6、f。 
+7 Enable clkout*，其中*=1~6、f 或phy。 
+8 目的是不影响勾选clkout 使能配置的输出相位计算。 
+                             第2 章  IP 使用指南 
+48/52 
+ UG041001 
+www.pangomicro.com 
+(2) 初始优先级 
+IP 初始的相位计算优先级如下： 
+GPLL：clkout0>clkout1>clkout2>clkout3>clkout4>clkout5>clkout6>clkoutf 
+PPLL：clkoutphy>clkout0>clkout1>clkout2>clkout3>clkout4>clkoutf 
+ 
+说明： 
+ 
+实际优先级将根据IP 配置并结合上述规则对应调整。 
+ 
+2.4.3 时钟驱动功能使用说明 
+时钟驱动功能可以为PLL 的输入或输出增加可选的时钟驱动，此功能仅支持Titan2
+系列器件。相关详细信息请参见《Titan2 系列FPGA 时钟资源（Clock）用户指南
+(UG050004)》[8]。 
+ 1. 位置约束 
+使用位置相关的时钟驱动时，被驱动逻辑单元需满足下述位置约束： 
+ 
+clkout0、clkout1、clkout2、clkout3 的输出驱动选项为“BUFR”及“IOCLKBUF”
+时，被驱动逻辑单元应与PLL 位于同一REGION； 
+ 
+clkout{0..f}的输出驱动选项为“BUFX”或“BUFXCE”时，被驱动逻辑单元
+应与PLL 在同一水平方向的两个REGION 内。 
+ 
+推荐： 
+ 
+建议用户在使用位置相关的时钟驱动时增加位置约束，以保证布局布线结果符合预期。 
+ 
+ 2. 时钟驱动原语 
+IP 中时钟驱动原语的参数均设定为默认值。时钟驱动原语的具体功能及参数配置
+请参见《Titan2 系列产品GTP 用户指南(UG050007)》[9]。 
+                             第2 章  IP 使用指南 
+49/52 
+ UG041001 
+www.pangomicro.com 
+ 3. 作用范围 
+IP 的时钟驱动功能仅作用于正相时钟。若要对反相时钟增加时钟驱动，请自行例
+化时钟驱动原语。 
+ 
+                                   第3 章  附录 
+50/52 
+ UG041001 
+www.pangomicro.com 
+第3章 附录 
+3.1 参考文档 
+[1] Pango_Design_Suite_Quick_Start_Tutorial 
+[2] Pango_Design_Suite_User_Guide 
+[3] IP_Compiler_User_Guide 
+[4] Simulation_User_Guide 
+[5] User_Constraint_Editor_User_Guide 
+[6] Physical_Constraint_Editor_User_Guide 
+[7] Route_Constraint_Editor_User_Guide 
+[8] Titan2 系列FPGA 时钟资源（Clock）用户指南(UG050004) 
+[9] Titan2 系列产品GTP 用户指南(UG050007) 
+[10] Logos2 系列FPGA 时钟资源（Clock）用户指南(UG040004) 
+3.2 术语表 
+A 
+APB 
+ 
+Advanced Peripheral Bus 
+ 
+D 
+DPS 
+ 
+Dynamic Phase Shift 
+ 
+L 
+LF  
+ 
+Loop Filter 
+ 
+P 
+PFD 
+ 
+Phase Frequency Detector  
+                                   第3 章  附录 
+51/52 
+ UG041001 
+www.pangomicro.com 
+ 
+S 
+SSC 
+ 
+Spread Frequency Controller 
+ 
+V 
+VCO 
+ 
+Voltage Controlled Oscillator 
+3.3 缩略语表 
+I 
+IPC 
+ 
+IP Compiler 
+ 
+P 
+PDS 
+ 
+Pango Design Suite 
+ 
+U 
+UCE 
+ 
+User Constraint Editor 
+3.4 声明 
+3.4.1 版权声明 
+本文档版权归深圳市紫光同创电子有限公司所有，并保留一切权利。未经书面许可，
+任何公司和个人不得将此文档中的任何部分公开、转载或以其他方式披露、散发给第三
+方。否则，公司必将追究其法律责任。 
+3.4.2 免责声明 
+本文档仅提供阶段性信息，所含内容可根据产品的实际情况随时更新，恕不另行通
+知。如因本文档使用不当造成的直接或间接损失，本公司不承担任何法律责任。 
+                                   第3 章  附录 
+52/52 
+ UG041001 
+www.pangomicro.com 
+本文档按现状提供，不负任何担保责任，包括对适销性、适用于特定用途或非侵权
+性的任何担保，和任何提案、规格或样品在他处提到的任何担保。本文档在此未以禁止
+反言或其他方式授予任何知识产权使用许可，不管是明示许可还是暗示许可。 
+公司保留任何时候在不事先声明的情况下对公司系列产品相关文档的修改权利。 
