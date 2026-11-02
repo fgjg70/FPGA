@@ -490,6 +490,14 @@ if {[info exists ::env(NN_MEM_DCP)] && $::env(NN_MEM_DCP) ne ""} {
   }
   read_checkpoint -cell u_nn/u_mem $_nn_dcp
   puts "BUILD_NN_MEM_DCP=$_nn_dcp (linked -> u_nn/u_mem)"
+  # [2026-11-01] 可选: 给 u_nn 加 pblock (env NN_PBLOCK_RANGE, 如 CLOCKREGION_X0Y0:CLOCKREGION_X0Y3)。
+  # 动机: 120 块 W/Q BRAM 都在器件最左列, engine 被摆到右侧时 wa_r->BRAM 地址是纯长走线 (8.9ns @100MHz)。
+  if {[info exists ::env(NN_PBLOCK_RANGE)] && $::env(NN_PBLOCK_RANGE) ne ""} {
+    create_pblock p_nn
+    add_cells_to_pblock [get_pblocks p_nn] [get_cells u_nn]
+    resize_pblock [get_pblocks p_nn] -add $::env(NN_PBLOCK_RANGE)
+    puts "BUILD_NN_PBLOCK=$::env(NN_PBLOCK_RANGE)"
+  }
 }
 puts "BUILD_PROG=$PROG"
 
