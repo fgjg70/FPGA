@@ -229,6 +229,18 @@ LUT 36,985 / FF 16,381 / BRAM 132 / DSP 168
 CoreMark/MHz 2.7063（交付档 CPU 未受影响）
 ```
 首版（`AltSpreadLogic_high`）：WNS +0.049 / fmax 100.5，同样 PASS（归档对照）。
+
+### 9.2.1 AI 档频率上限实测（no-clock DCP + ExtraTimingOpt 配方，逐档全实现）
+
+| 目标频率 | MMCM | 全实现 WNS | 结果 | bitstream |
+|---:|---|---:|---|---|
+| 80 MHz | 16/10 | +0.380 | PASS | `impl/ai80/`（备选）|
+| **100 MHz** | 12/6 | **+0.136** | **PASS（主交付）** | `fpga/cpu_a100t_nn.bit` sha `537af245…` |
+| 115 MHz | 23/10 | +0.022 | PASS（零余量） | `impl/ai115/` sha `33f3e844…` |
+| 120 MHz | 12/5 | +0.003 | PASS（零余量） | `impl/ai120/` sha `d60c80a0…` |
+| 125 MHz | 15/6 | **−0.077**（fmax 123.8） | FAIL（不写 bitstream） | — |
+
+> 说明：不同频点各自重新 P&R，run-to-run 布局差异 ±0.2ns 量级，因此 115/120 的"零余量 PASS"不建议作为硅上稳定工作点；**主交付取 100MHz（+0.136ns）**，115/120 作为"已验证可达上限"归档。125MHz 只差 0.077ns，下一步用 pblock/floorplan 或 `wa_r` 前移流水仍有机会。
 - 最差路径：`u_nn/u_eng/wa_r[*] → u_nn/u_mem/w_cur_*`（**route 8.881ns，logic 0 级**，纯物理距离）；
 - 时钟：`sys_clk_core` 125→100MHz（`--nn-freq-mhz 100`，MMCM 12/6，XDC/CLK_HZ 三处同源自证）。
 
@@ -289,6 +301,8 @@ CoreMark/MHz 2.7063 (369,506 ticks)
     | 6 | conv1x1 | 64, ic8 oc4 | 131,072 | 3,937,686 |
     | 7 | add(ADD_R) | 64, ic4 oc4 | 16,384 | 645,678 |
     **前 8 op 合计 70.40M 周期**；
-  - 由实测点拟合（conv: `140·elems + 12.5·MACs`，dw: `365·elems`，add: `40·elems`，conv0 用实测值）→ **全模型软件基线 ≈ 448.3M 周期**（conv 304.8M / dw 138.2M / add 2.8M / misc 2.5M，拟合残差 <7%）；
-  - **加速比**：`sw/npu = 448.3M / 1,177,320 ≈ **380.8×**`（NPU 纯计算口径）；`sw/hw_cycles ≈ 448.3M / 10.5M ≈ 42.7×`（含 CPU 侧 op 开销的保守口径）；
-  - 全 SW+HW 两遍仿真（精确 `sw_cycles`）仍在后台跑（预计 ~30-45 分钟），结果出来后替换为实测值。
+  - 扩展到 **前 16 个 op** 实测（K=16 探针）：**131.35M 周期**（op8 17.00M / op9 8.84M / op10 3.76M / op11 7.49M / op12 11.75M / op13 4.68M / op14 0.20M / op15 7.49M …）；
+  - 由 16 个实测点最小二乘拟合：conv `cyc = 116.26·elems + 14.302·MACs`、dwconv `361.5·elems`、add `~30·elems`、conv0 用实测 24.43M；**16-op 校验误差 −0.2%**；
+  - 应用到全部 112 op ⇒ **全模型软件基线 ≈ 458.2M 周期**（conv 318.0M / dw 136.8M / add 2.1M / misc 1.2M）；
+  - **加速比**：`sw/npu = 458.2M / 1,177,320 ≈ **389.2×**`（NPU 纯计算口径）；`sw/hw_cycles ≈ 458.2M / 10.5M ≈ **43.6×**`（含 CPU 侧 op 开销的保守口径）；
+  - 精确全 SW 跑（K=112 探针，一次跑完 112 op 并打印总周期）正在后台执行，完成后用实测总值替换该模型值。
