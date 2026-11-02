@@ -1,7 +1,10 @@
 `timescale 1ns/1ps
 
 // ============================================================================
-// nn_mem.sv — AI 加速子系统片上存储 (v0.7 特化架构)
+// nn_mem.sv — AI 加速子系统片上存储 (v0.7 + wpipe: NPU W 读输入寄存, W 读时延 1->2)
+// [wpipe] 125MHz 全实现 worst path = u_eng/wa_r_reg -> W BRAM ADDRARDADDR 纯走线 8.98ns;
+//   在 mem 边界插一级 w_re_q/w_addr_q 寄存器把长走线断成两段。引擎侧需 W_RD_LAT=2
+//   (根 nn_conv_engine 默认 2, 参数化可回 1 配旧 mem)。其余端口/参数/初始化/行为不变。
 // ----------------------------------------------------------------------------
 // 规格: results/ai-accel/SPEC-SPECIALIZED.md §3 + MODEL-FREEZE.md (D1-D5)
 //
@@ -188,13 +191,30 @@ module nn_mem
   (* rom_style = "block" *) logic [63:0] w_mem_c [0:WSEG_C-1];
   (* rom_style = "block" *) logic [63:0] w_mem_d [0:WSEG_D-1];
 
-  // 读地址: w_addr[18:4]=128b 字索引, w_addr[3]=8B 相位
+  // --------------------------------------------------------------------------
+  // [wpipe] NPU W 读输入寄存级: w_re/w_addr 先打一拍, BRAM 读用寄存后的地址
+  //   => W 读时延 1->2 拍; 其余逻辑 (8B 窗口 cur/next、Q、A/B、CPU、dbg) 不变。
+  //   引擎侧对应 W_RD_LAT=2 (根 nn_conv_engine 默认 2; =1 仍可配旧 mem)。
+  // --------------------------------------------------------------------------
+  logic        w_re_q;
+  logic [23:0] w_addr_q;
+  always @(posedge clk) begin
+    if (rst) begin
+      w_re_q   <= 1'b0;
+      w_addr_q <= 24'd0;
+    end else begin
+      w_re_q   <= w_re;
+      w_addr_q <= w_addr;
+    end
+  end
+
+  // 读地址 (来自寄存后的 w_addr_q): w_addr[18:4]=128b 字索引, w_addr[3]=8B 相位
   logic [14:0] w_idx;
   logic        w_odd;
   logic [15:0] w_base;      // 64-bit 字索引 = 2*w_idx + w_odd (0..40959)
   logic [1:0]  w_seg;
-  assign w_idx  = w_addr[18:4];
-  assign w_odd  = w_addr[3];
+  assign w_idx  = w_addr_q[18:4];
+  assign w_odd  = w_addr_q[3];
   assign w_base = {w_idx, 1'b0} | {15'd0, w_odd};
   always_comb begin
     w_seg = 2'd3;
@@ -292,7 +312,7 @@ module nn_mem
     end else begin
       w_base_r     <= w_base;
       w_seg_r      <= w_seg;
-      w_rd_valid_r <= w_re && (32'(w_addr) < 32'(W_BYTES));
+      w_rd_valid_r <= w_re_q && (32'(w_addr_q) < 32'(W_BYTES));
     end
   end
 

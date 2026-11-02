@@ -10,7 +10,8 @@ import re
 import sys
 
 BASE = 8          # INIT 1 + VCHK 1 + CPREP 6
-DRN = 3
+W_RD_LAT = 2      # 引擎 W 读有效时延 (1=旧; 2=mem 侧 w_addr 寄存一拍)
+DRN = W_RD_LAT + 2
 NEXT = 2
 QPER8 = 11        # 8-lane tile: S_Q(9, q_iss 0..q_tot+1) + QLOAD(2)
 QLOAD = 2

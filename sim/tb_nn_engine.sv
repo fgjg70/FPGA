@@ -70,7 +70,7 @@ module tb_nn_engine;
     .dbg_we(dbg_we), .dbg_space(dbg_space), .dbg_addr(dbg_addr), .dbg_wdata(dbg_wdata)
   );
 
-  nn_conv_engine #(.OC_LANES(16), .PX_LANES(8)) u_eng (
+  nn_conv_engine #(.OC_LANES(16), .PX_LANES(8), .W_RD_LAT(2)) u_eng (
     .clk(clk), .rst(rst), .desc(desc), .start(start),
     .busy(busy), .done(done), .cycles(cycles), .err_code(err_code),
     .w_re(w_re), .w_addr(w_addr), .w_rdata(w_rdata),

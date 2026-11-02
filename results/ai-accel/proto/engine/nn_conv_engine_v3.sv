@@ -25,7 +25,8 @@ module nn_conv_engine
   import nn_pkg::*;
 #(
   parameter int OC_LANES = 16,
-  parameter int PX_LANES = 8
+  parameter int PX_LANES = 8,
+  parameter int W_RD_LAT = 2        // W 读有效时延: 2=配 wpipe mem (根默认); 1=旧 mem 兼容
 )(
   input  logic         clk,
   input  logic         rst,
@@ -60,7 +61,8 @@ module nn_conv_engine
   localparam int OCL   = OC_LANES;   // 16
   localparam int BANDW = 24;
   localparam int WINW  = 15;
-  localparam int DRNN  = 3;
+  localparam bit LAT2  = (W_RD_LAT >= 2);
+  localparam int DRNN  = LAT2 ? 4 : 3;
 
   typedef enum logic [4:0] {
     S_IDLE, S_INIT, S_VCHK, S_CPREP, S_Q, S_QLOAD, S_BI, S_LD, S_LDCAP,
@@ -186,7 +188,7 @@ module nn_conv_engine
   logic        ld_ret_v, ld_fill_d, ld_half_d;
   logic [4:0]  ld_j_d;
   logic [7:0]  ld_fillbyte_d;
-  logic        mac_v1, mac_v2, mac_v3;
+  logic        mac_v1, mac_v2, mac_v3, mac_v4;
   logic signed [15:0] wby_r [0:OCL-1];
   logic        rd_half_s, rd_half_d;
   logic [63:0] src_word_q;
@@ -200,6 +202,7 @@ module nn_conv_engine
 
   logic signed [31:0] acc    [0:PX-1][0:OCL-1];
   logic signed [7:0]  a_pipe [0:PX-1][0:OCL-1];
+  logic signed [7:0]  a_pipe1[0:PX-1][0:OCL-1];   // LAT2: 中间级 (对齐 2 拍 W 时延)
   logic signed [7:0]  a_pipe2[0:PX-1][0:OCL-1];
   logic signed [15:0] prod   [0:PX-1][0:OCL-1];
 
@@ -583,7 +586,7 @@ module nn_conv_engine
       x_ld <= 16'sd0; x0_ld <= 16'sd0; dx_r <= 16'd1; y_ok_r <= 1'b0;
       y_ld <= 16'sd0;
       p3_ph <= 2'd0; p3w0 <= 128'd0; p3w1 <= 128'd0;
-      mac_v1 <= 1'b0; mac_v2 <= 1'b0; mac_v3 <= 1'b0;
+      mac_v1 <= 1'b0; mac_v2 <= 1'b0; mac_v3 <= 1'b0; mac_v4 <= 1'b0;
       q_iss  <= 5'd0;
       is_conv <= 1'b0; is_pool <= 1'b0; is_copy <= 1'b0; is_add <= 1'b0;
       f_dw <= 1'b0; f_leaky <= 1'b0; f_up2x <= 1'b0; f_p3 <= 1'b0; f_add_r <= 1'b0;
@@ -632,6 +635,7 @@ module nn_conv_engine
         prod64[l] <= 48'sd0; wby_r[l] <= 16'sd0;
         for (int px = 0; px < PX; px++) begin
           acc[px][l] <= 32'sd0; a_pipe[px][l] <= 8'sd0;
+          a_pipe1[px][l] <= 8'sd0;
           a_pipe2[px][l] <= 8'sd0; prod[px][l] <= 16'sd0; mx[px][l] <= -8'sd128;
         end
       end
@@ -680,6 +684,7 @@ module nn_conv_engine
       mac_v1 <= mac_issue;
       mac_v2 <= mac_v1;
       mac_v3 <= mac_v2;
+      mac_v4 <= mac_v3;
       if (mac_issue) begin
         for (int px = 0; px < PX; px++)
           for (int oc = 0; oc < OCL; oc++) begin
@@ -689,22 +694,48 @@ module nn_conv_engine
               a_pipe[px][oc] <= (oc < 8) ? win_sel[px][oc*8 +: 8] : 8'sd0;
           end
       end
-      if (mac_v1) begin
-        for (int oc = 0; oc < OCL; oc++)
-          wby_r[oc] <= (dense || (oc < 8)) ? $signed(w_rdata[oc*8 +: 8]) : 16'sd0;
-        for (int px = 0; px < PX; px++)
+      if (LAT2) begin : g_wlat2
+        if (mac_v1) begin
+          for (int px = 0; px < PX; px++)
+            for (int oc = 0; oc < OCL; oc++)
+              a_pipe1[px][oc] <= a_pipe[px][oc];
+        end
+        if (mac_v2) begin
           for (int oc = 0; oc < OCL; oc++)
-            a_pipe2[px][oc] <= a_pipe[px][oc];
+            wby_r[oc] <= (dense || (oc < 8)) ? $signed(w_rdata[oc*8 +: 8]) : 16'sd0;
+          for (int px = 0; px < PX; px++)
+            for (int oc = 0; oc < OCL; oc++)
+              a_pipe2[px][oc] <= a_pipe1[px][oc];
+        end
+        if (mac_v3) begin
+          for (int px = 0; px < PX; px++)
+            for (int oc = 0; oc < OCL; oc++)
+              prod[px][oc] <= $signed(a_pipe2[px][oc]) * wby_r[oc];
+        end
+        if (mac_v4) begin
+          for (int px = 0; px < PX; px++)
+            for (int oc = 0; oc < OCL; oc++)
+              acc[px][oc] <= acc[px][oc] + {{16{prod[px][oc][15]}}, prod[px][oc]};
+        end
       end
-      if (mac_v2) begin
-        for (int px = 0; px < PX; px++)
+      else begin : g_wlat1
+        if (mac_v1) begin
           for (int oc = 0; oc < OCL; oc++)
-            prod[px][oc] <= $signed(a_pipe2[px][oc]) * wby_r[oc];
-      end
-      if (mac_v3) begin
-        for (int px = 0; px < PX; px++)
-          for (int oc = 0; oc < OCL; oc++)
-            acc[px][oc] <= acc[px][oc] + {{16{prod[px][oc][15]}}, prod[px][oc]};
+            wby_r[oc] <= (dense || (oc < 8)) ? $signed(w_rdata[oc*8 +: 8]) : 16'sd0;
+          for (int px = 0; px < PX; px++)
+            for (int oc = 0; oc < OCL; oc++)
+              a_pipe2[px][oc] <= a_pipe[px][oc];
+        end
+        if (mac_v2) begin
+          for (int px = 0; px < PX; px++)
+            for (int oc = 0; oc < OCL; oc++)
+              prod[px][oc] <= $signed(a_pipe2[px][oc]) * wby_r[oc];
+        end
+        if (mac_v3) begin
+          for (int px = 0; px < PX; px++)
+            for (int oc = 0; oc < OCL; oc++)
+              acc[px][oc] <= acc[px][oc] + {{16{prod[px][oc][15]}}, prod[px][oc]};
+        end
       end
 
       if (win_adv) begin

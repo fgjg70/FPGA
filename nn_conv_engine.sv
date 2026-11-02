@@ -25,7 +25,8 @@ module nn_conv_engine
   import nn_pkg::*;
 #(
   parameter int OC_LANES = 16,
-  parameter int PX_LANES = 8
+  parameter int PX_LANES = 8,
+  parameter int W_RD_LAT = 2        // W 读有效时延: 2=配 wpipe mem (根默认); 1=旧 mem 兼容
 )(
   input  logic         clk,
   input  logic         rst,
@@ -60,7 +61,8 @@ module nn_conv_engine
   localparam int OCL   = OC_LANES;   // 16
   localparam int BANDW = 24;
   localparam int WINW  = 15;
-  localparam int DRNN  = 3;
+  localparam bit LAT2  = (W_RD_LAT >= 2);
+  localparam int DRNN  = LAT2 ? 4 : 3;
 
   typedef enum logic [4:0] {
     S_IDLE, S_INIT, S_VCHK, S_CPREP, S_Q, S_QLOAD, S_BI, S_LD, S_LDCAP,
@@ -186,7 +188,7 @@ module nn_conv_engine
   logic        ld_ret_v, ld_fill_d, ld_half_d;
   logic [4:0]  ld_j_d;
   logic [7:0]  ld_fillbyte_d;
-  logic        mac_v1, mac_v2, mac_v3;
+  logic        mac_v1, mac_v2, mac_v3, mac_v4;
   logic signed [15:0] wby_r [0:OCL-1];
   logic        rd_half_s, rd_half_d;
   logic [63:0] src_word_q;
@@ -200,6 +202,7 @@ module nn_conv_engine
 
   logic signed [31:0] acc    [0:PX-1][0:OCL-1];
   logic signed [7:0]  a_pipe [0:PX-1][0:OCL-1];
+  logic signed [7:0]  a_pipe1[0:PX-1][0:OCL-1];   // LAT2: 中间级 (对齐 2 拍 W 时延)
   logic signed [7:0]  a_pipe2[0:PX-1][0:OCL-1];
   logic signed [15:0] prod   [0:PX-1][0:OCL-1];
 
@@ -237,6 +240,7 @@ module nn_conv_engine
   // ==========================================================================
   logic [15:0] ic8_r, oc8_r, ocw_r, oc_limit_r, icb_n_r;
   logic [4:0]  q_tot_r, qb_w_r, qm_w_r;     // Q 装载拍数/字数 (寄存器)
+  logic        icb_more_r;                  // (c_icb+1 < icb_n) 预打拍
   logic [15:0] rem_ch;                      // 当前 tile 之后剩余通道数 (增量)
   logic [12:0] q_bias_w, q_mpos_w, q_tail_w; // Q 三段 64b 字索引 (寄存器)
   logic [23:0] row_step_a, oy_step_a, ox_step_a, band_step_a, band_ky_step, base0_a;
@@ -354,6 +358,8 @@ module nn_conv_engine
   logic [63:0] ad_pack_q;
   logic signed [8:0] ad_delta [0:7];
   logic signed [8:0] ad_qq [0:7];
+  logic signed [7:0] ad_qs [0:7];
+  (* use_dsp = "no" *) logic signed [31:0] ad_mul [0:7];
   logic [63:0] ad_dst_q;
   always_comb begin
     logic signed [8:0]  s;
@@ -406,6 +412,8 @@ module nn_conv_engine
       else                     ad_pack2[l*8 +: 8] = s2[7:0];
     end
   end
+
+  wire [63:0] ad_src_word = rd_half_s ? a_rdata[127:64] : a_rdata[63:0];
 
   wire [5:0] sel_byte_base = {c_m[2:0], 3'b000};
   wire [3:0] cur_kx = dense ? c_m[7:3] : c_m[3:0];
@@ -578,7 +586,7 @@ module nn_conv_engine
       x_ld <= 16'sd0; x0_ld <= 16'sd0; dx_r <= 16'd1; y_ok_r <= 1'b0;
       y_ld <= 16'sd0;
       p3_ph <= 2'd0; p3w0 <= 128'd0; p3w1 <= 128'd0;
-      mac_v1 <= 1'b0; mac_v2 <= 1'b0; mac_v3 <= 1'b0;
+      mac_v1 <= 1'b0; mac_v2 <= 1'b0; mac_v3 <= 1'b0; mac_v4 <= 1'b0;
       q_iss  <= 5'd0;
       is_conv <= 1'b0; is_pool <= 1'b0; is_copy <= 1'b0; is_add <= 1'b0;
       f_dw <= 1'b0; f_leaky <= 1'b0; f_up2x <= 1'b0; f_p3 <= 1'b0; f_add_r <= 1'b0;
@@ -611,7 +619,9 @@ module nn_conv_engine
       zp_out <= 8'sd0; zp_in <= 8'sd0; shift_q <= 8'd0; leaky_q <= 1'b0;
       zp_s_r <= 8'sd0; zp_d_r <= 8'sd0; add_r_r <= 16'd0; kadd_r <= 8'd0;
       ad_pack_q <= 64'd0; ad_dst_q <= 64'd0;
-      for (int l = 0; l < 8; l++) begin ad_delta[l] <= 9'sd0; ad_qq[l] <= 9'sd0; end
+      for (int l = 0; l < 8; l++) begin
+        ad_delta[l] <= 9'sd0; ad_qq[l] <= 9'sd0; ad_mul[l] <= 32'sd0; ad_qs[l] <= 8'sd0;
+      end
       wr16_r <= 1'b0; wrs16_r <= 1'b0; wrbeats_r <= 16'd8;
       for (int px = 0; px < PX; px++) begin
         out_lo[px] <= 64'sd0; out_hi[px] <= 64'sd0;
@@ -625,6 +635,7 @@ module nn_conv_engine
         prod64[l] <= 48'sd0; wby_r[l] <= 16'sd0;
         for (int px = 0; px < PX; px++) begin
           acc[px][l] <= 32'sd0; a_pipe[px][l] <= 8'sd0;
+          a_pipe1[px][l] <= 8'sd0;
           a_pipe2[px][l] <= 8'sd0; prod[px][l] <= 16'sd0; mx[px][l] <= -8'sd128;
         end
       end
@@ -673,6 +684,7 @@ module nn_conv_engine
       mac_v1 <= mac_issue;
       mac_v2 <= mac_v1;
       mac_v3 <= mac_v2;
+      mac_v4 <= mac_v3;
       if (mac_issue) begin
         for (int px = 0; px < PX; px++)
           for (int oc = 0; oc < OCL; oc++) begin
@@ -682,22 +694,48 @@ module nn_conv_engine
               a_pipe[px][oc] <= (oc < 8) ? win_sel[px][oc*8 +: 8] : 8'sd0;
           end
       end
-      if (mac_v1) begin
-        for (int oc = 0; oc < OCL; oc++)
-          wby_r[oc] <= (dense || (oc < 8)) ? $signed(w_rdata[oc*8 +: 8]) : 16'sd0;
-        for (int px = 0; px < PX; px++)
+      if (LAT2) begin : g_wlat2
+        if (mac_v1) begin
+          for (int px = 0; px < PX; px++)
+            for (int oc = 0; oc < OCL; oc++)
+              a_pipe1[px][oc] <= a_pipe[px][oc];
+        end
+        if (mac_v2) begin
           for (int oc = 0; oc < OCL; oc++)
-            a_pipe2[px][oc] <= a_pipe[px][oc];
+            wby_r[oc] <= (dense || (oc < 8)) ? $signed(w_rdata[oc*8 +: 8]) : 16'sd0;
+          for (int px = 0; px < PX; px++)
+            for (int oc = 0; oc < OCL; oc++)
+              a_pipe2[px][oc] <= a_pipe1[px][oc];
+        end
+        if (mac_v3) begin
+          for (int px = 0; px < PX; px++)
+            for (int oc = 0; oc < OCL; oc++)
+              prod[px][oc] <= $signed(a_pipe2[px][oc]) * wby_r[oc];
+        end
+        if (mac_v4) begin
+          for (int px = 0; px < PX; px++)
+            for (int oc = 0; oc < OCL; oc++)
+              acc[px][oc] <= acc[px][oc] + {{16{prod[px][oc][15]}}, prod[px][oc]};
+        end
       end
-      if (mac_v2) begin
-        for (int px = 0; px < PX; px++)
+      else begin : g_wlat1
+        if (mac_v1) begin
           for (int oc = 0; oc < OCL; oc++)
-            prod[px][oc] <= $signed(a_pipe2[px][oc]) * wby_r[oc];
-      end
-      if (mac_v3) begin
-        for (int px = 0; px < PX; px++)
-          for (int oc = 0; oc < OCL; oc++)
-            acc[px][oc] <= acc[px][oc] + {{16{prod[px][oc][15]}}, prod[px][oc]};
+            wby_r[oc] <= (dense || (oc < 8)) ? $signed(w_rdata[oc*8 +: 8]) : 16'sd0;
+          for (int px = 0; px < PX; px++)
+            for (int oc = 0; oc < OCL; oc++)
+              a_pipe2[px][oc] <= a_pipe[px][oc];
+        end
+        if (mac_v2) begin
+          for (int px = 0; px < PX; px++)
+            for (int oc = 0; oc < OCL; oc++)
+              prod[px][oc] <= $signed(a_pipe2[px][oc]) * wby_r[oc];
+        end
+        if (mac_v3) begin
+          for (int px = 0; px < PX; px++)
+            for (int oc = 0; oc < OCL; oc++)
+              acc[px][oc] <= acc[px][oc] + {{16{prod[px][oc][15]}}, prod[px][oc]};
+        end
       end
 
       if (win_adv) begin
@@ -960,6 +998,7 @@ module nn_conv_engine
           c_m    <= 16'd0;
           c_ld   <= 16'd0;
           p3_ph  <= 2'd0;
+          icb_more_r <= (16'd1 < icb_n_r);
           wa_r   <= d_woff[23:0] + {8'd0, oc_base_w};
           if (f_p3) begin
             band_base <= blk_base;
@@ -1044,7 +1083,7 @@ module nn_conv_engine
               la        <= band_base;
             end
           end
-          else if (dense && (c_icb + 16'd1 < icb_n_r)) begin
+          else if (dense && icb_more_r) begin
             band_base <= band_base + 24'd8;
             la        <= band_base + 24'd8;
           end
@@ -1068,6 +1107,7 @@ module nn_conv_engine
               c_m <= 16'd0;
               if (c_icb + 16'd1 < icb_n_r) begin
                 c_icb <= c_icb + 16'd1;
+                icb_more_r <= ((c_icb + 16'd2) < icb_n_r);
                 c_ld  <= 16'd0;
                 x_ld  <= x0_ld;
                 y_ok_r <= (y_ld >= 0) && (y_ld < $signed(d_ih));
@@ -1076,6 +1116,7 @@ module nn_conv_engine
               else if (c_ky + 16'd1 < ks16) begin
                 c_ky  <= c_ky + 16'd1;
                 c_icb <= 16'd0;
+                icb_more_r <= (16'd1 < icb_n_r);
                 c_ld  <= 16'd0;
                 x_ld  <= x0_ld;
                 y_ld  <= y_ld + 16'sd1;
@@ -1279,7 +1320,9 @@ module nn_conv_engine
         end
         S_AD_R2: begin
           rd_half_d  <= dst_la[3];
-          src_word_q <= rd_half_s ? a_rdata[127:64] : a_rdata[63:0];
+          src_word_q <= ad_src_word;
+          for (int l = 0; l < 8; l++)
+            ad_qs[l] <= $signed(ad_src_word[l*8 +: 8]);
           // q 口打拍后: S_AD_Q 发出 -> 第 2 拍(本拍)数据有效
           if (f_add_r && (c_iy == 16'd0) && (c_ix == 16'd0) && (c_cb == 16'd0)) begin
             zp_s_r  <= q_rdata[7:0];
@@ -1296,8 +1339,9 @@ module nn_conv_engine
             dword = rd_half_d ? a_rdata[127:64] : a_rdata[63:0];
             ad_dst_q <= dword;
             for (int l = 0; l < 8; l++) begin
-              qs = $signed(src_word_q[l*8 +: 8]);
-              ad_qq[l] <= (qs - zp_s_r);
+              qs = ad_qs[l];
+              ad_qq[l]  <= (qs - zp_s_r);
+              ad_mul[l] <= ($signed(qs) - $signed(zp_s_r)) * $signed({1'b0, add_r_r});
             end
           end
           state <= S_AD_WR2;
@@ -1307,8 +1351,7 @@ module nn_conv_engine
             logic signed [31:0] p;
             for (int l = 0; l < 8; l++) begin
               if (f_add_r) begin
-                p = $signed(ad_qq[l]) * $signed({1'b0, add_r_r});
-                p = p >>> kadd_r;
+                p = ad_mul[l] >>> kadd_r;
                 ad_delta[l] <= 9'(p[8:0]);
               end
               else begin

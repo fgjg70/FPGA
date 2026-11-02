@@ -11,12 +11,14 @@
 
 **nn_mem v0.7 完成并修复了 R3 集成阻塞项（W 读口 8B 粒度窗口）：
 W 320KB 落 80 个 BRAM36（4 段 64-bit 宽、每段两个满宽读口）、A/B 128KB 落 32 个 BRAM36；
-Q 48KB 在 2026-11-01 19:1x 构建修复中改为 **2 个 BRAM ROM（4096+2048 深，共 12 tiles）**
-⇒ **nn_mem 合计 124 tiles**；加交付档核心约 9.5 ⇒ 约 **133.5/135**。
-（历史：Q 为 LUTRAM 时 mem 合计 112、整机 121.5；该口径已被构建修复取代，见 §3.7。）
-tb_nn_mem 三种加载模式全 PASS（47,146 checks）；引擎×内存联合 TB（T-accel 的
-46/47 向量 + PACKED3/ADD_R 4 向量）：stub 与真 nn_mem 结果完全一致，真 mem 47/47+4/4 PASS，
-根目录 engine 快照同样 47/47+4/4 PASS。**
+Q 48KB = lo 4096×64 BRAM ROM（8 tiles）+ hi 2048×64 分布式 ROM（~1.6K LUT，0 BRAM）
+⇒ **nn_mem 合计 120 tiles**；核心实占 12 tiles ⇒ **整机 132/135 ✓**。
+**[2026-11-02 wpipe 落根目录] W 读输入寄存一级，W 读时延 1→2 拍**（治 125MHz 全实现 worst path：
+engine `wa_r` → W BRAM 地址的 8.98ns 纯走线被断成两段）；引擎侧 `W_RD_LAT=2`（根引擎已默认 2）。
+tb_nn_mem 三模式 **47,148 / 47,148 / 42 checks, mismatch=0 PASS**；引擎×真 mem 联合回归
+**47/47 + 4/4 PASS**，周期 **192,100**（WLAT1 基线 191,283，Δ+817）。
+（历史：Q 全 LUTRAM 时 mem 112/整机 121.5；Q 全 BRAM 时 mem 124/整机 136 差 1 tile；
+当前 120 为最终构建口径，见 §3.7/§3.8。）**
 
 ---
 
@@ -83,11 +85,11 @@ module nn_mem import nn_pkg::*; #(
 );
 ```
 
-### 2.1 读/写口径（1 拍寄存读，地址第 N 拍、数据 N+1 拍有效）
+### 2.1 读/写口径（1 拍寄存读，地址第 N 拍、数据 N+1 拍有效；**W 读在 wpipe 后为 2 拍**，见 §3.8）
 
 | 口 | 语义 |
 |---|---|
-| `w_*` | `w_addr` = W 区字节偏移（0x00000..0x4FFFF，**8B 对齐、低 3 位忽略**）；`w_rdata[127:0]` = 从 `w_addr` 起的 **16 字节小端窗口**（`w_addr[3]=1` 时跨 128b 字边界，取 {下一 64b 字, 当前 64b 字}）；越界 -> 128'b0 |
+| `w_*` | `w_addr` = W 区字节偏移（0x00000..0x4FFFF，**8B 对齐、低 3 位忽略**）；`w_rdata[127:0]` = 从 `w_addr` 起的 **16 字节小端窗口**（`w_addr[3]=1` 时跨 128b 字边界，取 {下一 64b 字, 当前 64b 字}）；越界 -> 128'b0。**W 读时延 2 拍**（wpipe：`w_re/w_addr` 输入寄存一级；引擎侧 `W_RD_LAT=2`，见 §3.8） |
 | `q_*` | `q_addr` = **64-bit Q 字索引**（Q 48KB = 6144 个 64b 字）；`q_rdata[63:0] = {Q32[2k+1], Q32[2k]}`（低地址 32 位字在 `[31:0]`）；`q_addr>=6144` -> 64'b0 |
 | `a_*` | `a_sel` + `a_addr`（绝对窗口偏移，16B 对齐）；A=[0x60000,0x78000)、B=[0x78000,0x80000)；sel/地址归属不符或越界 -> 128'b0；`a_rdata` = 16 字节小端 |
 | `b_*` | 128b 整字 + `b_wstrb[15:0]` 字节使能；**不做 RMW**；`b_addr` 16B 对齐（低 4 位忽略） |
@@ -249,6 +251,51 @@ Q lo 4096 / hi 2048。端口未变（Q 只是内部实现变化）。
 
 ---
 
+### 3.8 W 读时延 1→2（wpipe 落根目录，2026-11-02，task-12）
+
+**背景**：125MHz 全实现两次确定性差 −0.077ns，worst path = `u_eng/wa_r_reg → u_mem/w_cur_*_reg/ADDRARDADDR`
+（**纯走线 8.98ns，0 级逻辑**）——engine 与 W BRAM 的物理距离问题。结构解：把 W 读路径在 mem 边界打一拍。
+
+**改动（仅此一处，根 `nn_mem.sv`）**：
+- 新增 W 读输入寄存级 `w_re_q/w_addr_q`（`rst` 清零）；
+- `w_idx/w_odd/w_base` 改由 `w_addr_q` 派生；`w_rd_valid_r <= w_re_q && (w_addr_q < W_BYTES)`；
+- 其余（W 8B 窗口 cur/next 双读口、Q lo BRAM + hi 分布式、A/B+strobe、CPU 窗口、dbg、初始化）**零改动**；
+- **W 读时延 1→2 拍**；端口/参数/初始化完全不变（nn_subsys 无改动；黑盒 stub 不变）。
+
+**接口契约**（SPEC/CONTRACT 更新项）：
+- NPU `w_*`：地址拍 +2 拍数据有效（原 1 拍）；引擎侧 `W_RD_LAT=2`（根 `nn_conv_engine` 已默认 2，参数化可回 1 配旧 mem）；
+- CPU 窗口 A/B 读仍 1 拍（不经过 W 口）；Q/A/B 时延不变。
+
+**验证**：
+- `tb_nn_mem` 三模式（+nnwq / +nnw+nnq / 无镜像）：**47,148 / 47,148 / 42 checks，mismatch=0 PASS**；
+  新增 W 时延契约检查：写后 +1 拍读仍无效（0）、+2 拍读到新值；
+- 引擎×真 mem（根引擎 `W_RD_LAT=2` + 根 nn_mem）：**vec 47/47 + vec_v3extra 4/4 PASS**；周期和
+  **192,100**（vec47 189,202 + extra4 2,898），W_RD_LAT=1 基线 191,283 ⇒ **Δ+817**；
+  C128 全模型 1,177,320 → **1,191,020（+1.16%）**（t-accel `calc_cycles_v3.py` DRN=W_RD_LAT+2 逐 case 精确）；
+- **根 `sim/tb_nn_engine.sv`（最终版 sha256 `ce574de04c323d8121ae4cb91bf525b55911f16f735fc0ccc8bca6b85ddbb0b9`）+
+  根 `nn_conv_engine.sv`（sha256 `0cb981855ffbb7ff0bef7b5e7814db2c31b3e2cd5cdcbf1b394178b2e188374d`）+
+  根 wpipe mem 也独立复跑 47/47 + 4/4 PASS，周期和 192,100**。
+
+**资源 / DCP**（根 `nn_mem.sv`，no-clock 黑盒构建用）：
+- `results/ai-accel/impl/nn_mem_ooc/nn_mem_wpipe_noclk.dcp`，**1,465,157 B**，sha256
+  `e4afea9626d1db14f1a9d1e31b461b407f6ff6ed8b1fc84c4a7be8fa996db6a5`；
+- `open_checkpoint`：**clocks=0 / generated=0、RAMB36=120 / RAMB18=0、FDRE=242**（功能 FF +25；
+  其余为综合对 `w_addr_q` 的位复制以驱动 8 个 BRAM 地址口，0.19% 器件）；
+- LUT cells 2,504（与 wpipe 前 2,456 Slice LUT 基本一致）；
+- 复现：`cd results\ai-accel\impl\nn_mem_ooc && vivado -mode batch -source synth_nn_mem_wpipe_noclk_root.tcl`
+  （`check_nn_mem_wpipe_noclk_root.tcl` 做 open_checkpoint 复验）。
+
+**复现命令（仿真）**：
+```bat
+vlib work
+vlog -sv -work work <repo>\rv32_pkg.sv <repo>\nn_pkg.sv <repo>\nn_mem.sv <repo>\sim\tb_nn_mem.sv
+vsim -c -do "run -all; quit -f" work.tb_nn_mem +nnwq=<yolo_wq.hex>
+```
+> 注：§3.6/§3.7 中旧 DCP/时序数字为 wpipe 前版本，作历史对照；当前构建口径以本节的
+> `nn_mem_wpipe_noclk.dcp`（120 tiles、clocks=0）为准。
+
+---
+
 ## 4. 仿真自检（ModelSim SE-64 2020.4）
 
 ### 4.1 三种加载模式（都 PASS）
@@ -359,7 +406,7 @@ Lead 的 SoC 探针观察到"前 8 像素对、第 9 像素起错"；联合 TB �
 
 ### 7.1 与 SPEC §3 一致的部分
 W 320KB（80 tiles）、Q 48KB LUTRAM（0 BRAM）、A/B 96K/32K、CPU 只 A/B、
-`b_wstrb[15:0]`、`q` 64b 独立口、w 读 1 拍——全部按规格实现。
+`b_wstrb[15:0]`、`q` 64b 独立口——全部按规格实现；w 读原为 1 拍，**2026-11-02 wpipe 后为 2 拍（§3.8）**。
 
 ### 7.2 需要知道的偏差（2 条）
 1. **R3 修复使 W 从 75.5 → 80 BRAM36（+4.5）**：这是 8B 粒度 16B 窗口 + 1 拍延迟下

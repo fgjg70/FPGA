@@ -21,7 +21,8 @@ module nn_mem_v07_stub
   parameter int W_BYTES = 320*1024,
   parameter int Q_BYTES = 48*1024,
   parameter int A_BYTES = 96*1024,
-  parameter int B_BYTES = 32*1024
+  parameter int B_BYTES = 32*1024,
+  parameter int W_LAT   = 1        // 1=1 拍; 2=额外寄存 w_re/w_addr 一拍 (模拟 nn_mem_pipe)
 )(
   input  logic         clk,
   input  logic         rst,
@@ -132,11 +133,19 @@ module nn_mem_v07_stub
 
   // ---------------------------------------------------------------- W 读
   logic [127:0] w_rdata_r;
+  logic         w_re_d;
+  logic [23:0]  w_addr_d;
+  always @(posedge clk) begin
+    w_re_d   <= w_re;
+    w_addr_d <= w_addr;
+  end
+  wire        w_re_e   = (W_LAT >= 2) ? w_re_d   : w_re;
+  wire [23:0] w_addr_e = (W_LAT >= 2) ? w_addr_d : w_addr;
   always @(posedge clk) begin
     begin : w_rd
       logic [16:0] wa;
-      wa = 17'(w_addr >> 2);   // 32-bit 字索引
-      if (!w_re || (w_addr >= W_BYTES)) w_rdata_r <= 128'd0;
+      wa = 17'(w_addr_e >> 2);   // 32-bit 字索引
+      if (!w_re_e || (w_addr_e >= W_BYTES)) w_rdata_r <= 128'd0;
       else w_rdata_r <= {w_mem[wa + 17'd3], w_mem[wa + 17'd2],
                          w_mem[wa + 17'd1], w_mem[wa]};
     end

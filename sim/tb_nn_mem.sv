@@ -140,9 +140,11 @@ module tb_nn_mem #(
     cpu_re = 0;
   endtask
 
+  // [wpipe] W 读时延 1->2 拍: 多等 1 拍再采样
   task automatic w_read(input logic [23:0] addr, output logic [127:0] data);
     @(negedge clk);
     w_re = 1; w_addr = addr;
+    @(negedge clk);
     @(negedge clk);
     data = w_rdata;
     w_re = 0;
@@ -335,6 +337,21 @@ module tb_nn_mem #(
     exp64 = q_exp(has_qimg, 32'd6143);
     exp64[63:32] = 32'h0BAD_F00D;
     chk64(rd64, exp64, "dbg Q write last word (half1)");
+
+
+    // ---------- ③c [wpipe] W 读时延契约: 地址拍 +1 拍仍无效, +2 拍才有效 ----------
+    dbg_write(1'b0, 17'd0, 32'hDEAD_BEEF);      // W word0 low
+    dbg_write(1'b0, 17'd1, 32'h1234_5678);      // W word0 high
+    dbg_write(1'b0, 17'd2, 32'h0);              // W word1 = next64 清零 (镜像里非 0)
+    dbg_write(1'b0, 17'd3, 32'h0);
+    @(negedge clk);
+    w_re = 1; w_addr = 24'h0;
+    @(negedge clk);                              // +1 拍: 无前次有效读 -> w_rdata 必须为 0
+    chk128(w_rdata, 128'h0, "wpipe contract: W data NOT valid at +1 cycle");
+    @(negedge clk);                              // +2 拍: 数据有效
+    chk128(w_rdata, {64'h0, 64'h1234_5678_DEAD_BEEF},
+           "wpipe contract: W data valid at +2 cycle");
+    w_re = 0;
 
     // ---------- ④ A/B: 128b 写 + strobe + 128b 读 ----------
     b_write(A_ADDR + 24'h0, 2'd0, p128(32'd1), 16'hFFFF);
