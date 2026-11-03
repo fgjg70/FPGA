@@ -5,6 +5,15 @@
 > **提交截止**：2026-11-04 18:00
 > 本仓库同时保留一条 Artix-7 XC7A100T 分支作为**跨厂商对比**（规则允许仅作对比；交付主体必须是紫光同创器件）。
 
+## 0. 合规与证据（先读）
+
+- **交付主体 = 紫光同创 PG2L100H**；Artix-7 XC7A100T 线仅作**跨厂商对比**（赛题规则 3.4）。
+- **数字必须带级别与证据**：A 实测（上板） / B 实测（仿真） / C 综合 / D 派生 / E 未测——见 [`COMPLIANCE.md`](COMPLIANCE.md)。
+- **证据登记**：[`docs/EVIDENCE.md`](docs/EVIDENCE.md)（每个对外数字对应一行 + 状态）。
+- **提交清单**：[`docs/SUBMISSION-CHECKLIST.md`](docs/SUBMISSION-CHECKLIST.md)（截止 2026-11-04 18:00）。
+- **逐文件合规审计**：[`docs/COMPLIANCE-AUDIT.md`](docs/COMPLIANCE-AUDIT.md)（覆盖全库 828 文件）。
+- **当前最重要缺口**：① Pango **Flash 未写入**（断电需重新下载）；② Pango CoreMark 原始日志未入库；③ 设计报告（Word/PDF）与演示视频未产出；④ 摄像头预览已目视确认，但 CPU 固件/按键/UART 未逐项确认。
+
 ## 1. 交付主体与关键指标（PG2L100H）
 
 | 项 | 实测值 | 来源 |
@@ -68,7 +77,16 @@
 - **NPU 周期口径**：1,769,238 拍是**纯计算**时间（@50 MHz = 35.38 ms）；端到端延迟需另测（采集→NPU→CPU→LCD→业务判定）。
 - **Flash 未写入**：当前为 JTAG RAM 下载；现场演示前需完成 Flash 自启动或固化下载流程（含备机/兜底视频）。
 
-## 6. 仓库整理记录
+## 6. 技术文档入口
+
+- [`docs/TECHNICAL-OVERVIEW.md`](docs/TECHNICAL-OVERVIEW.md) — 系统架构/CPU 微架构/NPU/视频通路/时钟域
+- [`docs/REPRODUCE.md`](docs/REPRODUCE.md) — 两条线的构建/仿真/上板复现步骤
+- [`docs/EVIDENCE.md`](docs/EVIDENCE.md) — 证据登记表（含待补清单）
+- [`docs/SUBMISSION-CHECKLIST.md`](docs/SUBMISSION-CHECKLIST.md) — 提交检查清单
+- [`COMPLIANCE.md`](COMPLIANCE.md) — 合规规范（证据分级/禁用词/边界清单）
+- [`docs/README.md`](docs/README.md) — 全部文档索引
+
+## 7. 仓库整理记录
 
 - 2026-11-03：删除重复快照 `releases/cpu50mhz/`（384 文件/9.2MB，保留于 commit `f07836d`）；删除 `_pds_probe/` 临时工程与编辑器/工具临时文件；`legacy/`→`archive/legacy/`、`fpga_pds/`→`archive/pds/`；新增本 README、`README-ARTIX.md`、`docs/README.md`、`THIRD_PARTY.md`、`archive/README.md`；`.gitignore` 增补临时文件规则。**RTL、构建脚本、Pango 工程路径均未改动。**
 - 分支约定：`main` = 交付/总览；`feat/ai-accel` = 自研 NPU 对比材料；`feat/isa-ac` = RV32A/C 扩展实验；`tag deliv150-o2ira` = Artix 150 MHz 交付档。

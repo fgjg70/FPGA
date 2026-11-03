@@ -1,3 +1,5 @@
+> **范围/口径声明（交付主体）**：本文属于**紫光同创 PG2L100H** 交付主体线。文中"实测"指上板实测并应附证据路径；"未达成/未部署"项见根 [`COMPLIANCE.md`](COMPLIANCE.md) §4 边界清单。注意：**Pango 侧 Flash 当前尚未写入**（JTAG RAM 下载），详见 [`fpga_pg2l100h/vision/BOARD_VALIDATION.md`](fpga_pg2l100h/vision/BOARD_VALIDATION.md)。
+
 # PG2L100H：OV7670 FIFO + AN430 外设调试
 
 历史参考：本目录适配资料中的22针AL422模块。2026-11-02实物照片确认当前摄像头为18针DVP，应打开 `../vision/build/j11/pg2l100h_vision.pds`，按 `../vision/CAMERA_DEBUG.md` 和该工程生成的接线表连接。本目录FIFO信号表不适用于当前实物。

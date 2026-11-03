@@ -1,3 +1,5 @@
+> **范围/口径声明（交付主体）**：本文属于**紫光同创 PG2L100H** 交付主体线。文中"实测"指上板实测并应附证据路径；"未达成/未部署"项见根 [`COMPLIANCE.md`](COMPLIANCE.md) §4 边界清单。注意：**Pango 侧 Flash 当前尚未写入**（JTAG RAM 下载），详见 [`fpga_pg2l100h/vision/BOARD_VALIDATION.md`](fpga_pg2l100h/vision/BOARD_VALIDATION.md)。
+
 # 数字标签训练与真实数据闭环
 
 默认标签模型只启用digit 0～digit 9，对应通道12～21。六层卷积、27输出通道、定点移位和单bank ROM布局保持一致。当前活动手势权重仍为旧hand 1～9（通道3～11），使用肤色轮廓输入。用户指定的新一到十标准见 `GESTURE_STANDARD.md`：十类bank可复用通道2表示HAND 10，1～9继续用3～11，不增加输出通道或ROM容量；只有已训练并声明该标准的模型才启用十。新采集目录为camera_hand_northern10，训练默认输出候选，不覆盖活动bank。两模式数据及不同手型标准必须分开。模型是自定义轻量YOLO风格检测器，不能直接装入Ultralytics的PT/ONNX权重。

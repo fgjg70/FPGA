@@ -1,3 +1,5 @@
+> **文档性质声明（开发/交接文档）**：本文是内部开发/交接/审查文档，不是赛题交付结论或对外验收报告；涉及的数字请以根 [`COMPLIANCE.md`](COMPLIANCE.md) 的"证据分级"与对应证据文件为准。
+
 ---
 name: fpga-riscv-a100t
 description: 在正点原子达芬奇Pro (XC7A100T-FGG484-2) 上开发/验证 RISC-V 软核 CPU 时使用。涵盖 ModelSim 命令行回归、Vivado 2018.3 批处理综合与 JTAG 烧录、硬件闭环验证配方，以及本机环境特有的坑(DSH 会话剥离环境变量、cmd 批处理必须纯 ASCII、MMIO 读选通、UART 收发约定)。触发词：FPGA、A100T、达芬奇Pro、RISC-V、RV32I、ModelSim、Vivado、bitstream、烧录、CoreMark、紫光同创、PDS。

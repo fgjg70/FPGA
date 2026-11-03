@@ -1,3 +1,5 @@
+> **范围/口径声明（交付主体）**：本文属于**紫光同创 PG2L100H** 交付主体线。文中"实测"指上板实测并应附证据路径；"未达成/未部署"项见根 [`COMPLIANCE.md`](COMPLIANCE.md) §4 边界清单。注意：**Pango 侧 Flash 当前尚未写入**（JTAG RAM 下载），详见 [`fpga_pg2l100h/vision/BOARD_VALIDATION.md`](fpga_pg2l100h/vision/BOARD_VALIDATION.md)。
+
 # CPU 125 MHz / NPU 50 MHz 时钟解耦
 
 目标器件为PG2L100H / -6 / FBG676，所有活动RTL继续使用Verilog-2005。本轮目标为CPU、IMEM、DMEM和寄存器堆125 MHz；NPU、摄像头采集、快照、UART、按键和MMIO设备50 MHz；视频27 MHz、LCD像素9 MHz。当前最终布局布线及下载状态以 `build/j11/build_summary.json` 和 `validation/hardware_summary.json` 为准，PLL仿真通过本身不代表125 MHz时序收敛或实际运行已验证。

@@ -1,3 +1,5 @@
+> **范围/口径声明（交付主体）**：本文属于**紫光同创 PG2L100H** 交付主体线。文中"实测"指上板实测并应附证据路径；"未达成/未部署"项见根 [`COMPLIANCE.md`](COMPLIANCE.md) §4 边界清单。注意：**Pango 侧 Flash 当前尚未写入**（JTAG RAM 下载），详见 [`fpga_pg2l100h/vision/BOARD_VALIDATION.md`](fpga_pg2l100h/vision/BOARD_VALIDATION.md)。
+
 # NUMGUARD数字标签模型：实际训练与验证记录
 
 默认标签bank模型为 `candidates/numguard/`，仅启用digit 0～9，即类别12～21，掩码 `0x003ff000`。本报告只描述该数字模型，权重保持不变；新增手势1～9独立bank的训练与较弱验证结果见 `GESTURES.md`。模型/权重已经实际训练并导出，不是空接口或随机参数；网络是自定义6层YOLO风格小型检测器，不是标准YOLOv8预训练权重的直接移植。

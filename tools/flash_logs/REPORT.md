@@ -1,3 +1,6 @@
+> **范围声明（[跨厂商对比]）**：本文记录的是 **Artix-7 达芬奇 Pro 板**的 QSPI Flash 烧写验证（2026-10-17），属于参照线证据。
+> **不要**把它当成紫光同创 PG2L100H 的 Flash 状态：**Pango 侧 Flash 当前尚未写入**（仅 JTAG RAM 下载，见 `fpga_pg2l100h/vision/BOARD_VALIDATION.md`）。
+
 # QSPI Flash 固化 — 报告 (2026-10-09)
 
 **结论：成功。** 达芬奇 Pro 板载 QSPI Flash 已写入我们的 bitstream，并**逐字节读回校验通过**。
