@@ -277,12 +277,12 @@ cmd /c D:\USER\Desktop\FPGA\FPGA\fpga\ila_info.bat    REM 列出 ILA 与所有�
 
 | 项 | 状态（**2026-10-11 现查**）|
 |---|---|
-| 时钟名 | **`sys_clk_core`**（**频率无关**命名；旧名 `sys_clk_75` 已废）—— XDC 用 `-multiply_by 21 -divide_by 8`（⇒ 131.25 MHz 目标）|
+| 时钟名 | **`sys_clk_core`**（**频率无关**命名；旧名 `sys_clk_75` 已废）—— XDC 用 `-multiply_by 21 -divide_by 7`（⇒ **150 MHz 当前交付档**）|
 | **已上板验证档** | **105 MHz**（`sys_clk_core` @9.524 ns；MMCM `CLKOUT0_DIVIDE_F` 按档位取）|
 | 该档评分版时序 | fmax **106.30 MHz**（WNS **+0.117** @9.524 ns）|
 | 该档评分版资源 | LUT **2706** / FF **1290** / BRAM **8** / DSP **8** |
 | `fpga/cpu_a100t.bit` / ILA 版里嵌的程序 | `cm_hw`（CoreMark **3000** 迭代；`cm_hw.build.json` 记 `expect_tick`、`wait_seconds`，**随档位自动写**）|
-| **当前设计目标档** | **131.25 MHz**（@7.619 ns）—— **时序未收敛**：`Timing constraints are not met.`、WNS **−0.963**、1141/4437 失败端点 |
+| **历史设计目标档（2026-10-11）** | **131.25 MHz**（@7.619 ns）—— 当时**时序未收敛**：`Timing constraints are not met.`、WNS **−0.963**、1141/4437 失败端点 |
 | **ILA 版 bitstream** | 改过 RTL 就必须按 §3 重建（约 5–6 分钟），否则抓到的是旧设计 |
 | 最后一次采集 | **2026-10-11 15:22:41**，tick **1,380,682,494**、`ila_ctrl=0xC2`、硬件 CM/MHz **2.1728** |
 

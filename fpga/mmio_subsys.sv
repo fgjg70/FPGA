@@ -162,7 +162,7 @@ module mmio_subsys
   //   它所在的链: cycle_cnt(64 位自由计数器) -> `>=` **64 位比较器** -> irq_timer
   //     -> csr_file 的 mip / MIE / MTIE 门控 -> core.irq_take -> trap_enter
   //     -> pc_target 的 4:1 优先级 mux -> pc_next -> **imem 地址脚**。
-  //   在 75 MHz 下这条链**不在 top-50**(实测 top-50 全部同源, 都是 dmem->imem 那条墙),
+  //   在 75 MHz（历史档）下这条链**不在 top-50**(实测 top-50 全部同源, 都是 dmem->imem 那条墙),
   //   但在 150 MHz 的 6.667 ns 预算下, 一旦那条墙被"load 出前递"(C-2) 打断, 它就是
   //   最可能接班成为新墙的候选之一: 64 位比较器(约 2~3 级 CARRY4) + CSR 门控 +
   //   4:1 mux 全压在同一个周期里, 而它的起点还是一个自由计数器。

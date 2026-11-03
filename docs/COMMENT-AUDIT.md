@@ -1,6 +1,6 @@
 # 源文件注释合规性审计（docs/COMMENT-AUDIT.md）
 
-> **覆盖范围**：仓库中所有含注释的源码/脚本/约束文件（RTL `.v/.sv/.vhd/.vhdl`、`.c/.h/.S`、`.py`、`.tcl`、`.bat/.ps1`、`.fdc/.pdc/.xdc`、`.pds`、`.ld`、`.yml`）。
+> **覆盖范围**：仓库中所有含注释的源码/脚本/约束文件（RTL `.v/.sv/.vhd/.vhdl`、`.c/.h/.S`、`.py`、`.tcl`、`.bat/.ps1`/`.sh`、`.fdc/.pdc/.xdc`、`.pds`、`.ld`、`.yml`）。
 > **审查方法**：抽取各类注释（`//`、`/* */`、`#`、`REM`、`<!-- -->`、docstring）→ 与当前事实口径（Artix 交付档 150 MHz；main 验证矩阵 12 项；Pango CPU 125 MHz / NPU 50 MHz；Pango Flash 未写入）逐项比对 → 修复冲突陈述。
 > **历史/第三方副本**（`fpga_mes50hp/`、`fpga_pds_1_0_9/`、`archive/`、`ebf_*`）保留当时注释原貌，不参与当前交付口径（见 THIRD_PARTY.md / archive/README.md）。
 
@@ -16,7 +16,7 @@
 
 **总计：403 个源文件**；注释条数合计 **16,284**（按上述抽取规则计数）。
 
-## 2. 本轮修复记录（均有真实文件改动）
+## 2. 本轮修复记录（均有真实文件改动；终审后补 #25/#26）
 
 | # | 文件 | 问题 | 修复 |
 |---:|---|---|---|
@@ -42,9 +42,11 @@
 | 20 | `results/COMPETITION-PLAN.md` | > 三份独立调研发起：规则（docs-sync）、工程化（build-repo）、RTL/软件/测试（shortcom）， | > ⚠ **历史计划（2026-10-17，Pango 迁移前）**：文中"现在跑在 Artix-7，不合规"是当时状态；当前交付主体已迁移到紫光同创 PG2L100H，见 `RE |
 | 21 | `HANDOFF.md` | **最新已上板档 = 105 MHz**（`sys_clk_core` @9.524 ns，采集 2026-10-11 15:22:41）； | > ⚠ **历史文档（2026-10-11 口径）**："最新已上板档 = 105 MHz / 当前目标 131.25 MHz"均已被 **2026-10-17 的 150 MHz |
 | 22 | `CODE-MAP.md` | ## 5. 当前交付指标（**2026-10-11 现查**；三件事必须一起写） | ## 5. 交付指标（**2026-10-11 历史快照；当前交付档 150 MHz 见 README-ARTIX.md ②**） |
-
 | 23 | `tools/build_sw.py` | 注释仍写"全部 11 项回归…PASS 11"（第一轮 MISS） | 改为"12 项回归…PASS 12" |
 | 24 | `tools/fpga_workflow.py` | 注释仍写"文档里的 PASS 11 需要同步更新"（第一轮 MISS） | 改为"当前 PASS 12；历史版本曾为 PASS 11" |
+| 25 | `fpga/top_a100t.sv` | "为什么是 21/1 而不是 3/2"段落仍写 1050/14=75、XDC -divide_by 14（第一轮 diff 未覆盖） | 改为 VCO 1050 / CLKOUT0_DIVIDE_F=7 ⇒ 150 MHz、XDC 21/7；75 MHz 推导标历史 |
+| 26 | `fpga/mmio_subsys.sv` | "在 75 MHz 下这条链不在 top-50"未标历史（与后文 150 MHz 混读） | 加"（历史档）"前缀 |
+
 ## 3. 逐文件审计表
 
 | # | 源文件 | 类别 | 注释条数 | 判定/处置 |
@@ -167,10 +169,10 @@
 | 116 | `fpga/ila_try.tcl` | Artix-7 参照线 | 1 | 审查通过（未发现与当前口径冲突的陈述） |
 | 117 | `fpga/jtag_probe.bat` | Artix-7 参照线 | 0 | 审查通过（未发现与当前口径冲突的陈述） |
 | 118 | `fpga/jtag_probe.tcl` | Artix-7 参照线 | 4 | 审查通过（未发现与当前口径冲突的陈述） |
-| 119 | `fpga/mmio_subsys.sv` | Artix-7 参照线 | 120 | 审查通过（未发现与当前口径冲突的陈述） |
+| 119 | `fpga/mmio_subsys.sv` | Artix-7 参照线 | 120 | 已修复：75 MHz 历史标注（终审补做） |
 | 120 | `fpga/prog_uart.bat` | Artix-7 参照线 | 0 | 审查通过（未发现与当前口径冲突的陈述） |
 | 121 | `fpga/prog_uart.tcl` | Artix-7 参照线 | 13 | 审查通过（未发现与当前口径冲突的陈述） |
-| 122 | `fpga/top_a100t.sv` | Artix-7 参照线 | 114 | 已修复：top_a100t 信号名注释 |
+| 122 | `fpga/top_a100t.sv` | Artix-7 参照线 | 114 | 已修复：交付档注释 128.125→150（含 21/7 推导修正） |
 | 123 | `fpga_mes50hp/app/digit_cli.py` | 历史/第三方副本 | 0 | 保留原貌（历史/第三方副本，不参与当前交付口径） |
 | 124 | `fpga_mes50hp/app/digit_demo.py` | 历史/第三方副本 | 0 | 保留原貌（历史/第三方副本，不参与当前交付口径） |
 | 125 | `fpga_mes50hp/app/evaluate_board.py` | 历史/第三方副本 | 0 | 保留原貌（历史/第三方副本，不参与当前交付口径） |

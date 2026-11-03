@@ -44,7 +44,7 @@
 
 NPU的1769238周期只覆盖计算；50 MHz下35.38 ms是纯计算时间。板上另测采集启动→NPU启动、NPU启动→CPU判定、判定→LCD帧提交、三次确认后的业务总延迟。串口事件中的DEC是NPU启动→CPU完成判定，包含这次NPU计算，不是纯CPU开销；正常测量关闭d采集。
 
-使用者已完成CoreMark跑分，保留已有原始日志和测试条件；本轮转换不以重跑为前置条件。下面的独立工程用于需要时复现：
+使用者侧曾做过 CoreMark 跑分，但**原始日志目前尚未入库**（`docs/EVIDENCE.md` P-09 状态 🔲）；本仓库与报告**不得引用未入库分数**。下面的独立工程用于需要时复现并把原始日志入库：
 
 ```powershell
 python fpga_pg2l100h/vision/build.py --prepare-only --profile coremark --iterations 6000
@@ -52,7 +52,7 @@ python fpga_pg2l100h/vision/build.py --profile coremark --iterations 6000 --pds-
 python fpga_pg2l100h/vision/competition/coremark.py --log actual_coremark_uart.txt --output fpga_pg2l100h/vision/validation/coremark_hardware.json
 ```
 
-CoreMark工程为 `build/coremark_j11/pg2l100h_coremark.pds`，使用相同CPU、50 MHz和片上存储器；固件关闭推理。官方算法固定到EEMBC/CoreMark提交 `1f483d5b8316753a742cbf5590caf5bd0a4e4777`，逐文件校验，移植层与官方算法分离。保留原始完整串口记录，不修改>=10秒判定。6000次是初始配置；若实际运行不足10秒，增加迭代重跑。一次迭代仿真只在测试台提高UART波特率以缩短输出等待，CPU和算法不变；部署固件仍是115200。此短仿真不产生有效成绩。
+CoreMark工程为 `build/coremark_j11/pg2l100h_coremark.pds`，使用相同CPU、50 MHz和片上存储器；固件关闭推理。官方算法固定到EEMBC/CoreMark提交 `1f483d5b8316753a742cbf5590caf5bd0a4e4777`，逐文件校验，移植层与官方算法分离。跑分时必须保留原始完整串口记录并入库，不修改>=10秒判定。6000次是初始配置；若实际运行不足10秒，增加迭代重跑。一次迭代仿真只在测试台提高UART波特率以缩短输出等待，CPU和算法不变；部署固件仍是115200。此短仿真不产生有效成绩。
 
 CoreMark/MHz = iterations × 1e6 / ticks。CoreMark/LUT需明确分母是整个系统还是CPU子模块，并从对应的实际PDS报告提取，不能拿旧Xilinx或MES50HP的资源/跑分代填。当前应用使用片上存储器，未实现指南高阶任务的两路组相联I/D Cache，也未展示板上中断应用；已有BTB/CSR逻辑不等于这些指标均通过验收。
 
