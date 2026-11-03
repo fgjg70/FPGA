@@ -83,3 +83,7 @@ python fpga_pg2l100h/vision/tools/make_demo_cards.py
 完整验证通过后可执行 `python fpga_pg2l100h/vision/competition/package_project.py`，生成 `competition/NUMGUARD_project.zip`，含源码、模型、独立J11 PDS工程、校验清单和仿真证据。打包器会拒绝旧模型/旧固件的失配工程；压缩包仍明确标注实物验收待完成，不作为已获奖或已完成硬件测评的证明。
 
 本轮交付结果汇总在 `competition/VALIDATION.md`。软件回归、PG2L100H实际综合/布局布线、50 MHz时序和JTAG配置均已完成；板载CH340串口未接通，仍待温度检查、摄像头/LCD、冷启动和独立识别验收。原始硬件记录在 `validation/hardware_summary.json` 及 `validation/hardware_20261102/`。此前混合12类实验保存在 `PUBLIC12_ARCHIVE.md` 和 `model/PUBLIC12_*_ARCHIVE.md`；新手势专用模型独立保存在 `model/gesture/`。手势示例 `validation/gesture_examples.png` 保留各类首个样本及其失败结果，是软件整数参考图，不是板上照片。
+
+## 性能与代码规范
+- [`PERFORMANCE-ANALYSIS.md`](PERFORMANCE-ANALYSIS.md) — CoreMark 流水线效率分析（最终版口径；ILA 非强制）
+- [`CODE-STANDARDS.md`](CODE-STANDARDS.md) — 代码规范（模块化/时序约束/注释完整性）
