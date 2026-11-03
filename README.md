@@ -11,7 +11,7 @@
 - **数字必须带级别与证据**：A 实测（上板） / B 实测（仿真） / C 综合 / D 派生 / E 未测——见 [`COMPLIANCE.md`](COMPLIANCE.md)。
 - **证据登记**：[`docs/EVIDENCE.md`](docs/EVIDENCE.md)（每个对外数字对应一行 + 状态）。
 - **提交清单**：[`docs/SUBMISSION-CHECKLIST.md`](docs/SUBMISSION-CHECKLIST.md)（截止 2026-11-04 18:00）。
-- **逐文件合规审计**：[`docs/COMPLIANCE-AUDIT.md`](docs/COMPLIANCE-AUDIT.md)（覆盖全库 828 文件）。
+- **逐文件合规审计**：[`docs/COMPLIANCE-AUDIT.md`](docs/COMPLIANCE-AUDIT.md)（覆盖全库 835 文件）。
 - **当前最重要缺口**：① Pango **Flash 未写入**（断电需重新下载）；② Pango CoreMark 原始日志未入库；③ 设计报告（Word/PDF）与演示视频未产出；④ 摄像头预览已目视确认，但 CPU 固件/按键/UART 未逐项确认。
 
 ## 1. 交付主体与关键指标（PG2L100H）
