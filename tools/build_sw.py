@@ -5,7 +5,7 @@ Usage:
     python tools/build_sw.py sw/hello.c sw/portme.c -o sim/prog/hello.hex
     python tools/build_sw.py sw/coremark/*.c -I sw/coremark -o sim/prog/coremark.hex
 
-    # 【W-07】一条命令构建**全部 11 项回归**需要的镜像 (全新克隆可复现 PASS 11)
+    # 【W-07】一条命令构建**全部 12 项回归**需要的镜像 (全新克隆可复现 PASS 12)
     python tools/build_sw.py --all
     python tools/build_sw.py --all --with-hw     # 额外构建上板跑分镜像 cm_hw.hex
     python tools/build_sw.py --list              # 只列出 --all 会构建什么
