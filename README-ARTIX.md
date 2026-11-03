@@ -1,12 +1,12 @@
 <!-- 本文件为 Artix-7 XC7A100T 交付档的完整说明；仓库总览见 README.md。 -->
-> **本文件是 Artix-7 交付档的详细说明（历史交付线，用于跨厂商对比）。比赛交付主体见 [README.md](README.md) 与 [fpga_pg2l100h/](fpga_pg2l100h/)。
+> **本文件是 Artix-7 交付档的详细说明（历史交付线，用于跨厂商对比）。比赛交付主体见 [README.md](https://github.com/fgjg70/FPGA/blob/main/README.md) 与 [fpga_pg2l100h/](fpga_pg2l100h/)。
 > **数字口径（务必引用时带上）**：CoreMark 324.19 为 2026-10-17 上板实测（`-Os` 旧固件，日志 `results/uart_flash_boot_final.txt`）；405.9 为 `-O2` 配方派生值、**从未上板**；自研 NPU 的 401.9× 是「CPU 软件基线 vs NPU 纯计算」的仿真口径（B 级）。所有 Artix-7 数字[跨厂商对比]，不构成交付成绩。**
 
 # RV32IM 五级流水线处理器
 
 PG2L100H视觉工程入口见 [fpga_pg2l100h/vision/README.md](fpga_pg2l100h/vision/README.md)。活动RTL为Verilog-2005，CPU、指令存储和数据存储目标125 MHz，NPU、摄像头采集及MMIO为50 MHz；摄像头接J7，AN430 LCD接J11。
 
-该版本已通过原生布局布线和时序检查。2026-11-03修正125 MHz CPU PLL的带宽配置并重新下载到FPGA RAM后，PLL锁定标志已由0变为1，用户已确认摄像头画面显示在LCD上；CPU固件执行和物理按键仍待单独验证。当前为易失RAM配置，断电后需要重新下载。最新记录见 [BOARD_VALIDATION.md](fpga_pg2l100h/vision/BOARD_VALIDATION.md)。北方一到十手势尚待实拍训练，COCO80模型尚未部署，功能边界见 [MODES.md](fpga_pg2l100h/vision/MODES.md)。
+该版本已通过原生布局布线和时序检查。2026-11-03修正125 MHz CPU PLL的带宽配置并重新下载到FPGA RAM后，PLL锁定标志已由0变为1，用户已确认摄像头画面显示在LCD上；CPU固件执行和物理按键仍待单独验证。当前为易失RAM配置，断电后需要重新下载。最新记录见 [BOARD_VALIDATION.md](https://github.com/fgjg70/FPGA/blob/main/fpga_pg2l100h/vision/BOARD_VALIDATION.md)。北方一到十手势尚待实拍训练，COCO80模型尚未部署，功能边界见 [MODES.md](fpga_pg2l100h/vision/MODES.md)。
 
 之前的 CPU/NPU 50 MHz 源码基线快照已归档在 commit `f07836d`（`releases/cpu50mhz/`，2026-11-02 备份），已从 main 树中移除以缩减仓库体积；需要时用 `git show f07836d -- releases/cpu50mhz` 取回。
 
