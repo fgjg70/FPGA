@@ -31,3 +31,12 @@
 - `CODE-MAP.md`、`CODE-REVIEW-PLAN.md`、`HANDOFF*.md` — 代码地图/审查计划/交接文档（根目录）
 - `tools/fpga_workflow.py` — 构建/仿真/上板统一入口
 - `archive/README.md` — 归档内容说明
+
+## 合规与证据（2026-11-03 新增）
+- `COMPLIANCE.md` — 合规规范（证据分级 A/B/C/D/E、禁用词、交付边界、器件合规）
+- `docs/TECHNICAL-OVERVIEW.md` — 技术总览（CPU 微架构/NPU/视频/时钟域/工具链）
+- `docs/REPRODUCE.md` — 两条线复现指南
+- `docs/EVIDENCE.md` — 证据登记表（含待补清单）
+- `docs/SUBMISSION-CHECKLIST.md` — 提交检查清单（截止 11-04 18:00）
+- `docs/COMPLIANCE-AUDIT.md` — 全库逐文件合规审计（835 文件）
+- `tools/compliance_check.py` — 禁用词/缺级别数字自动检查
