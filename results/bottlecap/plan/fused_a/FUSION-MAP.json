@@ -1,0 +1,120 @@
+{
+ "format": "bottlecap-fusion-map-v1",
+ "stage": "a",
+ "source_plan": "results/bottlecap/plan/fused_a/plan.json",
+ "unfused_plan": "results/bottlecap/plan/plan.json (106 op, M6 E2E 基线)",
+ "semantics_reference": "results/bottlecap/reports/M6-FUSION-CONTRACT.md (B.1 Q tail byte4..7 / B.2 写回级两次饱和 / B.3 可融条件)",
+ "n_ops_before": 106,
+ "n_ops_after": 101,
+ "fused_adds": 5,
+ "w_bytes": 2020960,
+ "q_bytes": 90288,
+ "q_bytes_saved_by_fusion": 80,
+ "mappings": [
+  {
+   "add_op": 67,
+   "host_conv_op": 66,
+   "add_type": "residual_relu",
+   "module": "refine5.conv2.0+bn",
+   "shape": [
+    7,
+    7,
+    72,
+    72
+   ],
+   "src_tid_dropped": 55,
+   "residual_tid": 53,
+   "r_scale": 54489,
+   "k_add": 15,
+   "zp_s": 18,
+   "zp_d": -128,
+   "relu": true,
+   "op_bytes_saved": 10584
+  },
+  {
+   "add_op": 73,
+   "host_conv_op": 72,
+   "add_type": "residual_relu",
+   "module": "refine4.conv2.0+bn",
+   "shape": [
+    14,
+    14,
+    72,
+    72
+   ],
+   "src_tid_dropped": 59,
+   "residual_tid": 56,
+   "r_scale": 14445,
+   "k_add": 15,
+   "zp_s": 2,
+   "zp_d": -128,
+   "relu": true,
+   "op_bytes_saved": 42336
+  },
+  {
+   "add_op": 79,
+   "host_conv_op": 78,
+   "add_type": "residual_relu",
+   "module": "refine3.conv2.0+bn",
+   "shape": [
+    28,
+    28,
+    72,
+    72
+   ],
+   "src_tid_dropped": 63,
+   "residual_tid": 60,
+   "r_scale": 26741,
+   "k_add": 15,
+   "zp_s": 7,
+   "zp_d": -128,
+   "relu": true,
+   "op_bytes_saved": 169344
+  },
+  {
+   "add_op": 85,
+   "host_conv_op": 84,
+   "add_type": "residual_relu",
+   "module": "refine2.conv2.0+bn",
+   "shape": [
+    56,
+    56,
+    72,
+    72
+   ],
+   "src_tid_dropped": 67,
+   "residual_tid": 64,
+   "r_scale": 24605,
+   "k_add": 15,
+   "zp_s": -6,
+   "zp_d": -128,
+   "relu": true,
+   "op_bytes_saved": 677376
+  },
+  {
+   "add_op": 94,
+   "host_conv_op": 93,
+   "add_type": "residual_relu",
+   "module": "multi_scale_fusion.1.conv2.0+bn",
+   "shape": [
+    56,
+    56,
+    72,
+    72
+   ],
+   "src_tid_dropped": 73,
+   "residual_tid": 71,
+   "r_scale": 42498,
+   "k_add": 15,
+   "zp_s": 10,
+   "zp_d": -128,
+   "relu": true,
+   "op_bytes_saved": 677376
+  }
+ ],
+ "notes": [
+  "A 类 residual_relu: retarget host conv.dst := add.dst(残差 buffer), 引擎 q_d=残差, q_s=conv requant, 与未融合逐字节一致",
+  "B 类 shortcut 本轮不融(引擎只从 dst 读 q_d, 残差在 src 侧且多消费者), 待引擎扩展",
+  "copy(concat) 不融(需要 src 跨张量段读, 当前 RTL 不支持)"
+ ]
+}

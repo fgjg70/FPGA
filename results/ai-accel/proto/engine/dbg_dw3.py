@@ -1,4 +1,4 @@
-﻿import importlib.util
+import importlib.util
 spec = importlib.util.spec_from_file_location("gv", "gen_vectors.py")
 gv = importlib.util.module_from_spec(spec); spec.loader.exec_module(gv)
 v = gv.make_conv("dw3x3_c8", 9, 10, 8, 8, 3, 1, 1, True, 21, dw=True)

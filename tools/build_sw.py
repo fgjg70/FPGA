@@ -249,7 +249,28 @@ def regression_images(include_hw=False, clk_hz=None):
     else:
         print('[skip] yolo_demo/yolo_board: 缺 sw/yolo_plan.h 或 sim/prog/yolo/plan.json '
               '(先跑 tools/nn_gen_sw.py)')
+    # ---- [M5-S1 2026-11-03] job 级接口 demo (nn_subsys job doorbell + 2KB 结果邮箱) ----
+    # 依赖 sw/yolo_plan.h (YOLO_FINALS golden + 46 寄存器 op 表), 与 yolo_demo 同源。
+    if os.path.exists(_yolo_hdr) and os.path.exists(os.path.join(SW, 'nn_job_demo.c')):
+        imgs.append(dict(kind='cc', name='nn_job_demo',
+                         sources=['sw/nn_job_demo.c', 'sw/portme.c'], includes=[SW],
+                         march='rv32im', opt='-O2',
+                         out='sim/prog/nn_job_demo.hex'))
+    else:
+        print('[skip] nn_job_demo: 缺 sw/nn_job_demo.c 或 sw/yolo_plan.h')
     cm_srcs = ['sw/coremark/' + f for f in CM_SRC]
+    # ---- [M6a 2026-11-04] slim model (96x96, 71 op) end-to-end firmware ----
+    # needs results/bottlecap/plan/slim/slim_plan.h (guard=SLIM_PLAN_H)
+    _slim_hdr = os.path.join(REPO, 'results/bottlecap/plan/slim/slim_plan.h')
+    _slim_src = os.path.join(SW, 'slim_demo.c')
+    if os.path.exists(_slim_src) and os.path.exists(_slim_hdr):
+        imgs.append(dict(kind='cc', name='slim_demo',
+                         sources=['sw/slim_demo.c', 'sw/portme.c'],
+                         includes=[SW, os.path.join(REPO, 'results/bottlecap/plan/slim')],
+                         march='rv32im', opt='-O2',
+                         out='sim/prog/slim_demo.hex'))
+    else:
+        print('[skip] slim_demo: missing sw/slim_demo.c or slim_plan.h')
     # 【R54 单一事实来源】CoreMark 的编译配方**不在这里**定义 —— 见 tools/cm_recipe.py。
     # 以前这里是 `CM_OPT = '-O2 -mbranch-cost=1 -fira-loop-pressure'`, 而 tools/mk_cm_hw.py
     # 里硬编码了 `opt = "-Os"`; 两者**写同一个文件** sim/prog/cm_hw.hex, 于是漂移成了

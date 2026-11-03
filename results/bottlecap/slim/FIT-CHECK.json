@@ -1,0 +1,3084 @@
+{
+  "generated_at": "2026-11-03T23:55:58+0800",
+  "contract": "results/ai-accel/CONTRACT.md (v0.7)",
+  "limits": {
+    "w_bytes": 327680,
+    "q_bytes": 49152,
+    "a_single_tensor_bytes": 98304,
+    "b_bytes": 32768,
+    "ops": 128,
+    "max_ic_oc": 256,
+    "channel_align": 8
+  },
+  "selected": {
+    "model_class": "SlimMobileNetNutAnchorFree",
+    "width_multiplier": 0.4,
+    "fpn_channels": 64,
+    "num_classes": 4,
+    "input_size": 96,
+    "input_preprocess": {
+      "target_size": 96,
+      "fitted_height": 72,
+      "pad_top": 12,
+      "pad_bottom": 12,
+      "normalize": "pixel/127.5-1",
+      "label_normalize": "/(input_size-1)"
+    },
+    "grid_size": 24,
+    "parameter_count": 136321,
+    "w_bytes": 130448,
+    "q_bytes": 22608,
+    "a_single_tensor_peak_bytes": 73728,
+    "a_peak_tensor": "backbone_stage2_0_block_0_0",
+    "b_peak_bytes": 27648,
+    "op_count": {
+      "conv": 39,
+      "dwconv": 18,
+      "upsample": 3,
+      "add": 11,
+      "pool": 0,
+      "copy": 0,
+      "total": 71
+    },
+    "ic_max": 256,
+    "oc_max": 256,
+    "checks": [
+      {
+        "item": "W \u533a int8 \u6743\u91cd\uff08BN \u6298\u53e0\u540e\uff0c8 \u901a\u9053\u5bf9\u9f50\uff09",
+        "actual_bytes": 130448,
+        "actual": "130,448 B / 127.4 KB",
+        "limit_bytes": 327680,
+        "limit": "320 KB (327,680 B)",
+        "pass": true
+      },
+      {
+        "item": "Q \u533a\u91cf\u5316\u53c2\u6570 \u03a3(6*OC_pad+16)",
+        "actual_bytes": 22608,
+        "actual": "22,608 B",
+        "limit_bytes": 49152,
+        "limit": "48 KB (49,152 B)",
+        "pass": true
+      },
+      {
+        "item": "A \u7f13\u51b2\u5355\u5f20\u91cf\u5cf0\u503c\uff08NHWC int8\uff0c8ch \u5bf9\u9f50\uff1b\u542b PACKED3 \u8f93\u5165\u56fe\uff09",
+        "actual_bytes": 73728,
+        "actual": "73,728 B / 72.0 KB",
+        "limit_bytes": 98304,
+        "limit": "96 KB (98,304 B)",
+        "pass": true,
+        "peak_tensor": "backbone_stage2_0_block_0_0"
+      },
+      {
+        "item": "B \u7f13\u51b2\uff08A/B \u53ef\u884c\u6446\u653e\u4e0b\u7684\u5e76\u53d1\u5cf0\u503c\uff09",
+        "actual_bytes": 27648,
+        "actual": "27,648 B / 27.0 KB",
+        "limit_bytes": 32768,
+        "limit": "32 KB (32,768 B)",
+        "pass": true,
+        "placement_feasible": true
+      },
+      {
+        "item": "op \u603b\u6570\uff08conv/dwconv/pool/upsample/add/copy\uff09",
+        "actual_bytes": 71,
+        "actual": "71 ops",
+        "limit_bytes": 128,
+        "limit": "128 op (ROM \u6df1\u5ea6)",
+        "pass": true
+      },
+      {
+        "item": "\u63cf\u8ff0\u7b26 IC/OC \u4e0a\u9650",
+        "actual_bytes": 256,
+        "actual": "IC_max=256, OC_max=256",
+        "limit_bytes": 256,
+        "limit": "256",
+        "pass": true
+      }
+    ],
+    "all_pass": true,
+    "buffer_placement": {
+      "ok": true,
+      "failures": [],
+      "a_peak": 73728,
+      "b_peak": 27648,
+      "live_at_end": {
+        "objectness_head": [
+          "b",
+          0,
+          4608
+        ],
+        "class_head": [
+          "b",
+          4608,
+          4608
+        ],
+        "box_head": [
+          "b",
+          9216,
+          4608
+        ]
+      }
+    },
+    "layers": [
+      {
+        "op": "conv",
+        "name": "backbone_stem_0",
+        "target": "backbone.stem.0",
+        "k": 3,
+        "s": 2,
+        "pad": 1,
+        "groups": 1,
+        "ic": 3,
+        "oc": 8,
+        "ic_pad": 8,
+        "oc_pad": 8,
+        "w_bytes": 576,
+        "q_bytes": 64,
+        "in_shape": [
+          1,
+          3,
+          96,
+          96
+        ],
+        "out_shape": [
+          1,
+          8,
+          48,
+          48
+        ],
+        "act_bytes": 18432,
+        "inputs": [
+          "x"
+        ],
+        "output": "backbone_stem_0"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage1_block_0_0",
+        "target": "backbone.stage1.block.0.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 8,
+        "oc": 16,
+        "ic_pad": 8,
+        "oc_pad": 16,
+        "w_bytes": 128,
+        "q_bytes": 112,
+        "in_shape": [
+          1,
+          8,
+          48,
+          48
+        ],
+        "out_shape": [
+          1,
+          16,
+          48,
+          48
+        ],
+        "act_bytes": 36864,
+        "inputs": [
+          "backbone_stem_0"
+        ],
+        "output": "backbone_stage1_block_0_0"
+      },
+      {
+        "op": "dwconv",
+        "name": "backbone_stage1_block_1_0",
+        "target": "backbone.stage1.block.1.0",
+        "k": 3,
+        "s": 1,
+        "pad": 1,
+        "groups": 16,
+        "ic": 16,
+        "oc": 16,
+        "ic_pad": 16,
+        "oc_pad": 16,
+        "w_bytes": 144,
+        "q_bytes": 112,
+        "in_shape": [
+          1,
+          16,
+          48,
+          48
+        ],
+        "out_shape": [
+          1,
+          16,
+          48,
+          48
+        ],
+        "act_bytes": 36864,
+        "inputs": [
+          "backbone_stage1_block_0_0"
+        ],
+        "output": "backbone_stage1_block_1_0"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage1_block_2",
+        "target": "backbone.stage1.block.2",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 16,
+        "oc": 8,
+        "ic_pad": 16,
+        "oc_pad": 8,
+        "w_bytes": 128,
+        "q_bytes": 64,
+        "in_shape": [
+          1,
+          16,
+          48,
+          48
+        ],
+        "out_shape": [
+          1,
+          8,
+          48,
+          48
+        ],
+        "act_bytes": 18432,
+        "inputs": [
+          "backbone_stage1_block_1_0"
+        ],
+        "output": "backbone_stage1_block_2"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage2_0_block_0_0",
+        "target": "backbone.stage2.0.block.0.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 8,
+        "oc": 32,
+        "ic_pad": 8,
+        "oc_pad": 32,
+        "w_bytes": 256,
+        "q_bytes": 208,
+        "in_shape": [
+          1,
+          8,
+          48,
+          48
+        ],
+        "out_shape": [
+          1,
+          32,
+          48,
+          48
+        ],
+        "act_bytes": 73728,
+        "inputs": [
+          "add"
+        ],
+        "output": "backbone_stage2_0_block_0_0"
+      },
+      {
+        "op": "dwconv",
+        "name": "backbone_stage2_0_block_1_0",
+        "target": "backbone.stage2.0.block.1.0",
+        "k": 3,
+        "s": 2,
+        "pad": 1,
+        "groups": 32,
+        "ic": 32,
+        "oc": 32,
+        "ic_pad": 32,
+        "oc_pad": 32,
+        "w_bytes": 288,
+        "q_bytes": 208,
+        "in_shape": [
+          1,
+          32,
+          48,
+          48
+        ],
+        "out_shape": [
+          1,
+          32,
+          24,
+          24
+        ],
+        "act_bytes": 18432,
+        "inputs": [
+          "backbone_stage2_0_block_0_0"
+        ],
+        "output": "backbone_stage2_0_block_1_0"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage2_0_block_2",
+        "target": "backbone.stage2.0.block.2",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 32,
+        "oc": 8,
+        "ic_pad": 32,
+        "oc_pad": 8,
+        "w_bytes": 256,
+        "q_bytes": 64,
+        "in_shape": [
+          1,
+          32,
+          24,
+          24
+        ],
+        "out_shape": [
+          1,
+          8,
+          24,
+          24
+        ],
+        "act_bytes": 4608,
+        "inputs": [
+          "backbone_stage2_0_block_1_0"
+        ],
+        "output": "backbone_stage2_0_block_2"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage2_1_block_0_0",
+        "target": "backbone.stage2.1.block.0.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 8,
+        "oc": 32,
+        "ic_pad": 8,
+        "oc_pad": 32,
+        "w_bytes": 256,
+        "q_bytes": 208,
+        "in_shape": [
+          1,
+          8,
+          24,
+          24
+        ],
+        "out_shape": [
+          1,
+          32,
+          24,
+          24
+        ],
+        "act_bytes": 18432,
+        "inputs": [
+          "backbone_stage2_0_block_2"
+        ],
+        "output": "backbone_stage2_1_block_0_0"
+      },
+      {
+        "op": "dwconv",
+        "name": "backbone_stage2_1_block_1_0",
+        "target": "backbone.stage2.1.block.1.0",
+        "k": 3,
+        "s": 1,
+        "pad": 1,
+        "groups": 32,
+        "ic": 32,
+        "oc": 32,
+        "ic_pad": 32,
+        "oc_pad": 32,
+        "w_bytes": 288,
+        "q_bytes": 208,
+        "in_shape": [
+          1,
+          32,
+          24,
+          24
+        ],
+        "out_shape": [
+          1,
+          32,
+          24,
+          24
+        ],
+        "act_bytes": 18432,
+        "inputs": [
+          "backbone_stage2_1_block_0_0"
+        ],
+        "output": "backbone_stage2_1_block_1_0"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage2_1_block_2",
+        "target": "backbone.stage2.1.block.2",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 32,
+        "oc": 8,
+        "ic_pad": 32,
+        "oc_pad": 8,
+        "w_bytes": 256,
+        "q_bytes": 64,
+        "in_shape": [
+          1,
+          32,
+          24,
+          24
+        ],
+        "out_shape": [
+          1,
+          8,
+          24,
+          24
+        ],
+        "act_bytes": 4608,
+        "inputs": [
+          "backbone_stage2_1_block_1_0"
+        ],
+        "output": "backbone_stage2_1_block_2"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage3_0_block_0_0",
+        "target": "backbone.stage3.0.block.0.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 8,
+        "oc": 32,
+        "ic_pad": 8,
+        "oc_pad": 32,
+        "w_bytes": 256,
+        "q_bytes": 208,
+        "in_shape": [
+          1,
+          8,
+          24,
+          24
+        ],
+        "out_shape": [
+          1,
+          32,
+          24,
+          24
+        ],
+        "act_bytes": 18432,
+        "inputs": [
+          "add_1"
+        ],
+        "output": "backbone_stage3_0_block_0_0"
+      },
+      {
+        "op": "dwconv",
+        "name": "backbone_stage3_0_block_1_0",
+        "target": "backbone.stage3.0.block.1.0",
+        "k": 3,
+        "s": 2,
+        "pad": 1,
+        "groups": 32,
+        "ic": 32,
+        "oc": 32,
+        "ic_pad": 32,
+        "oc_pad": 32,
+        "w_bytes": 288,
+        "q_bytes": 208,
+        "in_shape": [
+          1,
+          32,
+          24,
+          24
+        ],
+        "out_shape": [
+          1,
+          32,
+          12,
+          12
+        ],
+        "act_bytes": 4608,
+        "inputs": [
+          "backbone_stage3_0_block_0_0"
+        ],
+        "output": "backbone_stage3_0_block_1_0"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage3_0_block_2",
+        "target": "backbone.stage3.0.block.2",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 32,
+        "oc": 16,
+        "ic_pad": 32,
+        "oc_pad": 16,
+        "w_bytes": 512,
+        "q_bytes": 112,
+        "in_shape": [
+          1,
+          32,
+          12,
+          12
+        ],
+        "out_shape": [
+          1,
+          16,
+          12,
+          12
+        ],
+        "act_bytes": 2304,
+        "inputs": [
+          "backbone_stage3_0_block_1_0"
+        ],
+        "output": "backbone_stage3_0_block_2"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage3_1_block_0_0",
+        "target": "backbone.stage3.1.block.0.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 16,
+        "oc": 64,
+        "ic_pad": 16,
+        "oc_pad": 64,
+        "w_bytes": 1024,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          16,
+          12,
+          12
+        ],
+        "out_shape": [
+          1,
+          64,
+          12,
+          12
+        ],
+        "act_bytes": 9216,
+        "inputs": [
+          "backbone_stage3_0_block_2"
+        ],
+        "output": "backbone_stage3_1_block_0_0"
+      },
+      {
+        "op": "dwconv",
+        "name": "backbone_stage3_1_block_1_0",
+        "target": "backbone.stage3.1.block.1.0",
+        "k": 3,
+        "s": 1,
+        "pad": 1,
+        "groups": 64,
+        "ic": 64,
+        "oc": 64,
+        "ic_pad": 64,
+        "oc_pad": 64,
+        "w_bytes": 576,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          64,
+          12,
+          12
+        ],
+        "out_shape": [
+          1,
+          64,
+          12,
+          12
+        ],
+        "act_bytes": 9216,
+        "inputs": [
+          "backbone_stage3_1_block_0_0"
+        ],
+        "output": "backbone_stage3_1_block_1_0"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage3_1_block_2",
+        "target": "backbone.stage3.1.block.2",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 64,
+        "oc": 16,
+        "ic_pad": 64,
+        "oc_pad": 16,
+        "w_bytes": 1024,
+        "q_bytes": 112,
+        "in_shape": [
+          1,
+          64,
+          12,
+          12
+        ],
+        "out_shape": [
+          1,
+          16,
+          12,
+          12
+        ],
+        "act_bytes": 2304,
+        "inputs": [
+          "backbone_stage3_1_block_1_0"
+        ],
+        "output": "backbone_stage3_1_block_2"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage3_2_block_0_0",
+        "target": "backbone.stage3.2.block.0.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 16,
+        "oc": 64,
+        "ic_pad": 16,
+        "oc_pad": 64,
+        "w_bytes": 1024,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          16,
+          12,
+          12
+        ],
+        "out_shape": [
+          1,
+          64,
+          12,
+          12
+        ],
+        "act_bytes": 9216,
+        "inputs": [
+          "add_2"
+        ],
+        "output": "backbone_stage3_2_block_0_0"
+      },
+      {
+        "op": "dwconv",
+        "name": "backbone_stage3_2_block_1_0",
+        "target": "backbone.stage3.2.block.1.0",
+        "k": 3,
+        "s": 1,
+        "pad": 1,
+        "groups": 64,
+        "ic": 64,
+        "oc": 64,
+        "ic_pad": 64,
+        "oc_pad": 64,
+        "w_bytes": 576,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          64,
+          12,
+          12
+        ],
+        "out_shape": [
+          1,
+          64,
+          12,
+          12
+        ],
+        "act_bytes": 9216,
+        "inputs": [
+          "backbone_stage3_2_block_0_0"
+        ],
+        "output": "backbone_stage3_2_block_1_0"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage3_2_block_2",
+        "target": "backbone.stage3.2.block.2",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 64,
+        "oc": 16,
+        "ic_pad": 64,
+        "oc_pad": 16,
+        "w_bytes": 1024,
+        "q_bytes": 112,
+        "in_shape": [
+          1,
+          64,
+          12,
+          12
+        ],
+        "out_shape": [
+          1,
+          16,
+          12,
+          12
+        ],
+        "act_bytes": 2304,
+        "inputs": [
+          "backbone_stage3_2_block_1_0"
+        ],
+        "output": "backbone_stage3_2_block_2"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage4_0_block_0_0",
+        "target": "backbone.stage4.0.block.0.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 16,
+        "oc": 64,
+        "ic_pad": 16,
+        "oc_pad": 64,
+        "w_bytes": 1024,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          16,
+          12,
+          12
+        ],
+        "out_shape": [
+          1,
+          64,
+          12,
+          12
+        ],
+        "act_bytes": 9216,
+        "inputs": [
+          "add_3"
+        ],
+        "output": "backbone_stage4_0_block_0_0"
+      },
+      {
+        "op": "dwconv",
+        "name": "backbone_stage4_0_block_1_0",
+        "target": "backbone.stage4.0.block.1.0",
+        "k": 3,
+        "s": 2,
+        "pad": 1,
+        "groups": 64,
+        "ic": 64,
+        "oc": 64,
+        "ic_pad": 64,
+        "oc_pad": 64,
+        "w_bytes": 576,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          64,
+          12,
+          12
+        ],
+        "out_shape": [
+          1,
+          64,
+          6,
+          6
+        ],
+        "act_bytes": 2304,
+        "inputs": [
+          "backbone_stage4_0_block_0_0"
+        ],
+        "output": "backbone_stage4_0_block_1_0"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage4_0_block_2",
+        "target": "backbone.stage4.0.block.2",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 64,
+        "oc": 24,
+        "ic_pad": 64,
+        "oc_pad": 24,
+        "w_bytes": 1536,
+        "q_bytes": 160,
+        "in_shape": [
+          1,
+          64,
+          6,
+          6
+        ],
+        "out_shape": [
+          1,
+          24,
+          6,
+          6
+        ],
+        "act_bytes": 864,
+        "inputs": [
+          "backbone_stage4_0_block_1_0"
+        ],
+        "output": "backbone_stage4_0_block_2"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage4_1_block_0_0",
+        "target": "backbone.stage4.1.block.0.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 24,
+        "oc": 96,
+        "ic_pad": 24,
+        "oc_pad": 96,
+        "w_bytes": 2304,
+        "q_bytes": 592,
+        "in_shape": [
+          1,
+          24,
+          6,
+          6
+        ],
+        "out_shape": [
+          1,
+          96,
+          6,
+          6
+        ],
+        "act_bytes": 3456,
+        "inputs": [
+          "backbone_stage4_0_block_2"
+        ],
+        "output": "backbone_stage4_1_block_0_0"
+      },
+      {
+        "op": "dwconv",
+        "name": "backbone_stage4_1_block_1_0",
+        "target": "backbone.stage4.1.block.1.0",
+        "k": 3,
+        "s": 1,
+        "pad": 1,
+        "groups": 96,
+        "ic": 96,
+        "oc": 96,
+        "ic_pad": 96,
+        "oc_pad": 96,
+        "w_bytes": 864,
+        "q_bytes": 592,
+        "in_shape": [
+          1,
+          96,
+          6,
+          6
+        ],
+        "out_shape": [
+          1,
+          96,
+          6,
+          6
+        ],
+        "act_bytes": 3456,
+        "inputs": [
+          "backbone_stage4_1_block_0_0"
+        ],
+        "output": "backbone_stage4_1_block_1_0"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage4_1_block_2",
+        "target": "backbone.stage4.1.block.2",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 96,
+        "oc": 24,
+        "ic_pad": 96,
+        "oc_pad": 24,
+        "w_bytes": 2304,
+        "q_bytes": 160,
+        "in_shape": [
+          1,
+          96,
+          6,
+          6
+        ],
+        "out_shape": [
+          1,
+          24,
+          6,
+          6
+        ],
+        "act_bytes": 864,
+        "inputs": [
+          "backbone_stage4_1_block_1_0"
+        ],
+        "output": "backbone_stage4_1_block_2"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage4_2_block_0_0",
+        "target": "backbone.stage4.2.block.0.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 24,
+        "oc": 96,
+        "ic_pad": 24,
+        "oc_pad": 96,
+        "w_bytes": 2304,
+        "q_bytes": 592,
+        "in_shape": [
+          1,
+          24,
+          6,
+          6
+        ],
+        "out_shape": [
+          1,
+          96,
+          6,
+          6
+        ],
+        "act_bytes": 3456,
+        "inputs": [
+          "add_4"
+        ],
+        "output": "backbone_stage4_2_block_0_0"
+      },
+      {
+        "op": "dwconv",
+        "name": "backbone_stage4_2_block_1_0",
+        "target": "backbone.stage4.2.block.1.0",
+        "k": 3,
+        "s": 1,
+        "pad": 1,
+        "groups": 96,
+        "ic": 96,
+        "oc": 96,
+        "ic_pad": 96,
+        "oc_pad": 96,
+        "w_bytes": 864,
+        "q_bytes": 592,
+        "in_shape": [
+          1,
+          96,
+          6,
+          6
+        ],
+        "out_shape": [
+          1,
+          96,
+          6,
+          6
+        ],
+        "act_bytes": 3456,
+        "inputs": [
+          "backbone_stage4_2_block_0_0"
+        ],
+        "output": "backbone_stage4_2_block_1_0"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage4_2_block_2",
+        "target": "backbone.stage4.2.block.2",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 96,
+        "oc": 24,
+        "ic_pad": 96,
+        "oc_pad": 24,
+        "w_bytes": 2304,
+        "q_bytes": 160,
+        "in_shape": [
+          1,
+          96,
+          6,
+          6
+        ],
+        "out_shape": [
+          1,
+          24,
+          6,
+          6
+        ],
+        "act_bytes": 864,
+        "inputs": [
+          "backbone_stage4_2_block_1_0"
+        ],
+        "output": "backbone_stage4_2_block_2"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage4_3_block_0_0",
+        "target": "backbone.stage4.3.block.0.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 24,
+        "oc": 96,
+        "ic_pad": 24,
+        "oc_pad": 96,
+        "w_bytes": 2304,
+        "q_bytes": 592,
+        "in_shape": [
+          1,
+          24,
+          6,
+          6
+        ],
+        "out_shape": [
+          1,
+          96,
+          6,
+          6
+        ],
+        "act_bytes": 3456,
+        "inputs": [
+          "add_5"
+        ],
+        "output": "backbone_stage4_3_block_0_0"
+      },
+      {
+        "op": "dwconv",
+        "name": "backbone_stage4_3_block_1_0",
+        "target": "backbone.stage4.3.block.1.0",
+        "k": 3,
+        "s": 1,
+        "pad": 1,
+        "groups": 96,
+        "ic": 96,
+        "oc": 96,
+        "ic_pad": 96,
+        "oc_pad": 96,
+        "w_bytes": 864,
+        "q_bytes": 592,
+        "in_shape": [
+          1,
+          96,
+          6,
+          6
+        ],
+        "out_shape": [
+          1,
+          96,
+          6,
+          6
+        ],
+        "act_bytes": 3456,
+        "inputs": [
+          "backbone_stage4_3_block_0_0"
+        ],
+        "output": "backbone_stage4_3_block_1_0"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage4_3_block_2",
+        "target": "backbone.stage4.3.block.2",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 96,
+        "oc": 40,
+        "ic_pad": 96,
+        "oc_pad": 40,
+        "w_bytes": 3840,
+        "q_bytes": 256,
+        "in_shape": [
+          1,
+          96,
+          6,
+          6
+        ],
+        "out_shape": [
+          1,
+          40,
+          6,
+          6
+        ],
+        "act_bytes": 1440,
+        "inputs": [
+          "backbone_stage4_3_block_1_0"
+        ],
+        "output": "backbone_stage4_3_block_2"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage4_4_block_0_0",
+        "target": "backbone.stage4.4.block.0.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 40,
+        "oc": 160,
+        "ic_pad": 40,
+        "oc_pad": 160,
+        "w_bytes": 6400,
+        "q_bytes": 976,
+        "in_shape": [
+          1,
+          40,
+          6,
+          6
+        ],
+        "out_shape": [
+          1,
+          160,
+          6,
+          6
+        ],
+        "act_bytes": 5760,
+        "inputs": [
+          "backbone_stage4_3_block_2"
+        ],
+        "output": "backbone_stage4_4_block_0_0"
+      },
+      {
+        "op": "dwconv",
+        "name": "backbone_stage4_4_block_1_0",
+        "target": "backbone.stage4.4.block.1.0",
+        "k": 3,
+        "s": 1,
+        "pad": 1,
+        "groups": 160,
+        "ic": 160,
+        "oc": 160,
+        "ic_pad": 160,
+        "oc_pad": 160,
+        "w_bytes": 1440,
+        "q_bytes": 976,
+        "in_shape": [
+          1,
+          160,
+          6,
+          6
+        ],
+        "out_shape": [
+          1,
+          160,
+          6,
+          6
+        ],
+        "act_bytes": 5760,
+        "inputs": [
+          "backbone_stage4_4_block_0_0"
+        ],
+        "output": "backbone_stage4_4_block_1_0"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage4_4_block_2",
+        "target": "backbone.stage4.4.block.2",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 160,
+        "oc": 40,
+        "ic_pad": 160,
+        "oc_pad": 40,
+        "w_bytes": 6400,
+        "q_bytes": 256,
+        "in_shape": [
+          1,
+          160,
+          6,
+          6
+        ],
+        "out_shape": [
+          1,
+          40,
+          6,
+          6
+        ],
+        "act_bytes": 1440,
+        "inputs": [
+          "backbone_stage4_4_block_1_0"
+        ],
+        "output": "backbone_stage4_4_block_2"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage5_0_block_0_0",
+        "target": "backbone.stage5.0.block.0.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 40,
+        "oc": 160,
+        "ic_pad": 40,
+        "oc_pad": 160,
+        "w_bytes": 6400,
+        "q_bytes": 976,
+        "in_shape": [
+          1,
+          40,
+          6,
+          6
+        ],
+        "out_shape": [
+          1,
+          160,
+          6,
+          6
+        ],
+        "act_bytes": 5760,
+        "inputs": [
+          "add_6"
+        ],
+        "output": "backbone_stage5_0_block_0_0"
+      },
+      {
+        "op": "dwconv",
+        "name": "backbone_stage5_0_block_1_0",
+        "target": "backbone.stage5.0.block.1.0",
+        "k": 3,
+        "s": 2,
+        "pad": 1,
+        "groups": 160,
+        "ic": 160,
+        "oc": 160,
+        "ic_pad": 160,
+        "oc_pad": 160,
+        "w_bytes": 1440,
+        "q_bytes": 976,
+        "in_shape": [
+          1,
+          160,
+          6,
+          6
+        ],
+        "out_shape": [
+          1,
+          160,
+          3,
+          3
+        ],
+        "act_bytes": 1440,
+        "inputs": [
+          "backbone_stage5_0_block_0_0"
+        ],
+        "output": "backbone_stage5_0_block_1_0"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage5_0_block_2",
+        "target": "backbone.stage5.0.block.2",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 160,
+        "oc": 64,
+        "ic_pad": 160,
+        "oc_pad": 64,
+        "w_bytes": 10240,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          160,
+          3,
+          3
+        ],
+        "out_shape": [
+          1,
+          64,
+          3,
+          3
+        ],
+        "act_bytes": 576,
+        "inputs": [
+          "backbone_stage5_0_block_1_0"
+        ],
+        "output": "backbone_stage5_0_block_2"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage5_1_block_0_0",
+        "target": "backbone.stage5.1.block.0.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 64,
+        "oc": 256,
+        "ic_pad": 64,
+        "oc_pad": 256,
+        "w_bytes": 16384,
+        "q_bytes": 1552,
+        "in_shape": [
+          1,
+          64,
+          3,
+          3
+        ],
+        "out_shape": [
+          1,
+          256,
+          3,
+          3
+        ],
+        "act_bytes": 2304,
+        "inputs": [
+          "backbone_stage5_0_block_2"
+        ],
+        "output": "backbone_stage5_1_block_0_0"
+      },
+      {
+        "op": "dwconv",
+        "name": "backbone_stage5_1_block_1_0",
+        "target": "backbone.stage5.1.block.1.0",
+        "k": 3,
+        "s": 1,
+        "pad": 1,
+        "groups": 256,
+        "ic": 256,
+        "oc": 256,
+        "ic_pad": 256,
+        "oc_pad": 256,
+        "w_bytes": 2304,
+        "q_bytes": 1552,
+        "in_shape": [
+          1,
+          256,
+          3,
+          3
+        ],
+        "out_shape": [
+          1,
+          256,
+          3,
+          3
+        ],
+        "act_bytes": 2304,
+        "inputs": [
+          "backbone_stage5_1_block_0_0"
+        ],
+        "output": "backbone_stage5_1_block_1_0"
+      },
+      {
+        "op": "conv",
+        "name": "backbone_stage5_1_block_2",
+        "target": "backbone.stage5.1.block.2",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 256,
+        "oc": 64,
+        "ic_pad": 256,
+        "oc_pad": 64,
+        "w_bytes": 16384,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          256,
+          3,
+          3
+        ],
+        "out_shape": [
+          1,
+          64,
+          3,
+          3
+        ],
+        "act_bytes": 576,
+        "inputs": [
+          "backbone_stage5_1_block_1_0"
+        ],
+        "output": "backbone_stage5_1_block_2"
+      },
+      {
+        "op": "conv",
+        "name": "lateral5_0",
+        "target": "lateral5.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 64,
+        "oc": 64,
+        "ic_pad": 64,
+        "oc_pad": 64,
+        "w_bytes": 4096,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          64,
+          3,
+          3
+        ],
+        "out_shape": [
+          1,
+          64,
+          3,
+          3
+        ],
+        "act_bytes": 576,
+        "inputs": [
+          "add_7"
+        ],
+        "output": "lateral5_0"
+      },
+      {
+        "op": "conv",
+        "name": "lateral4_0",
+        "target": "lateral4.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 40,
+        "oc": 64,
+        "ic_pad": 40,
+        "oc_pad": 64,
+        "w_bytes": 2560,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          40,
+          6,
+          6
+        ],
+        "out_shape": [
+          1,
+          64,
+          6,
+          6
+        ],
+        "act_bytes": 2304,
+        "inputs": [
+          "add_6"
+        ],
+        "output": "lateral4_0"
+      },
+      {
+        "op": "dwconv",
+        "name": "refine4_depthwise_0",
+        "target": "refine4.depthwise.0",
+        "k": 3,
+        "s": 1,
+        "pad": 1,
+        "groups": 64,
+        "ic": 64,
+        "oc": 64,
+        "ic_pad": 64,
+        "oc_pad": 64,
+        "w_bytes": 576,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          64,
+          6,
+          6
+        ],
+        "out_shape": [
+          1,
+          64,
+          6,
+          6
+        ],
+        "act_bytes": 2304,
+        "inputs": [
+          "add_8"
+        ],
+        "output": "refine4_depthwise_0"
+      },
+      {
+        "op": "conv",
+        "name": "refine4_pointwise_0",
+        "target": "refine4.pointwise.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 64,
+        "oc": 64,
+        "ic_pad": 64,
+        "oc_pad": 64,
+        "w_bytes": 4096,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          64,
+          6,
+          6
+        ],
+        "out_shape": [
+          1,
+          64,
+          6,
+          6
+        ],
+        "act_bytes": 2304,
+        "inputs": [
+          "refine4_depthwise_0"
+        ],
+        "output": "refine4_pointwise_0"
+      },
+      {
+        "op": "conv",
+        "name": "lateral3_0",
+        "target": "lateral3.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 16,
+        "oc": 64,
+        "ic_pad": 16,
+        "oc_pad": 64,
+        "w_bytes": 1024,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          16,
+          12,
+          12
+        ],
+        "out_shape": [
+          1,
+          64,
+          12,
+          12
+        ],
+        "act_bytes": 9216,
+        "inputs": [
+          "add_3"
+        ],
+        "output": "lateral3_0"
+      },
+      {
+        "op": "dwconv",
+        "name": "refine3_depthwise_0",
+        "target": "refine3.depthwise.0",
+        "k": 3,
+        "s": 1,
+        "pad": 1,
+        "groups": 64,
+        "ic": 64,
+        "oc": 64,
+        "ic_pad": 64,
+        "oc_pad": 64,
+        "w_bytes": 576,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          64,
+          12,
+          12
+        ],
+        "out_shape": [
+          1,
+          64,
+          12,
+          12
+        ],
+        "act_bytes": 9216,
+        "inputs": [
+          "add_9"
+        ],
+        "output": "refine3_depthwise_0"
+      },
+      {
+        "op": "conv",
+        "name": "refine3_pointwise_0",
+        "target": "refine3.pointwise.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 64,
+        "oc": 64,
+        "ic_pad": 64,
+        "oc_pad": 64,
+        "w_bytes": 4096,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          64,
+          12,
+          12
+        ],
+        "out_shape": [
+          1,
+          64,
+          12,
+          12
+        ],
+        "act_bytes": 9216,
+        "inputs": [
+          "refine3_depthwise_0"
+        ],
+        "output": "refine3_pointwise_0"
+      },
+      {
+        "op": "conv",
+        "name": "lateral2_0",
+        "target": "lateral2.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 8,
+        "oc": 64,
+        "ic_pad": 8,
+        "oc_pad": 64,
+        "w_bytes": 512,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          8,
+          24,
+          24
+        ],
+        "out_shape": [
+          1,
+          64,
+          24,
+          24
+        ],
+        "act_bytes": 36864,
+        "inputs": [
+          "add_1"
+        ],
+        "output": "lateral2_0"
+      },
+      {
+        "op": "dwconv",
+        "name": "refine2_depthwise_0",
+        "target": "refine2.depthwise.0",
+        "k": 3,
+        "s": 1,
+        "pad": 1,
+        "groups": 64,
+        "ic": 64,
+        "oc": 64,
+        "ic_pad": 64,
+        "oc_pad": 64,
+        "w_bytes": 576,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          64,
+          24,
+          24
+        ],
+        "out_shape": [
+          1,
+          64,
+          24,
+          24
+        ],
+        "act_bytes": 36864,
+        "inputs": [
+          "add_10"
+        ],
+        "output": "refine2_depthwise_0"
+      },
+      {
+        "op": "conv",
+        "name": "refine2_pointwise_0",
+        "target": "refine2.pointwise.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 64,
+        "oc": 64,
+        "ic_pad": 64,
+        "oc_pad": 64,
+        "w_bytes": 4096,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          64,
+          24,
+          24
+        ],
+        "out_shape": [
+          1,
+          64,
+          24,
+          24
+        ],
+        "act_bytes": 36864,
+        "inputs": [
+          "refine2_depthwise_0"
+        ],
+        "output": "refine2_pointwise_0"
+      },
+      {
+        "op": "dwconv",
+        "name": "head_features_0_depthwise_0",
+        "target": "head_features.0.depthwise.0",
+        "k": 3,
+        "s": 1,
+        "pad": 1,
+        "groups": 64,
+        "ic": 64,
+        "oc": 64,
+        "ic_pad": 64,
+        "oc_pad": 64,
+        "w_bytes": 576,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          64,
+          24,
+          24
+        ],
+        "out_shape": [
+          1,
+          64,
+          24,
+          24
+        ],
+        "act_bytes": 36864,
+        "inputs": [
+          "refine2_pointwise_0"
+        ],
+        "output": "head_features_0_depthwise_0"
+      },
+      {
+        "op": "conv",
+        "name": "head_features_0_pointwise_0",
+        "target": "head_features.0.pointwise.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 64,
+        "oc": 64,
+        "ic_pad": 64,
+        "oc_pad": 64,
+        "w_bytes": 4096,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          64,
+          24,
+          24
+        ],
+        "out_shape": [
+          1,
+          64,
+          24,
+          24
+        ],
+        "act_bytes": 36864,
+        "inputs": [
+          "head_features_0_depthwise_0"
+        ],
+        "output": "head_features_0_pointwise_0"
+      },
+      {
+        "op": "dwconv",
+        "name": "head_features_1_depthwise_0",
+        "target": "head_features.1.depthwise.0",
+        "k": 3,
+        "s": 1,
+        "pad": 1,
+        "groups": 64,
+        "ic": 64,
+        "oc": 64,
+        "ic_pad": 64,
+        "oc_pad": 64,
+        "w_bytes": 576,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          64,
+          24,
+          24
+        ],
+        "out_shape": [
+          1,
+          64,
+          24,
+          24
+        ],
+        "act_bytes": 36864,
+        "inputs": [
+          "head_features_0_pointwise_0"
+        ],
+        "output": "head_features_1_depthwise_0"
+      },
+      {
+        "op": "conv",
+        "name": "head_features_1_pointwise_0",
+        "target": "head_features.1.pointwise.0",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 64,
+        "oc": 64,
+        "ic_pad": 64,
+        "oc_pad": 64,
+        "w_bytes": 4096,
+        "q_bytes": 400,
+        "in_shape": [
+          1,
+          64,
+          24,
+          24
+        ],
+        "out_shape": [
+          1,
+          64,
+          24,
+          24
+        ],
+        "act_bytes": 36864,
+        "inputs": [
+          "head_features_1_depthwise_0"
+        ],
+        "output": "head_features_1_pointwise_0"
+      },
+      {
+        "op": "conv",
+        "name": "objectness_head",
+        "target": "objectness_head",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 64,
+        "oc": 1,
+        "ic_pad": 64,
+        "oc_pad": 8,
+        "w_bytes": 512,
+        "q_bytes": 64,
+        "in_shape": [
+          1,
+          64,
+          24,
+          24
+        ],
+        "out_shape": [
+          1,
+          1,
+          24,
+          24
+        ],
+        "act_bytes": 4608,
+        "inputs": [
+          "head_features_1_pointwise_0"
+        ],
+        "output": "objectness_head"
+      },
+      {
+        "op": "conv",
+        "name": "class_head",
+        "target": "class_head",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 64,
+        "oc": 4,
+        "ic_pad": 64,
+        "oc_pad": 8,
+        "w_bytes": 512,
+        "q_bytes": 64,
+        "in_shape": [
+          1,
+          64,
+          24,
+          24
+        ],
+        "out_shape": [
+          1,
+          4,
+          24,
+          24
+        ],
+        "act_bytes": 4608,
+        "inputs": [
+          "head_features_1_pointwise_0"
+        ],
+        "output": "class_head"
+      },
+      {
+        "op": "conv",
+        "name": "box_head",
+        "target": "box_head",
+        "k": 1,
+        "s": 1,
+        "pad": 0,
+        "groups": 1,
+        "ic": 64,
+        "oc": 4,
+        "ic_pad": 64,
+        "oc_pad": 8,
+        "w_bytes": 512,
+        "q_bytes": 64,
+        "in_shape": [
+          1,
+          64,
+          24,
+          24
+        ],
+        "out_shape": [
+          1,
+          4,
+          24,
+          24
+        ],
+        "act_bytes": 4608,
+        "inputs": [
+          "head_features_1_pointwise_0"
+        ],
+        "output": "box_head"
+      }
+    ],
+    "activation_table": [
+      {
+        "name": "backbone_stem_0",
+        "op": "conv",
+        "shape_nhwc": [
+          48,
+          48,
+          8
+        ],
+        "bytes": 18432
+      },
+      {
+        "name": "backbone_stage1_block_0_0",
+        "op": "conv",
+        "shape_nhwc": [
+          48,
+          48,
+          16
+        ],
+        "bytes": 36864
+      },
+      {
+        "name": "backbone_stage1_block_1_0",
+        "op": "dwconv",
+        "shape_nhwc": [
+          48,
+          48,
+          16
+        ],
+        "bytes": 36864
+      },
+      {
+        "name": "backbone_stage1_block_2",
+        "op": "conv",
+        "shape_nhwc": [
+          48,
+          48,
+          8
+        ],
+        "bytes": 18432
+      },
+      {
+        "name": "add",
+        "op": "add",
+        "shape_nhwc": [
+          48,
+          48,
+          8
+        ],
+        "bytes": 18432
+      },
+      {
+        "name": "backbone_stage2_0_block_0_0",
+        "op": "conv",
+        "shape_nhwc": [
+          48,
+          48,
+          32
+        ],
+        "bytes": 73728
+      },
+      {
+        "name": "backbone_stage2_0_block_1_0",
+        "op": "dwconv",
+        "shape_nhwc": [
+          24,
+          24,
+          32
+        ],
+        "bytes": 18432
+      },
+      {
+        "name": "backbone_stage2_0_block_2",
+        "op": "conv",
+        "shape_nhwc": [
+          24,
+          24,
+          8
+        ],
+        "bytes": 4608
+      },
+      {
+        "name": "backbone_stage2_1_block_0_0",
+        "op": "conv",
+        "shape_nhwc": [
+          24,
+          24,
+          32
+        ],
+        "bytes": 18432
+      },
+      {
+        "name": "backbone_stage2_1_block_1_0",
+        "op": "dwconv",
+        "shape_nhwc": [
+          24,
+          24,
+          32
+        ],
+        "bytes": 18432
+      },
+      {
+        "name": "backbone_stage2_1_block_2",
+        "op": "conv",
+        "shape_nhwc": [
+          24,
+          24,
+          8
+        ],
+        "bytes": 4608
+      },
+      {
+        "name": "add_1",
+        "op": "add",
+        "shape_nhwc": [
+          24,
+          24,
+          8
+        ],
+        "bytes": 4608
+      },
+      {
+        "name": "backbone_stage3_0_block_0_0",
+        "op": "conv",
+        "shape_nhwc": [
+          24,
+          24,
+          32
+        ],
+        "bytes": 18432
+      },
+      {
+        "name": "backbone_stage3_0_block_1_0",
+        "op": "dwconv",
+        "shape_nhwc": [
+          12,
+          12,
+          32
+        ],
+        "bytes": 4608
+      },
+      {
+        "name": "backbone_stage3_0_block_2",
+        "op": "conv",
+        "shape_nhwc": [
+          12,
+          12,
+          16
+        ],
+        "bytes": 2304
+      },
+      {
+        "name": "backbone_stage3_1_block_0_0",
+        "op": "conv",
+        "shape_nhwc": [
+          12,
+          12,
+          64
+        ],
+        "bytes": 9216
+      },
+      {
+        "name": "backbone_stage3_1_block_1_0",
+        "op": "dwconv",
+        "shape_nhwc": [
+          12,
+          12,
+          64
+        ],
+        "bytes": 9216
+      },
+      {
+        "name": "backbone_stage3_1_block_2",
+        "op": "conv",
+        "shape_nhwc": [
+          12,
+          12,
+          16
+        ],
+        "bytes": 2304
+      },
+      {
+        "name": "add_2",
+        "op": "add",
+        "shape_nhwc": [
+          12,
+          12,
+          16
+        ],
+        "bytes": 2304
+      },
+      {
+        "name": "backbone_stage3_2_block_0_0",
+        "op": "conv",
+        "shape_nhwc": [
+          12,
+          12,
+          64
+        ],
+        "bytes": 9216
+      },
+      {
+        "name": "backbone_stage3_2_block_1_0",
+        "op": "dwconv",
+        "shape_nhwc": [
+          12,
+          12,
+          64
+        ],
+        "bytes": 9216
+      },
+      {
+        "name": "backbone_stage3_2_block_2",
+        "op": "conv",
+        "shape_nhwc": [
+          12,
+          12,
+          16
+        ],
+        "bytes": 2304
+      },
+      {
+        "name": "add_3",
+        "op": "add",
+        "shape_nhwc": [
+          12,
+          12,
+          16
+        ],
+        "bytes": 2304
+      },
+      {
+        "name": "backbone_stage4_0_block_0_0",
+        "op": "conv",
+        "shape_nhwc": [
+          12,
+          12,
+          64
+        ],
+        "bytes": 9216
+      },
+      {
+        "name": "backbone_stage4_0_block_1_0",
+        "op": "dwconv",
+        "shape_nhwc": [
+          6,
+          6,
+          64
+        ],
+        "bytes": 2304
+      },
+      {
+        "name": "backbone_stage4_0_block_2",
+        "op": "conv",
+        "shape_nhwc": [
+          6,
+          6,
+          24
+        ],
+        "bytes": 864
+      },
+      {
+        "name": "backbone_stage4_1_block_0_0",
+        "op": "conv",
+        "shape_nhwc": [
+          6,
+          6,
+          96
+        ],
+        "bytes": 3456
+      },
+      {
+        "name": "backbone_stage4_1_block_1_0",
+        "op": "dwconv",
+        "shape_nhwc": [
+          6,
+          6,
+          96
+        ],
+        "bytes": 3456
+      },
+      {
+        "name": "backbone_stage4_1_block_2",
+        "op": "conv",
+        "shape_nhwc": [
+          6,
+          6,
+          24
+        ],
+        "bytes": 864
+      },
+      {
+        "name": "add_4",
+        "op": "add",
+        "shape_nhwc": [
+          6,
+          6,
+          24
+        ],
+        "bytes": 864
+      },
+      {
+        "name": "backbone_stage4_2_block_0_0",
+        "op": "conv",
+        "shape_nhwc": [
+          6,
+          6,
+          96
+        ],
+        "bytes": 3456
+      },
+      {
+        "name": "backbone_stage4_2_block_1_0",
+        "op": "dwconv",
+        "shape_nhwc": [
+          6,
+          6,
+          96
+        ],
+        "bytes": 3456
+      },
+      {
+        "name": "backbone_stage4_2_block_2",
+        "op": "conv",
+        "shape_nhwc": [
+          6,
+          6,
+          24
+        ],
+        "bytes": 864
+      },
+      {
+        "name": "add_5",
+        "op": "add",
+        "shape_nhwc": [
+          6,
+          6,
+          24
+        ],
+        "bytes": 864
+      },
+      {
+        "name": "backbone_stage4_3_block_0_0",
+        "op": "conv",
+        "shape_nhwc": [
+          6,
+          6,
+          96
+        ],
+        "bytes": 3456
+      },
+      {
+        "name": "backbone_stage4_3_block_1_0",
+        "op": "dwconv",
+        "shape_nhwc": [
+          6,
+          6,
+          96
+        ],
+        "bytes": 3456
+      },
+      {
+        "name": "backbone_stage4_3_block_2",
+        "op": "conv",
+        "shape_nhwc": [
+          6,
+          6,
+          40
+        ],
+        "bytes": 1440
+      },
+      {
+        "name": "backbone_stage4_4_block_0_0",
+        "op": "conv",
+        "shape_nhwc": [
+          6,
+          6,
+          160
+        ],
+        "bytes": 5760
+      },
+      {
+        "name": "backbone_stage4_4_block_1_0",
+        "op": "dwconv",
+        "shape_nhwc": [
+          6,
+          6,
+          160
+        ],
+        "bytes": 5760
+      },
+      {
+        "name": "backbone_stage4_4_block_2",
+        "op": "conv",
+        "shape_nhwc": [
+          6,
+          6,
+          40
+        ],
+        "bytes": 1440
+      },
+      {
+        "name": "add_6",
+        "op": "add",
+        "shape_nhwc": [
+          6,
+          6,
+          40
+        ],
+        "bytes": 1440
+      },
+      {
+        "name": "backbone_stage5_0_block_0_0",
+        "op": "conv",
+        "shape_nhwc": [
+          6,
+          6,
+          160
+        ],
+        "bytes": 5760
+      },
+      {
+        "name": "backbone_stage5_0_block_1_0",
+        "op": "dwconv",
+        "shape_nhwc": [
+          3,
+          3,
+          160
+        ],
+        "bytes": 1440
+      },
+      {
+        "name": "backbone_stage5_0_block_2",
+        "op": "conv",
+        "shape_nhwc": [
+          3,
+          3,
+          64
+        ],
+        "bytes": 576
+      },
+      {
+        "name": "backbone_stage5_1_block_0_0",
+        "op": "conv",
+        "shape_nhwc": [
+          3,
+          3,
+          256
+        ],
+        "bytes": 2304
+      },
+      {
+        "name": "backbone_stage5_1_block_1_0",
+        "op": "dwconv",
+        "shape_nhwc": [
+          3,
+          3,
+          256
+        ],
+        "bytes": 2304
+      },
+      {
+        "name": "backbone_stage5_1_block_2",
+        "op": "conv",
+        "shape_nhwc": [
+          3,
+          3,
+          64
+        ],
+        "bytes": 576
+      },
+      {
+        "name": "add_7",
+        "op": "add",
+        "shape_nhwc": [
+          3,
+          3,
+          64
+        ],
+        "bytes": 576
+      },
+      {
+        "name": "lateral5_0",
+        "op": "conv",
+        "shape_nhwc": [
+          3,
+          3,
+          64
+        ],
+        "bytes": 576
+      },
+      {
+        "name": "lateral4_0",
+        "op": "conv",
+        "shape_nhwc": [
+          6,
+          6,
+          64
+        ],
+        "bytes": 2304
+      },
+      {
+        "name": "interpolate",
+        "op": "upsample",
+        "shape_nhwc": [
+          6,
+          6,
+          64
+        ],
+        "bytes": 2304
+      },
+      {
+        "name": "add_8",
+        "op": "add",
+        "shape_nhwc": [
+          6,
+          6,
+          64
+        ],
+        "bytes": 2304
+      },
+      {
+        "name": "refine4_depthwise_0",
+        "op": "dwconv",
+        "shape_nhwc": [
+          6,
+          6,
+          64
+        ],
+        "bytes": 2304
+      },
+      {
+        "name": "refine4_pointwise_0",
+        "op": "conv",
+        "shape_nhwc": [
+          6,
+          6,
+          64
+        ],
+        "bytes": 2304
+      },
+      {
+        "name": "lateral3_0",
+        "op": "conv",
+        "shape_nhwc": [
+          12,
+          12,
+          64
+        ],
+        "bytes": 9216
+      },
+      {
+        "name": "interpolate_1",
+        "op": "upsample",
+        "shape_nhwc": [
+          12,
+          12,
+          64
+        ],
+        "bytes": 9216
+      },
+      {
+        "name": "add_9",
+        "op": "add",
+        "shape_nhwc": [
+          12,
+          12,
+          64
+        ],
+        "bytes": 9216
+      },
+      {
+        "name": "refine3_depthwise_0",
+        "op": "dwconv",
+        "shape_nhwc": [
+          12,
+          12,
+          64
+        ],
+        "bytes": 9216
+      },
+      {
+        "name": "refine3_pointwise_0",
+        "op": "conv",
+        "shape_nhwc": [
+          12,
+          12,
+          64
+        ],
+        "bytes": 9216
+      },
+      {
+        "name": "lateral2_0",
+        "op": "conv",
+        "shape_nhwc": [
+          24,
+          24,
+          64
+        ],
+        "bytes": 36864
+      },
+      {
+        "name": "interpolate_2",
+        "op": "upsample",
+        "shape_nhwc": [
+          24,
+          24,
+          64
+        ],
+        "bytes": 36864
+      },
+      {
+        "name": "add_10",
+        "op": "add",
+        "shape_nhwc": [
+          24,
+          24,
+          64
+        ],
+        "bytes": 36864
+      },
+      {
+        "name": "refine2_depthwise_0",
+        "op": "dwconv",
+        "shape_nhwc": [
+          24,
+          24,
+          64
+        ],
+        "bytes": 36864
+      },
+      {
+        "name": "refine2_pointwise_0",
+        "op": "conv",
+        "shape_nhwc": [
+          24,
+          24,
+          64
+        ],
+        "bytes": 36864
+      },
+      {
+        "name": "head_features_0_depthwise_0",
+        "op": "dwconv",
+        "shape_nhwc": [
+          24,
+          24,
+          64
+        ],
+        "bytes": 36864
+      },
+      {
+        "name": "head_features_0_pointwise_0",
+        "op": "conv",
+        "shape_nhwc": [
+          24,
+          24,
+          64
+        ],
+        "bytes": 36864
+      },
+      {
+        "name": "head_features_1_depthwise_0",
+        "op": "dwconv",
+        "shape_nhwc": [
+          24,
+          24,
+          64
+        ],
+        "bytes": 36864
+      },
+      {
+        "name": "head_features_1_pointwise_0",
+        "op": "conv",
+        "shape_nhwc": [
+          24,
+          24,
+          64
+        ],
+        "bytes": 36864
+      },
+      {
+        "name": "objectness_head",
+        "op": "conv",
+        "shape_nhwc": [
+          24,
+          24,
+          8
+        ],
+        "bytes": 4608
+      },
+      {
+        "name": "class_head",
+        "op": "conv",
+        "shape_nhwc": [
+          24,
+          24,
+          8
+        ],
+        "bytes": 4608
+      },
+      {
+        "name": "box_head",
+        "op": "conv",
+        "shape_nhwc": [
+          24,
+          24,
+          8
+        ],
+        "bytes": 4608
+      }
+    ]
+  },
+  "variants": [
+    {
+      "width_multiplier": 0.5,
+      "fpn_channels": 32,
+      "input_size": 96,
+      "parameter_count": 166033,
+      "w_bytes": 159248,
+      "q_bytes": 23904,
+      "a_single_tensor_peak_bytes": 73728,
+      "a_peak_tensor": "backbone_stage2_0_block_0_0",
+      "b_peak_bytes": 32256,
+      "op_total": 71,
+      "ic_max": 320,
+      "oc_max": 320,
+      "all_pass": false,
+      "failed_items": [
+        "\u63cf\u8ff0\u7b26 IC/OC \u4e0a\u9650"
+      ]
+    },
+    {
+      "width_multiplier": 0.5,
+      "fpn_channels": 32,
+      "input_size": 128,
+      "parameter_count": 166033,
+      "w_bytes": 159248,
+      "q_bytes": 23904,
+      "a_single_tensor_peak_bytes": 131072,
+      "a_peak_tensor": "backbone_stage2_0_block_0_0",
+      "b_peak_bytes": 0,
+      "op_total": 71,
+      "ic_max": 320,
+      "oc_max": 320,
+      "all_pass": false,
+      "failed_items": [
+        "A \u7f13\u51b2\u5355\u5f20\u91cf\u5cf0\u503c\uff08NHWC int8\uff0c8ch \u5bf9\u9f50\uff1b\u542b PACKED3 \u8f93\u5165\u56fe\uff09",
+        "B \u7f13\u51b2\uff08A/B \u53ef\u884c\u6446\u653e\u4e0b\u7684\u5e76\u53d1\u5cf0\u503c\uff09",
+        "\u63cf\u8ff0\u7b26 IC/OC \u4e0a\u9650"
+      ]
+    },
+    {
+      "width_multiplier": 0.5,
+      "fpn_channels": 32,
+      "input_size": 160,
+      "parameter_count": 166033,
+      "w_bytes": 159248,
+      "q_bytes": 23904,
+      "a_single_tensor_peak_bytes": 204800,
+      "a_peak_tensor": "backbone_stage2_0_block_0_0",
+      "b_peak_bytes": 0,
+      "op_total": 71,
+      "ic_max": 320,
+      "oc_max": 320,
+      "all_pass": false,
+      "failed_items": [
+        "A \u7f13\u51b2\u5355\u5f20\u91cf\u5cf0\u503c\uff08NHWC int8\uff0c8ch \u5bf9\u9f50\uff1b\u542b PACKED3 \u8f93\u5165\u56fe\uff09",
+        "B \u7f13\u51b2\uff08A/B \u53ef\u884c\u6446\u653e\u4e0b\u7684\u5e76\u53d1\u5cf0\u503c\uff09",
+        "\u63cf\u8ff0\u7b26 IC/OC \u4e0a\u9650"
+      ]
+    },
+    {
+      "width_multiplier": 0.45,
+      "fpn_channels": 32,
+      "input_size": 96,
+      "parameter_count": 136977,
+      "w_bytes": 130928,
+      "q_bytes": 21696,
+      "a_single_tensor_peak_bytes": 73728,
+      "a_peak_tensor": "backbone_stage2_0_block_0_0",
+      "b_peak_bytes": 32256,
+      "op_total": 71,
+      "ic_max": 288,
+      "oc_max": 288,
+      "all_pass": false,
+      "failed_items": [
+        "\u63cf\u8ff0\u7b26 IC/OC \u4e0a\u9650"
+      ]
+    },
+    {
+      "width_multiplier": 0.45,
+      "fpn_channels": 32,
+      "input_size": 128,
+      "parameter_count": 136977,
+      "w_bytes": 130928,
+      "q_bytes": 21696,
+      "a_single_tensor_peak_bytes": 131072,
+      "a_peak_tensor": "backbone_stage2_0_block_0_0",
+      "b_peak_bytes": 0,
+      "op_total": 71,
+      "ic_max": 288,
+      "oc_max": 288,
+      "all_pass": false,
+      "failed_items": [
+        "A \u7f13\u51b2\u5355\u5f20\u91cf\u5cf0\u503c\uff08NHWC int8\uff0c8ch \u5bf9\u9f50\uff1b\u542b PACKED3 \u8f93\u5165\u56fe\uff09",
+        "B \u7f13\u51b2\uff08A/B \u53ef\u884c\u6446\u653e\u4e0b\u7684\u5e76\u53d1\u5cf0\u503c\uff09",
+        "\u63cf\u8ff0\u7b26 IC/OC \u4e0a\u9650"
+      ]
+    },
+    {
+      "width_multiplier": 0.45,
+      "fpn_channels": 32,
+      "input_size": 160,
+      "parameter_count": 136977,
+      "w_bytes": 130928,
+      "q_bytes": 21696,
+      "a_single_tensor_peak_bytes": 204800,
+      "a_peak_tensor": "backbone_stage2_0_block_0_0",
+      "b_peak_bytes": 0,
+      "op_total": 71,
+      "ic_max": 288,
+      "oc_max": 288,
+      "all_pass": false,
+      "failed_items": [
+        "A \u7f13\u51b2\u5355\u5f20\u91cf\u5cf0\u503c\uff08NHWC int8\uff0c8ch \u5bf9\u9f50\uff1b\u542b PACKED3 \u8f93\u5165\u56fe\uff09",
+        "B \u7f13\u51b2\uff08A/B \u53ef\u884c\u6446\u653e\u4e0b\u7684\u5e76\u53d1\u5cf0\u503c\uff09",
+        "\u63cf\u8ff0\u7b26 IC/OC \u4e0a\u9650"
+      ]
+    },
+    {
+      "width_multiplier": 0.4,
+      "fpn_channels": 32,
+      "input_size": 96,
+      "parameter_count": 114241,
+      "w_bytes": 108784,
+      "q_bytes": 19920,
+      "a_single_tensor_peak_bytes": 73728,
+      "a_peak_tensor": "backbone_stage2_0_block_0_0",
+      "b_peak_bytes": 32256,
+      "op_total": 71,
+      "ic_max": 256,
+      "oc_max": 256,
+      "all_pass": true,
+      "failed_items": []
+    },
+    {
+      "width_multiplier": 0.4,
+      "fpn_channels": 32,
+      "input_size": 128,
+      "parameter_count": 114241,
+      "w_bytes": 108784,
+      "q_bytes": 19920,
+      "a_single_tensor_peak_bytes": 131072,
+      "a_peak_tensor": "backbone_stage2_0_block_0_0",
+      "b_peak_bytes": 0,
+      "op_total": 71,
+      "ic_max": 256,
+      "oc_max": 256,
+      "all_pass": false,
+      "failed_items": [
+        "A \u7f13\u51b2\u5355\u5f20\u91cf\u5cf0\u503c\uff08NHWC int8\uff0c8ch \u5bf9\u9f50\uff1b\u542b PACKED3 \u8f93\u5165\u56fe\uff09",
+        "B \u7f13\u51b2\uff08A/B \u53ef\u884c\u6446\u653e\u4e0b\u7684\u5e76\u53d1\u5cf0\u503c\uff09"
+      ]
+    },
+    {
+      "width_multiplier": 0.4,
+      "fpn_channels": 32,
+      "input_size": 160,
+      "parameter_count": 114241,
+      "w_bytes": 108784,
+      "q_bytes": 19920,
+      "a_single_tensor_peak_bytes": 204800,
+      "a_peak_tensor": "backbone_stage2_0_block_0_0",
+      "b_peak_bytes": 0,
+      "op_total": 71,
+      "ic_max": 256,
+      "oc_max": 256,
+      "all_pass": false,
+      "failed_items": [
+        "A \u7f13\u51b2\u5355\u5f20\u91cf\u5cf0\u503c\uff08NHWC int8\uff0c8ch \u5bf9\u9f50\uff1b\u542b PACKED3 \u8f93\u5165\u56fe\uff09",
+        "B \u7f13\u51b2\uff08A/B \u53ef\u884c\u6446\u653e\u4e0b\u7684\u5e76\u53d1\u5cf0\u503c\uff09"
+      ]
+    },
+    {
+      "width_multiplier": 0.4,
+      "fpn_channels": 48,
+      "input_size": 96,
+      "parameter_count": 124001,
+      "w_bytes": 118336,
+      "q_bytes": 21264,
+      "a_single_tensor_peak_bytes": 73728,
+      "a_peak_tensor": "backbone_stage2_0_block_0_0",
+      "b_peak_bytes": 27648,
+      "op_total": 71,
+      "ic_max": 256,
+      "oc_max": 256,
+      "all_pass": true,
+      "failed_items": []
+    },
+    {
+      "width_multiplier": 0.4,
+      "fpn_channels": 48,
+      "input_size": 128,
+      "parameter_count": 124001,
+      "w_bytes": 118336,
+      "q_bytes": 21264,
+      "a_single_tensor_peak_bytes": 131072,
+      "a_peak_tensor": "backbone_stage2_0_block_0_0",
+      "b_peak_bytes": 0,
+      "op_total": 71,
+      "ic_max": 256,
+      "oc_max": 256,
+      "all_pass": false,
+      "failed_items": [
+        "A \u7f13\u51b2\u5355\u5f20\u91cf\u5cf0\u503c\uff08NHWC int8\uff0c8ch \u5bf9\u9f50\uff1b\u542b PACKED3 \u8f93\u5165\u56fe\uff09",
+        "B \u7f13\u51b2\uff08A/B \u53ef\u884c\u6446\u653e\u4e0b\u7684\u5e76\u53d1\u5cf0\u503c\uff09"
+      ]
+    },
+    {
+      "width_multiplier": 0.4,
+      "fpn_channels": 48,
+      "input_size": 160,
+      "parameter_count": 124001,
+      "w_bytes": 118336,
+      "q_bytes": 21264,
+      "a_single_tensor_peak_bytes": 204800,
+      "a_peak_tensor": "backbone_stage2_0_block_0_0",
+      "b_peak_bytes": 0,
+      "op_total": 71,
+      "ic_max": 256,
+      "oc_max": 256,
+      "all_pass": false,
+      "failed_items": [
+        "A \u7f13\u51b2\u5355\u5f20\u91cf\u5cf0\u503c\uff08NHWC int8\uff0c8ch \u5bf9\u9f50\uff1b\u542b PACKED3 \u8f93\u5165\u56fe\uff09",
+        "B \u7f13\u51b2\uff08A/B \u53ef\u884c\u6446\u653e\u4e0b\u7684\u5e76\u53d1\u5cf0\u503c\uff09"
+      ]
+    },
+    {
+      "width_multiplier": 0.4,
+      "fpn_channels": 64,
+      "input_size": 96,
+      "parameter_count": 136321,
+      "w_bytes": 130448,
+      "q_bytes": 22608,
+      "a_single_tensor_peak_bytes": 73728,
+      "a_peak_tensor": "backbone_stage2_0_block_0_0",
+      "b_peak_bytes": 27648,
+      "op_total": 71,
+      "ic_max": 256,
+      "oc_max": 256,
+      "all_pass": true,
+      "failed_items": []
+    },
+    {
+      "width_multiplier": 0.4,
+      "fpn_channels": 64,
+      "input_size": 128,
+      "parameter_count": 136321,
+      "w_bytes": 130448,
+      "q_bytes": 22608,
+      "a_single_tensor_peak_bytes": 131072,
+      "a_peak_tensor": "backbone_stage2_0_block_0_0",
+      "b_peak_bytes": 0,
+      "op_total": 71,
+      "ic_max": 256,
+      "oc_max": 256,
+      "all_pass": false,
+      "failed_items": [
+        "A \u7f13\u51b2\u5355\u5f20\u91cf\u5cf0\u503c\uff08NHWC int8\uff0c8ch \u5bf9\u9f50\uff1b\u542b PACKED3 \u8f93\u5165\u56fe\uff09",
+        "B \u7f13\u51b2\uff08A/B \u53ef\u884c\u6446\u653e\u4e0b\u7684\u5e76\u53d1\u5cf0\u503c\uff09"
+      ]
+    },
+    {
+      "width_multiplier": 0.4,
+      "fpn_channels": 64,
+      "input_size": 160,
+      "parameter_count": 136321,
+      "w_bytes": 130448,
+      "q_bytes": 22608,
+      "a_single_tensor_peak_bytes": 204800,
+      "a_peak_tensor": "backbone_stage2_0_block_0_0",
+      "b_peak_bytes": 0,
+      "op_total": 71,
+      "ic_max": 256,
+      "oc_max": 256,
+      "all_pass": false,
+      "failed_items": [
+        "A \u7f13\u51b2\u5355\u5f20\u91cf\u5cf0\u503c\uff08NHWC int8\uff0c8ch \u5bf9\u9f50\uff1b\u542b PACKED3 \u8f93\u5165\u56fe\uff09",
+        "B \u7f13\u51b2\uff08A/B \u53ef\u884c\u6446\u653e\u4e0b\u7684\u5e76\u53d1\u5cf0\u503c\uff09"
+      ]
+    },
+    {
+      "width_multiplier": 0.4,
+      "fpn_channels": 72,
+      "input_size": 96,
+      "parameter_count": 143441,
+      "w_bytes": 137464,
+      "q_bytes": 23280,
+      "a_single_tensor_peak_bytes": 73728,
+      "a_peak_tensor": "backbone_stage2_0_block_0_0",
+      "b_peak_bytes": 27648,
+      "op_total": 71,
+      "ic_max": 256,
+      "oc_max": 256,
+      "all_pass": true,
+      "failed_items": []
+    },
+    {
+      "width_multiplier": 0.4,
+      "fpn_channels": 72,
+      "input_size": 128,
+      "parameter_count": 143441,
+      "w_bytes": 137464,
+      "q_bytes": 23280,
+      "a_single_tensor_peak_bytes": 131072,
+      "a_peak_tensor": "backbone_stage2_0_block_0_0",
+      "b_peak_bytes": 0,
+      "op_total": 71,
+      "ic_max": 256,
+      "oc_max": 256,
+      "all_pass": false,
+      "failed_items": [
+        "A \u7f13\u51b2\u5355\u5f20\u91cf\u5cf0\u503c\uff08NHWC int8\uff0c8ch \u5bf9\u9f50\uff1b\u542b PACKED3 \u8f93\u5165\u56fe\uff09",
+        "B \u7f13\u51b2\uff08A/B \u53ef\u884c\u6446\u653e\u4e0b\u7684\u5e76\u53d1\u5cf0\u503c\uff09"
+      ]
+    },
+    {
+      "width_multiplier": 0.4,
+      "fpn_channels": 72,
+      "input_size": 160,
+      "parameter_count": 143441,
+      "w_bytes": 137464,
+      "q_bytes": 23280,
+      "a_single_tensor_peak_bytes": 204800,
+      "a_peak_tensor": "backbone_stage2_0_block_0_0",
+      "b_peak_bytes": 0,
+      "op_total": 71,
+      "ic_max": 256,
+      "oc_max": 256,
+      "all_pass": false,
+      "failed_items": [
+        "A \u7f13\u51b2\u5355\u5f20\u91cf\u5cf0\u503c\uff08NHWC int8\uff0c8ch \u5bf9\u9f50\uff1b\u542b PACKED3 \u8f93\u5165\u56fe\uff09",
+        "B \u7f13\u51b2\uff08A/B \u53ef\u884c\u6446\u653e\u4e0b\u7684\u5e76\u53d1\u5cf0\u503c\uff09"
+      ]
+    }
+  ],
+  "hypotheticals": [
+    {
+      "width_multiplier": 0.4,
+      "fpn_channels": 64,
+      "input_size": 112,
+      "hypothetical": true,
+      "requires_architecture_change": "stage2[0] InvertedResidual expansion 4->3 (hidden 32->24)",
+      "architecturally_invalid": true,
+      "invalid_reason": "FPN \u4f7f\u7528 F.interpolate(scale_factor=2.0)\uff0c\u8981\u6c42\u8f93\u5165\u80fd\u88ab 32 \u6574\u9664\uff1b112 \u7684 stage \u5c3a\u5bf8 [56, 28, 14, 7, 3] \u4e0a\u91c7\u6837\u540e\u4e0e C4 \u4e0d\u4e00\u81f4",
+      "error": "RuntimeError",
+      "parameter_count": null,
+      "w_bytes": null,
+      "q_bytes": null,
+      "a_single_tensor_peak_bytes": null,
+      "a_peak_tensor": null,
+      "b_peak_bytes": null,
+      "op_total": null,
+      "ic_max": null,
+      "oc_max": null,
+      "all_pass": false,
+      "failed_items": [
+        "\u67b6\u6784\u4e0d\u53ef\u884c\uff08FPN \u4e0a\u91c7\u6837\u5c3a\u5bf8\u4e0d\u6574\u9664\uff09"
+      ]
+    },
+    {
+      "width_multiplier": 0.4,
+      "fpn_channels": 64,
+      "input_size": 128,
+      "hypothetical": true,
+      "requires_architecture_change": "stage2[0] InvertedResidual expansion 4->3 (hidden 32->24)",
+      "architecturally_invalid": false,
+      "parameter_count": 111073,
+      "w_bytes": 106352,
+      "q_bytes": 19152,
+      "a_single_tensor_peak_bytes": 98304,
+      "a_peak_tensor": "backbone_stage2_0_block_0_0",
+      "b_peak_bytes": 0,
+      "op_total": 71,
+      "ic_max": 192,
+      "oc_max": 192,
+      "all_pass": false,
+      "failed_items": [
+        "B \u7f13\u51b2\uff08A/B \u53ef\u884c\u6446\u653e\u4e0b\u7684\u5e76\u53d1\u5cf0\u503c\uff09"
+      ]
+    }
+  ],
+  "teacher_probe": [
+    {
+      "input_size": 96,
+      "images": 500,
+      "true_positive": 0,
+      "false_positive": 756,
+      "false_negative": 1250,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "mean_iou": 0.0,
+      "exact_image_accuracy": 0.0,
+      "count_accuracy": 0.396,
+      "teacher_epoch": 13
+    },
+    {
+      "input_size": 160,
+      "images": 500,
+      "true_positive": 764,
+      "false_positive": 485,
+      "false_negative": 486,
+      "precision": 0.611689351481185,
+      "recall": 0.6112,
+      "f1": 0.6114445778311325,
+      "mean_iou": 0.5270155197818865,
+      "exact_image_accuracy": 0.356,
+      "count_accuracy": 0.998,
+      "teacher_epoch": 13
+    },
+    {
+      "input_size": 224,
+      "images": 500,
+      "true_positive": 1250,
+      "false_positive": 0,
+      "false_negative": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "mean_iou": 0.9695919076442718,
+      "exact_image_accuracy": 1.0,
+      "count_accuracy": 1.0,
+      "teacher_epoch": 13
+    }
+  ]
+}

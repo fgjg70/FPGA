@@ -1,0 +1,209 @@
+{
+ "format": "bottlecap-deploy-check-v1",
+ "contract": "results/ai-accel/CONTRACT.md (v0.7 + v0.8 flags/RELU)",
+ "model": {
+  "checkpoint": "results/bottlecap/slim/best_model.pt",
+  "arch": "slim",
+  "input_size": 96,
+  "model_variant": "slim_mobilenetv2_fpn_anchorfree",
+  "params": 136321
+ },
+ "summary": {
+  "ops": 71,
+  "w_bytes": 130448,
+  "q_bytes": 22784,
+  "max_single_tensor_bytes": 73728,
+  "ab_mode": "real",
+  "peak_A": 92160,
+  "peak_B": 23040,
+  "rom_depth": 71,
+  "rom_field_bits": {
+   "woff": 17,
+   "qoff": 15,
+   "src_dst": 17
+  },
+  "max_ic": 256,
+  "max_oc": 256
+ },
+ "checks": [
+  {
+   "item": "W 区容量",
+   "pass": true,
+   "actual": "130448 B",
+   "limit": "327680 B",
+   "evidence": ""
+  },
+  {
+   "item": "Q 区容量",
+   "pass": true,
+   "actual": "22784 B",
+   "limit": "49152 B",
+   "evidence": ""
+  },
+  {
+   "item": "A 缓冲单张量峰值",
+   "pass": true,
+   "actual": "73728 B",
+   "limit": "98304 B",
+   "evidence": "backbone.stage2.0.block.0.0+bn"
+  },
+  {
+   "item": "A/B 真实分配(A 峰值)",
+   "pass": true,
+   "actual": "92160 B",
+   "limit": "98304 B",
+   "evidence": ""
+  },
+  {
+   "item": "A/B 真实分配(B 峰值)",
+   "pass": true,
+   "actual": "23040 B",
+   "limit": "32768 B",
+   "evidence": ""
+  },
+  {
+   "item": "ROM 深度",
+   "pass": true,
+   "actual": "71 op",
+   "limit": "128 op",
+   "evidence": ""
+  },
+  {
+   "item": "引擎 IC/OC 上限(≤1023)",
+   "pass": true,
+   "actual": "max IC=256 OC=256",
+   "limit": "≤1023",
+   "evidence": ""
+  },
+  {
+   "item": "nn_subsys 现状 IC/OC 检查(≤256)",
+   "pass": true,
+   "actual": "max IC=256 OC=256",
+   "limit": "≤256",
+   "evidence": "CONTRACT §4 现状; v0.8 引擎支持到 1023, RTL 正在修"
+  },
+  {
+   "item": "8 通道对齐(ic_pad/oc_pad)",
+   "pass": true,
+   "actual": "0 个违例",
+   "limit": "0 违例",
+   "evidence": ""
+  },
+  {
+   "item": "copy 通道偏移 8 对齐",
+   "pass": true,
+   "actual": "0 个违例",
+   "limit": "0 违例",
+   "evidence": ""
+  },
+  {
+   "item": "act=relu <-> flags bit4(v0.8 RELU)",
+   "pass": true,
+   "actual": "0 个不一致",
+   "limit": "0",
+   "evidence": ""
+  },
+  {
+   "item": "leaky 全 0(本模型用 RELU/linear)",
+   "pass": true,
+   "actual": "0 个 leaky",
+   "limit": "0",
+   "evidence": ""
+  },
+  {
+   "item": "op kind 全为硬件 op(无 cpu_*)",
+   "pass": true,
+   "actual": "0 个违例",
+   "limit": "0",
+   "evidence": ""
+  },
+  {
+   "item": "conv 参数域(k∈{1,3,5},st∈{1,2},pad=k//2,dw ic==oc)",
+   "pass": true,
+   "actual": "0 个违例",
+   "limit": "0",
+   "evidence": ""
+  },
+  {
+   "item": "upsample 语义(2x, ic==oc)",
+   "pass": true,
+   "actual": "0 个违例",
+   "limit": "0",
+   "evidence": ""
+  },
+  {
+   "item": "copy 语义(ic8<=oc8, 8ch 字拷贝)",
+   "pass": true,
+   "actual": "0 个违例",
+   "limit": "0",
+   "evidence": ""
+  },
+  {
+   "item": "ADD_R 语义(ic==oc, R≤u16, KADD≤15)",
+   "pass": true,
+   "actual": "0 个违例",
+   "limit": "0",
+   "evidence": ""
+  },
+  {
+   "item": "PACKED3 仅 conv0(ic≤8,k=3,non-dw)",
+   "pass": true,
+   "actual": "1 个 PACKED3 op",
+   "limit": "仅 op0",
+   "evidence": ""
+  },
+  {
+   "item": "输入 PACKED3 张量",
+   "pass": true,
+   "actual": "packed=True",
+   "limit": "True",
+   "evidence": ""
+  },
+  {
+   "item": "woff 字段位宽",
+   "pass": true,
+   "actual": "17 位",
+   "limit": "≤19 位",
+   "evidence": ""
+  },
+  {
+   "item": "qoff 字段位宽",
+   "pass": true,
+   "actual": "15 位",
+   "limit": "≤16 位",
+   "evidence": ""
+  },
+  {
+   "item": "src/dst 字段位宽(A/B 窗口)",
+   "pass": true,
+   "actual": "17 位",
+   "limit": "≤19 位",
+   "evidence": ""
+  },
+  {
+   "item": "W 流式偏移连续(ptr+=wlen)",
+   "pass": true,
+   "actual": "gaps=0",
+   "limit": "0",
+   "evidence": ""
+  },
+  {
+   "item": "tile 方案在 IBUF/OBUF 预算内",
+   "pass": true,
+   "actual": "overflow=0",
+   "limit": "0",
+   "evidence": "IBUF=16384/OBUF=12288 B"
+  },
+  {
+   "item": "op 总数 ≤ ROM 深度",
+   "pass": true,
+   "actual": "71",
+   "limit": "128",
+   "evidence": ""
+  }
+ ],
+ "n_checks": 25,
+ "n_fail": 0,
+ "status": "PASS",
+ "failures": []
+}

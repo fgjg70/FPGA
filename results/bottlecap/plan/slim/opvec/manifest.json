@@ -1,0 +1,2979 @@
+{
+ "format": "bottlecap-opvec-v1",
+ "source_plan": "results/bottlecap/plan/slim/plan.json",
+ "input_hw": [
+  96,
+  96
+ ],
+ "arena_base": 16777216,
+ "hex_format": {
+  "op_<NN>.hex": "u32 little-endian words per line (8 hex digits); payload = dst tensor bytes in arena layout (NHWC pad8, y,x,c logical order, 含通道 pad 字节, 行数=ceil(bytes/4))",
+  "input.hex": "同上 (PACKED3 3B/px, 无 C8 padding)",
+  "input_compact.hex": "每行 1 字节(2 hex), y,x,c 逻辑序, 不含 padding"
+ },
+ "notes": {
+  "dense_conv_k3s2": "本模型所有 k3/stride2 卷积都是 depthwise (无 dense k3s2); 故用 dwconv k3s2 覆盖 stride2+k3 语义",
+  "fnv": "FNV-1a 32 over 真实通道 x H x W, NHWC(y,x,c) 逻辑序(不含 pad), 与 checksums.txt 同口径",
+  "pad_value": "未用通道(zp_out)已写入 op 输出张量字节; 比对应覆盖整块 c8",
+  "subset_ops": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15,
+   16,
+   17,
+   18,
+   19,
+   20,
+   21,
+   22,
+   23,
+   24,
+   25,
+   26,
+   27,
+   28,
+   29,
+   30,
+   31,
+   32,
+   33,
+   34,
+   35,
+   36,
+   37,
+   38,
+   39,
+   40,
+   41,
+   42,
+   43,
+   44,
+   45,
+   46,
+   47,
+   48,
+   49,
+   50,
+   51,
+   52,
+   53,
+   54,
+   55,
+   56,
+   57,
+   58,
+   59,
+   60,
+   61,
+   62,
+   63,
+   64,
+   65,
+   66,
+   67,
+   68,
+   69,
+   70
+  ]
+ },
+ "images": [
+  {
+   "name": "pattern_v1",
+   "meta": {
+    "kind": "pattern_v1",
+    "seed": 12345
+   },
+   "input": {
+    "file_u32": "pattern_v1/input.hex",
+    "file_compact": "pattern_v1/input_compact.hex",
+    "shape": [
+     96,
+     96,
+     3
+    ],
+    "bytes": 27648,
+    "fnv": 3826187461,
+    "arena_off": 0,
+    "layout": "PACKED3 (3 bytes/pixel, no C8 padding), y-major then x then c"
+   },
+   "ops": [
+    {
+     "op": 0,
+     "kind": "conv",
+     "module": "backbone.stem.0+bn",
+     "shape": [
+      48,
+      48,
+      8
+     ],
+     "real_c": 8,
+     "bytes": 18432,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 73728,
+     "arena_abs": 16850944,
+     "file": "pattern_v1/op000.hex",
+     "fnv": 2325939011,
+     "flags": 20,
+     "act": "relu"
+    },
+    {
+     "op": 1,
+     "kind": "conv",
+     "module": "backbone.stage1.block.0.0+bn",
+     "shape": [
+      48,
+      48,
+      16
+     ],
+     "real_c": 16,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op001.hex",
+     "fnv": 1749457275,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 2,
+     "kind": "dwconv",
+     "module": "backbone.stage1.block.1.0+bn",
+     "shape": [
+      48,
+      48,
+      16
+     ],
+     "real_c": 16,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 36864,
+     "arena_abs": 16814080,
+     "file": "pattern_v1/op002.hex",
+     "fnv": 3764018186,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 3,
+     "kind": "conv",
+     "module": "backbone.stage1.block.2+bn",
+     "shape": [
+      48,
+      48,
+      8
+     ],
+     "real_c": 8,
+     "bytes": 18432,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": 3,
+     "arena_off": 92160,
+     "arena_abs": 16869376,
+     "file": "pattern_v1/op003.hex",
+     "fnv": 1599566880,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 4,
+     "kind": "add",
+     "module": "add",
+     "shape": [
+      48,
+      48,
+      8
+     ],
+     "real_c": 8,
+     "bytes": 18432,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": 3,
+     "arena_off": 92160,
+     "arena_abs": 16869376,
+     "file": "pattern_v1/op004.hex",
+     "fnv": 3701780627,
+     "flags": 8,
+     "act": "none"
+    },
+    {
+     "op": 5,
+     "kind": "conv",
+     "module": "backbone.stage2.0.block.0.0+bn",
+     "shape": [
+      48,
+      48,
+      32
+     ],
+     "real_c": 32,
+     "bytes": 73728,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op005.hex",
+     "fnv": 1089759525,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 6,
+     "kind": "dwconv",
+     "module": "backbone.stage2.0.block.1.0+bn",
+     "shape": [
+      24,
+      24,
+      32
+     ],
+     "real_c": 32,
+     "bytes": 18432,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 73728,
+     "arena_abs": 16850944,
+     "file": "pattern_v1/op006.hex",
+     "fnv": 2937299905,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 7,
+     "kind": "conv",
+     "module": "backbone.stage2.0.block.2+bn",
+     "shape": [
+      24,
+      24,
+      8
+     ],
+     "real_c": 8,
+     "bytes": 4608,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": 21,
+     "arena_off": 36864,
+     "arena_abs": 16814080,
+     "file": "pattern_v1/op007.hex",
+     "fnv": 2644070643,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 8,
+     "kind": "conv",
+     "module": "backbone.stage2.1.block.0.0+bn",
+     "shape": [
+      24,
+      24,
+      32
+     ],
+     "real_c": 32,
+     "bytes": 18432,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op008.hex",
+     "fnv": 486611547,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 9,
+     "kind": "dwconv",
+     "module": "backbone.stage2.1.block.1.0+bn",
+     "shape": [
+      24,
+      24,
+      32
+     ],
+     "real_c": 32,
+     "bytes": 18432,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 18432,
+     "arena_abs": 16795648,
+     "file": "pattern_v1/op009.hex",
+     "fnv": 1576664537,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 10,
+     "kind": "conv",
+     "module": "backbone.stage2.1.block.2+bn",
+     "shape": [
+      24,
+      24,
+      8
+     ],
+     "real_c": 8,
+     "bytes": 4608,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -5,
+     "arena_off": 41472,
+     "arena_abs": 16818688,
+     "file": "pattern_v1/op010.hex",
+     "fnv": 1694800592,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 11,
+     "kind": "add",
+     "module": "add_1",
+     "shape": [
+      24,
+      24,
+      8
+     ],
+     "real_c": 8,
+     "bytes": 4608,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -5,
+     "arena_off": 41472,
+     "arena_abs": 16818688,
+     "file": "pattern_v1/op011.hex",
+     "fnv": 3306453857,
+     "flags": 8,
+     "act": "none"
+    },
+    {
+     "op": 12,
+     "kind": "conv",
+     "module": "backbone.stage3.0.block.0.0+bn",
+     "shape": [
+      24,
+      24,
+      32
+     ],
+     "real_c": 32,
+     "bytes": 18432,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op012.hex",
+     "fnv": 1322628986,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 13,
+     "kind": "dwconv",
+     "module": "backbone.stage3.0.block.1.0+bn",
+     "shape": [
+      12,
+      12,
+      32
+     ],
+     "real_c": 32,
+     "bytes": 4608,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 18432,
+     "arena_abs": 16795648,
+     "file": "pattern_v1/op013.hex",
+     "fnv": 541241000,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 14,
+     "kind": "conv",
+     "module": "backbone.stage3.0.block.2+bn",
+     "shape": [
+      12,
+      12,
+      16
+     ],
+     "real_c": 16,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": 13,
+     "arena_off": 23040,
+     "arena_abs": 16800256,
+     "file": "pattern_v1/op014.hex",
+     "fnv": 4057890352,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 15,
+     "kind": "conv",
+     "module": "backbone.stage3.1.block.0.0+bn",
+     "shape": [
+      12,
+      12,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 9216,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op015.hex",
+     "fnv": 1725610669,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 16,
+     "kind": "dwconv",
+     "module": "backbone.stage3.1.block.1.0+bn",
+     "shape": [
+      12,
+      12,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 9216,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 9216,
+     "arena_abs": 16786432,
+     "file": "pattern_v1/op016.hex",
+     "fnv": 622312785,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 17,
+     "kind": "conv",
+     "module": "backbone.stage3.1.block.2+bn",
+     "shape": [
+      12,
+      12,
+      16
+     ],
+     "real_c": 16,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -3,
+     "arena_off": 18432,
+     "arena_abs": 16795648,
+     "file": "pattern_v1/op017.hex",
+     "fnv": 2377042172,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 18,
+     "kind": "add",
+     "module": "add_2",
+     "shape": [
+      12,
+      12,
+      16
+     ],
+     "real_c": 16,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -3,
+     "arena_off": 18432,
+     "arena_abs": 16795648,
+     "file": "pattern_v1/op018.hex",
+     "fnv": 1042165171,
+     "flags": 8,
+     "act": "none"
+    },
+    {
+     "op": 19,
+     "kind": "conv",
+     "module": "backbone.stage3.2.block.0.0+bn",
+     "shape": [
+      12,
+      12,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 9216,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op019.hex",
+     "fnv": 3031003055,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 20,
+     "kind": "dwconv",
+     "module": "backbone.stage3.2.block.1.0+bn",
+     "shape": [
+      12,
+      12,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 9216,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 9216,
+     "arena_abs": 16786432,
+     "file": "pattern_v1/op020.hex",
+     "fnv": 3006329656,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 21,
+     "kind": "conv",
+     "module": "backbone.stage3.2.block.2+bn",
+     "shape": [
+      12,
+      12,
+      16
+     ],
+     "real_c": 16,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -1,
+     "arena_off": 20736,
+     "arena_abs": 16797952,
+     "file": "pattern_v1/op021.hex",
+     "fnv": 3912032276,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 22,
+     "kind": "add",
+     "module": "add_3",
+     "shape": [
+      12,
+      12,
+      16
+     ],
+     "real_c": 16,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -1,
+     "arena_off": 20736,
+     "arena_abs": 16797952,
+     "file": "pattern_v1/op022.hex",
+     "fnv": 1478008677,
+     "flags": 8,
+     "act": "none"
+    },
+    {
+     "op": 23,
+     "kind": "conv",
+     "module": "backbone.stage4.0.block.0.0+bn",
+     "shape": [
+      12,
+      12,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 9216,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op023.hex",
+     "fnv": 1760625117,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 24,
+     "kind": "dwconv",
+     "module": "backbone.stage4.0.block.1.0+bn",
+     "shape": [
+      6,
+      6,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 9216,
+     "arena_abs": 16786432,
+     "file": "pattern_v1/op024.hex",
+     "fnv": 2876388297,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 25,
+     "kind": "conv",
+     "module": "backbone.stage4.0.block.2+bn",
+     "shape": [
+      6,
+      6,
+      24
+     ],
+     "real_c": 24,
+     "bytes": 864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": 14,
+     "arena_off": 6912,
+     "arena_abs": 16784128,
+     "file": "pattern_v1/op025.hex",
+     "fnv": 1621602443,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 26,
+     "kind": "conv",
+     "module": "backbone.stage4.1.block.0.0+bn",
+     "shape": [
+      6,
+      6,
+      96
+     ],
+     "real_c": 96,
+     "bytes": 3456,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op026.hex",
+     "fnv": 3549743102,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 27,
+     "kind": "dwconv",
+     "module": "backbone.stage4.1.block.1.0+bn",
+     "shape": [
+      6,
+      6,
+      96
+     ],
+     "real_c": 96,
+     "bytes": 3456,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 3456,
+     "arena_abs": 16780672,
+     "file": "pattern_v1/op027.hex",
+     "fnv": 118846088,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 28,
+     "kind": "conv",
+     "module": "backbone.stage4.1.block.2+bn",
+     "shape": [
+      6,
+      6,
+      24
+     ],
+     "real_c": 24,
+     "bytes": 864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -3,
+     "arena_off": 7776,
+     "arena_abs": 16784992,
+     "file": "pattern_v1/op028.hex",
+     "fnv": 769015865,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 29,
+     "kind": "add",
+     "module": "add_4",
+     "shape": [
+      6,
+      6,
+      24
+     ],
+     "real_c": 24,
+     "bytes": 864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -3,
+     "arena_off": 7776,
+     "arena_abs": 16784992,
+     "file": "pattern_v1/op029.hex",
+     "fnv": 2766867298,
+     "flags": 8,
+     "act": "none"
+    },
+    {
+     "op": 30,
+     "kind": "conv",
+     "module": "backbone.stage4.2.block.0.0+bn",
+     "shape": [
+      6,
+      6,
+      96
+     ],
+     "real_c": 96,
+     "bytes": 3456,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op030.hex",
+     "fnv": 4216956312,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 31,
+     "kind": "dwconv",
+     "module": "backbone.stage4.2.block.1.0+bn",
+     "shape": [
+      6,
+      6,
+      96
+     ],
+     "real_c": 96,
+     "bytes": 3456,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 3456,
+     "arena_abs": 16780672,
+     "file": "pattern_v1/op031.hex",
+     "fnv": 765194164,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 32,
+     "kind": "conv",
+     "module": "backbone.stage4.2.block.2+bn",
+     "shape": [
+      6,
+      6,
+      24
+     ],
+     "real_c": 24,
+     "bytes": 864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -6,
+     "arena_off": 6912,
+     "arena_abs": 16784128,
+     "file": "pattern_v1/op032.hex",
+     "fnv": 1030297862,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 33,
+     "kind": "add",
+     "module": "add_5",
+     "shape": [
+      6,
+      6,
+      24
+     ],
+     "real_c": 24,
+     "bytes": 864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -6,
+     "arena_off": 6912,
+     "arena_abs": 16784128,
+     "file": "pattern_v1/op033.hex",
+     "fnv": 3775281987,
+     "flags": 8,
+     "act": "none"
+    },
+    {
+     "op": 34,
+     "kind": "conv",
+     "module": "backbone.stage4.3.block.0.0+bn",
+     "shape": [
+      6,
+      6,
+      96
+     ],
+     "real_c": 96,
+     "bytes": 3456,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op034.hex",
+     "fnv": 2117567933,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 35,
+     "kind": "dwconv",
+     "module": "backbone.stage4.3.block.1.0+bn",
+     "shape": [
+      6,
+      6,
+      96
+     ],
+     "real_c": 96,
+     "bytes": 3456,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 3456,
+     "arena_abs": 16780672,
+     "file": "pattern_v1/op035.hex",
+     "fnv": 3932177427,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 36,
+     "kind": "conv",
+     "module": "backbone.stage4.3.block.2+bn",
+     "shape": [
+      6,
+      6,
+      40
+     ],
+     "real_c": 40,
+     "bytes": 1440,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": 0,
+     "arena_off": 11520,
+     "arena_abs": 16788736,
+     "file": "pattern_v1/op036.hex",
+     "fnv": 3272512057,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 37,
+     "kind": "conv",
+     "module": "backbone.stage4.4.block.0.0+bn",
+     "shape": [
+      6,
+      6,
+      160
+     ],
+     "real_c": 160,
+     "bytes": 5760,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op037.hex",
+     "fnv": 218373092,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 38,
+     "kind": "dwconv",
+     "module": "backbone.stage4.4.block.1.0+bn",
+     "shape": [
+      6,
+      6,
+      160
+     ],
+     "real_c": 160,
+     "bytes": 5760,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 5760,
+     "arena_abs": 16782976,
+     "file": "pattern_v1/op038.hex",
+     "fnv": 3813208387,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 39,
+     "kind": "conv",
+     "module": "backbone.stage4.4.block.2+bn",
+     "shape": [
+      6,
+      6,
+      40
+     ],
+     "real_c": 40,
+     "bytes": 1440,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -4,
+     "arena_off": 12960,
+     "arena_abs": 16790176,
+     "file": "pattern_v1/op039.hex",
+     "fnv": 1486555407,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 40,
+     "kind": "add",
+     "module": "add_6",
+     "shape": [
+      6,
+      6,
+      40
+     ],
+     "real_c": 40,
+     "bytes": 1440,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -4,
+     "arena_off": 12960,
+     "arena_abs": 16790176,
+     "file": "pattern_v1/op040.hex",
+     "fnv": 2588487126,
+     "flags": 8,
+     "act": "none"
+    },
+    {
+     "op": 41,
+     "kind": "conv",
+     "module": "backbone.stage5.0.block.0.0+bn",
+     "shape": [
+      6,
+      6,
+      160
+     ],
+     "real_c": 160,
+     "bytes": 5760,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op041.hex",
+     "fnv": 446301476,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 42,
+     "kind": "dwconv",
+     "module": "backbone.stage5.0.block.1.0+bn",
+     "shape": [
+      3,
+      3,
+      160
+     ],
+     "real_c": 160,
+     "bytes": 1440,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 5760,
+     "arena_abs": 16782976,
+     "file": "pattern_v1/op042.hex",
+     "fnv": 979961830,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 43,
+     "kind": "conv",
+     "module": "backbone.stage5.0.block.2+bn",
+     "shape": [
+      3,
+      3,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 576,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -13,
+     "arena_off": 4608,
+     "arena_abs": 16781824,
+     "file": "pattern_v1/op043.hex",
+     "fnv": 4087836428,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 44,
+     "kind": "conv",
+     "module": "backbone.stage5.1.block.0.0+bn",
+     "shape": [
+      3,
+      3,
+      256
+     ],
+     "real_c": 256,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op044.hex",
+     "fnv": 3143487643,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 45,
+     "kind": "dwconv",
+     "module": "backbone.stage5.1.block.1.0+bn",
+     "shape": [
+      3,
+      3,
+      256
+     ],
+     "real_c": 256,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 2304,
+     "arena_abs": 16779520,
+     "file": "pattern_v1/op045.hex",
+     "fnv": 3283560590,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 46,
+     "kind": "conv",
+     "module": "backbone.stage5.1.block.2+bn",
+     "shape": [
+      3,
+      3,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 576,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": 1,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op046.hex",
+     "fnv": 3491349213,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 47,
+     "kind": "add",
+     "module": "add_7",
+     "shape": [
+      3,
+      3,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 576,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": 1,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op047.hex",
+     "fnv": 2136894051,
+     "flags": 8,
+     "act": "none"
+    },
+    {
+     "op": 48,
+     "kind": "conv",
+     "module": "lateral5.0+bn",
+     "shape": [
+      3,
+      3,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 576,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 4608,
+     "arena_abs": 16781824,
+     "file": "pattern_v1/op048.hex",
+     "fnv": 3320391765,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 49,
+     "kind": "conv",
+     "module": "lateral4.0+bn",
+     "shape": [
+      6,
+      6,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op049.hex",
+     "fnv": 449636335,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 50,
+     "kind": "upsample",
+     "module": "interpolate(up2x#1)",
+     "shape": [
+      6,
+      6,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 2304,
+     "arena_abs": 16779520,
+     "file": "pattern_v1/op050.hex",
+     "fnv": 2927871637,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 51,
+     "kind": "add",
+     "module": "add_8",
+     "shape": [
+      6,
+      6,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op051.hex",
+     "fnv": 1807713949,
+     "flags": 24,
+     "act": "relu"
+    },
+    {
+     "op": 52,
+     "kind": "dwconv",
+     "module": "refine4.depthwise.0+bn",
+     "shape": [
+      6,
+      6,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 2304,
+     "arena_abs": 16779520,
+     "file": "pattern_v1/op052.hex",
+     "fnv": 3853876196,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 53,
+     "kind": "conv",
+     "module": "refine4.pointwise.0+bn",
+     "shape": [
+      6,
+      6,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 18432,
+     "arena_abs": 16795648,
+     "file": "pattern_v1/op053.hex",
+     "fnv": 1514420297,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 54,
+     "kind": "conv",
+     "module": "lateral3.0+bn",
+     "shape": [
+      12,
+      12,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 9216,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op054.hex",
+     "fnv": 414070921,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 55,
+     "kind": "upsample",
+     "module": "interpolate_1(up2x#1)",
+     "shape": [
+      12,
+      12,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 9216,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 9216,
+     "arena_abs": 16786432,
+     "file": "pattern_v1/op055.hex",
+     "fnv": 2825114085,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 56,
+     "kind": "add",
+     "module": "add_9",
+     "shape": [
+      12,
+      12,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 9216,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op056.hex",
+     "fnv": 3325305829,
+     "flags": 24,
+     "act": "relu"
+    },
+    {
+     "op": 57,
+     "kind": "dwconv",
+     "module": "refine3.depthwise.0+bn",
+     "shape": [
+      12,
+      12,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 9216,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 9216,
+     "arena_abs": 16786432,
+     "file": "pattern_v1/op057.hex",
+     "fnv": 4261084713,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 58,
+     "kind": "conv",
+     "module": "refine3.pointwise.0+bn",
+     "shape": [
+      12,
+      12,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 9216,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 73728,
+     "arena_abs": 16850944,
+     "file": "pattern_v1/op058.hex",
+     "fnv": 523788900,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 59,
+     "kind": "conv",
+     "module": "lateral2.0+bn",
+     "shape": [
+      24,
+      24,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op059.hex",
+     "fnv": 545042413,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 60,
+     "kind": "upsample",
+     "module": "interpolate_2(up2x#1)",
+     "shape": [
+      24,
+      24,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 36864,
+     "arena_abs": 16814080,
+     "file": "pattern_v1/op060.hex",
+     "fnv": 959524501,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 61,
+     "kind": "add",
+     "module": "add_10",
+     "shape": [
+      24,
+      24,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op061.hex",
+     "fnv": 614211145,
+     "flags": 24,
+     "act": "relu"
+    },
+    {
+     "op": 62,
+     "kind": "dwconv",
+     "module": "refine2.depthwise.0+bn",
+     "shape": [
+      24,
+      24,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 36864,
+     "arena_abs": 16814080,
+     "file": "pattern_v1/op062.hex",
+     "fnv": 609724153,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 63,
+     "kind": "conv",
+     "module": "refine2.pointwise.0+bn",
+     "shape": [
+      24,
+      24,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op063.hex",
+     "fnv": 1453090294,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 64,
+     "kind": "dwconv",
+     "module": "head_features.0.depthwise.0+bn",
+     "shape": [
+      24,
+      24,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 36864,
+     "arena_abs": 16814080,
+     "file": "pattern_v1/op064.hex",
+     "fnv": 3109935748,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 65,
+     "kind": "conv",
+     "module": "head_features.0.pointwise.0+bn",
+     "shape": [
+      24,
+      24,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op065.hex",
+     "fnv": 1338262,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 66,
+     "kind": "dwconv",
+     "module": "head_features.1.depthwise.0+bn",
+     "shape": [
+      24,
+      24,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 36864,
+     "arena_abs": 16814080,
+     "file": "pattern_v1/op066.hex",
+     "fnv": 3687263187,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 67,
+     "kind": "conv",
+     "module": "head_features.1.pointwise.0+bn",
+     "shape": [
+      24,
+      24,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "pattern_v1/op067.hex",
+     "fnv": 896582104,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 68,
+     "kind": "conv",
+     "module": "objectness_head",
+     "shape": [
+      24,
+      24,
+      8
+     ],
+     "real_c": 1,
+     "bytes": 4608,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": 22,
+     "arena_off": 36864,
+     "arena_abs": 16814080,
+     "file": "pattern_v1/op068.hex",
+     "fnv": 3160677429,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 69,
+     "kind": "conv",
+     "module": "class_head",
+     "shape": [
+      24,
+      24,
+      8
+     ],
+     "real_c": 4,
+     "bytes": 4608,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": 18,
+     "arena_off": 36864,
+     "arena_abs": 16814080,
+     "file": "pattern_v1/op069.hex",
+     "fnv": 625080945,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 70,
+     "kind": "conv",
+     "module": "box_head",
+     "shape": [
+      24,
+      24,
+      8
+     ],
+     "real_c": 4,
+     "bytes": 4608,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -8,
+     "arena_off": 36864,
+     "arena_abs": 16814080,
+     "file": "pattern_v1/op070.hex",
+     "fnv": 3644732777,
+     "flags": 0,
+     "act": "none"
+    }
+   ]
+  },
+  {
+   "name": "0349",
+   "meta": {
+    "kind": "real_image",
+    "file": "0349.png",
+    "preprocess": "letterbox 96x96 (96x72+12x2)"
+   },
+   "input": {
+    "file_u32": "0349/input.hex",
+    "file_compact": "0349/input_compact.hex",
+    "shape": [
+     96,
+     96,
+     3
+    ],
+    "bytes": 27648,
+    "fnv": 3139683958,
+    "arena_off": 0,
+    "layout": "PACKED3 (3 bytes/pixel, no C8 padding), y-major then x then c"
+   },
+   "ops": [
+    {
+     "op": 0,
+     "kind": "conv",
+     "module": "backbone.stem.0+bn",
+     "shape": [
+      48,
+      48,
+      8
+     ],
+     "real_c": 8,
+     "bytes": 18432,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 73728,
+     "arena_abs": 16850944,
+     "file": "0349/op000.hex",
+     "fnv": 846756167,
+     "flags": 20,
+     "act": "relu"
+    },
+    {
+     "op": 1,
+     "kind": "conv",
+     "module": "backbone.stage1.block.0.0+bn",
+     "shape": [
+      48,
+      48,
+      16
+     ],
+     "real_c": 16,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op001.hex",
+     "fnv": 1411404329,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 2,
+     "kind": "dwconv",
+     "module": "backbone.stage1.block.1.0+bn",
+     "shape": [
+      48,
+      48,
+      16
+     ],
+     "real_c": 16,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 36864,
+     "arena_abs": 16814080,
+     "file": "0349/op002.hex",
+     "fnv": 116536365,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 3,
+     "kind": "conv",
+     "module": "backbone.stage1.block.2+bn",
+     "shape": [
+      48,
+      48,
+      8
+     ],
+     "real_c": 8,
+     "bytes": 18432,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": 3,
+     "arena_off": 92160,
+     "arena_abs": 16869376,
+     "file": "0349/op003.hex",
+     "fnv": 3053258474,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 4,
+     "kind": "add",
+     "module": "add",
+     "shape": [
+      48,
+      48,
+      8
+     ],
+     "real_c": 8,
+     "bytes": 18432,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": 3,
+     "arena_off": 92160,
+     "arena_abs": 16869376,
+     "file": "0349/op004.hex",
+     "fnv": 2281137301,
+     "flags": 8,
+     "act": "none"
+    },
+    {
+     "op": 5,
+     "kind": "conv",
+     "module": "backbone.stage2.0.block.0.0+bn",
+     "shape": [
+      48,
+      48,
+      32
+     ],
+     "real_c": 32,
+     "bytes": 73728,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op005.hex",
+     "fnv": 3218276488,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 6,
+     "kind": "dwconv",
+     "module": "backbone.stage2.0.block.1.0+bn",
+     "shape": [
+      24,
+      24,
+      32
+     ],
+     "real_c": 32,
+     "bytes": 18432,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 73728,
+     "arena_abs": 16850944,
+     "file": "0349/op006.hex",
+     "fnv": 2432655728,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 7,
+     "kind": "conv",
+     "module": "backbone.stage2.0.block.2+bn",
+     "shape": [
+      24,
+      24,
+      8
+     ],
+     "real_c": 8,
+     "bytes": 4608,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": 21,
+     "arena_off": 36864,
+     "arena_abs": 16814080,
+     "file": "0349/op007.hex",
+     "fnv": 4015867328,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 8,
+     "kind": "conv",
+     "module": "backbone.stage2.1.block.0.0+bn",
+     "shape": [
+      24,
+      24,
+      32
+     ],
+     "real_c": 32,
+     "bytes": 18432,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op008.hex",
+     "fnv": 80971916,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 9,
+     "kind": "dwconv",
+     "module": "backbone.stage2.1.block.1.0+bn",
+     "shape": [
+      24,
+      24,
+      32
+     ],
+     "real_c": 32,
+     "bytes": 18432,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 18432,
+     "arena_abs": 16795648,
+     "file": "0349/op009.hex",
+     "fnv": 1307082790,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 10,
+     "kind": "conv",
+     "module": "backbone.stage2.1.block.2+bn",
+     "shape": [
+      24,
+      24,
+      8
+     ],
+     "real_c": 8,
+     "bytes": 4608,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -5,
+     "arena_off": 41472,
+     "arena_abs": 16818688,
+     "file": "0349/op010.hex",
+     "fnv": 1659124292,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 11,
+     "kind": "add",
+     "module": "add_1",
+     "shape": [
+      24,
+      24,
+      8
+     ],
+     "real_c": 8,
+     "bytes": 4608,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -5,
+     "arena_off": 41472,
+     "arena_abs": 16818688,
+     "file": "0349/op011.hex",
+     "fnv": 3837533027,
+     "flags": 8,
+     "act": "none"
+    },
+    {
+     "op": 12,
+     "kind": "conv",
+     "module": "backbone.stage3.0.block.0.0+bn",
+     "shape": [
+      24,
+      24,
+      32
+     ],
+     "real_c": 32,
+     "bytes": 18432,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op012.hex",
+     "fnv": 610265950,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 13,
+     "kind": "dwconv",
+     "module": "backbone.stage3.0.block.1.0+bn",
+     "shape": [
+      12,
+      12,
+      32
+     ],
+     "real_c": 32,
+     "bytes": 4608,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 18432,
+     "arena_abs": 16795648,
+     "file": "0349/op013.hex",
+     "fnv": 58462284,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 14,
+     "kind": "conv",
+     "module": "backbone.stage3.0.block.2+bn",
+     "shape": [
+      12,
+      12,
+      16
+     ],
+     "real_c": 16,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": 13,
+     "arena_off": 23040,
+     "arena_abs": 16800256,
+     "file": "0349/op014.hex",
+     "fnv": 1075030756,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 15,
+     "kind": "conv",
+     "module": "backbone.stage3.1.block.0.0+bn",
+     "shape": [
+      12,
+      12,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 9216,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op015.hex",
+     "fnv": 3714217369,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 16,
+     "kind": "dwconv",
+     "module": "backbone.stage3.1.block.1.0+bn",
+     "shape": [
+      12,
+      12,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 9216,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 9216,
+     "arena_abs": 16786432,
+     "file": "0349/op016.hex",
+     "fnv": 4287213046,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 17,
+     "kind": "conv",
+     "module": "backbone.stage3.1.block.2+bn",
+     "shape": [
+      12,
+      12,
+      16
+     ],
+     "real_c": 16,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -3,
+     "arena_off": 18432,
+     "arena_abs": 16795648,
+     "file": "0349/op017.hex",
+     "fnv": 1497712598,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 18,
+     "kind": "add",
+     "module": "add_2",
+     "shape": [
+      12,
+      12,
+      16
+     ],
+     "real_c": 16,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -3,
+     "arena_off": 18432,
+     "arena_abs": 16795648,
+     "file": "0349/op018.hex",
+     "fnv": 3827596339,
+     "flags": 8,
+     "act": "none"
+    },
+    {
+     "op": 19,
+     "kind": "conv",
+     "module": "backbone.stage3.2.block.0.0+bn",
+     "shape": [
+      12,
+      12,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 9216,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op019.hex",
+     "fnv": 710344550,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 20,
+     "kind": "dwconv",
+     "module": "backbone.stage3.2.block.1.0+bn",
+     "shape": [
+      12,
+      12,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 9216,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 9216,
+     "arena_abs": 16786432,
+     "file": "0349/op020.hex",
+     "fnv": 2008644718,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 21,
+     "kind": "conv",
+     "module": "backbone.stage3.2.block.2+bn",
+     "shape": [
+      12,
+      12,
+      16
+     ],
+     "real_c": 16,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -1,
+     "arena_off": 20736,
+     "arena_abs": 16797952,
+     "file": "0349/op021.hex",
+     "fnv": 3634552984,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 22,
+     "kind": "add",
+     "module": "add_3",
+     "shape": [
+      12,
+      12,
+      16
+     ],
+     "real_c": 16,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -1,
+     "arena_off": 20736,
+     "arena_abs": 16797952,
+     "file": "0349/op022.hex",
+     "fnv": 821961567,
+     "flags": 8,
+     "act": "none"
+    },
+    {
+     "op": 23,
+     "kind": "conv",
+     "module": "backbone.stage4.0.block.0.0+bn",
+     "shape": [
+      12,
+      12,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 9216,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op023.hex",
+     "fnv": 3456161031,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 24,
+     "kind": "dwconv",
+     "module": "backbone.stage4.0.block.1.0+bn",
+     "shape": [
+      6,
+      6,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 9216,
+     "arena_abs": 16786432,
+     "file": "0349/op024.hex",
+     "fnv": 3046091888,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 25,
+     "kind": "conv",
+     "module": "backbone.stage4.0.block.2+bn",
+     "shape": [
+      6,
+      6,
+      24
+     ],
+     "real_c": 24,
+     "bytes": 864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": 14,
+     "arena_off": 6912,
+     "arena_abs": 16784128,
+     "file": "0349/op025.hex",
+     "fnv": 115426327,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 26,
+     "kind": "conv",
+     "module": "backbone.stage4.1.block.0.0+bn",
+     "shape": [
+      6,
+      6,
+      96
+     ],
+     "real_c": 96,
+     "bytes": 3456,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op026.hex",
+     "fnv": 354893580,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 27,
+     "kind": "dwconv",
+     "module": "backbone.stage4.1.block.1.0+bn",
+     "shape": [
+      6,
+      6,
+      96
+     ],
+     "real_c": 96,
+     "bytes": 3456,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 3456,
+     "arena_abs": 16780672,
+     "file": "0349/op027.hex",
+     "fnv": 660592699,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 28,
+     "kind": "conv",
+     "module": "backbone.stage4.1.block.2+bn",
+     "shape": [
+      6,
+      6,
+      24
+     ],
+     "real_c": 24,
+     "bytes": 864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -3,
+     "arena_off": 7776,
+     "arena_abs": 16784992,
+     "file": "0349/op028.hex",
+     "fnv": 1800378988,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 29,
+     "kind": "add",
+     "module": "add_4",
+     "shape": [
+      6,
+      6,
+      24
+     ],
+     "real_c": 24,
+     "bytes": 864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -3,
+     "arena_off": 7776,
+     "arena_abs": 16784992,
+     "file": "0349/op029.hex",
+     "fnv": 4073127651,
+     "flags": 8,
+     "act": "none"
+    },
+    {
+     "op": 30,
+     "kind": "conv",
+     "module": "backbone.stage4.2.block.0.0+bn",
+     "shape": [
+      6,
+      6,
+      96
+     ],
+     "real_c": 96,
+     "bytes": 3456,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op030.hex",
+     "fnv": 2912574909,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 31,
+     "kind": "dwconv",
+     "module": "backbone.stage4.2.block.1.0+bn",
+     "shape": [
+      6,
+      6,
+      96
+     ],
+     "real_c": 96,
+     "bytes": 3456,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 3456,
+     "arena_abs": 16780672,
+     "file": "0349/op031.hex",
+     "fnv": 4211829095,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 32,
+     "kind": "conv",
+     "module": "backbone.stage4.2.block.2+bn",
+     "shape": [
+      6,
+      6,
+      24
+     ],
+     "real_c": 24,
+     "bytes": 864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -6,
+     "arena_off": 6912,
+     "arena_abs": 16784128,
+     "file": "0349/op032.hex",
+     "fnv": 1173927234,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 33,
+     "kind": "add",
+     "module": "add_5",
+     "shape": [
+      6,
+      6,
+      24
+     ],
+     "real_c": 24,
+     "bytes": 864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -6,
+     "arena_off": 6912,
+     "arena_abs": 16784128,
+     "file": "0349/op033.hex",
+     "fnv": 847473750,
+     "flags": 8,
+     "act": "none"
+    },
+    {
+     "op": 34,
+     "kind": "conv",
+     "module": "backbone.stage4.3.block.0.0+bn",
+     "shape": [
+      6,
+      6,
+      96
+     ],
+     "real_c": 96,
+     "bytes": 3456,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op034.hex",
+     "fnv": 3902488543,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 35,
+     "kind": "dwconv",
+     "module": "backbone.stage4.3.block.1.0+bn",
+     "shape": [
+      6,
+      6,
+      96
+     ],
+     "real_c": 96,
+     "bytes": 3456,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 3456,
+     "arena_abs": 16780672,
+     "file": "0349/op035.hex",
+     "fnv": 1628816245,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 36,
+     "kind": "conv",
+     "module": "backbone.stage4.3.block.2+bn",
+     "shape": [
+      6,
+      6,
+      40
+     ],
+     "real_c": 40,
+     "bytes": 1440,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": 0,
+     "arena_off": 11520,
+     "arena_abs": 16788736,
+     "file": "0349/op036.hex",
+     "fnv": 2342689051,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 37,
+     "kind": "conv",
+     "module": "backbone.stage4.4.block.0.0+bn",
+     "shape": [
+      6,
+      6,
+      160
+     ],
+     "real_c": 160,
+     "bytes": 5760,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op037.hex",
+     "fnv": 1790761684,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 38,
+     "kind": "dwconv",
+     "module": "backbone.stage4.4.block.1.0+bn",
+     "shape": [
+      6,
+      6,
+      160
+     ],
+     "real_c": 160,
+     "bytes": 5760,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 5760,
+     "arena_abs": 16782976,
+     "file": "0349/op038.hex",
+     "fnv": 721460761,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 39,
+     "kind": "conv",
+     "module": "backbone.stage4.4.block.2+bn",
+     "shape": [
+      6,
+      6,
+      40
+     ],
+     "real_c": 40,
+     "bytes": 1440,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -4,
+     "arena_off": 12960,
+     "arena_abs": 16790176,
+     "file": "0349/op039.hex",
+     "fnv": 1986417183,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 40,
+     "kind": "add",
+     "module": "add_6",
+     "shape": [
+      6,
+      6,
+      40
+     ],
+     "real_c": 40,
+     "bytes": 1440,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -4,
+     "arena_off": 12960,
+     "arena_abs": 16790176,
+     "file": "0349/op040.hex",
+     "fnv": 1417820944,
+     "flags": 8,
+     "act": "none"
+    },
+    {
+     "op": 41,
+     "kind": "conv",
+     "module": "backbone.stage5.0.block.0.0+bn",
+     "shape": [
+      6,
+      6,
+      160
+     ],
+     "real_c": 160,
+     "bytes": 5760,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op041.hex",
+     "fnv": 3391873117,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 42,
+     "kind": "dwconv",
+     "module": "backbone.stage5.0.block.1.0+bn",
+     "shape": [
+      3,
+      3,
+      160
+     ],
+     "real_c": 160,
+     "bytes": 1440,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 5760,
+     "arena_abs": 16782976,
+     "file": "0349/op042.hex",
+     "fnv": 3030916385,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 43,
+     "kind": "conv",
+     "module": "backbone.stage5.0.block.2+bn",
+     "shape": [
+      3,
+      3,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 576,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -13,
+     "arena_off": 4608,
+     "arena_abs": 16781824,
+     "file": "0349/op043.hex",
+     "fnv": 2505366256,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 44,
+     "kind": "conv",
+     "module": "backbone.stage5.1.block.0.0+bn",
+     "shape": [
+      3,
+      3,
+      256
+     ],
+     "real_c": 256,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op044.hex",
+     "fnv": 3820444639,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 45,
+     "kind": "dwconv",
+     "module": "backbone.stage5.1.block.1.0+bn",
+     "shape": [
+      3,
+      3,
+      256
+     ],
+     "real_c": 256,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 2304,
+     "arena_abs": 16779520,
+     "file": "0349/op045.hex",
+     "fnv": 2458081748,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 46,
+     "kind": "conv",
+     "module": "backbone.stage5.1.block.2+bn",
+     "shape": [
+      3,
+      3,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 576,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": 1,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op046.hex",
+     "fnv": 1877471799,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 47,
+     "kind": "add",
+     "module": "add_7",
+     "shape": [
+      3,
+      3,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 576,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": 1,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op047.hex",
+     "fnv": 2345548371,
+     "flags": 8,
+     "act": "none"
+    },
+    {
+     "op": 48,
+     "kind": "conv",
+     "module": "lateral5.0+bn",
+     "shape": [
+      3,
+      3,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 576,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 4608,
+     "arena_abs": 16781824,
+     "file": "0349/op048.hex",
+     "fnv": 2616197984,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 49,
+     "kind": "conv",
+     "module": "lateral4.0+bn",
+     "shape": [
+      6,
+      6,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op049.hex",
+     "fnv": 578056923,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 50,
+     "kind": "upsample",
+     "module": "interpolate(up2x#1)",
+     "shape": [
+      6,
+      6,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 2304,
+     "arena_abs": 16779520,
+     "file": "0349/op050.hex",
+     "fnv": 3226249493,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 51,
+     "kind": "add",
+     "module": "add_8",
+     "shape": [
+      6,
+      6,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op051.hex",
+     "fnv": 1870576337,
+     "flags": 24,
+     "act": "relu"
+    },
+    {
+     "op": 52,
+     "kind": "dwconv",
+     "module": "refine4.depthwise.0+bn",
+     "shape": [
+      6,
+      6,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 2304,
+     "arena_abs": 16779520,
+     "file": "0349/op052.hex",
+     "fnv": 779647950,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 53,
+     "kind": "conv",
+     "module": "refine4.pointwise.0+bn",
+     "shape": [
+      6,
+      6,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 2304,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 18432,
+     "arena_abs": 16795648,
+     "file": "0349/op053.hex",
+     "fnv": 539471102,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 54,
+     "kind": "conv",
+     "module": "lateral3.0+bn",
+     "shape": [
+      12,
+      12,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 9216,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op054.hex",
+     "fnv": 3197080993,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 55,
+     "kind": "upsample",
+     "module": "interpolate_1(up2x#1)",
+     "shape": [
+      12,
+      12,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 9216,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 9216,
+     "arena_abs": 16786432,
+     "file": "0349/op055.hex",
+     "fnv": 2216099973,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 56,
+     "kind": "add",
+     "module": "add_9",
+     "shape": [
+      12,
+      12,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 9216,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op056.hex",
+     "fnv": 2365554313,
+     "flags": 24,
+     "act": "relu"
+    },
+    {
+     "op": 57,
+     "kind": "dwconv",
+     "module": "refine3.depthwise.0+bn",
+     "shape": [
+      12,
+      12,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 9216,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 9216,
+     "arena_abs": 16786432,
+     "file": "0349/op057.hex",
+     "fnv": 2448631512,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 58,
+     "kind": "conv",
+     "module": "refine3.pointwise.0+bn",
+     "shape": [
+      12,
+      12,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 9216,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 73728,
+     "arena_abs": 16850944,
+     "file": "0349/op058.hex",
+     "fnv": 1257510577,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 59,
+     "kind": "conv",
+     "module": "lateral2.0+bn",
+     "shape": [
+      24,
+      24,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op059.hex",
+     "fnv": 122407493,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 60,
+     "kind": "upsample",
+     "module": "interpolate_2(up2x#1)",
+     "shape": [
+      24,
+      24,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 36864,
+     "arena_abs": 16814080,
+     "file": "0349/op060.hex",
+     "fnv": 850744429,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 61,
+     "kind": "add",
+     "module": "add_10",
+     "shape": [
+      24,
+      24,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op061.hex",
+     "fnv": 3101069861,
+     "flags": 24,
+     "act": "relu"
+    },
+    {
+     "op": 62,
+     "kind": "dwconv",
+     "module": "refine2.depthwise.0+bn",
+     "shape": [
+      24,
+      24,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 36864,
+     "arena_abs": 16814080,
+     "file": "0349/op062.hex",
+     "fnv": 2435360531,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 63,
+     "kind": "conv",
+     "module": "refine2.pointwise.0+bn",
+     "shape": [
+      24,
+      24,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op063.hex",
+     "fnv": 997037645,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 64,
+     "kind": "dwconv",
+     "module": "head_features.0.depthwise.0+bn",
+     "shape": [
+      24,
+      24,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 36864,
+     "arena_abs": 16814080,
+     "file": "0349/op064.hex",
+     "fnv": 344362782,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 65,
+     "kind": "conv",
+     "module": "head_features.0.pointwise.0+bn",
+     "shape": [
+      24,
+      24,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op065.hex",
+     "fnv": 1978872710,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 66,
+     "kind": "dwconv",
+     "module": "head_features.1.depthwise.0+bn",
+     "shape": [
+      24,
+      24,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 36864,
+     "arena_abs": 16814080,
+     "file": "0349/op066.hex",
+     "fnv": 2643115513,
+     "flags": 17,
+     "act": "relu"
+    },
+    {
+     "op": 67,
+     "kind": "conv",
+     "module": "head_features.1.pointwise.0+bn",
+     "shape": [
+      24,
+      24,
+      64
+     ],
+     "real_c": 64,
+     "bytes": 36864,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -128,
+     "arena_off": 0,
+     "arena_abs": 16777216,
+     "file": "0349/op067.hex",
+     "fnv": 3602781930,
+     "flags": 16,
+     "act": "relu"
+    },
+    {
+     "op": 68,
+     "kind": "conv",
+     "module": "objectness_head",
+     "shape": [
+      24,
+      24,
+      8
+     ],
+     "real_c": 1,
+     "bytes": 4608,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": 22,
+     "arena_off": 36864,
+     "arena_abs": 16814080,
+     "file": "0349/op068.hex",
+     "fnv": 1877117940,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 69,
+     "kind": "conv",
+     "module": "class_head",
+     "shape": [
+      24,
+      24,
+      8
+     ],
+     "real_c": 4,
+     "bytes": 4608,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": 18,
+     "arena_off": 36864,
+     "arena_abs": 16814080,
+     "file": "0349/op069.hex",
+     "fnv": 461065888,
+     "flags": 0,
+     "act": "none"
+    },
+    {
+     "op": 70,
+     "kind": "conv",
+     "module": "box_head",
+     "shape": [
+      24,
+      24,
+      8
+     ],
+     "real_c": 4,
+     "bytes": 4608,
+     "layout": "NHWC pad8 (y,x,c8), u32-LE words",
+     "pad_value": -8,
+     "arena_off": 36864,
+     "arena_abs": 16814080,
+     "file": "0349/op070.hex",
+     "fnv": 2431299032,
+     "flags": 0,
+     "act": "none"
+    }
+   ]
+  }
+ ]
+}

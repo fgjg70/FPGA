@@ -1,0 +1,4 @@
+1 red_cap 红色瓶盖
+2 purple_cap 紫色瓶盖
+3 green_cap 绿色瓶盖
+4 yellow_cap 黄色瓶盖

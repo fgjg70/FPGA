@@ -1,0 +1,79 @@
+[
+ {
+  "tag": "ad_add_122",
+  "lut": 278,
+  "ff": 233,
+  "dsp": 32,
+  "bram": 0.0,
+  "slack_ns": 1.832,
+  "path_ns": 6.318,
+  "worst_endpoint": "u_dut/qs_reg[0][3]/D",
+  "fmax_mhz_est": 157.5
+ },
+ {
+  "tag": "ad_add_150",
+  "lut": 278,
+  "ff": 233,
+  "dsp": 32,
+  "bram": 0.0,
+  "slack_ns": 0.317,
+  "path_ns": 6.318,
+  "worst_endpoint": "u_dut/qs_reg[0][3]/D",
+  "fmax_mhz_est": 157.5
+ },
+ {
+  "tag": "ad_noadd_122",
+  "lut": 121,
+  "ff": 198,
+  "dsp": 32,
+  "bram": 0.0,
+  "slack_ns": 1.832,
+  "path_ns": 6.318,
+  "worst_endpoint": "u_dut/qs_reg[0][4]/D",
+  "fmax_mhz_est": 157.5
+ },
+ {
+  "tag": "ad_noadd_150",
+  "lut": 121,
+  "ff": 198,
+  "dsp": 32,
+  "bram": 0.0,
+  "slack_ns": 0.317,
+  "path_ns": 6.318,
+  "worst_endpoint": "u_dut/qs_reg[0][4]/D",
+  "fmax_mhz_est": 157.5
+ },
+ {
+  "tag": "ad_w0_122",
+  "lut": 278,
+  "ff": 233,
+  "dsp": 32,
+  "bram": 0.0,
+  "slack_ns": 1.832,
+  "path_ns": 6.318,
+  "worst_endpoint": "qs_reg[0][3]/D",
+  "fmax_mhz_est": 157.5
+ },
+ {
+  "tag": "ad_w1_122",
+  "lut": 278,
+  "ff": 233,
+  "dsp": 32,
+  "bram": 0.0,
+  "slack_ns": 1.832,
+  "path_ns": 6.318,
+  "worst_endpoint": "qs_reg[0][3]/D",
+  "fmax_mhz_est": 157.5
+ },
+ {
+  "tag": "ad_w1_150",
+  "lut": 278,
+  "ff": 233,
+  "dsp": 32,
+  "bram": 0.0,
+  "slack_ns": 0.317,
+  "path_ns": 6.318,
+  "worst_endpoint": "qs_reg[0][3]/D",
+  "fmax_mhz_est": 157.5
+ }
+]

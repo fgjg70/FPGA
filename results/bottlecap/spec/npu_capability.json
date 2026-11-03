@@ -1,0 +1,1547 @@
+{
+ "schema": "npu-capability/v0.7",
+ "generated_at": "2026-11-03T23:10:00+08:00",
+ "repo_root": "D:/USER/Desktop/FPGA/FPGA",
+ "markdown_report": "results/bottlecap/spec/NPU-CAPABILITY.md",
+ "purpose": "Contract-fact base for deciding whether a 2,048,721-param MobileNetV2(0.55)+FPN(72)+anchor-free detector (224x224) can run on the existing int8 NPU (XC7A100T, contract v0.7).",
+ "evidence_baseline": {
+  "contract": "results/ai-accel/CONTRACT.md (v0.7 = section 12)",
+  "cycle_formula_source": "results/ai-accel/proto/engine/calc_cycles_v3.py:12-103 (W_RD_LAT=2)",
+  "latest_e2e_log": ".fpga-cache/logs/tb_sw_nn_yolo.log:40-44 (2026-11-03 19:12)",
+  "latest_e2e": {
+   "ops": 112,
+   "input": "128x128x3",
+   "hw_bad": 0,
+   "auto_bad": 0,
+   "npu_cycles_mode_cpu": 1191020,
+   "npu_cycles_mode_auto": 1191020,
+   "npu_hz": 100000000,
+   "ms_per_frame": 11.91
+  },
+  "e2e_number_note": "1,177,320 (results/ai-accel/DELIVERY.md:269) predates the R5 wpipe change; current 1,191,020 = formula +1.16% (results/engine-report.md:23, results/ai-accel/mem-report.md:274) and matches the latest E2E log.",
+  "verify_baseline": {
+   "command": "python tools/fpga_workflow.py verify --force",
+   "expected": "PASS 16",
+   "seconds": {
+    "tb_sw_nn_yolo": 70.5,
+    "tb_nn_engine": 3.8,
+    "tb_nn_mem": 3.85,
+    "tb_nn_seq": 3.1
+   }
+  }
+ },
+ "limits": {
+  "onchip_bytes": {
+   "W": 327680,
+   "Q": 49152,
+   "A": 98304,
+   "B": 32768,
+   "NN_BYTES": 524288,
+   "hole_0x5C000_0x5FFFF": 16384,
+   "note": "W = synthesis-time ROM (CPU cannot access); Q = BRAM/LUTRAM ROM (CPU cannot access); only A/B are CPU-mapped."
+  },
+  "offsets": {
+   "NN_W_OFF": 0,
+   "NN_Q_OFF": 327680,
+   "NN_A_OFF": 393216,
+   "NN_B_OFF": 491520,
+   "NN_BASE_hex": "0x90040000"
+  },
+  "max_single_tensor_bytes": {
+   "A": 98304,
+   "B": 32768,
+   "concurrent_peak": 131072,
+   "rule": "A whole tensor must stay inside one buffer (a_sel/b_sel by address; nn_mem returns 0 on mismatch)."
+  },
+  "rom": {
+   "depth": 128,
+   "current_len": 112,
+   "entry_bits": 200,
+   "entry_bytes": 25,
+   "total_bits": 25600,
+   "nn_seq_idx_bits": 8,
+   "fields": {
+    "kind": 4,
+    "flags": 7,
+    "ks": 4,
+    "pad": 3,
+    "stride": 2,
+    "ic": 10,
+    "oc": 10,
+    "ih": 9,
+    "iw": 9,
+    "src": 19,
+    "dst": 19,
+    "woff": 19,
+    "qoff": 16,
+    "aux0": 16,
+    "aux1": 16,
+    "csum": 32,
+    "rsvd": 5
+   },
+   "note_no_icb_ocb": "SPEC-SPECIALIZED.md:31-44 (96-bit, icb/ocb/ohop/owop) is an obsolete draft; current RTL has NO icb/ocb/ohop/owop and stores exact ic/oc as 10 bit each (nn_pkg.sv:111-129)."
+  },
+  "mmio": {
+   "base": "0xA000_0100",
+   "regs": [
+    "CTRL@0x00",
+    "STATUS@0x04",
+    "CYCLES@0x08",
+    "OP@0x0C",
+    "SRC@0x10",
+    "DST@0x14",
+    "WOFF@0x18",
+    "QOFF@0x1C",
+    "IH@0x20",
+    "IW@0x24",
+    "IC@0x28",
+    "OC@0x2C",
+    "KS@0x30",
+    "ST@0x34",
+    "PAD@0x38",
+    "FLAGS@0x3C",
+    "DBG0@0x40",
+    "DBG1@0x44",
+    "DBG2@0x48"
+   ],
+   "evidence": [
+    "rv32_pkg.sv:385-403",
+    "results/ai-accel/CONTRACT.md:73-100",
+    "nn_subsys.sv:294-337"
+   ],
+   "free_slots_note": "DBG0/1/2 occupy 0x140/0x144/0x148; adding W-load registers needs MMIO re-mapping."
+  },
+  "device": {
+   "part": "xc7a100tfgg484-2",
+   "LUT": 63400,
+   "FF": 126800,
+   "BRAM36": 135,
+   "BRAM_total_KB": 607.5,
+   "DSP48E1": 240,
+   "addr_bytes_per_BRAM36": 4096,
+   "ai_impl_100mhz": {
+    "LUT": 36985,
+    "FF": 16381,
+    "BRAM": 132,
+    "DSP": 168
+   },
+   "evidence": [
+    "results/ai-accel/PLAN.md:18",
+    "results/ai-accel/CONTRACT.md:63-67",
+    "results/ai-accel/DELIVERY.md:223-230"
+   ]
+  },
+  "bram_budget": {
+   "nn_mem_tiles": 120,
+   "core_tiles": 12,
+   "total_used": 132,
+   "free_tiles": 3,
+   "note": "P3 tile cache needs ~12.4 tiles -> BRAM must be freed before tile-cache work.",
+   "evidence": [
+    "results/ai-accel/SPEC-SPECIALIZED.md:71-77,82-85",
+    "results/ai-accel/mem-report.md:223-245"
+   ]
+  },
+  "timing": {
+   "delivered_nn_clock_mhz": 100,
+   "wns_ns": 0.136,
+   "fmax_mhz": 101.4,
+   "max_verified_mhz": 122.22,
+   "125mhz": "-0.077 ns FAIL",
+   "evidence": [
+    "results/ai-accel/DELIVERY.md:223-244"
+   ]
+  }
+ },
+ "ops": {
+  "conv_dense": {
+   "nn_op_code": 0,
+   "rom_kind": 0,
+   "ks": [
+    1,
+    3,
+    5
+   ],
+   "stride": [
+    1,
+    2
+   ],
+   "pad_range": "0..ks/2 (3-bit field)",
+   "ic_oc": ">=1; contract IC<=256/OC<=256 (nn_subsys desc_ok); ROM ic/oc 10 bit; engine structural IC<=504 (ic8[8:3] 6 bit)",
+   "oc_tiling": "16 OC lanes (OCB16=ceil(OC/16)); one start = whole layer (hardware-internal c_ocb loop, outermost)",
+   "band_limit": "7*stride+k <= 24 (BANDW)",
+   "padding": "out-of-bounds pixels filled with zp_in",
+   "mac_per_cycle_peak": 128,
+   "mac_per_cycle_measured": 24.5,
+   "cycle_formula": "BASE + SUM_t[q_cycles(act_t) + NB*(1 + sub*per + DRN + REQ(act_t) + NEXT)]; act_t=min(16,oc8-16t); sub=(k==1?ICB:k*ICB); per=(count+1)+wi+8k; count=(k==1?8:7*stride+k); wi=(k==1?0:1); NB=OH*ceil(OW/8)",
+   "evidence": [
+    "nn_conv_engine.sv:102-104,116-137",
+    "nn_subsys.sv:197-199,252-253",
+    "results/ai-accel/proto/engine/calc_cycles_v3.py:54-81"
+   ]
+  },
+  "dwconv": {
+   "nn_op_code": "0 + flags bit0",
+   "rom_kind": 1,
+   "ks": [
+    3,
+    5
+   ],
+   "stride": [
+    1,
+    2
+   ],
+   "requires": "OC == IC",
+   "oc_tiling": "8 OC lanes",
+   "mac_per_cycle_peak": 64,
+   "mac_per_cycle_measured": 8.0,
+   "cycle_formula": "BASE + OCB8*QPER8 + OCB8*NB*(1 + k*per + DRN + REQ(8) + NEXT); per=count+2+k; count=7*stride+k",
+   "evidence": [
+    "nn_conv_engine.sv:122-126",
+    "results/ai-accel/proto/engine/calc_cycles_v3.py:82-91"
+   ]
+  },
+  "maxpool": {
+   "nn_op_code": 1,
+   "rom_kind": 2,
+   "ks": [
+    2,
+    3,
+    5,
+    9
+   ],
+   "stride": [
+    1,
+    2
+   ],
+   "pad_range": "0..ks/2 (<=4)",
+   "semantics": "signed int8 max; OOB=-128; no requant; out channels = in channels",
+   "mac_per_cycle": 0,
+   "cycle_formula": "BASE + NB*(1 + k*per + 8 + NEXT); NB=ICB*OH*ceil(OW/8); per=count+2+k",
+   "evidence": [
+    "nn_conv_engine.sv:124-126",
+    "results/ai-accel/CONTRACT.md:382"
+   ]
+  },
+  "copy": {
+   "nn_op_code": 2,
+   "rom_kind": 5,
+   "granularity": "8-channel (64-bit) words",
+   "requires": "channel offsets multiple of 8; ceil8(ic)<=ceil8(oc)",
+   "mac_per_cycle": 0,
+   "cycle_formula": "BASE + IH*IW*ICB*2",
+   "evidence": [
+    "nn_conv_engine.sv:128-130",
+    "results/ai-accel/CONTRACT.md:383,390",
+    "tools/nn_gen_rom.py:138-145"
+   ]
+  },
+  "upsample_2x": {
+   "nn_op_code": "2 + flags bit3",
+   "rom_kind": 3,
+   "semantics": "2x nearest only; 1 source word -> 4 destinations",
+   "x4_note": "4x must be chained as two 2x ops (target model has one 14->56 case)",
+   "mac_per_cycle": 0,
+   "cycle_formula": "BASE + IH*IW*ICB*5",
+   "evidence": [
+    "nn_conv_engine.sv:1284-1286",
+    "results/ai-accel/CONTRACT.md:383"
+   ]
+  },
+  "add": {
+   "nn_op_code": 3,
+   "rom_kind": 4,
+   "requires": "OC==IC",
+   "mac_per_cycle": 0,
+   "cycle_formula": "BASE + (ADD_R?1:0) + IH*IW*ICB*5",
+   "evidence": [
+    "nn_conv_engine.sv:131-133"
+   ]
+  },
+  "add_r": {
+   "nn_op_code": "3 + flags bit6",
+   "rom_kind": 4,
+   "q_block_bytes": 16,
+   "q_layout": "[0]=zp_s [1]=zp_d [2:3]=R(u16 LE) [4]=KADD [5:15]=0",
+   "formula": "out=clamp(q_d+(((q_s-zp_s)*R)>>KADD),-128,127); floor",
+   "limits": {
+    "R": "0<R<=65535",
+    "KADD": "contract <=15 (RTL u8)"
+   },
+   "risk": "R overflows u16 if scale ratio >2 with KADD=15 (unverified, needs quantization)",
+   "evidence": [
+    "results/ai-accel/CONTRACT.md:460-475",
+    "nn_conv_engine.sv:371-379",
+    "tools/nn_gen_rom.py:164-170"
+   ]
+  },
+  "packed3": {
+   "nn_op_code": "0 + flags bit5",
+   "rom_kind": 0,
+   "scope": "conv0 only",
+   "requirements": "dense (not dw), ic<=8, k=3",
+   "address": "y*iw*3+x*3+c (c<3), lanes>=3 fill zp_in",
+   "cycle_effect": "load=3*count+1",
+   "evidence": [
+    "nn_conv_engine.sv:123,456-464,889-931",
+    "results/ai-accel/SPEC-SPECIALIZED.md:58"
+   ]
+  }
+ },
+ "cycle_formulas": {
+  "reference": "results/ai-accel/proto/engine/calc_cycles_v3.py:12-103",
+  "note": "engine-report.md:820-830 is pre-wpipe (DRN=3, add words*4); code with DRN=4 / words*5 matches latest E2E 1,191,020",
+  "constants": {
+   "BASE": 8,
+   "BASE_breakdown": "S_INIT 1 + S_VCHK 1 + S_CPREP 6",
+   "W_RD_LAT": 2,
+   "DRN": 4,
+   "NEXT": 2,
+   "QPER8": 11,
+   "REQP": 6,
+   "q_tot": "act/2+act/4+1",
+   "q_cycles": "q_tot+4",
+   "REQ": "6+beats+2; beats=8 if act==16 and oc8%16==0 and dst16 else 16; act==8 -> 8"
+  },
+  "formulas": {
+   "conv_dense": "BASE + SUM_t[q_cycles(act_t) + NB*(1+sub*per+DRN+REQ(act_t)+NEXT)]",
+   "dwconv": "BASE + OCB8*QPER8 + OCB8*NB*(1+k*per+DRN+REQ(8)+NEXT)",
+   "maxpool": "BASE + NB*(1+k*per+8+NEXT)",
+   "copy": "BASE + IH*IW*ICB*2",
+   "upsample_2x": "BASE + IH*IW*ICB*5",
+   "add": "BASE + (ADD_R?1:0) + IH*IW*ICB*5"
+  },
+  "validated_by": {
+   "engine_tb": "47/47 + 4/4 PASS mismatch=0, per-case cycles equal formula",
+   "full_model": "112-op formula sum = 1,191,020 = latest E2E (0 diff)",
+   "evidence": [
+    "results/ai-accel/engine-report.md:842-848",
+    "results/ai-accel/proto/engine/full_model_estimate_v3.md:13-16",
+    ".fpga-cache/logs/tb_sw_nn_yolo.log:42"
+   ]
+  }
+ },
+ "quant": {
+  "weight": {
+   "type": "int8 symmetric",
+   "granularity": "per-OC",
+   "formula": "s_w[oc]=max|W'[oc]|/127; w_q=clamp(round(W'/s_w),-127,127); BN folded first"
+  },
+  "activation": {
+   "type": "int8 asymmetric",
+   "granularity": "per-tensor",
+   "formula": "s_a=(max-min)/255; zp_a=-128-round(min/s_a); a_q=clamp(round(a/s_a)+zp_a,-128,127)"
+  },
+  "bias": {
+   "formula": "bias_adj[oc]=round(b'/(s_a_in*s_w[oc])) - zp_in*sum(w_q[oc])"
+  },
+  "requant": {
+   "M_pos": "int16(round(s_a_in*s_w/s_a_out*2^SHIFT))",
+   "M_neg": "not stored; (M_pos*3277+16384)>>15 if leaky else M_pos",
+   "SHIFT": "per-layer, Q tail byte[3]; contract 1..30; RTL implements 0..31",
+   "rounding": "floor (arithmetic shift)",
+   "output": "clamp((acc*M)>>SHIFT + zp_out, -128, 127)",
+   "precision": "acc*M needs 40-43 bit; RTL uses signed 48-bit intermediate"
+  },
+  "add_r": {
+   "R_u16_max": 65535,
+   "KADD_contract_max": 15,
+   "formula": "clamp(q_d + (((q_s-zp_s)*R)>>KADD), -128,127)"
+  },
+  "leaky": {
+   "slope": 0.100006,
+   "impl": "M_neg=(M_pos*3277+16384)>>15",
+   "flag": "flags.bit1; Q tail[2]"
+  },
+  "activation_functions_supported": [
+   "linear (leaky=0)",
+   "leaky ReLU 0.1 (leaky=1)"
+  ],
+  "activation_functions_unsupported": [
+   "ReLU (slope 0) - NOT expressible",
+   "ReLU6 - NOT expressible",
+   "sigmoid/tanh"
+  ],
+  "relu_evidence": [
+   "no relu match in any *.sv (grep)",
+   "nn_conv_engine.sv:976-989",
+   "tools/yolo/quant_lib.py:252-263",
+   "results/ai-accel/CONTRACT.md:92"
+  ],
+  "padding": {
+   "conv_oob_pixels": "zp_in",
+   "activation_padding_channels": "zp_a"
+  },
+  "evidence": [
+   "results/ai-accel/CONTRACT.md:104-143",
+   "nn_conv_engine.sv:769-782",
+   "tools/yolo/quant_lib.py:1-20"
+  ]
+ },
+ "formats": {
+  "weight_layout_dense": {
+   "formula": "for tap in 0..K*K-1: for ic in 0..IC_pad-1: for oc in 0..OC_pad-1: byte=w_q[oc][ic][tap]",
+   "padding": "IC_pad=ceil(IC/8)*8, OC_pad=ceil(OC/8)*8, padded bytes 0",
+   "bytes": "K*K*IC_pad*OC_pad",
+   "evidence": [
+    "results/ai-accel/CONTRACT.md:147-165"
+   ]
+  },
+  "weight_layout_depthwise": {
+   "formula": "for tap: for oc: byte=w_q[oc][tap]",
+   "bytes": "K*K*OC_pad",
+   "evidence": [
+    "results/ai-accel/CONTRACT.md:160-165"
+   ]
+  },
+  "activation_layout": {
+   "formula": "addr=((y*W+x)*C8+c_block)*8+c_byte; C8=ceil(C/8)*8",
+   "read_port": "128 bit/cycle, 16B aligned, 1-cycle latency",
+   "write_port": "128 bit/cycle + b_wstrb[15:0] (no RMW)",
+   "evidence": [
+    "results/ai-accel/CONTRACT.md:183-193",
+    "nn_pkg.sv:159-167",
+    "nn_mem.sv:43-46"
+   ]
+  },
+  "q_layout_per_layer": {
+   "formula": "bias_adj int32[OC_pad]@+0 | M_pos int16[OC_pad]@+4*OC_pad | tail 16B@+6*OC_pad",
+   "bytes": "6*OC_pad+16",
+   "tail": "[0]=zp_out [1]=zp_in [2]=leaky_en [3]=SHIFT [4..15]=0",
+   "evidence": [
+    "results/ai-accel/CONTRACT.md:167-179"
+   ]
+  },
+  "q_layout_add_r": {
+   "bytes": 16,
+   "layout": "[0]=zp_s [1]=zp_d [2:3]=R u16 LE [4]=KADD [5:15]=0",
+   "evidence": [
+    "results/ai-accel/CONTRACT.md:466-475"
+   ]
+  },
+  "ram_io": {
+   "w": "W-region-relative byte offset, 8B aligned, 16B little-endian window, latency 2 (wpipe)",
+   "q": "64-bit Q word index 0..6143, 1 cycle",
+   "a": "window-absolute byte offset (A=0x60000/B=0x78000), 16B aligned, 1 cycle",
+   "b": "window-absolute, 16B aligned, 128-bit + strobe",
+   "cpu": "window-relative offset; A/B only; 1-cycle registered read; others read 0/write ignored",
+   "evidence": [
+    "nn_mem.sv:36-46,87-118,199-224,394-469",
+    "results/ai-accel/mem-report.md:88-97"
+   ]
+  }
+ },
+ "plan_fields": {
+  "plan_json": {
+   "top": [
+    "input{ih,iw,ic,act_off,packed,gen{kind,seed},csum}",
+    "wq_bytes",
+    "q_base",
+    "ops[]",
+    "final_ops[]"
+   ],
+   "op_common": [
+    "id",
+    "kind",
+    "flags",
+    "k",
+    "stride",
+    "pad",
+    "ih",
+    "iw",
+    "ic",
+    "oc",
+    "woff",
+    "qoff",
+    "csum"
+   ],
+   "op_conv": [
+    "src{buf,off}",
+    "dst{buf,off}",
+    "leaky"
+   ],
+   "op_cpu_add": [
+    "r_scale",
+    "k_add",
+    "zp_s",
+    "src",
+    "dst"
+   ],
+   "kinds": [
+    "conv",
+    "dwconv",
+    "pool",
+    "upsample",
+    "add",
+    "copy",
+    "cpu_conv0",
+    "cpu_concat",
+    "cpu_copy",
+    "cpu_add"
+   ],
+   "evidence": [
+    "results/ai-accel/CONTRACT.md:318-366",
+    "tools/yolo/make_vectors.py:116-172",
+    "tools/nn_gen_sw.py:13-18"
+   ]
+  },
+  "model_json": {
+   "fields": [
+    "idx",
+    "op(code 0..5)",
+    "k",
+    "stride",
+    "pad",
+    "ic",
+    "oc",
+    "ih",
+    "iw",
+    "oh",
+    "ow",
+    "flags",
+    "woff",
+    "qoff",
+    "src(abs)",
+    "dst(abs)"
+   ],
+   "globals": [
+    "input_h",
+    "input_w",
+    "checksums"
+   ],
+   "evidence": [
+    "tools/yolo/make_vectors.py:174-202"
+   ]
+  },
+  "nn_rom_table_json": {
+   "top": [
+    "plan",
+    "num_ops",
+    "num_rom_entries",
+    "total_bits",
+    "fields",
+    "entries"
+   ],
+   "entry_fields": [
+    "kind",
+    "flags",
+    "ks",
+    "pad",
+    "stride",
+    "ic",
+    "oc",
+    "ih",
+    "iw",
+    "src",
+    "dst",
+    "woff",
+    "qoff",
+    "aux0",
+    "aux1",
+    "csum"
+   ],
+   "total_bits": 200,
+   "evidence": [
+    "results/ai-accel/nn_rom_table.json",
+    "tools/yolo/gen_rom_table.py:7-20"
+   ]
+  },
+  "nn_rom_t": {
+   "bits": 200,
+   "fields": {
+    "kind": 4,
+    "flags": 7,
+    "ks": 4,
+    "pad": 3,
+    "stride": 2,
+    "ic": 10,
+    "oc": 10,
+    "ih": 9,
+    "iw": 9,
+    "src": 19,
+    "dst": 19,
+    "woff": 19,
+    "qoff": 16,
+    "aux0": 16,
+    "aux1": 16,
+    "csum": 32,
+    "rsvd": 5
+   },
+   "evidence": [
+    "nn_pkg.sv:111-129",
+    "tools/nn_gen_rom.py:10-12"
+   ]
+  },
+  "nn_desc_t": {
+   "fields": {
+    "op": 2,
+    "flags": 7,
+    "ks": 4,
+    "stride": 2,
+    "pad": 3,
+    "ih": 16,
+    "iw": 16,
+    "ic": 16,
+    "oc": 16,
+    "src": 32,
+    "dst": 32,
+    "woff": 32,
+    "qoff": 32
+   },
+   "evidence": [
+    "nn_pkg.sv:78-92"
+   ]
+  }
+ },
+ "address_ports": {
+  "nn_mem_ports": [
+   {
+    "name": "cpu_*",
+    "width": "re/we + addr[31:0] + wdata[31:0] + wstrb[3:0] -> rdata[31:0]",
+    "semantics": "window-relative; A/B only; 1-cycle registered read",
+    "evidence": "nn_mem.sv:87-93"
+   },
+   {
+    "name": "w_*",
+    "width": "re + addr[23:0] -> rdata[127:0]",
+    "semantics": "W-region-relative, 8B aligned, 16B window, latency 2 after wpipe",
+    "evidence": "nn_mem.sv:94-97,199-218,349"
+   },
+   {
+    "name": "q_*",
+    "width": "re + addr[12:0] -> rdata[63:0]",
+    "semantics": "64-bit Q word index 0..6143, 1 cycle",
+    "evidence": "nn_mem.sv:98-101,381-392"
+   },
+   {
+    "name": "a_*",
+    "width": "sel[1:0]+re+addr[23:0] -> rdata[127:0]",
+    "semantics": "window-absolute, 16B aligned, 1 cycle",
+    "evidence": "nn_mem.sv:102-106,405-421"
+   },
+   {
+    "name": "b_*",
+    "width": "sel+we+addr[23:0]+wdata[127:0]+wstrb[15:0]",
+    "semantics": "window-absolute, 16B aligned, strobe, no RMW",
+    "evidence": "nn_mem.sv:107-112,424-447"
+   },
+   {
+    "name": "dbg_*",
+    "width": "we/space/addr[16:0]/wdata[31:0]",
+    "semantics": "simulation only (ifndef SYNTHESIS), SoC tied 0",
+    "evidence": "nn_mem.sv:113-117,161-169,367-380"
+   }
+  ],
+  "cpu_window_rule": {
+   "mapping": "cpu_sel_act = (cpu_addr>=A_OFF) && (cpu_addr<B_END)",
+   "effect": "W/Q invisible; non A/B reads 0 and writes ignored",
+   "evidence": [
+    "nn_mem.sv:415-417",
+    "results/ai-accel/CONTRACT.md:446-459"
+   ]
+  },
+  "address_units": {
+   "w_addr": "W-region-relative (0 base); engine = d_woff + oc_base_w",
+   "a_addr": "NN-window absolute (A=0x60000/B=0x78000 base)",
+   "b_addr": "NN-window absolute",
+   "evidence": [
+    "nn_mem.sv:36-46",
+    "nn_conv_engine.sv:1002,429-476,889-931"
+   ]
+  },
+  "buffer_select": {
+   "rule": "sel_a_src=(desc.src>=NN_B_OFF); sel_b_dst=(desc.dst>=NN_B_OFF); nn_mem verifies region match",
+   "evidence": [
+    "nn_conv_engine.sv:931-932",
+    "nn_mem.sv:405-413"
+   ],
+   "ddr3_conflict": "With a DDR3 arena base (e.g. 0x0100_0000) every src/dst >= NN_B_OFF, so both select B; buffer select/decode must be redesigned (new src_space/dst_space fields)."
+  },
+  "w_writable_gap": {
+   "current": "W is a synthesis-time ROM; write path exists only under ifndef SYNTHESIS (dbg). Both BRAM read ports are used for cur/next (16B window) -> no spare write port.",
+   "required_new": [
+    {
+     "item": "W write port",
+     "form": "w_we + w_waddr[23:0] + w_wdata[127:0]/w_wstrb[15:0], time-multiplexed with engine reads",
+     "location": "nn_mem.sv W array + write block"
+    },
+    {
+     "item": "load mode/FSM",
+     "form": "LOAD_MODE (engine cannot start), address counter, CRC/FNV, done IRQ",
+     "location": "nn_subsys.sv + nn_seq.sv"
+    },
+    {
+     "item": "MMIO/DMA registers",
+     "form": "NN_WLOAD_* (target offset, data/command, DDR source, length, status); MMIO remap needed",
+     "location": "rv32_pkg.sv:385-403 + nn_subsys.sv:294-337 + top_a100t.sv:265"
+    },
+    {
+     "item": "boot-time source",
+     "form": "QSPI Flash or DDR3 (currently compile-time $readmemh)",
+     "location": "new loader + sw/"
+    },
+    {
+     "item": "read-after-write contract",
+     "form": "keep W read latency 2 + barrier before engine start",
+     "location": "nn_mem.sv + nn_conv_engine.sv (W_RD_LAT)"
+    }
+   ],
+   "conclusion": "A simple extra we port is impossible: both W BRAM ports are fully used by the 16B-window scheme. Either change the weight read protocol (still needs storage duplication) or stream from external memory (only viable route for 2 MB)."
+  }
+ },
+ "engine_oc_splitting": {
+  "answer": "OC blocking is internal to hardware (c_ocb outermost). One start = one whole layer; plan.json has one entry per conv and ROM has no oc_base field -> there is no multi-start OC-block API today.",
+  "oc_tiling": {
+   "dense": 16,
+   "dw_pool": 8,
+   "read_amplification": "input re-read per OC tile -> ceil(oc8/16) for dense; P3 measured 4.22x for C320"
+  },
+  "to_split": "Add oc_base/oc_count to nn_desc_t/ROM + partial-OC execution, or generate multiple conv ops in plan.json with shifted dst/woff (engine has no dst-channel-offset support).",
+  "evidence": [
+   "nn_conv_engine.sv:1172-1226",
+   "nn_pkg.sv:78-92,111-129",
+   "results/ai-accel/P3-DDR3-TILECACHE.md:65-76"
+  ]
+ },
+ "a_b_and_cpu_copy": {
+  "A": {
+   "window_off": 393216,
+   "bytes": 98304
+  },
+  "B": {
+   "window_off": 491520,
+   "bytes": 32768
+  },
+  "cpu_rule": "CPU only A/B (0x60000..0x7FFFF); W/Q invisible; busy -> reads 0xDEADBEEF, writes dropped + STATUS.err",
+  "existing_functions": [
+   {
+    "name": "gen_input",
+    "file": "sw/yolo_demo.c",
+    "lines": "115-125",
+    "what": "pattern_v1 q=(x*13+y*7+c*29+seed)&0xFF -> YOLO_INPUT_ABS+(y*W+x)*YOLO_INPUT_STRIDE+c (A region, packed stride 3)"
+   },
+   {
+    "name": "wr8/rd8/wr32/rd32",
+    "file": "sw/yolo_demo.c",
+    "lines": "41-44",
+    "what": "volatile byte/word access via NN_WIN=(u8*)YOLO_NN_BASE"
+   },
+   {
+    "name": "sw_upsample/sw_pool/sw_copy/sw_cat/sw_cpu_add",
+    "file": "sw/yolo_demo.c",
+    "lines": "220-327",
+    "what": "CPU software-baseline copies (byte loops, no DMA)"
+   }
+  ],
+  "constants": {
+   "file": "sw/yolo_plan.h",
+   "lines": "9-15,41-51"
+  },
+  "real_image_path": "NOT implemented: deterministic synthetic input only; real images deferred (sw/yolo_demo.c:8-10, CONTRACT.md:350-357). No camera/video RTL in top_a100t.sv (ports sys_clk/sys_rst_n/led[3:0]/uart_txd/uart_rxd)."
+ },
+ "external_memory": {
+  "ddr3_rtl_present": false,
+  "ddr3_pins_present": false,
+  "camera_rtl_present": false,
+  "evidence": [
+   "grep: no mig_7series/ddr3/axi/dma entity in any *.sv",
+   "fpga/top_a100t.sv:58-62",
+   "fpga/daVinciPro.xdc:47-56 (only clk/rst/led/uart)"
+  ],
+  "weights_source": "synthesis-time $readmemh (nn_mem.sv:66-72; PLAN.md:20); CPU cannot access W/Q",
+  "p3_reference": {
+   "status": "spec/analysis only, no RTL",
+   "c320_arena_bytes": 819200,
+   "c320_ddr_base": "0x0100_0000",
+   "c320_max_single_tensor": 614400,
+   "c320_traffic_MB_per_frame": 15.246,
+   "bandwidth_need_30fps_GBs": "0.48-0.56",
+   "effective_ddr3_GBs": "1.6-2.2",
+   "tile_cache_tiles": 12.4,
+   "spare_bram_tiles": 3,
+   "rom_width_decision": "src/dst 19->21 bit (not yet in RTL)",
+   "tensor_src_field": "planned (0=on-chip/1=DDR3) but not implemented",
+   "evidence": [
+    "results/ai-accel/P3-320-ARENA.md:9-110",
+    "results/ai-accel/P3-DDR3-TILECACHE.md:10-113",
+    "results/ai-accel/SPEC-SPECIALIZED.md:109-114"
+   ]
+  },
+  "required_additions": [
+   {
+    "item": "MIG 7-series/DDR3 controller",
+    "form": "32-bit (2x16) DDR3-800 class, ui_clk domain",
+    "location": "new ddr3/ + fpga/daVinciPro.xdc + fpga/build*.tcl"
+   },
+   {
+    "item": "AXI/stream + DMA",
+    "form": "weight read + activation read/write channels with QoS",
+    "location": "new nn_dma.sv"
+   },
+   {
+    "item": "weight streaming front-end",
+    "form": "DDR3 -> 4-8KB weight tile double buffer -> engine w_*; w offset becomes tile base + offset",
+    "location": "nn_conv_engine.sv (wa_r/w_delta/W_RD_LAT), nn_mem.sv (W ROM -> RAM/FIFO), nn_pkg.sv (woff semantics)"
+   },
+   {
+    "item": "activation arena + tile cache",
+    "form": "row-band + OC-block tiles; DMA and double buffer",
+    "location": "nn_seq.sv (TENSOR_SRC + tile loop), nn_mem.sv (A/B double buffer + DMA), nn_conv_engine.sv (band-outer)"
+   },
+   {
+    "item": "engine buffer select rework",
+    "form": "explicit src_space/dst_space instead of (addr>=NN_B_OFF)",
+    "location": "nn_pkg.sv, nn_conv_engine.sv:931-932, nn_mem.sv:405-413"
+   },
+   {
+    "item": "boot load + checksum",
+    "form": "Flash/DDR3 -> cache + CRC/FNV",
+    "location": "nn_subsys.sv + rv32_pkg.sv + sw/"
+   },
+   {
+    "item": "clock domain crossing",
+    "form": "MIG ui_clk <-> sys_clk_core async FIFO",
+    "location": "new module"
+   },
+   {
+    "item": "BRAM re-allocation",
+    "form": "W ROM 80 tiles -> tile cache; Q strategy",
+    "location": "nn_mem.sv + fpga/nn_mem_bb.sv DCP regeneration"
+   },
+   {
+    "item": "toolchain",
+    "form": "arena map (exists), plan tensor-location field, wider ROM",
+    "location": "tools/yolo/gen_arena_map.py, tools/nn_gen_rom.py, tools/nn_gen_sw.py"
+   }
+  ]
+ },
+ "execution_modes": {
+  "MODE_CPU": {
+   "trigger": "NN_CTRL.start=1",
+   "behavior": "CPU writes 14 descriptor regs per op and polls done; nn_subsys desc_ok checks",
+   "evidence": [
+    "nn_subsys.sv:294-320",
+    "results/ai-accel/CONTRACT.md:485-491"
+   ]
+  },
+  "MODE_AUTO": {
+   "trigger": "NN_CTRL.start=1 and bit1=1",
+   "behavior": "nn_seq executes nn_rom_pkg::NN_ROM autonomously; CPU reads STATUS/CYCLES; done/err sticky",
+   "evidence": [
+    "nn_subsys.sv:300-305,361-368",
+    "nn_seq.sv:120-137"
+   ]
+  },
+  "equivalence_acceptance": "same plan both modes must match per-op checksums; latest E2E hw_bad=0 auto_bad=0 both npu_cycles=1,191,020",
+  "note": "CTRL bit1 doubles as irq_en (CONTRACT section 4) and auto (v0.7) during the start cycle."
+ },
+ "add_model_checklist": [
+  {
+   "step": "float model + BN fold",
+   "artifact": "model_float",
+   "generator": "tools/yolo/convert_yolo_fastest.py (darknet only)",
+   "gap": "target model is PyTorch; no torch/onnx->plan front-end exists"
+  },
+  {
+   "step": "int8 PTQ + Q packing",
+   "artifact": "model_int8_<hw>",
+   "generator": "tools/yolo/quantize.py + quant_lib.py",
+   "gap": "needs ReLU support, Q may exceed 48KB"
+  },
+  {
+   "step": "all-integer golden",
+   "artifact": "GOLDEN PASS mismatch=0",
+   "generator": "tools/yolo/golden.py"
+  },
+  {
+   "step": "plan/model/W/Q/checksums/vectors",
+   "artifact": "sim/prog/<model>/",
+   "generator": "tools/yolo/make_vectors.py",
+   "gap": "AB allocator supports external arena via --buffer-a/--buffer-b"
+  },
+  {
+   "step": "ROM data source",
+   "artifact": "nn_rom_table.json",
+   "generator": "tools/yolo/gen_rom_table.py",
+   "gap": "ROM_DEPTH=128 hard-coded"
+  },
+  {
+   "step": "microcode ROM RTL",
+   "artifact": "nn_rom_pkg.sv",
+   "generator": "tools/nn_gen_rom.py",
+   "gap": "depth_max=128; field widths"
+  },
+  {
+   "step": "C header",
+   "artifact": "sw/yolo_plan.h",
+   "generator": "tools/nn_gen_sw.py"
+  },
+  {
+   "step": "software image",
+   "artifact": "sim/prog/*.hex + *.dmem.hex",
+   "generator": "tools/build_sw.py --all --with-hw",
+   "gap": "bigger op table ~5KB, dmem 16KB (tight)"
+  },
+  {
+   "step": "bitstream",
+   "artifact": "fpga/cpu_a100t_nn.bit",
+   "generator": "python tools/fpga_workflow.py synth --nn ...",
+   "gap": "weights are ROM-burned -> full re-synthesis; W ROM needs OOC DCP"
+  }
+ ],
+ "verification": {
+  "commands": [
+   "python tools/fpga_workflow.py verify --force",
+   "python tools/fpga_workflow.py verify --only tb_sw_nn_yolo --force",
+   "python tools/fpga_workflow.py verify --only tb_nn_engine tb_nn_mem tb_nn_seq --force",
+   "python sim/run_prog.py --imem <hex> --dmem <dmem.hex> --plus ..."
+  ],
+  "tests": [
+   {
+    "name": "tb_sw_nn_yolo",
+    "marker": "RESULT : PASS + hw_bad=0 + auto_bad=0",
+    "seconds": 70.5,
+    "covers": "112-op E2E, dual mode, per-op FNV vs golden"
+   },
+   {
+    "name": "tb_nn_engine",
+    "marker": "ENGINE_TB: PASS",
+    "seconds": 3.8,
+    "covers": "47 cases + 4 PACKED3/ADD_R"
+   },
+   {
+    "name": "tb_nn_mem",
+    "marker": "MEM_TB: PASS",
+    "seconds": 3.85,
+    "covers": "W/Q sweeps, A/B 128b+strobe, CPU window"
+   },
+   {
+    "name": "tb_nn_seq",
+    "marker": "NN_SEQ_TB: PASS",
+    "seconds": 3.1,
+    "covers": "112 starts, desc mapping, cycles accumulation"
+   }
+  ],
+  "evidence": [
+   "tools/fpga_workflow.py:14-15,1128-1179,3333-3335",
+   ".fpga-cache/verify-state.json",
+   ".fpga-cache/logs/tb_sw_nn_yolo.log:40-44"
+  ]
+ },
+ "target_model_measured": {
+  "lead_brief_values": {
+   "params": 2048721,
+   "int8_weights": "~2.05 MB",
+   "peak_activation": "~225 KB",
+   "ops": "~150",
+   "input": "224x224x3"
+  },
+  "measured_values": {
+   "params": 2048721,
+   "weights_int8_contract_layout_bytes": 2020960,
+   "q_region_bytes": 90368,
+   "w_plus_q_bytes": 2111328,
+   "peak_single_tensor_bytes": 1204224,
+   "peak_tensor_example": "112x112x96 (backbone.stage2.0.block.0.0 expansion conv output)",
+   "peak_225KB_explanation": "225,792 B = 288ch@28x28 (deep hidden) or 72ch@56x56 (FPN P2); early expansion convs are 1,204,224 B -> '225KB' underestimates the true peak by 5.3x",
+   "ops_npu_mapped": 106,
+   "ops_breakdown": {
+    "conv": 61,
+    "dwconv": 17,
+    "add": 20,
+    "upsample": 6,
+    "copy": 2
+   },
+   "ops_note": "X4 nearest upsample split into two 2x ops; concat of 3 tensors -> 2 copy ops; '~150' is closer to a PyTorch module count",
+   "max_ic": 864,
+   "max_oc": 864,
+   "ops_over_256_channels": 33,
+   "relu_layers": 58,
+   "linear_layers": 45,
+   "macs": 2271966928,
+   "macs_crosscheck": 2273516504,
+   "input_packed3_bytes": 150528,
+   "concat_target_bytes": 677376,
+   "estimated_npu_cycles_current_formula": 39870094,
+   "estimated_seconds_per_frame_100mhz": 0.399,
+   "estimated_fps_100mhz": 2.51,
+   "cycle_breakdown": {
+    "conv": 33877606,
+    "dwconv": 4785178,
+    "add": 968665,
+    "upsample": 125733,
+    "copy": 112912
+   },
+   "estimate_caveats": "calc_cycles_v3 formula extrapolation assuming >256 channels supported; excludes DDR stalls/DMA"
+  },
+  "method": "EnhancedNutAnchorFree(num_classes=4, fpn_channels=72, backbone_width=0.55) from tools/bottlecap/model_src; torch.fx trace + ShapeProp on 1x3x224x224; sum weights/Q with pad8; apply calc_cycles_v3 formulas.",
+  "evidence": [
+   "tools/bottlecap/model_src/nut_detector/enhanced_anchor_free.py:30-148",
+   "tools/bottlecap/model_src/nut_detector/mobilenet_anchor_free.py:12-43",
+   "tools/bottlecap/model_src/nut_detector/model.py:8-43",
+   "results/bottlecap/reports/四色瓶盖模型训练过程.md:123-150"
+  ]
+ },
+ "big_model_blockers": [
+  {
+   "id": "B1",
+   "blocker": "weight capacity",
+   "severity": "structural",
+   "hard_limit": "W = 327,680 B (320 KB), 80 BRAM36, synthesis-time ROM, CPU cannot access",
+   "target_need": "2,020,960 B int8 weights (+90,368 B Q); W+Q = 2,111,328 B",
+   "ratio": 6.17,
+   "needs_ddr3": true,
+   "evidence": [
+    "nn_pkg.sv:43",
+    "nn_mem.sv:79,189-192",
+    "results/ai-accel/CONTRACT.md:446-459"
+   ],
+   "required_changes": [
+    {
+     "file": "nn_pkg.sv",
+     "change": "NN_W_BYTES/woff width (19->21 bit) or replace W with streamed weights"
+    },
+    {
+     "file": "nn_mem.sv",
+     "change": "W 4-segment ROM -> weight tile buffer/FIFO + DMA read port"
+    },
+    {
+     "file": "nn_conv_engine.sv",
+     "change": "wa_r base becomes DDR tile base; W_RD_LAT contract"
+    },
+    {
+     "file": "new ddr3/ + fpga/daVinciPro.xdc + fpga/build*.tcl",
+     "change": "DDR3 PHY/pins/IP (zero-vendor-IP discipline break)"
+    },
+    {
+     "file": "new nn_dma.sv",
+     "change": "DDR3 -> weight cache streaming engine with double buffer"
+    }
+   ]
+  },
+  {
+   "id": "B2",
+   "blocker": "single-tensor activation capacity",
+   "severity": "structural",
+   "hard_limit": "A=98,304 B / B=32,768 B; a whole tensor must fit one buffer; concurrent 131,072 B",
+   "target_need": "peak measured 1,204,224 B; concat target 677,376 B; input packed 150,528 B",
+   "ratio": 12.25,
+   "needs_ddr3": true,
+   "evidence": [
+    "nn_pkg.sv:45-46",
+    "results/ai-accel/CONTRACT.md:451,459",
+    "nn_mem.sv:405-413"
+   ],
+   "required_changes": [
+    {
+     "file": "nn_pkg.sv",
+     "change": "A/B sizes -> tile-cache sizes; src/dst 21 bit"
+    },
+    {
+     "file": "nn_mem.sv",
+     "change": "activation array -> DDR3 arena + DMA ports + A/B double buffer"
+    },
+    {
+     "file": "nn_seq.sv",
+     "change": "TENSOR_SRC (0=on-chip,1=DDR3) + tile inner loops"
+    },
+    {
+     "file": "nn_conv_engine.sv",
+     "change": "band-outer loop order (currently OC-block outer, 4.22x input reread)"
+    }
+   ]
+  },
+  {
+   "id": "B3",
+   "blocker": "channel-count limit",
+   "severity": "structural",
+   "hard_limit": "contract IC/OC <= 256 (nn_subsys desc_ok); ROM ic/oc 10 bit; engine structural IC <= 504 (ic8[8:3])",
+   "target_need": "max 864 channels; 33 ops exceed 256",
+   "ratio": 3.375,
+   "needs_ddr3": false,
+   "evidence": [
+    "results/ai-accel/CONTRACT.md:100",
+    "nn_subsys.sv:252-253",
+    "nn_pkg.sv:117-118",
+    "nn_conv_engine.sv:102"
+   ],
+   "required_changes": [
+    {
+     "file": "nn_subsys.sv",
+     "change": "desc_ok IC/OC limit 256 -> >=1024"
+    },
+    {
+     "file": "nn_pkg.sv",
+     "change": "ic/oc stay 10 bit (864 fits); document new limit"
+    },
+    {
+     "file": "nn_conv_engine.sv",
+     "change": "icb_n 6->7 bit; Q read word counts; OC tile counters/oc_limit_r"
+    },
+    {
+     "file": "results/ai-accel/CONTRACT.md",
+     "change": "section 4 / section 12.4 channel limits"
+    }
+   ]
+  },
+  {
+   "id": "B4",
+   "blocker": "activation function: ReLU not expressible",
+   "severity": "structural",
+   "hard_limit": "only {linear, leaky-0.1}; M_neg is M_pos or M_pos*0.1; no ReLU/ReLU6",
+   "target_need": "58 nn.ReLU layers",
+   "ratio": "n/a",
+   "needs_ddr3": false,
+   "evidence": [
+    "nn_conv_engine.sv:976-989",
+    "results/ai-accel/CONTRACT.md:92",
+    "tools/yolo/quant_lib.py:252-263",
+    "tools/bottlecap/model_src/nut_detector/model.py:29"
+   ],
+   "required_changes": [
+    {
+     "file": "nn_pkg.sv",
+     "change": "flags bit7 = RELU (or Q tail act code)"
+    },
+    {
+     "file": "nn_conv_engine.sv",
+     "change": "M_neg <= 0 when relu; parse new act code"
+    },
+    {
+     "file": "tools/yolo/quant_lib.py",
+     "change": "tail[2] activation encoding; golden/quant math for relu"
+    },
+    {
+     "file": "tools/nn_gen_rom.py",
+     "change": "flags mapping for relu"
+    },
+    {
+     "file": "results/ai-accel/CONTRACT.md",
+     "change": "section 5 quant semantics + section 7 Q tail"
+    }
+   ]
+  },
+  {
+   "id": "B5",
+   "blocker": "Q region capacity",
+   "severity": "capacity",
+   "hard_limit": "49,152 B (lo 32KB BRAM + hi 16KB LUTRAM); q_addr 13 bit; ROM qoff 16 bit",
+   "target_need": "90,368 B",
+   "ratio": 1.84,
+   "needs_ddr3": "either DDR3 Q or LUTRAM expansion (BRAM has no spare tiles)",
+   "evidence": [
+    "nn_pkg.sv:44,124",
+    "nn_mem.sv:361-362",
+    "results/ai-accel/mem-report.md:104,223-245"
+   ],
+   "required_changes": [
+    {
+     "file": "nn_pkg.sv",
+     "change": "NN_Q_BYTES; qoff 16 -> 17 bit"
+    },
+    {
+     "file": "nn_mem.sv",
+     "change": "Q sub-ROM expansion (24 tiles unavailable) -> LUTRAM or DDR3 Q read"
+    },
+    {
+     "file": "nn_conv_engine.sv",
+     "change": "q_addr 13 -> 14/15 bit"
+    }
+   ]
+  },
+  {
+   "id": "B6",
+   "blocker": "input/conv0 tensor exceeds A",
+   "severity": "capacity",
+   "hard_limit": "A = 98,304 B; PACKED3 conv0 needs the whole input addressable",
+   "target_need": "224x224x3 packed = 150,528 B; conv0 output 112x112x8 = 100,352 B > A",
+   "ratio": 1.53,
+   "needs_ddr3": true,
+   "evidence": [
+    "nn_conv_engine.sv:123,456-464",
+    "results/ai-accel/P3-320-ARENA.md:41-62"
+   ],
+   "required_changes": [
+    {
+     "file": "nn_conv_engine.sv",
+     "change": "PACKED3 row-band streaming loader (C320 design: 20 bands x 16,320 B)"
+    },
+    {
+     "file": "nn_seq.sv",
+     "change": "conv0 band loop/DMA commands"
+    },
+    {
+     "file": "new nn_dma.sv",
+     "change": "camera/arena -> A row-band copy"
+    }
+   ]
+  },
+  {
+   "id": "B7",
+   "blocker": "weights not runtime-loadable (ROM in bitstream)",
+   "severity": "integration",
+   "hard_limit": "W/Q synthesized via $readmemh; model change = full re-synthesis; W ROM needs OOC DCP black box",
+   "target_need": "2.02MB weights loaded at boot with checksum",
+   "ratio": "n/a",
+   "needs_ddr3": "yes for source storage (or QSPI streaming)",
+   "evidence": [
+    "nn_mem.sv:66-72,184-188",
+    "results/ai-accel/PLAN.md:20",
+    "results/ai-accel/DELIVERY.md:250-253"
+   ],
+   "required_changes": [
+    {
+     "file": "nn_subsys.sv",
+     "change": "weight-load FSM + MMIO registers"
+    },
+    {
+     "file": "rv32_pkg.sv",
+     "change": "new MMIO addresses for loader"
+    },
+    {
+     "file": "sw/",
+     "change": "load W/Q + FNV/CRC verify"
+    },
+    {
+     "file": "new nn_dma.sv",
+     "change": "Flash/DDR3 -> weight tile streaming"
+    }
+   ]
+  },
+  {
+   "id": "B8",
+   "blocker": "ROM depth if plan really has ~150 ops",
+   "severity": "conditional",
+   "hard_limit": "NN_ROM_DEPTH=128, idx 8 bit, entry 200 bit",
+   "target_need": "measured 106 NPU ops (fits); lead estimate ~150 would need 256",
+   "ratio": 1.17,
+   "needs_ddr3": false,
+   "evidence": [
+    "nn_pkg.sv:103,111-129",
+    "nn_seq.sv:58,66,79",
+    "tools/nn_gen_rom.py:297,308-309",
+    "tools/yolo/gen_rom_table.py:38"
+   ],
+   "required_changes": [
+    {
+     "file": "nn_pkg.sv",
+     "change": "NN_ROM_DEPTH 128 -> 256; nn_rom_t +8 bit (src/dst 21, qoff 17, flags 8)"
+    },
+    {
+     "file": "nn_seq.sv",
+     "change": "idx 8->9 bit; last_entry width; rom_mem 200->208 bit"
+    },
+    {
+     "file": "tools/nn_gen_rom.py",
+     "change": "depth_max 128 -> 256; NUM_FIELDS"
+    },
+    {
+     "file": "tools/yolo/gen_rom_table.py",
+     "change": "ROM_DEPTH 128 -> 256"
+    },
+    {
+     "file": "results/ai-accel/CONTRACT.md",
+     "change": "section 12.4 depth/field table"
+    }
+   ]
+  },
+  {
+   "id": "B9",
+   "blocker": "compute time / throughput",
+   "severity": "performance",
+   "hard_limit": "128 MAC/cycle peak; YOLO full-model measured 16.85 MAC/cycle; delivered 100 MHz (max verified 122.22)",
+   "target_need": "2.272 GMAC -> 39.87M cycles (~0.40 s/frame, 2.5 fps) by current formula; 0.326 s @122.22MHz",
+   "ratio": "~113x the YOLO MAC count",
+   "needs_ddr3": false,
+   "evidence": [
+    "nn_subsys.sv:197-199",
+    "results/ai-accel/DELIVERY.md:223-244",
+    "results/ai-accel/proto/engine/full_model_estimate_v3.md:13",
+    ".fpga-cache/logs/tb_sw_nn_yolo.log:42"
+   ],
+   "required_changes": [
+    {
+     "file": "nn_conv_engine.sv",
+     "change": "only if higher fps: more MACs/cycle (PX16/OC lanes), band-outer loop"
+    },
+    {
+     "file": "nn_seq.sv",
+     "change": "overlap DMA with compute"
+    }
+   ]
+  },
+  {
+   "id": "B10",
+   "blocker": "BRAM headroom for tile cache",
+   "severity": "capacity",
+   "hard_limit": "132/135 BRAM tiles used, 3 free",
+   "target_need": "P3 tile cache ~12.4 tiles",
+   "ratio": 4.1,
+   "needs_ddr3": true,
+   "evidence": [
+    "results/ai-accel/SPEC-SPECIALIZED.md:71-77,82-85",
+    "results/ai-accel/P3-DDR3-TILECACHE.md:243-245"
+   ],
+   "required_changes": [
+    {
+     "file": "nn_mem.sv",
+     "change": "free BRAM: Q -> LUTRAM/DDR3, shrink W, smaller tile"
+    },
+    {
+     "file": "fpga/nn_mem_bb.sv",
+     "change": "regenerate OOC DCP"
+    },
+    {
+     "file": "fpga/build*.tcl",
+     "change": "pblock/floorplan for engine<->mem distance"
+    }
+   ]
+  },
+  {
+   "id": "B11",
+   "blocker": "toolchain: no PyTorch/ONNX front-end",
+   "severity": "integration",
+   "hard_limit": "tools/yolo is darknet-specific; no torch/onnx->plan path in repo",
+   "target_need": "export EnhancedNutAnchorFree checkpoint -> plan/model/W/Q hex + FNV checksums",
+   "ratio": "n/a",
+   "needs_ddr3": false,
+   "evidence": [
+    "tools/yolo/README.md:15-31",
+    "tools/yolo/convert_yolo_fastest.py:1-10",
+    "tools/yolo/darknet_lib.py:1-16"
+   ],
+   "required_changes": [
+    {
+     "file": "new tools/bottlecap/export_plan.py",
+     "change": "PyTorch -> int8 PTQ -> plan/model/W/Q/checksums (reuse make_vectors backend formats)"
+    }
+   ]
+  },
+  {
+   "id": "B12",
+   "blocker": "input preprocessing / camera path missing",
+   "severity": "integration",
+   "hard_limit": "demo input is deterministic pattern_v1; no camera/video RTL; model expects NCHW [-1,1] 320x240 letterbox->224",
+   "target_need": "camera -> resize/letterbox -> /127.5-1 -> NCHW->NHWC -> int8 quantize -> packed3",
+   "ratio": "n/a",
+   "needs_ddr3": "for frame buffer",
+   "evidence": [
+    "sw/yolo_demo.c:8-10,111-125",
+    "results/ai-accel/CONTRACT.md:350-357",
+    "fpga/top_a100t.sv:58-62",
+    "results/bottlecap/reports/四色瓶盖模型训练过程.md:111-119"
+   ],
+   "required_changes": [
+    {
+     "file": "new camera/preprocess RTL",
+     "change": "capture, resize/letterbox, NCHW->NHWC, quantize, packed3"
+    },
+    {
+     "file": "sw/",
+     "change": "CPU-side normalize/quantize fallback"
+    },
+    {
+     "file": "nn_mem.sv",
+     "change": "input staging buffer/DMA port"
+    }
+   ]
+  },
+  {
+   "id": "B13",
+   "blocker": "int8 accuracy unknown + ReLU semantics change",
+   "severity": "risk",
+   "hard_limit": "per-tensor int8 + floor requant; YOLO cos 0.9742/0.9174, ideal QDQ ceiling 0.9889/0.9670",
+   "target_need": "target float baseline P=R=F1=1.0; int8 accuracy unknown; ReLU cannot be reproduced without RTL change",
+   "ratio": "n/a",
+   "needs_ddr3": false,
+   "evidence": [
+    "results/ai-accel/model-report.md:20,33",
+    "results/ai-accel/DELIVERY.md:79",
+    "results/bottlecap/reports/四色瓶盖模型训练过程.md"
+   ],
+   "required_changes": [
+    {
+     "file": "tools/bottlecap/*",
+     "change": "int8 PTQ + evaluation; per-channel activation/16-bit critical tensors if needed"
+    },
+    {
+     "file": "results/ai-accel/CONTRACT.md",
+     "change": "only if quantization granularity must change (RTL+toolchain)"
+    }
+   ]
+  }
+ ],
+ "gap_table_lead_point_5": [
+  {
+   "gap": "weights 2.02MB vs 320KB on-chip",
+   "hard_limit": "W 327,680 B ROM",
+   "required_module_port_field": "nn_mem W storage -> streaming; nn_pkg woff 19->21; DDR3/MIG/DMA; nn_conv_engine wa_r",
+   "needs_ddr3": true
+  },
+  {
+   "gap": "peak activation 1.20MB vs A 96KB",
+   "hard_limit": "A 98,304 B / B 32,768 B",
+   "required_module_port_field": "nn_mem activation -> DDR3 arena + DMA; nn_seq TENSOR_SRC + tile loops; nn_conv_engine band-outer; nn_pkg src/dst 21 bit",
+   "needs_ddr3": true
+  },
+  {
+   "gap": "max channel 864 vs IC/OC<=256",
+   "hard_limit": "nn_subsys desc_ok 256; engine ic8[8:3]",
+   "required_module_port_field": "nn_subsys desc_ok; nn_conv_engine icb_n 6->7 bit; CONTRACT section 4/12.4",
+   "needs_ddr3": false
+  },
+  {
+   "gap": "58 ReLU layers vs {linear,leaky}",
+   "hard_limit": "M_neg = M_pos or M_pos*0.1",
+   "required_module_port_field": "nn_pkg flags bit7 RELU; nn_conv_engine M_neg mux; quant_lib tail; nn_gen_rom flags; CONTRACT section 5/7",
+   "needs_ddr3": false
+  },
+  {
+   "gap": "Q 90,368 B vs 48KB",
+   "hard_limit": "Q 49,152 B; qoff 16 bit; q_addr 13 bit",
+   "required_module_port_field": "nn_pkg NN_Q_BYTES/qoff 17 bit; nn_mem Q storage; nn_conv_engine q_addr width",
+   "needs_ddr3": "either (BRAM full)"
+  },
+  {
+   "gap": "224 input 150,528 B packed vs A 96KB",
+   "hard_limit": "A 98,304 B",
+   "required_module_port_field": "nn_conv_engine PACKED3 band streaming; nn_dma; nn_seq conv0 loop",
+   "needs_ddr3": true
+  },
+  {
+   "gap": "conv0 output 112x112x8 = 100,352 B > A",
+   "hard_limit": "A 98,304 B",
+   "required_module_port_field": "tile conv0 output / stream to DDR; nn_mem DMA port",
+   "needs_ddr3": true
+  },
+  {
+   "gap": "concat target 56x56x216 = 677,376 B",
+   "hard_limit": "A/B 128KB total",
+   "required_module_port_field": "copy writes into DDR arena directly (copy engine -> DMA) or fused conv reading 3 slices",
+   "needs_ddr3": true
+  },
+  {
+   "gap": "106 ops vs ROM 128 (ok) / lead 150 (not ok)",
+   "hard_limit": "NN_ROM_DEPTH=128, idx 8 bit, entry 200 bit",
+   "required_module_port_field": "nn_pkg NN_ROM_DEPTH; nn_seq idx/rom_mem width; nn_gen_rom depth_max; gen_rom_table ROM_DEPTH; CONTRACT section 12.4",
+   "needs_ddr3": false
+  },
+  {
+   "gap": "2.02MB weights not runtime-loadable (ROM in bitstream)",
+   "hard_limit": "synthesis-time $readmemh; CPU cannot access W",
+   "required_module_port_field": "nn_subsys load FSM + MMIO; sw loader; QSPI/DDR3 source; nn_mem W write/stream port",
+   "needs_ddr3": "yes (source) or QSPI"
+  },
+  {
+   "gap": "tile cache needs 12.4 BRAM tiles, only 3 free",
+   "hard_limit": "132/135 BRAM",
+   "required_module_port_field": "nn_mem BRAM re-allocation; nn_mem_bb OOC DCP; build.tcl pblock",
+   "needs_ddr3": true
+  },
+  {
+   "gap": "no camera/preprocess path",
+   "hard_limit": "demo uses synthetic pattern_v1",
+   "required_module_port_field": "new camera/ISP/DMA RTL; sw preprocess; nn_mem input staging",
+   "needs_ddr3": "for frame buffer"
+  },
+  {
+   "gap": "no DDR3 PHY at all",
+   "hard_limit": "no MIG/AXI/ddr3 RTL, no DDR pins in XDC",
+   "required_module_port_field": "new ddr3/ + fpga/daVinciPro.xdc + fpga/build*.tcl + nn_dma.sv",
+   "needs_ddr3": true
+  },
+  {
+   "gap": "no PyTorch->plan front-end",
+   "hard_limit": "tools/yolo is darknet-only",
+   "required_module_port_field": "new tools/bottlecap/export_plan.py (toolchain only, no RTL)",
+   "needs_ddr3": false
+  },
+  {
+   "gap": "compute ~0.40 s/frame @100MHz (2.5 fps) without DDR stalls",
+   "hard_limit": "128 MAC/cycle peak; 16.85 MAC/cycle measured on YOLO",
+   "required_module_port_field": "nn_conv_engine parallelism/band-outer; nn_seq DMA overlap (only if fps target > ~2.5)",
+   "needs_ddr3": false
+  }
+ ],
+ "field_width_gap_lead_point_2": {
+  "current_actual": {
+   "entry_bits": 200,
+   "src": 19,
+   "dst": 19,
+   "woff": 19,
+   "qoff": 16,
+   "flags": 7,
+   "rom_depth": 128,
+   "nn_seq_idx_bits": 8,
+   "note": "P3's src/dst 19->21 bit / 200->208 bit decision (results/ai-accel/P3-320-ARENA.md:96-110) is NOT yet in RTL; current nn_pkg.sv:121-122 is 19 bit."
+  },
+  "needed_for_150op_2MB": {
+   "entry_bits": 208,
+   "src": 21,
+   "dst": 21,
+   "woff": 21,
+   "qoff": 17,
+   "flags": 8,
+   "rom_depth": 256,
+   "nn_seq_idx_bits": 9,
+   "rom_total_bits": 53248
+  },
+  "delta": {
+   "entry_bits": 8,
+   "src": 2,
+   "dst": 2,
+   "woff": 2,
+   "qoff": 1,
+   "flags": 1,
+   "rom_depth": 128,
+   "rom_extra_bits": 27648
+  },
+  "if_only_measured_106_ops": {
+   "rom_depth_needed": 128,
+   "entry_bits_needed": "208 still (src/dst/woff/qoff/flags width changes are storage-driven, not op-count driven)",
+   "comment": "measured op count fits current depth; 2MB weights / 2MB arena still require 21-bit src/dst/woff (and qoff 17 if Q stays on-chip)"
+  }
+ },
+ "open_questions": [
+  {
+   "id": "Q1",
+   "question": "Target model int8 quantization artifacts (Q tables, per-layer cos, end-to-end accuracy)",
+   "status": "does not exist; needs new quant pipeline"
+  },
+  {
+   "id": "Q2",
+   "question": "DDR3 part number / pins / reference clock / MIG configuration",
+   "status": "not found; needs user input (results/ai-accel/PLAN.md:249-260)"
+  },
+  {
+   "id": "Q3",
+   "question": "Camera interface (DVP/MIPI/SPI, resolution, format)",
+   "status": "no RTL found; user says board has camera"
+  },
+  {
+   "id": "Q4",
+   "question": "Is 21-bit src/dst implemented?",
+   "status": "NO: nn_pkg.sv:121-122 still 19 bit"
+  },
+  {
+   "id": "Q5",
+   "question": "Does ADD_R R overflow u16 for target model (scale ratio >2)?",
+   "status": "unknown until quantization runs"
+  },
+  {
+   "id": "Q6",
+   "question": "Where does the '~150 op' number come from?",
+   "status": "not found; measured NPU-mapped 106 ops"
+  },
+  {
+   "id": "Q7",
+   "question": "Where does the '225KB peak activation' number come from?",
+   "status": "inconsistent with measured 1,204,224 B; 225KB corresponds to deep-layer tensors only"
+  },
+  {
+   "id": "Q8",
+   "question": "Boot-time load time and bitstream size for a 2MB weight model",
+   "status": "no data"
+  }
+ ]
+}

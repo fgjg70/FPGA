@@ -1,0 +1,133 @@
+{
+  "checkpoint_epoch": 13,
+  "test_images": 500,
+  "true_objects": 1250,
+  "predicted_objects": 1250,
+  "true_positive": 1250,
+  "false_positive": 0,
+  "false_negative": 0,
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1": 1.0,
+  "mean_matched_iou": 0.9695916984558105,
+  "count_accuracy": 1.0,
+  "exact_image_accuracy": 1.0,
+  "per_class": {
+    "red_cap": {
+      "true_objects": 313,
+      "predicted_objects": 313,
+      "matched_objects": 313,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "purple_cap": {
+      "true_objects": 313,
+      "predicted_objects": 313,
+      "matched_objects": 313,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "green_cap": {
+      "true_objects": 312,
+      "predicted_objects": 312,
+      "matched_objects": 312,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "yellow_cap": {
+      "true_objects": 312,
+      "predicted_objects": 312,
+      "matched_objects": 312,
+      "precision": 1.0,
+      "recall": 1.0
+    }
+  },
+  "by_true_object_count": {
+    "1": {
+      "images": 125,
+      "precision": 1.0,
+      "recall": 1.0,
+      "count_accuracy": 1.0,
+      "exact_image_accuracy": 1.0
+    },
+    "2": {
+      "images": 125,
+      "precision": 1.0,
+      "recall": 1.0,
+      "count_accuracy": 1.0,
+      "exact_image_accuracy": 1.0
+    },
+    "3": {
+      "images": 125,
+      "precision": 1.0,
+      "recall": 1.0,
+      "count_accuracy": 1.0,
+      "exact_image_accuracy": 1.0
+    },
+    "4": {
+      "images": 125,
+      "precision": 1.0,
+      "recall": 1.0,
+      "count_accuracy": 1.0,
+      "exact_image_accuracy": 1.0
+    }
+  },
+  "by_lighting_profile": {
+    "bright": {
+      "images": 69,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "count_accuracy": 1.0,
+      "exact_image_accuracy": 1.0
+    },
+    "cool": {
+      "images": 68,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "count_accuracy": 1.0,
+      "exact_image_accuracy": 1.0
+    },
+    "dim": {
+      "images": 76,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "count_accuracy": 1.0,
+      "exact_image_accuracy": 1.0
+    },
+    "low_contrast": {
+      "images": 69,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "count_accuracy": 1.0,
+      "exact_image_accuracy": 1.0
+    },
+    "neutral": {
+      "images": 78,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "count_accuracy": 1.0,
+      "exact_image_accuracy": 1.0
+    },
+    "transition": {
+      "images": 61,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "count_accuracy": 1.0,
+      "exact_image_accuracy": 1.0
+    },
+    "warm": {
+      "images": 79,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "count_accuracy": 1.0,
+      "exact_image_accuracy": 1.0
+    }
+  }
+}

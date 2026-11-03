@@ -146,7 +146,7 @@ if {[info exists ::env(NN_MEM_DCP)] && $::env(NN_MEM_DCP) ne ""} {
   set NN_MEM_SRC "$root/fpga/nn_mem_bb.sv"
   puts "BUILD_NN_MEM_BLACKBOX=1 SRC=$NN_MEM_SRC"
 }
-read_verilog -sv [list "$root/rv32_pkg.sv" "$root/nn_pkg.sv" "$root/nn_rom_pkg.sv" "$root/alu.sv" "$root/branch_unit.sv" "$root/control_unit.sv" "$root/imm_gen.sv" "$root/pc.sv" "$root/regfile.sv" "$root/id_ex_reg.sv" "$root/ex_mem_reg.sv" "$root/mem_wb_reg.sv" "$root/hazard_unit.sv" "$root/load_store_unit.sv" "$root/imem.sv" "$root/dmem.sv" "$root/btb.sv" "$root/bht.sv" "$root/ras.sv" "$root/muldiv.sv" "$root/csr_file.sv" "$root/core.sv" "$root/gemm_accel.sv" $NN_MEM_SRC "$root/nn_conv_engine.sv" "$root/nn_seq.sv" "$root/nn_subsys.sv" "$root/fpga/mmio_subsys.sv" "$root/fpga/top_a100t.sv"]
+read_verilog -sv [list "$root/rv32_pkg.sv" "$root/nn_pkg.sv" "$root/nn_rom_pkg.sv" "$root/alu.sv" "$root/branch_unit.sv" "$root/control_unit.sv" "$root/imm_gen.sv" "$root/pc.sv" "$root/regfile.sv" "$root/id_ex_reg.sv" "$root/ex_mem_reg.sv" "$root/mem_wb_reg.sv" "$root/hazard_unit.sv" "$root/load_store_unit.sv" "$root/imem.sv" "$root/dmem.sv" "$root/btb.sv" "$root/bht.sv" "$root/ras.sv" "$root/muldiv.sv" "$root/csr_file.sv" "$root/core.sv" "$root/gemm_accel.sv" $NN_MEM_SRC "$root/nn_conv_engine.sv" "$root/nn_seq.sv" "$root/nn_subsys.sv" "$root/nn_wload.sv" "$root/nn_tilecache.sv" "$root/fpga/mmio_subsys.sv" "$root/fpga/top_a100t.sv"]
 # ---------------------------------------------------------------------------
 # AI core clock: materialise an XDC copy with a LITERAL divider.
 # Why not conditional logic inside the .xdc: Vivado 2018.3's XDC parser rejects

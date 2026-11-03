@@ -150,3 +150,26 @@ results/ai-accel/proto/**/synth150_*_paths.rpt
 results/ai-accel/proto/**/synth_eng_only_paths.rpt
 results/ai-accel/proto/**/synth_mem_only_*.rpt# AI 档构建生成的 XDC 副本 (分频值为字面量, 可重建)
 fpga/daVinciPro_ai_*.xdc
+# ---- 瓶盖迁移 (results/bottlecap + tools/bottlecap): 大产物不入库 ----
+# 依据: FINAL-FEASIBILITY.md / plan/*/checksums.txt 记录 sha256; 全部可由
+#   tools/bottlecap/{gen_npu_artifacts,gen_weights_image,cycle_model}.py + 冻结 ckpt 重生成。
+results/bottlecap/plan/opvec/
+results/bottlecap/plan/fused_a/opvec/
+results/bottlecap/**/w.hex
+results/bottlecap/**/q.hex
+results/bottlecap/**/wq.hex
+results/bottlecap/stream/
+results/bottlecap/proto/m6b_data/
+results/bottlecap/proto/**/*.vcd
+results/bottlecap/proto/**/*.hex
+results/bottlecap/perf-proto/.Xil/
+results/bottlecap/perf-proto/**/*.log
+results/bottlecap/perf-proto/**/*.rpt
+results/bottlecap/perf-proto/**/*.dcp
+results/bottlecap/perf-proto/**/*.bit
+tools/bottlecap/data/
+tools/bottlecap/model_src/*.pth
+
+# ---- 追加: Vivado OOC 临时 work 目录（op3work 等，可完全重生成） ----
+results/bottlecap/perf-proto/*work/
+results/bottlecap/perf-proto/**/.Xil/

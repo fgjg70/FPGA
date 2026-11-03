@@ -38,6 +38,22 @@
 #define MMIO_UART_STAT   0xa0000014u
 #define MMIO_RESULT      0xa0000024u
 
+/* ---- [M5-S1] Job 级接口寄存器 (CPU-NPU 解耦第一版; 见 CPU-NPU-DECOUPLE.md §4.2) ---- */
+#define MMIO_NN_JOB_ID   0xa0000150u
+#define MMIO_NN_JOB_STATUS 0xa0000154u
+#define MMIO_NN_JOB_FRAME_NO 0xa0000158u
+#define MMIO_NN_JOB_CYCLES 0xa000015cu
+#define MMIO_NN_JOB_IN_ADDR 0xa0000160u
+#define MMIO_NN_JOB_OUT_ADDR 0xa0000164u
+#define MMIO_NN_JOB_MODEL 0xa0000168u
+#define MMIO_NN_JOB_FRAME 0xa000016cu
+#define MMIO_NN_JOB_DOORBELL 0xa0000170u
+#define MMIO_NN_JOB_ACK  0xa0000174u
+#define MMIO_NN_JOB_ERR_CODE 0xa0000178u
+#define MMIO_NN_JOB_LEN  0xa000017cu
+#define MMIO_NN_JOB_DONE_CNT 0xa0000180u
+#define MMIO_NN_JOB_DROP_CNT 0xa0000184u
+
 /* ---- 模型输入 ---- */
 #define YOLO_INPUT_H       128u
 #define YOLO_INPUT_W       128u
@@ -71,6 +87,7 @@
 #define YF_POOLMAX   0x10u
 #define YF_PACKED3   0x20u   /* v0.7: conv0 输入 3B/像素 packed */
 #define YF_ADD_R     0x40u   /* v0.7: add 用 per-tensor 源 requant */
+#define YF_RELU      0x80u   /* v0.8: 激活 ReLU (负支=0); ADD 时 out=max(out,zp_d) */
 
 typedef struct {
     unsigned short kind, flags, k, stride, pad;

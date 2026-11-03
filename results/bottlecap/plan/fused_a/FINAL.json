@@ -1,0 +1,126 @@
+{
+ "format": "bottlecap-plan-final-v1",
+ "generated_at": "2026-11-04T01:07:27+08:00",
+ "model": {
+  "checkpoint": "tools/bottlecap/model_src/best_model.pt",
+  "arch": "enhanced",
+  "input_size": 224,
+  "model_variant": "enhanced_mobilenetv2_fpn_decoupled_head",
+  "params": 2048721
+ },
+ "checkpoint_sha256": "b88f6215cfca18907bd7a22192e37e113da98d88c14e0aaa2e7cb40cb5f97027",
+ "label": "fused_a",
+ "contract": "results/ai-accel/CONTRACT.md (v0.7 + v0.8 flags/RELU)",
+ "counts": {
+  "ops": 101,
+  "w_bytes": 2020960,
+  "q_bytes": 90288,
+  "max_single_tensor_bytes": 1204224,
+  "ab_mode": "virtual",
+  "peak_A": 15720400,
+  "peak_B": 0,
+  "total_bands": 2345,
+  "rom_depth": 101
+ },
+ "commands": {
+  "extract_graph": "python tools/bottlecap/extract_graph.py --arch auto --checkpoint D:\\USER\\Desktop\\FPGA\\FPGA\\tools\\bottlecap\\model_src\\best_model.pt --input-size 224 --profile none --out results\\bottlecap\\plan\\fused_a\\graph.json",
+  "quant_npu": "python tools/bottlecap/quant_npu.py --arch auto --checkpoint D:\\USER\\Desktop\\FPGA\\FPGA\\tools\\bottlecap\\model_src\\best_model.pt --input-size 224 --graph results\\bottlecap\\plan\\fused_a\\graph.json --out results\\bottlecap\\plan\\fused_a\\quant_report.json",
+  "gen_npu_artifacts": "python tools/bottlecap/gen_npu_artifacts.py --arch auto --checkpoint D:\\USER\\Desktop\\FPGA\\FPGA\\tools\\bottlecap\\model_src\\best_model.pt --input-size 224 --graph results\\bottlecap\\plan\\fused_a\\graph.json --outdir results\\bottlecap\\plan\\fused_a --ab-mode real --deploy-check results\\bottlecap\\plan\\fused_a\\DEPLOY-CHECK.json --emit-deploy-bundle --emit-wq-merged --label fused_a --final-json results\\bottlecap\\plan\\fused_a\\FINAL.json --handoff-md results\\bottlecap\\plan\\fused_a\\E2E-HANDOFF.md",
+  "golden_npu": "python tools/bottlecap/golden_npu.py --arch auto --checkpoint D:\\USER\\Desktop\\FPGA\\FPGA\\tools\\bottlecap\\model_src\\best_model.pt --input-size 224 --outdir results\\bottlecap\\plan\\fused_a --graph results\\bottlecap\\plan\\fused_a\\graph.json --export-opvec results\\bottlecap\\plan\\fused_a\\opvec --report results\\bottlecap\\plan\\fused_a\\GOLDEN-REPORT-SLIM.md"
+ },
+ "files": {
+  "graph.json": {
+   "bytes": 82035,
+   "sha256": "82b79429fe8907dff14d4d67672040255f5d301a02545c48d7526be3c9e6da61"
+  },
+  "quant_report.json": {
+   "bytes": 110024,
+   "sha256": "2160905c7cfd0a5a275ae70206de22729ff7ebd4ce889cf804413c6adc0bf585"
+  },
+  "plan.json": {
+   "bytes": 227864,
+   "sha256": "1096d9cbc6009430839d99210d673ca171d1fb6f9fcfe455ba4edf87974b1c34"
+  },
+  "model.json": {
+   "bytes": 47635,
+   "sha256": "8bf6b6ed6ce147d1b0ee3e939cfb3005e3f5adfe2dd94087c7971ce2a6babd18"
+  },
+  "nn_rom_table.json": {
+   "bytes": 53475,
+   "sha256": "c3c98057efc16c29449f8a50e079abe54c427219003195384ca6b11b67b24699"
+  },
+  "w.hex": {
+   "bytes": 4547160,
+   "sha256": "d28ed91e65c767695e0c663ad462950952ecb20b5987c9a332ad1f06528b49f8"
+  },
+  "q.hex": {
+   "bytes": 203148,
+   "sha256": "286cfa5d534dffff2341c8ac4572f37dde9d246812c0017427605aac7ac275bc"
+  },
+  "checksums.txt": {
+   "bytes": 6229,
+   "sha256": "b42abf3e8b87134270a112afaf9194396d0c0b792bc6e45be2a0b47edbf882e8"
+  },
+  "band_plan.json": {
+   "bytes": 65034,
+   "sha256": "5fec590f4ac2bd80d19a8c793f26677932730c937ab314e1b8d49b115245a42a"
+  },
+  "opvec/manifest.json": {
+   "bytes": 88508,
+   "sha256": "562c03309603e58ac6e05abac582f0b1a1b0bf1baac92af13a2b62766a0d10fc"
+  },
+  "opvec/index.json": {
+   "bytes": 35184,
+   "sha256": "ad646dfef0b3e7cc4fcbc18332e32429eb26d2d5ee44a552b18f7bc547b43f0f"
+  },
+  "e2e_metrics.json": {
+   "bytes": 8526,
+   "sha256": "45d06486eb9b591f0e27757c29d06a7bf02117be4ed9f7c8cb9bb21fecf4e781"
+  },
+  "FUSION-MAP.json": {
+   "bytes": 2604,
+   "sha256": "0176f4db68245aa9cfd466b0aa2cd096a573ac51db50fce3aeb750a4e1c888c0"
+  },
+  "FUSION-REPORT.md": {
+   "bytes": 11505,
+   "sha256": "9450c9ef07099f3535dde0764e6e79d17e3c86a2d2d7b61344052004407fe629"
+  },
+  "E2E-HANDOFF-FUSED.md": {
+   "bytes": 6018,
+   "sha256": "0daca4fdbe4f1eaa53aa7b953b15ec177f3be8ecdad7d658ef45e8f8585f951b"
+  },
+  "nn_rom_pkg_bottlecap_fused_a.sv": {
+   "bytes": 14026,
+   "sha256": "8619ee2095816f9a24258b657f3cd5522647ba496a63e2fc080cb62902c35fb7"
+  },
+  "nn_rom_table_bottlecap_fused_a.json": {
+   "bytes": 32712,
+   "sha256": "63371434d9048a326bfb6e4dffbce2934b492357244e05ee54c46272b81acff7"
+  }
+ },
+ "extra": {
+  "engine_cycles": {
+   "note": "v3 周期公式(calc_cycles_v3.py 同源): BASE=8/DRN=4/NEXT=2/REQP=6/QPER8=11; 已在 ModelSim 对 slim(799,520)与 YOLO(1,191,020) 逐 case 验证",
+   "per_kind_cycles": {
+    "conv": 34098057,
+    "dwconv": 4785178,
+    "add": 640075,
+    "upsample": 90445,
+    "copy": 169368,
+    "pool": 0
+   },
+   "total_cycles": 39783123,
+   "total_cycles_range": [
+    39783123,
+    39783123
+   ],
+   "total_ms_at_100MHz": 397.831,
+   "total_ms_at_122MHz": 326.091,
+   "total_ms_at_150MHz": 265.221,
+   "fps_at_100MHz": 2.514,
+   "fps_at_122MHz": 3.067
+  },
+  "bundle": {},
+  "wq_hex": null
+ }
+}

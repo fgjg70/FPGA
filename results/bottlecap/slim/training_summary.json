@@ -1,0 +1,195 @@
+{
+  "parameter_count": 136321,
+  "fp32_parameter_size_mib": 0.5200233459472656,
+  "int8_parameter_size_mib": 0.1300058364868164,
+  "best_score": 1.9479043877798778,
+  "best_epoch": 62,
+  "epochs_completed": 77,
+  "elapsed_seconds": 1342.8615202903748,
+  "best_checkpoint": "D:\\USER\\Desktop\\FPGA\\FPGA\\results\\bottlecap\\slim\\best_model.pt",
+  "config": {
+    "num_classes": 4,
+    "width_multiplier": 0.4,
+    "fpn_channels": 64,
+    "input_size": 96,
+    "class_names": [
+      "red_cap",
+      "purple_cap",
+      "green_cap",
+      "yellow_cap"
+    ],
+    "preprocess": {
+      "target_size": 96,
+      "fitted_height": 72,
+      "pad_top": 12,
+      "pad_bottom": 12,
+      "normalize": "pixel/127.5-1",
+      "label_normalize": "/(input_size-1)"
+    },
+    "grid_size": 24,
+    "decode": "3x3 local peaks + confidence Top-K (40) + class-aware NMS (0.35) + Top-4",
+    "confidence_threshold": 0.2,
+    "nms_iou_threshold": 0.35,
+    "model_variant": "slim_mobilenetv2_fpn_anchorfree",
+    "dataset_dir": "D:\\USER\\Desktop\\bottle_cap_model_training_package_20260819\\bottle_cap_model_training_package_20260819\\bottle_cap_color_dataset_multi_augmented_7to1",
+    "train_images": 3500,
+    "test_images": 500,
+    "epochs": 80,
+    "batch_size": 64,
+    "num_workers": 4,
+    "learning_rate": 0.0012,
+    "weight_decay": 0.0002,
+    "scheduler": "cosine",
+    "optimizer": "AdamW",
+    "amp": true,
+    "seed": 20260819,
+    "patience": 15,
+    "distill_weight": 0.0,
+    "parameter_count": 136321,
+    "selection_score": "test_f1 + test_mean_iou"
+  },
+  "best_metrics": {
+    "epoch": 62,
+    "train_loss": 0.24455047924177986,
+    "train_supervised_loss": 0.24455047924177986,
+    "train_distillation_loss": 0.0,
+    "learning_rate": 0.00015255845046798167,
+    "epoch_seconds": 16.275898694992065,
+    "test_loss": 0.19913548874855042,
+    "test_precision": 0.9984,
+    "test_recall": 0.9984,
+    "test_f1": 0.9984,
+    "test_mean_iou": 0.9495043877798778,
+    "test_count_accuracy": 1.0,
+    "test_exact_image_accuracy": 0.996
+  },
+  "detailed_test": {
+    "test_images": 500,
+    "true_objects": 1250,
+    "predicted_objects": 1250,
+    "true_positive": 1248,
+    "false_positive": 2,
+    "false_negative": 2,
+    "precision": 0.9984,
+    "recall": 0.9984,
+    "f1": 0.9984,
+    "mean_matched_iou": 0.9495043877798778,
+    "count_accuracy": 1.0,
+    "exact_image_accuracy": 0.996,
+    "per_class": {
+      "red_cap": {
+        "true_objects": 313,
+        "predicted_objects": 311,
+        "matched_objects": 311,
+        "precision": 1.0,
+        "recall": 0.9936102236421726
+      },
+      "purple_cap": {
+        "true_objects": 313,
+        "predicted_objects": 315,
+        "matched_objects": 313,
+        "precision": 0.9936507936507937,
+        "recall": 1.0
+      },
+      "green_cap": {
+        "true_objects": 312,
+        "predicted_objects": 312,
+        "matched_objects": 312,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "yellow_cap": {
+        "true_objects": 312,
+        "predicted_objects": 312,
+        "matched_objects": 312,
+        "precision": 1.0,
+        "recall": 1.0
+      }
+    },
+    "by_true_object_count": {
+      "1": {
+        "images": 125,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "count_accuracy": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "2": {
+        "images": 125,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "count_accuracy": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "3": {
+        "images": 125,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "count_accuracy": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "4": {
+        "images": 125,
+        "precision": 0.996,
+        "recall": 0.996,
+        "f1": 0.996,
+        "count_accuracy": 1.0,
+        "exact_image_accuracy": 0.984
+      }
+    },
+    "by_lighting_profile": {
+      "bright": {
+        "images": 69,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "cool": {
+        "images": 68,
+        "precision": 0.9938271604938271,
+        "recall": 0.9938271604938271,
+        "f1": 0.9938271604938271,
+        "exact_image_accuracy": 0.9852941176470589
+      },
+      "dim": {
+        "images": 76,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "low_contrast": {
+        "images": 69,
+        "precision": 0.9942196531791907,
+        "recall": 0.9942196531791907,
+        "f1": 0.9942196531791907,
+        "exact_image_accuracy": 0.9855072463768116
+      },
+      "neutral": {
+        "images": 78,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "transition": {
+        "images": 61,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "warm": {
+        "images": 79,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "exact_image_accuracy": 1.0
+      }
+    }
+  }
+}

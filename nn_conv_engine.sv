@@ -19,6 +19,26 @@
 //
 // 周期: 见 results/ai-accel/engine-report.md §0.6 (BASE=8, Q=按 tile active lane 数,
 //       DRN=3, REQ=13, NEXT=2; 46+ case 逐 case 必须与公式相等)。
+//
+// 【v0.8 / M1 (瓶盖模型迁移) 增量 —— 全部由 flags 位门控, 默认 flags=0 时逐位不变】
+//   1. NN_F_RELU (bit7): requant 负支三态 M_neg = f_relu ? 0
+//      : (leaky ? (M_pos*3277+16384)>>15 : M_pos)。负 acc 的输出 = clamp(0+zp_out) = zp_out，
+//      即 int8 域下界为 zp_out（不是数值 0）。RELU 与 LEAKY 同时置位时 RELU 优先。
+//   2. ADD / ADD_R 后置 ReLU: flags.RELU=1 时 S_AD_WR3 的输出再取 max(q_out, zp_d)，
+//      zp_d 取该 op Q 块 byte[1]（CONTRACT §12.3 已有该字节）；不加 RELU 时逐位不变。
+//      为取 zp_d：ADD+RELU 会像 ADD_R 一样先经 S_AD_Q 读一次 Q 块（+1 拍，仅新模式）。
+//      ADD_R 的数值公式不变（byte[1]=zp_d 原本"仅 debug/记录"，现在 RELU 用作下界）。
+//   3. IC>511 的**死代码截断**修正: 原第 102 行 `icb_n = {10'd0, ic8[8:3]}` 只有 6 bit 有效位，
+//      但全文 grep 证明该 wire **从未被引用**（活跃路径一律用 16-bit 的 icb_n_r = ic8_r>>3）——
+//      所以引擎原本就没有 IC 截断: 负向对照实验 (HEAD 引擎 + M1 新 TB) 里 IC=864 的
+//      dense/dw/add/copy 全部 PASS。icb_n 改为 ic8[10:3]（8 bit, 覆盖 IC≤1024）只为与
+//      nn_rom_t.ic 的 10-bit 字段/后续复用保持一致，不改变任何已测行为。
+//      对旧 case（IC≤256, ic8≤511）该值与旧式逐位相等 ⇒ 周期/数值不受影响。
+//   4. plain ADD 的 Δ 显式取 q_s（不再依赖 zp_s_r）。原实现 Δ=(q_s-zp_s_r) 而 zp_s_r 只在
+//      ADD_R 时装载 ⇒ "ADD_R 之后再跑 plain ADD" 会残留上一 op 的 zp_s（跨 op 状态泄漏）。
+//      旧 47 case 里 plain ADD 之前没有 ADD_R ⇒ 旧行为逐位不变；M1 新 case 专门按
+//      "ADD_R+RELU -> plain ADD" 的顺序钉死该修复（负向对照: 旧引擎在该 case 上 mis=2642）。
+//   端口、状态数、周期公式均不变（ADD+RELU 因读 Q 块多 1 拍，仅新模式）。
 // ============================================================================
 
 module nn_conv_engine
@@ -66,7 +86,7 @@ module nn_conv_engine
 
   typedef enum logic [4:0] {
     S_IDLE, S_INIT, S_VCHK, S_CPREP, S_Q, S_QLOAD, S_BI, S_LD, S_LDCAP,
-    S_WI, S_MAC, S_DRN, S_REQ, S_NEXT, S_NEXT2, S_PINIT, S_PMAX, S_PPACK,
+    S_WI, S_MAC, S_DRN, S_ADRD, S_REQ, S_NEXT, S_NEXT2, S_PINIT, S_PMAX, S_PPACK,
     S_CP_RD, S_CP_WR, S_AD_Q, S_AD_R1, S_AD_R2, S_AD_WR, S_AD_WR2, S_AD_WR3, S_FIN
   } state_e;
 
@@ -76,7 +96,7 @@ module nn_conv_engine
   // 描述符锁存 + one-hot
   // ==========================================================================
   logic [1:0]  d_op;
-  logic [6:0]  d_flags;
+  logic [7:0]  d_flags;          // v0.8: 7→8 bit (新增 NN_F_RELU=bit7; 低位语义不变)
   logic [3:0]  d_ks;
   logic [1:0]  d_st;
   logic [2:0]  d_pad;
@@ -84,7 +104,7 @@ module nn_conv_engine
   logic [31:0] d_src, d_dst, d_woff, d_qoff;
 
   logic is_conv, is_pool, is_copy, is_add;
-  logic f_dw, f_leaky, f_up2x, f_p3, f_add_r;
+  logic f_dw, f_leaky, f_up2x, f_p3, f_add_r, f_relu;   // f_relu: v0.8 NN_F_RELU
   wire dense = is_conv && !f_dw;
 
   wire [2:0] pad_eff = (is_pool && (d_pad == 3'd0))
@@ -99,7 +119,11 @@ module nn_conv_engine
 
   wire [15:0] ic8 = (d_ic + 16'd7) & 16'hFFF8;
   wire [15:0] oc8 = (d_oc + 16'd7) & 16'hFFF8;
-  wire [15:0] icb_n = {10'd0, ic8[8:3]};      // IC8/8
+  // v0.8: IC8/8 索引。历史遗留 wire: 原 6-bit {10'd0,ic8[8:3]} 在 IC>511 时丢 bit9，
+  //   但本 wire **未被任何逻辑引用**（全文件 grep）—— 活跃计数是 S_CPREP 寄存的 16-bit
+  //   icb_n_r = ic8_r>>3，因此 IC=864 在原引擎上就已正确（负向对照 PASS）。这里改成
+  //   ic8[10:3]（8 bit, 覆盖 IC=1024）只为与 nn_rom_t.ic(10-bit) 对齐、防止将来误用。
+  wire [15:0] icb_n = {8'd0, ic8[10:3]};      // IC8/8 (≤128, 当前无引用, 仅保留可读常量)
   wire [15:0] ld_count = (dense && (d_ks == 4'd1))
                          ? 16'd8 : (7 * st16 + ks16);
 
@@ -120,7 +144,10 @@ module nn_conv_engine
     cr_ic_bad = (d_ic == 16'd0 || d_oc == 16'd0);
     cr_ih_bad = (d_ih == 16'd0 || d_iw == 16'd0);
     cr_dw_bad = f_dw && (d_oc != d_ic);
-    cr_p3_bad = f_p3 && (!is_conv || f_dw || (d_ic > 16'd8) || (d_ks != 4'd3));
+    // v0.9 [task-14 Step A/A1-A2] conv add-mode: 允许 conv 用 NN_F_ADD_R（残差融进 conv）。
+    //   - 只放开"合法性"；真正的累加数据通路在 S_REQ 侧（A4/A5）。
+    //   - 约束：PACKED3 与 add-mode 互斥（conv0 无残差），故 f_add_r 时禁 f_p3。
+    cr_p3_bad = f_p3 && (!is_conv || f_dw || f_add_r || (d_ic > 16'd8) || (d_ks != 4'd3));
     pl_ks_bad = !(d_ks == 4'd2 || d_ks == 4'd3 || d_ks == 4'd5 || d_ks == 4'd9);
     pl_st_bad = !(d_st == 2'd1 || d_st == 2'd2);
     pl_pad_bad= (d_pad > (ks16 >> 1));
@@ -131,7 +158,7 @@ module nn_conv_engine
     ad_ic_bad = (d_ic == 16'd0);
     ad_hw_bad = (d_ih == 16'd0 || d_iw == 16'd0);
     ad_oc_bad = (d_oc != d_ic);
-    ad_r_bad  = f_add_r && !is_add;
+    ad_r_bad  = f_add_r && !(is_add || is_conv);   // v0.9 [A1] conv add-mode（Step A）
     d_oh_bad  = (({1'b0, d_ih} + (pad_eff << 1)) < {13'd0, d_ks}) ||
                 (({1'b0, d_iw} + (pad_eff << 1)) < {13'd0, d_ks});
   end
@@ -199,6 +226,10 @@ module nn_conv_engine
   // ==========================================================================
   logic [63:0] abuf  [0:BANDW-1];
   logic [63:0] bshift[0:WINW-1];
+  // v0.9 [A7a] dw 专用 128b 窗口（16 通道/像素）：只有 f_dw 装载/移位，
+  //            dense 的 abuf/bshift/win_sel 一字节不动（共用流水零改动）。
+  logic [127:0] dwbuf [0:BANDW-1];
+  logic [127:0] dwbsh [0:WINW-1];
 
   logic signed [31:0] acc    [0:PX-1][0:OCL-1];
   logic signed [7:0]  a_pipe [0:PX-1][0:OCL-1];
@@ -297,14 +328,59 @@ module nn_conv_engine
   wire [15:0] qm_w  = {11'd0, qm_w_r};          // mpos 64b 字数 (4 lane/字)
   wire [15:0] q_tot = {11'd0, q_tot_r};         // 总字数
   // dense 16-lane tile: 每像素 2 个 8B 写 beat; 其余 1 beat
-  wire single16 = (dense && (act_l == 16'd16) && (oc8_r[3:0] == 4'd0) &&
+  wire single16 = ((dense || f_dw) && (act_l == 16'd16) && (oc8_r[3:0] == 4'd0) &&
                    (d_dst[3:0] == 4'd0));
-  wire wr_dense16 = dense && (act_l == 16'd16);
+  wire wr_dense16 = (dense || f_dw) && (act_l == 16'd16);
   wire [15:0] req_beats = wr_dense16 ? (single16 ? 16'd8 : 16'd16) : 16'd8;
   // S_DRN 打拍的控制 (避免 ocw_r -> b_wdata mux 长路径)
   logic        wr16_r, wrs16_r;
   logic [15:0] wrbeats_r;
-  wire [15:0] reqn_w    = 16'd6 + wrbeats_r + 16'd2;   // 6 拍流水 + beats + NEXT
+  // ---------------------------------------------------------------------------
+  // v0.9 [task-14 Step A/A4] conv add-mode: 残差融进 conv
+  //   S_ADRD 在 S_REQ 前把本块 dst 字（残差）经 a 口读进 ad_cap[]（每块 wrbeats 拍），
+  //   S_REQ 的写回在 pay 上逐 lane 做 ADD_R 累加 + 可选后置 ReLU（下界 fad_zp_d）。
+  //   Q 块 tail 扩展（仅 conv+ADD_R 使用；旧 op 该 4B 恒 0 => 逐位不变）：
+  //     byte4 = zp_d, byte5 = KADD, bytes6..7 = R(u16 LE)。
+  // ---------------------------------------------------------------------------
+  logic               fad_active;          // f_add_r && is_conv
+  logic signed [7:0]  fad_zp_d;
+  logic [7:0]         fad_kadd;
+  logic [15:0]        fad_r;
+  logic [127:0]       ad_cap [0:PX-1];     // 本块 dst 字（每像素 128b）
+  // v0.9 [A5c] fused 两级流水寄存器：delta（每像素 16 lane x 25b）+ fused 写回字（每像素 2x64b）
+  logic signed [24:0] fad_dlo [0:7];
+  logic signed [24:0] fad_dhi [0:7];
+  logic [63:0]        fad_plo [0:7];
+  logic [63:0]        fad_phi [0:7];
+  // v0.9 [A5c] fused 时写回整体延后 2 拍（delta 1 拍 + fused 字 1 拍）；非 fused 时=0 => 旧时序不变
+  // v0.9 [A5e] fused 三级流水（A5c 两级在 122MHz 只剩 +0.01ns，不够余量）：
+  //   L1a (6..13): q_s - zp_s -> fad_dv；L1b (7..14): *R>>KADD -> fad_dlo；L2 (8..15): +q_d/饱和/ReLU -> fad_plo
+  logic signed [8:0]  fad_dv_lo [0:7];
+  logic signed [8:0]  fad_dv_hi [0:7];
+  // v0.9 [A5e] fused 时写回整体延后 3 拍；非 fused 时=0 => 旧时序逐周期不变
+  wire [15:0] fad_off_w = fad_active ? 16'd3 : 16'd0;
+  wire [15:0] reqn_w    = 16'd6 + wrbeats_r + 16'd2 + fad_off_w;
+
+  // S_REQ 写回：out = clamp(q_d + delta)，f_relu 时夹下界 fad_zp_d
+  function automatic logic [63:0] fad_add(input logic [199:0] dlt, input logic [63:0] qd_w);
+    logic signed [24:0] dv;
+    logic signed [26:0] sv;
+    logic signed [7:0]  bb;
+    begin
+      fad_add = 64'd0;
+      for (int l = 0; l < 8; l++) begin
+        if (l < OCL) begin
+          dv = $signed(dlt[l*25 +: 25]);
+          sv = $signed(qd_w[l*8 +: 8]) + dv;
+          if (sv > 27'sd127)       bb = 8'sd127;
+          else if (sv < -27'sd128) bb = -8'sd128;
+          else                     bb = sv[7:0];
+          if (f_relu && (bb < fad_zp_d)) bb = fad_zp_d;
+          fad_add[l*8 +: 8] = bb;
+        end
+      end
+    end
+  endfunction
 
   // Q 三段的 64b 字索引 (寄存器)
   wire [12:0] q_bias_base = q_bias_w;
@@ -399,17 +475,28 @@ module nn_conv_engine
         win_sel[px] = st2_r ? bshift[2*px] : bshift[px];
     end
   end
+  // v0.9 [A7a] dw 专用 128b 窗口（16 通道/像素；仅 f_dw 使用）
+  logic [127:0] dw_win [0:PX-1];
+  always_comb begin
+    for (int px = 0; px < PX; px++)
+      dw_win[px] = st2_r ? dwbsh[2*px] : dwbsh[px];
+  end
   logic [63:0] ad_pack2;
   always_comb begin
     logic signed [9:0] s2;
     logic signed [7:0] qd2;
+    logic [7:0] bb;
     ad_pack2 = 64'd0;
     for (int l = 0; l < 8; l++) begin
       qd2 = $signed(ad_dst_q[l*8 +: 8]);
       s2  = $signed({qd2[7], qd2}) + $signed(ad_delta[l]);
-      if (s2 > 10'sd127)       ad_pack2[l*8 +: 8] = 8'h7F;
-      else if (s2 < -10'sd128) ad_pack2[l*8 +: 8] = 8'h80;
-      else                     ad_pack2[l*8 +: 8] = s2[7:0];
+      if (s2 > 10'sd127)       bb = 8'h7F;
+      else if (s2 < -10'sd128) bb = 8'h80;
+      else                     bb = s2[7:0];
+      // v0.8 [M1] ADD/ADD_R 后置 ReLU: 输出下界 = 目标张量 zero-point(zp_d, Q 块 byte[1])
+      //   f_relu=0 时该 if 不生效 => 与 v0.7 逐位相同。
+      if (f_relu && ($signed(bb) < zp_d_r)) bb = zp_d_r;
+      ad_pack2[l*8 +: 8] = bb;
     end
   end
 
@@ -479,14 +566,22 @@ module nn_conv_engine
         q_re_c   = 1'b1;
         q_addr_c = 13'(d_qoff >> 3);
       end
+      // v0.9 [A4] conv add-mode: REQ 前把 dst 字经 a 口读入（16B/拍，单口时分复用，不新增端口）
+      //   基址用 wr_base（本输出块的 dst 基址，S_NEXT 已更新；不是整张量的 dst_la）
+      S_ADRD: begin
+        a_re     = (c_p < wrbeats_r);
+        a_addr_c = wr_base + {18'd0,
+                     (wr16_r && !wrs16_r) ? {c_p[3:1], 4'h0} : {c_p[3:0], 4'h0}};
+        a_sel    = sel_b_dst ? 2'd1 : 2'd0;
+      end
       S_REQ: begin
         begin : req_wr
           logic [15:0] beat;
           logic [15:0] px;
           logic        half;
-          logic [63:0] pay;
+          logic [63:0] pay, pay_lo, pay_hi;
           logic [3:0]  sh;
-          beat = c_p - 16'd6;
+          beat = c_p - 16'd6 - fad_off_w;
           if (wr16_r && !wrs16_r) begin
             px   = beat >> 1;
             half = beat[0];
@@ -495,16 +590,25 @@ module nn_conv_engine
             px   = beat;
             half = 1'b0;
           end
-          if ((c_p >= 16'd6) && (c_p <= (16'd5 + wrbeats_r)) && ((ox0 + px) < ow_w)) begin
+          if ((c_p >= (16'd6 + fad_off_w)) && (c_p <= (16'd5 + wrbeats_r + fad_off_w)) &&
+              ((ox0 + px) < ow_w)) begin
             pay = half ? out_hi[px[2:0]] : out_lo[px[2:0]];
+            // v0.9 [A5c] conv add-mode: 写回数据已在上两级流水寄存好，这里只做选择
+            pay_lo = out_lo[px[2:0]];
+            pay_hi = out_hi[px[2:0]];
+            if (fad_active) begin
+              pay_lo = fad_plo[px[2:0]];
+              pay_hi = fad_phi[px[2:0]];
+            end
             sh  = wpx[3:0];
             b_we_c    = 1'b1;
             b_addr_c  = {wpx[23:4], 4'h0};
             if (wrs16_r) begin
-              b_wdata_c = {out_hi[px[2:0]], out_lo[px[2:0]]};
+              b_wdata_c = {pay_hi, pay_lo};
               b_wstrb_c = 16'hFFFF;
             end
             else begin
+              pay = half ? pay_hi : pay_lo;
               b_wdata_c = (sh == 4'd8) ? {pay, 64'd0} : {64'd0, pay};
               b_wstrb_c = (sh == 4'd8) ? 16'hFF00 : 16'h00FF;
             end
@@ -590,6 +694,7 @@ module nn_conv_engine
       q_iss  <= 5'd0;
       is_conv <= 1'b0; is_pool <= 1'b0; is_copy <= 1'b0; is_add <= 1'b0;
       f_dw <= 1'b0; f_leaky <= 1'b0; f_up2x <= 1'b0; f_p3 <= 1'b0; f_add_r <= 1'b0;
+      f_relu <= 1'b0;                                     // v0.8 [M1]
       c_ocb <= 16'd0; c_oy <= 16'd0; c_oxg <= 16'd0; c_ky <= 16'd0;
       c_icb <= 16'd0; c_m <= 16'd0; c_ld <= 16'd0; c_p <= 16'd0;
       c_iy  <= 16'd0; c_ix <= 16'd0; c_cb <= 16'd0;
@@ -618,6 +723,10 @@ module nn_conv_engine
       pad_r <= 3'd0; oh_w <= 16'd0; ow_w <= 16'd0; st2_r <= 1'b0;
       zp_out <= 8'sd0; zp_in <= 8'sd0; shift_q <= 8'd0; leaky_q <= 1'b0;
       zp_s_r <= 8'sd0; zp_d_r <= 8'sd0; add_r_r <= 16'd0; kadd_r <= 8'd0;
+      fad_active <= 1'b0; fad_zp_d <= 8'sd0; fad_kadd <= 8'd0; fad_r <= 16'd0;   // v0.9 [A4]
+      for (int l = 0; l < 8; l++) begin
+        fad_dlo[l] <= 25'sd0; fad_dhi[l] <= 25'sd0;                              // v0.9 [A5b]
+      end
       ad_pack_q <= 64'd0; ad_dst_q <= 64'd0;
       for (int l = 0; l < 8; l++) begin
         ad_delta[l] <= 9'sd0; ad_qq[l] <= 9'sd0; ad_mul[l] <= 32'sd0; ad_qs[l] <= 8'sd0;
@@ -663,8 +772,8 @@ module nn_conv_engine
       if (state == S_MAC) wa_r <= wa_r + w_delta;
 
       if (state == S_REQ) begin
-        if (c_p == 16'd5) wpx <= wr_base;
-        else if ((c_p >= 16'd6) && (c_p < (16'd6 + wrbeats_r))) begin
+        if (c_p == (16'd5 + fad_off_w)) wpx <= wr_base;
+        else if ((c_p >= (16'd6 + fad_off_w)) && (c_p < (16'd6 + fad_off_w + wrbeats_r))) begin
           if (wr16_r && !wrs16_r)
             wpx <= wpx + (c_p[0] ? (px_bytes - 24'd8) : 24'd8);
           else
@@ -678,6 +787,8 @@ module nn_conv_engine
       if (ld_ret_v) begin
         if (ld_fill_d) abuf[ld_j_d] <= {8{ld_fillbyte_d}};
         else           abuf[ld_j_d] <= ld_half_d ? a_rdata[127:64] : a_rdata[63:0];
+        // v0.9 [A7a] dw 专用：完整 16B 存入 128b 窗口（dense 不进这里）
+        dwbuf[ld_j_d] <= ld_fill_d ? {16{ld_fillbyte_d}} : a_rdata;
       end
 
       // ---------------- MAC 流水 ----------------
@@ -690,6 +801,8 @@ module nn_conv_engine
           for (int oc = 0; oc < OCL; oc++) begin
             if (dense)
               a_pipe[px][oc] <= win_sel[px][sel_byte_base +: 8];
+            else if (f_dw)
+              a_pipe[px][oc] <= dw_win[px][oc*8 +: 8];
             else
               a_pipe[px][oc] <= (oc < 8) ? win_sel[px][oc*8 +: 8] : 8'sd0;
           end
@@ -702,7 +815,7 @@ module nn_conv_engine
         end
         if (mac_v2) begin
           for (int oc = 0; oc < OCL; oc++)
-            wby_r[oc] <= (dense || (oc < 8)) ? $signed(w_rdata[oc*8 +: 8]) : 16'sd0;
+            wby_r[oc] <= (dense || (16'(oc) < act_l)) ? $signed(w_rdata[oc*8 +: 8]) : 16'sd0;
           for (int px = 0; px < PX; px++)
             for (int oc = 0; oc < OCL; oc++)
               a_pipe2[px][oc] <= a_pipe1[px][oc];
@@ -721,7 +834,7 @@ module nn_conv_engine
       else begin : g_wlat1
         if (mac_v1) begin
           for (int oc = 0; oc < OCL; oc++)
-            wby_r[oc] <= (dense || (oc < 8)) ? $signed(w_rdata[oc*8 +: 8]) : 16'sd0;
+            wby_r[oc] <= (dense || (16'(oc) < act_l)) ? $signed(w_rdata[oc*8 +: 8]) : 16'sd0;
           for (int px = 0; px < PX; px++)
             for (int oc = 0; oc < OCL; oc++)
               a_pipe2[px][oc] <= a_pipe[px][oc];
@@ -741,6 +854,9 @@ module nn_conv_engine
       if (win_adv) begin
         for (int i = 0; i < WINW-1; i++) bshift[i] <= bshift[i+1];
         bshift[WINW-1] <= abuf[15 + cur_kx[3:0]];
+        // v0.9 [A7a] dw 专用 128b 窗口滑动（dense 不受影响）
+        for (int i = 0; i < WINW-1; i++) dwbsh[i] <= dwbsh[i+1];
+        dwbsh[WINW-1] <= dwbuf[15 + cur_kx[3:0]];
       end
 
       // ---------------- requant 5 级流水 ----------------
@@ -780,6 +896,27 @@ module nn_conv_engine
           out_lo[c_p[2:0] - 3'd5] <= rq_pack[63:0];
           out_hi[c_p[2:0] - 3'd5] <= rq_pack[127:64];
         end
+        // v0.9 [A5e] fused 三级流水（关键路径逐级拆短；非 fused 全旁路 => 旧时序逐周期不变）
+        if (fad_active && (c_p >= 16'd6) && (c_p <= 16'd13)) begin : fad_l1a
+          for (int l = 0; l < 8; l++) begin
+            fad_dv_lo[l] <= $signed(out_lo[c_p[3:0] - 4'd6][l*8 +: 8]) - $signed(zp_out);
+            fad_dv_hi[l] <= $signed(out_hi[c_p[3:0] - 4'd6][l*8 +: 8]) - $signed(zp_out);
+          end
+        end
+        if (fad_active && (c_p >= 16'd7) && (c_p <= 16'd14)) begin : fad_l1b
+          for (int l = 0; l < 8; l++) begin
+            fad_dlo[l] <= (fad_dv_lo[l] * $signed({1'b0, fad_r})) >>> fad_kadd[3:0];
+            fad_dhi[l] <= (fad_dv_hi[l] * $signed({1'b0, fad_r})) >>> fad_kadd[3:0];
+          end
+        end
+        if (fad_active && (c_p >= 16'd8) && (c_p <= 16'd15)) begin : fad_l2
+          fad_plo[c_p[3:0] - 4'd8] <= fad_add({fad_dlo[7], fad_dlo[6], fad_dlo[5], fad_dlo[4],
+                                               fad_dlo[3], fad_dlo[2], fad_dlo[1], fad_dlo[0]},
+                                              ad_cap[c_p[3:0] - 4'd8][63:0]);
+          fad_phi[c_p[3:0] - 4'd8] <= fad_add({fad_dhi[7], fad_dhi[6], fad_dhi[5], fad_dhi[4],
+                                               fad_dhi[3], fad_dhi[2], fad_dhi[1], fad_dhi[0]},
+                                              ad_cap[c_p[3:0] - 4'd8][127:64]);
+        end
       end
 
       // ================= FSM =================
@@ -800,6 +937,8 @@ module nn_conv_engine
             f_up2x  <= desc.flags[NN_F_UP2X];
             f_p3    <= desc.flags[NN_F_PACKED3];
             f_add_r <= desc.flags[NN_F_ADD_R];
+            f_relu  <= desc.flags[NN_F_RELU];      // v0.8 [M1]
+            fad_active <= desc.flags[NN_F_ADD_R] && (desc.op == NN_OP_CONV);  // v0.9 [A4]
             cycles_r <= 32'd0; err_r <= 8'h00; q_iss <= 5'd0;
             state <= S_INIT;
           end
@@ -838,13 +977,12 @@ module nn_conv_engine
               ic8_r <= ic8;
               oc8_r <= oc8;
               st2_r <= (d_st == 2'd2);
-              ocw_r <= dense ? 16'd16 : 16'd8;
+              ocw_r <= is_pool ? 16'd8 : 16'd16;   // v0.9 [A7a] dw 也 16 lane（pool 保持 8）
             end
             16'd1: begin
               icb_n_r <= ic8_r >> 3;
               oc_limit_r <= is_pool  ? (ic8_r >> 3)
-                          : dense    ? ((oc8_r + 16'd15) >> 4)
-                                     : (oc8_r >> 3);
+                          : ((oc8_r + 16'd15) >> 4);
               if (is_copy) begin
                 oh_w <= f_up2x ? (d_ih << 1) : d_ih;
                 ow_w <= f_up2x ? (d_iw << 1) : d_iw;
@@ -937,7 +1075,7 @@ module nn_conv_engine
               end
               else if (is_pool) state <= S_PINIT;
               else if (is_copy) state <= S_CP_RD;
-              else              state <= f_add_r ? S_AD_Q : S_AD_R1;
+              else state <= (f_add_r || f_relu) ? S_AD_Q : S_AD_R1;
             end
             default: ;
           endcase
@@ -969,6 +1107,10 @@ module nn_conv_engine
               zp_in   <= q_rdata[15:8];
               leaky_q <= q_rdata[16];
               shift_q <= q_rdata[31:24];
+              // v0.9 [A4] conv+ADD_R 的融合参数（tail byte4..7；旧 op 该 4B 恒 0 => 无副作用）
+              fad_zp_d <= q_rdata[39:32];
+              fad_kadd <= q_rdata[47:40];
+              fad_r    <= q_rdata[63:48];
             end
           end
           if (16'(q_iss) == (q_tot + 16'd1)) state <= S_QLOAD;
@@ -983,7 +1125,10 @@ module nn_conv_engine
           end
           else begin
             for (int l = 0; l < OCL; l++)
-              mneg_q[l] <= leaky_q ? 16'((mtmp[l] + 32'sd16384) >>> 15) : mpos_q[l];
+              // v0.8 [M1] ReLU: 负支 M_neg=0 => (acc<0 的 acc*0)>>SHIFT = 0 => out = zp_out。
+              //   f_relu=0 时该三态退化为 v0.7 的 {leaky? M_neg : M_pos}，逐位不变。
+              mneg_q[l] <= f_relu ? 16'sd0
+                         : (leaky_q ? 16'((mtmp[l] + 32'sd16384) >>> 15) : mpos_q[l]);
             c_ql  <= 1'b0;
             state <= S_BI;
           end
@@ -1005,8 +1150,8 @@ module nn_conv_engine
             la        <= blk_base;
           end
           else begin
-            band_base <= f_dw ? (blk_base + (c_ocb << 3)) : blk_base;
-            la        <= f_dw ? (blk_base + (c_ocb << 3)) : blk_base;
+            band_base <= f_dw ? (blk_base + (c_ocb << 4)) : blk_base;   // v0.9 [A7a] dw 16 lane/tile
+            la        <= f_dw ? (blk_base + (c_ocb << 4)) : blk_base;
           end
           x_ld   <= x0_c;
           x0_ld  <= x0_c;
@@ -1096,6 +1241,7 @@ module nn_conv_engine
         end
         S_WI: begin
           for (int i = 0; i < WINW; i++) bshift[i] <= abuf[i];
+          for (int i = 0; i < WINW; i++) dwbsh[i] <= dwbuf[i];   // v0.9 [A7a]
           c_m   <= 16'd0;
           state <= is_pool ? S_PMAX : S_MAC;
         end
@@ -1157,9 +1303,23 @@ module nn_conv_engine
           if (c_drn == (DRNN - 1)) begin
             c_drn <= 3'd0;
             c_p   <= 16'd0;
-            state <= S_REQ;
+            state <= fad_active ? S_ADRD : S_REQ;   // v0.9 [A4]
           end
           else c_drn <= c_drn + 3'd1;
+        end
+        // ---- v0.9 [A4] conv add-mode: 读本块 dst 字（a 口 1 拍寄存读；注意 wrs16_r=1 才是 16B/像素）----
+        S_ADRD: begin
+          if ((c_p >= 16'd1) && (c_p <= wrbeats_r)) begin
+            if (wrs16_r)
+              ad_cap[c_p[3:0] - 16'd1] <= a_rdata;          // 16B/像素：一拍一个像素
+            else
+              ad_cap[(c_p[3:0] - 16'd1) >> 1] <= a_rdata;   // 半字模式：两拍一个像素
+          end
+          if (c_p == (wrbeats_r + 16'd1)) begin
+            c_p   <= 16'd0;
+            state <= S_REQ;
+          end
+          else c_p <= c_p + 16'd1;
         end
         S_REQ: begin
           if (c_p == (reqn_w - 16'd1)) begin
@@ -1324,11 +1484,18 @@ module nn_conv_engine
           for (int l = 0; l < 8; l++)
             ad_qs[l] <= $signed(ad_src_word[l*8 +: 8]);
           // q 口打拍后: S_AD_Q 发出 -> 第 2 拍(本拍)数据有效
-          if (f_add_r && (c_iy == 16'd0) && (c_ix == 16'd0) && (c_cb == 16'd0)) begin
-            zp_s_r  <= q_rdata[7:0];
-            zp_d_r  <= q_rdata[15:8];
-            add_r_r <= {q_rdata[31:24], q_rdata[23:16]};
-            kadd_r  <= q_rdata[39:32];
+          //   v0.8 [M1] ADD+RELU 也要读 Q 块(只为 byte[1]=zp_d 作后置 ReLU 下界);
+          //   非 ADD_R 时**不加载** zp_s/R/KADD, 保证 plain-add 的 delta=q_s 语义逐位不变。
+          if ((f_add_r || f_relu) && (c_iy == 16'd0) && (c_ix == 16'd0) && (c_cb == 16'd0)) begin
+            if (f_add_r) begin
+              zp_s_r  <= q_rdata[7:0];
+              zp_d_r  <= q_rdata[15:8];
+              add_r_r <= {q_rdata[31:24], q_rdata[23:16]};
+              kadd_r  <= q_rdata[39:32];
+            end
+            else begin
+              zp_d_r  <= q_rdata[15:8];      // 仅 RELU 下界(zp_d); zp_s/R/KADD 保持 0
+            end
           end
           state      <= S_AD_WR;
         end
@@ -1340,7 +1507,11 @@ module nn_conv_engine
             ad_dst_q <= dword;
             for (int l = 0; l < 8; l++) begin
               qs = ad_qs[l];
-              ad_qq[l]  <= (qs - zp_s_r);
+              // plain ADD 的 Δ 定义就是 q_s (CONTRACT §4/§12.3: 两种激活同 quant 域时逐字节相加)。
+              // v0.8 修正: 原来写 (qs - zp_s_r)，而 zp_s_r 只在 ADD_R 时装载 => 先跑一次 ADD_R
+              // 再跑 plain ADD 会残留上一 op 的 zp_s（多 op 序列下不确定）。这里显式取 q_s，
+              // 对旧 case (zp_s_r 恒 0) 与 v0.7 逐位相同，但不再依赖跨 op 残留状态。
+              ad_qq[l]  <= {qs[7], qs};
               ad_mul[l] <= ($signed(qs) - $signed(zp_s_r)) * $signed({1'b0, add_r_r});
             end
           end

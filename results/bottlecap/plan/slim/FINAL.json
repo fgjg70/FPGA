@@ -1,0 +1,143 @@
+{
+ "format": "bottlecap-plan-final-v1",
+ "generated_at": "2026-11-04T00:21:37+08:00",
+ "model": {
+  "checkpoint": "results/bottlecap/slim/best_model.pt",
+  "arch": "slim",
+  "input_size": 96,
+  "model_variant": "slim_mobilenetv2_fpn_anchorfree",
+  "params": 136321
+ },
+ "checkpoint_sha256": "7a1417e02f998823c85ee5f4336d89d9bf19e12ec3d100c59cf9d8d6c4b47f9e",
+ "label": "slim",
+ "contract": "results/ai-accel/CONTRACT.md (v0.7 + v0.8 flags/RELU)",
+ "counts": {
+  "ops": 71,
+  "w_bytes": 130448,
+  "q_bytes": 22784,
+  "max_single_tensor_bytes": 73728,
+  "ab_mode": "real",
+  "peak_A": 92160,
+  "peak_B": 23040,
+  "total_bands": 122,
+  "rom_depth": 71
+ },
+ "commands": {
+  "extract_graph": "python tools/bottlecap/extract_graph.py --arch slim --checkpoint results\\bottlecap\\slim\\best_model.pt --input-size 96 --profile none --out results\\bottlecap\\plan\\slim\\graph.json",
+  "quant_npu": "python tools/bottlecap/quant_npu.py --arch slim --checkpoint results\\bottlecap\\slim\\best_model.pt --input-size 96 --graph results\\bottlecap\\plan\\slim\\graph.json --out results\\bottlecap\\plan\\slim\\quant_report.json",
+  "gen_npu_artifacts": "python tools/bottlecap/gen_npu_artifacts.py --arch slim --checkpoint results\\bottlecap\\slim\\best_model.pt --input-size 96 --graph results\\bottlecap\\plan\\slim\\graph.json --outdir results\\bottlecap\\plan\\slim --ab-mode real --deploy-check results\\bottlecap\\plan\\slim\\DEPLOY-CHECK.json --emit-deploy-bundle --emit-wq-merged --label slim --final-json results\\bottlecap\\plan\\slim\\FINAL.json --handoff-md results\\bottlecap\\plan\\slim\\E2E-HANDOFF.md",
+  "golden_npu": "python tools/bottlecap/golden_npu.py --arch slim --checkpoint results\\bottlecap\\slim\\best_model.pt --input-size 96 --outdir results\\bottlecap\\plan\\slim --graph results\\bottlecap\\plan\\slim\\graph.json --export-opvec results\\bottlecap\\plan\\slim\\opvec --report results\\bottlecap\\plan\\slim\\GOLDEN-REPORT-SLIM.md"
+ },
+ "files": {
+  "graph.json": {
+   "bytes": 55754,
+   "sha256": "71bed9a9151718aafdd7c1f9b629d7747ed78916f95f238843fa74dac3634a96"
+  },
+  "quant_report.json": {
+   "bytes": 77920,
+   "sha256": "06efbffc9a6b2dcfb023483378851942016f4ab4f3e359116b7e7bcae283fd0e"
+  },
+  "plan.json": {
+   "bytes": 152048,
+   "sha256": "275faf4672aec9e3d2ae9f0c9f86e227465efb543318528f4d299ad7a46721e3"
+  },
+  "model.json": {
+   "bytes": 29623,
+   "sha256": "e4694035d9c71eacd13b5cb39a57a77396dee01666382d531904209160a58b56"
+  },
+  "nn_rom_table.json": {
+   "bytes": 34062,
+   "sha256": "718874cf39f379811437771f9a9ae9cc16a00eb265dc7d4705e488d2de87630a"
+  },
+  "w.hex": {
+   "bytes": 293508,
+   "sha256": "06bb5d116f595385e26de392227da47c734508450fe02637620549213b579389"
+  },
+  "q.hex": {
+   "bytes": 51264,
+   "sha256": "a68da99ba9cf7b32eaebd34d292345c75cedb40412640ae9259aa04b29cf13d3"
+  },
+  "checksums.txt": {
+   "bytes": 4661,
+   "sha256": "48ec4fa45538d2c15731e8d6a6cb429d49baf1d538a397d141f03445afe38f89"
+  },
+  "DEPLOY-CHECK.json": {
+   "bytes": 4358,
+   "sha256": "b246ca2160b120e2836c54ea3d2822ecf9ade5d9f1900b021dc3ae4a74289888"
+  },
+  "band_plan.json": {
+   "bytes": 42825,
+   "sha256": "e6bacd6e271e155d4da0e1951087513e14f3204566f6d9156d4cad78ea0d257e"
+  },
+  "slim_wq.hex": {
+   "bytes": 344772,
+   "sha256": "7ddbe6e1e482e380e5e8ac6a411c359f120db3db53762249ac0d4e45e4481baf"
+  },
+  "nn_rom_pkg_slim.sv": {
+   "bytes": 10409,
+   "sha256": "beee6738076289c61ac543644a9abc9510fb1cc1e5c74535b4c72f8c8f5a0235"
+  },
+  "slim_plan.h": {
+   "bytes": 16565,
+   "sha256": "ae6ae75629dd7d283f3363a4d101d452e8012a3fa4fcc33bfab390d6284a2563"
+  },
+  "opvec/manifest.json": {
+   "bytes": 62331,
+   "sha256": "635826997ebe8ff01ec31784407d5fdc24d2cf38b6df6db732f3170d71bfc48b"
+  },
+  "opvec/index.json": {
+   "bytes": 24397,
+   "sha256": "5f484387c99dbc1ab4f1343b15cfe7484fc34d1c060e9653aaea7248518d71c9"
+  },
+  "GOLDEN-REPORT-SLIM.md": {
+   "bytes": 18839,
+   "sha256": "d58f2693d4cc8de2f32488bc2bfd338eba6c60d9ebf8853ea3b06cbd67c86d84"
+  },
+  "e2e_metrics.json": {
+   "bytes": 10245,
+   "sha256": "be6adbe733169218c600d39b9a3bd4e6aa05a7020e339f0ecfc87356d04a5927"
+  }
+ },
+ "extra": {
+  "engine_cycles": {
+   "note": "v3 周期公式(calc_cycles_v3.py 同源): BASE=8/DRN=4/NEXT=2/REQP=6/QPER8=11; 已在 ModelSim 对 slim(799,520)与 YOLO(1,191,020) 逐 case 验证",
+   "per_kind_cycles": {
+    "conv": 447935,
+    "dwconv": 294042,
+    "add": 49959,
+    "upsample": 7584,
+    "copy": 0,
+    "pool": 0
+   },
+   "total_cycles": 799520,
+   "total_cycles_range": [
+    799520,
+    799520
+   ],
+   "total_ms_at_100MHz": 7.995,
+   "total_ms_at_122MHz": 6.553,
+   "total_ms_at_150MHz": 5.33,
+   "fps_at_100MHz": 125.075,
+   "fps_at_122MHz": 152.592
+  },
+  "bundle": {
+   "nn_gen_rom.py": {
+    "cmd": "python.exe nn_gen_rom.py --plan plan.json -o nn_rom_pkg_slim.sv --table nn_rom_table_slim.json",
+    "rc": 0,
+    "output": "[INFO] mode=ROM arena_base=0x1000000 ops=71 sum_wlen=130448 sum_qlen=22784\n[OK] nn_rom_pkg.sv: 71 条 ROM 项 -> D:\\USER\\Desktop\\FPGA\\FPGA\\results\\bottlecap\\plan\\slim\\nn_rom_pkg_slim.sv\n[OK] table: D:\\USER\\Desktop\\FPGA\\FPGA\\results\\bottlecap\\plan\\slim\\nn_rom_table_slim.json"
+   },
+   "nn_gen_sw.py": {
+    "cmd": "python.exe nn_gen_sw.py --plan plan.json -o slim_plan.h --guard SLIM_PLAN_H",
+    "rc": 0,
+    "output": "PLAN_GEN=PASS ops=71 cats=0 cat_srcs=0 -> D:\\USER\\Desktop\\FPGA\\FPGA\\results\\bottlecap\\plan\\slim\\slim_plan.h"
+   },
+   "files": [
+    "nn_rom_pkg_slim.sv",
+    "nn_rom_table_slim.json",
+    "slim_plan.h"
+   ],
+   "guard": "SLIM_PLAN_H"
+  },
+  "wq_hex": "slim_wq.hex"
+ }
+}

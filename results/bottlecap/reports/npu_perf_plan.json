@@ -1,0 +1,1004 @@
+{
+ "meta": {
+  "task": "task-11 NPU 性能升级方案",
+  "author": "ddr3-feas",
+  "date": "2026-11-03",
+  "scope": "纸面估算 + 已有报告；未改 RTL、未跑 Vivado 实现",
+  "cycle_formula_ref": "results/ai-accel/proto/engine/calc_cycles_v3.py (BASE=8, W_RD_LAT=2, DRN=4, NEXT=2; 50/50 TB case 实测逐拍相等)",
+  "model_plan_ref": "results/bottlecap/plan/plan.json (106 op, 2,271,966,928 MACs)",
+  "capability_ref": "results/bottlecap/spec/NPU-CAPABILITY.md",
+  "engine_ref": "results/ai-accel/engine-report.md",
+  "delivery_ref": "results/ai-accel/DELIVERY.md §8.2/§8.4/§9.2/§9.2.1",
+  "px16_ref": "results/ai-accel/PX16-STUDY.md"
+ },
+ "baseline": {
+  "ops": 106,
+  "macs": 2271966928,
+  "cycles": 39891262.0,
+  "components": {
+   "A_mac": 20302534.0,
+   "B_load_addr": 13520220.0,
+   "C_requant_write": 3746862.0,
+   "D_other": 2321646.0
+  },
+  "fps": {
+   "mhz100": 2.51,
+   "mhz122_22": 3.06,
+   "mhz150": 3.76
+  },
+  "effective_mac_per_cycle": 57.0,
+  "authority": "tools/bottlecap/cycle_model.py --self-check PASS 39891262"
+ },
+ "device_limits": {
+  "part": "XC7A100T-FGG484-2",
+  "lut_total": 63400,
+  "ff_total": 126800,
+  "bram36_total": 135,
+  "dsp48e1_total": 240,
+  "ai_build_100mhz": {
+   "lut": 36985,
+   "ff": 16381,
+   "bram": 132,
+   "dsp": 168,
+   "wns_ns": 0.136,
+   "fmax_mhz": 101.4
+  },
+  "headroom": {
+   "lut": 26415,
+   "ff": 110419,
+   "bram": 3,
+   "dsp": 72
+  },
+  "freq_verified_mhz": {
+   "delivered": 100.0,
+   "max_verified": 122.22,
+   "fail_at": 125.0,
+   "note": "125MHz 差 0.077ns，最差路径 u_nn/u_eng/wa_r -> u_nn/u_mem/w_cur_*（纯 route 8.881ns，0 级逻辑）"
+  },
+  "dpu_class_equivalent": {
+   "rule": "DPU 按 DSP 数配置 int8 MAC（约 1 DSP = 1 MAC/拍）",
+   "a100t_dsp_macs": 240,
+   "target_256_mac_ratio": 1.07,
+   "verdict": "256 MAC/拍 = 该器件 DPU 等价档位 1.07x（200 DSP + 56 LUT-MAC 或 160 DSP + 96 LUT-MAC），可达；512 MAC/拍需 312+ LUT-MAC（8K+ LUT + 512 宽累加树），判定不可行"
+  }
+ },
+ "schemes": [
+  {
+   "id": "M-OC32",
+   "name": "MAC 加宽：32 OC lane x 8 px = 256 MAC/拍",
+   "mac_peak": 256,
+   "changes": [
+    "nn_conv_engine: MAC 阵列 128->256（多出的 128 走 LUT 乘）",
+    "acc 阵列 8px x 32oc x 32b = 8K FF",
+    "requant 处理 32 lane",
+    "w 读口 32B/拍",
+    "nn_mem/stream: W 4 银行（见 w_bank_revision）",
+    "nn_pkg/ROM: OC lane 字段"
+   ],
+   "resource_delta": {
+    "lut": "+2.5K~5.5K",
+    "ff": "+5K",
+    "dsp": "0（推荐 LUT-MAC 路线）或 +64 -> 232/240（不推荐）",
+    "bram": "0"
+   },
+   "timing_risk": "中（OOC 预估 fmax 110~125MHz）",
+   "effort_modules": 5,
+   "accuracy_risk": "无（位精确不变）",
+   "decouple_compat": "兼容（NPU 独立时钟域可单独跑 122MHz）",
+   "standalone_cycles": 21234302,
+   "standalone_fps_122": 5.76,
+   "verdict": "推荐"
+  },
+  {
+   "id": "M-PX16",
+   "name": "MAC 加宽：16 OC lane x 16 px = 256 MAC/拍",
+   "mac_peak": 256,
+   "changes": [
+    "MAC 阵列 256（同上）",
+    "acc 8K FF + a_pipe 16px 寄存器",
+    "激活读口 32B/拍（tilecache 读口 256b）",
+    "W 读口保持 16B/拍"
+   ],
+   "resource_delta": {
+    "lut": "+6K~9K",
+    "ff": "+6K",
+    "dsp": "0",
+    "bram": "0"
+   },
+   "timing_risk": "中高（更宽 mux/fanout）",
+   "effort_modules": 4,
+   "accuracy_risk": "无",
+   "decouple_compat": "兼容",
+   "standalone_cycles": 23667942,
+   "standalone_fps_122": 5.16,
+   "verdict": "备选（比 OC32 差 11%，因 B 项只降到 0.68x）"
+  },
+  {
+   "id": "M-512",
+   "name": "MAC 加宽：32 OC x 16 px = 512 MAC/拍",
+   "mac_peak": 512,
+   "changes": [
+    "512 个 8x8 乘（仅 232 DSP 可承载 => 312 LUT-MAC）",
+    "512x32b 累加树",
+    "W/A 读均 32B/拍"
+   ],
+   "resource_delta": {
+    "lut": "+18K~22K",
+    "ff": "+10K",
+    "dsp": "232/240",
+    "bram": "0"
+   },
+   "timing_risk": "极高",
+   "effort_modules": 6,
+   "accuracy_risk": "无",
+   "decouple_compat": "兼容",
+   "standalone_cycles": 12320749,
+   "standalone_fps_122": 9.92,
+   "verdict": "不可行（LUT 超支 + 布线/时序风险）"
+  },
+  {
+   "id": "WG",
+   "name": "Winograd F(2x2,3x3) 用于稠密 3x3 stride-1",
+   "mac_peak": 128,
+   "changes": [
+    "输入变换（4x4 tile，加法定点）",
+    "16 点逐元素乘（9~10bit）",
+    "逆变换 + requant",
+    "V 缓冲 1~2 BRAM tiles",
+    "plan/权重生成器输出变换域权重 U",
+    "量化校准适配"
+   ],
+   "resource_delta": {
+    "lut": "+4K~6K",
+    "ff": "+2K",
+    "dsp": "0（9~10bit 乘仍 1 DSP/乘，总数不增）",
+    "bram": "+1~2 -> 133~134/135"
+   },
+   "timing_risk": "中高",
+   "effort_modules": 7,
+   "accuracy_risk": "高（int8 变换域位宽膨胀，需离线验证）",
+   "decouple_compat": "兼容",
+   "standalone_cycles": 31394862,
+   "standalone_fps_122": 3.89,
+   "saving_cycles": 8500000,
+   "saving_pct": 21.3,
+   "narrow_version": "只做 12 个 56^2 层覆盖 A3 的 94.1%",
+   "verdict": "可选加分项（先做 numpy 精度验证窄版）"
+  },
+  {
+   "id": "DW",
+   "name": "dwconv 专用通路（行缓冲 + 16 lane）",
+   "mac_peak": 128,
+   "changes": [
+    "nn_conv_engine dw 分支：去掉逐 tap 重装 + 16 lane",
+    "ROM dw flag"
+   ],
+   "resource_delta": {
+    "lut": "+1K~2K",
+    "ff": "+1K",
+    "dsp": "0",
+    "bram": "0"
+   },
+   "timing_risk": "低",
+   "effort_modules": 2,
+   "accuracy_risk": "无",
+   "decouple_compat": "兼容",
+   "saving_cycles": 2893675,
+   "saving_pct": 7.3,
+   "verdict": "推荐（P1c）"
+  },
+  {
+   "id": "LB",
+   "name": "行缓冲 + 地址预计算（治 B 项 33.9%）",
+   "mac_peak": 128,
+   "changes": [
+    "装载 FSM：count+1 11->7.7 拍",
+    "行缓冲跨输出行复用",
+    "（可选）激活读口 32B/拍"
+   ],
+   "resource_delta": {
+    "lut": "+2K~4K",
+    "ff": "+1K~2K",
+    "dsp": "0",
+    "bram": "0（LUTRAM/FF）"
+   },
+   "timing_risk": "低",
+   "effort_modules": 2,
+   "accuracy_risk": "无",
+   "decouple_compat": "兼容",
+   "saving_cycles": 4056066,
+   "saving_pct": 10.2,
+   "verdict": "推荐（P1b），系数 0.7~0.8 需实测"
+  },
+  {
+   "id": "FU",
+   "name": "图级融合（add/copy 融进 conv）",
+   "mac_peak": 128,
+   "changes": [
+    "plan 生成器：residual add -> 生产 conv 的 ADD 模式",
+    "concat -> 消费 conv 多 src",
+    "tilecache 多 src 基址"
+   ],
+   "resource_delta": {
+    "lut": "+0.3K",
+    "ff": "+0.2K",
+    "dsp": "0",
+    "bram": "0"
+   },
+   "timing_risk": "低",
+   "effort_modules": 2,
+   "accuracy_risk": "无（数值等价）",
+   "decouple_compat": "兼容",
+   "saving_cycles": 1088033,
+   "saving_pct": 2.7,
+   "verdict": "推荐（P1a）"
+  },
+  {
+   "id": "FR",
+   "name": "提频 122.22 -> 150 / 200 MHz",
+   "mac_peak": 128,
+   "changes": [
+    "pblock/floorplan（引擎与 W 同区）",
+    "wa_r/a_addr 预寄存（P3-TC §5 方案 C/E1）",
+    "W 流式重构（4 银行就近布局）"
+   ],
+   "resource_delta": {
+    "lut": "0",
+    "ff": "+0.5K",
+    "dsp": "0",
+    "bram": "0"
+   },
+   "timing_risk": "高（150MHz）；200MHz 不做承诺",
+   "effort_modules": 3,
+   "accuracy_risk": "无",
+   "decouple_compat": "依赖 task-10 的 NPU 独立时钟域",
+   "freq_options": {
+    "mhz122_22": "已验证（WNS +0.058）",
+    "mhz150": "需物理治理",
+    "mhz200": "不承诺"
+   },
+   "verdict": "P2c 攻坚项"
+  },
+  {
+   "id": "CV",
+   "name": "conv0 loader 优化",
+   "mac_peak": 128,
+   "changes": [
+    "PACKED3 loading 优化"
+   ],
+   "resource_delta": {
+    "lut": "+0.5K",
+    "ff": "+0.3K",
+    "dsp": "0",
+    "bram": "0"
+   },
+   "timing_risk": "低",
+   "effort_modules": 1,
+   "accuracy_risk": "无",
+   "decouple_compat": "兼容",
+   "saving_cycles": 100000,
+   "saving_pct": 0.25,
+   "verdict": "本模型不做（stem 只 0.6% 拍；YOLO 档才有意义）"
+  }
+ ],
+ "scenarios": [
+  {
+   "id": "C0",
+   "name": "baseline 128MAC",
+   "cycles": 39891262,
+   "eff_mac_per_cycle": 57.0,
+   "fps": {
+    "mhz100": 2.51,
+    "mhz122_22": 3.06,
+    "mhz150": 3.76
+   }
+  },
+  {
+   "id": "F",
+   "name": "只做融合",
+   "cycles": 38803229,
+   "eff_mac_per_cycle": 58.6,
+   "fps": {
+    "mhz100": 2.58,
+    "mhz122_22": 3.15,
+    "mhz150": 3.87
+   }
+  },
+  {
+   "id": "LB",
+   "name": "只做行缓冲/地址",
+   "cycles": 35835196,
+   "eff_mac_per_cycle": 63.4,
+   "fps": {
+    "mhz100": 2.79,
+    "mhz122_22": 3.41,
+    "mhz150": 4.19
+   }
+  },
+  {
+   "id": "DW",
+   "name": "只做 dw 专用",
+   "cycles": 36997587,
+   "eff_mac_per_cycle": 61.4,
+   "fps": {
+    "mhz100": 2.7,
+    "mhz122_22": 3.3,
+    "mhz150": 4.05
+   }
+  },
+  {
+   "id": "WG",
+   "name": "只做 Winograd",
+   "cycles": 31394862,
+   "eff_mac_per_cycle": 72.4,
+   "fps": {
+    "mhz100": 3.19,
+    "mhz122_22": 3.89,
+    "mhz150": 4.78
+   }
+  },
+  {
+   "id": "M-OC32",
+   "name": "只做 OC32 256MAC",
+   "cycles": 21234302,
+   "eff_mac_per_cycle": 107.0,
+   "fps": {
+    "mhz100": 4.71,
+    "mhz122_22": 5.76,
+    "mhz150": 7.06
+   }
+  },
+  {
+   "id": "M-PX16",
+   "name": "只做 PX16 256MAC",
+   "cycles": 23667942,
+   "eff_mac_per_cycle": 96.0,
+   "fps": {
+    "mhz100": 4.23,
+    "mhz122_22": 5.16,
+    "mhz150": 6.34
+   }
+  },
+  {
+   "id": "P1",
+   "name": "融合+LB+dw专用（不改阵列）",
+   "cycles": 31853488,
+   "eff_mac_per_cycle": 71.3,
+   "fps": {
+    "mhz100": 3.14,
+    "mhz122_22": 3.84,
+    "mhz150": 4.71
+   }
+  },
+  {
+   "id": "P2",
+   "name": "P1+OC32 256MAC",
+   "cycles": 15529292,
+   "eff_mac_per_cycle": 146.3,
+   "fps": {
+    "mhz100": 6.44,
+    "mhz122_22": 7.87,
+    "mhz150": 9.66
+   }
+  },
+  {
+   "id": "P2b",
+   "name": "P1+PX16 256MAC",
+   "cycles": 17232840,
+   "eff_mac_per_cycle": 131.8,
+   "fps": {
+    "mhz100": 5.8,
+    "mhz122_22": 7.09,
+    "mhz150": 8.7
+   }
+  },
+  {
+   "id": "P3",
+   "name": "P2+Winograd(全量 3x3s1)",
+   "cycles": 11281092,
+   "eff_mac_per_cycle": 201.4,
+   "fps": {
+    "mhz100": 8.86,
+    "mhz122_22": 10.83,
+    "mhz150": 13.3
+   }
+  },
+  {
+   "id": "P3narrow",
+   "name": "P2+Winograd(只 12 个 56^2 层)",
+   "cycles": 11545692,
+   "eff_mac_per_cycle": 196.8,
+   "fps": {
+    "mhz100": 8.66,
+    "mhz122_22": 10.59,
+    "mhz150": 12.99
+   }
+  },
+  {
+   "id": "P4",
+   "name": "P1+512MAC（资源不可行，仅数值参考）",
+   "cycles": 12320749,
+   "eff_mac_per_cycle": 184.4,
+   "fps": {
+    "mhz100": 8.12,
+    "mhz122_22": 9.92,
+    "mhz150": 12.17
+   },
+   "feasible": false
+  }
+ ],
+ "recommended": {
+  "primary_route": [
+   "P1a(fusion)",
+   "P1b(linebuffer/addr)",
+   "P1c(dw path)",
+   "P2(PX16 256MAC)",
+   "P2b(tilecache 32B/cycle)",
+   "P2c(150MHz route 治理)"
+  ],
+  "optional_route": [
+   "P3a(done: precision PASS)",
+   "P3narrow engine",
+   "P3c(all)"
+  ],
+  "headline": "P1=3.76fps@122；P2(PX16)=6.01fps@122 / 7.37@150；P3narrow=7.84@122 / 9.62@150",
+  "first_step": "P1a 融合（converter 出融合 plan + 引擎 conv add-mode，见 NPU-PERF-P1A-FUSION.md）",
+  "next_step_now": "把 NN_W_RD_BITS 参数加进 nn_mem（P2 零返工），见 NPU-PERF-OC32-REVISION.md §4"
+ },
+ "upstream_impact": {
+  "ddr3_bandwidth_at_higher_fps": {
+   "frame_bytes_banded": 45312600,
+   "mhz100_P2": {
+    "fps": 6.44,
+    "MBps": 291.8,
+    "pct_of_1600": 18.2
+   },
+   "mhz122_P2": {
+    "fps": 7.87,
+    "MBps": 356.6,
+    "pct_of_1600": 22.3
+   },
+   "mhz150_P2": {
+    "fps": 9.66,
+    "MBps": 437.7,
+    "pct_of_1600": 27.4
+   },
+   "mhz122_P3narrow": {
+    "fps": 10.59,
+    "MBps": 479.9,
+    "pct_of_1600": 30.0
+   },
+   "mhz150_P3": {
+    "fps": 13.3,
+    "MBps": 602.7,
+    "pct_of_1600": 37.7
+   },
+   "verdict": "DDR3 仍非瓶颈（<=38%）；权重流式 2.02MB/帧 x 13fps = 26.3MB/s（2.3%）"
+  },
+  "w_bank_revision": {
+   "reason": "OC32 需要 W 读 32B/拍（现设计 16B/拍）",
+   "from": "2 银行 x 160KiB（WEIGHT-STREAMING-DESIGN.md M1/M2）",
+   "to": "4 银行 x 80KiB：当前层跨 2 银行（OC 高/低半），另 2 银行预取下一层",
+   "max_layer_fit": "124,416 + 5,200 = 129,616 <= 2 x 81,920 = 163,840 OK",
+   "bram_cost": "0（总容量不变，80 tiles）",
+   "px16_note": "PX16 方案不需要改 W（仍 16B/拍），但 tilecache 读口需 256b",
+   "recommended_variant": "PX16（W 读 16B/拍不变，2x160KiB 零返工）优先；OC32 作为 A 侧 32B/拍做不出来时的备选"
+  },
+  "decouple_task10": {
+   "npU_independent_clock": "允许 NPU 122/150MHz 而 CPU 保持 150MHz 交付档",
+   "job_interface": "每帧一次 job（arena 基址进、检测框出），与 nn_seq MODE_AUTO 兼容",
+   "frame_pipeline": "端到端 fps ≈ max(NPU 帧时, CPU 后处理)；本模型后处理 <1ms => ≈ NPU 帧时",
+   "cpu_window": "CPU 窗口在 NPU 域 -> 按 task-10 job 接口用 DMA 描述符，避免跨域直访"
+  }
+ },
+ "risks": [
+  {
+   "id": "R1",
+   "risk": "Winograd int8 精度",
+   "impact": "端到端掉点",
+   "mitigation": "先 numpy 离线验证 2 个 56^2 层（cos/最大误差），只做窄版",
+   "severity": "high"
+  },
+  {
+   "id": "R2",
+   "risk": "150MHz 时序",
+   "impact": "9.66 -> 7.87fps",
+   "mitigation": "先按 122.22 交付；150MHz 独立攻坚（pblock/floorplan + wa_r 预寄存 + W 就近布局）",
+   "severity": "high"
+  },
+  {
+   "id": "R3",
+   "risk": "BRAM 余 3 tiles",
+   "impact": "Winograd V 缓冲要 1~2 tiles",
+   "mitigation": "IC 8ch 分块（3.6KB/块）；复用 tilecache 空闲 bank",
+   "severity": "medium"
+  },
+  {
+   "id": "R4",
+   "risk": "DSP 擦边（232/240）",
+   "impact": "P&R 性能下降",
+   "mitigation": "推荐 LUT-MAC 路线（+2.5K LUT，DSP 保持 168）",
+   "severity": "medium"
+  },
+  {
+   "id": "R5",
+   "risk": "B 优化系数 0.7~0.8 不确定",
+   "impact": "P2 帧率 7.6~7.9@122",
+   "mitigation": "P1b 先实测 B 下降",
+   "severity": "medium"
+  },
+  {
+   "id": "R6",
+   "risk": "与 task-10 跨域接口",
+   "impact": "CPU 窗口访问需桥",
+   "mitigation": "按 job 接口用 DMA 描述符",
+   "severity": "low"
+  },
+  {
+   "id": "R7",
+   "risk": "W 4 银行改造与 M2 排期冲突",
+   "impact": "P2b 依赖流式 M2",
+   "mitigation": "4 银行只多 1 位译码，工作量 ~0；与 M2 同批改",
+   "severity": "low"
+  }
+ ],
+ "open_questions": [
+  "目标帧率口径：P2@122=7.87fps（零精度风险）是否可接受？还是必须 >=10fps（需 Winograd+150MHz）？",
+  "Winograd 精度预算：可接受的逐层 cos / 端到端掉点阈值？",
+  "是否批准一次 nn_conv_engine 256-MAC 草稿的 OOC 综合（约 20~40 分钟，只出报告不改 RTL）？",
+  "150MHz 是否纳入本迭代（需要 pblock/floorplan + W 流式重构，可能与 task-10 排期冲突）？"
+ ],
+ "verification_discipline": [
+  "每阶段 python tools/fpga_workflow.py verify --force PASS 数不降（现 PASS 16）",
+  "引擎改动过 tb_nn_engine（47/47 + 4/4）与全尺寸 l0 replay 位精确",
+  "全模型过 tb_sw_nn_bottlecap 双模（hw_bad=0/auto_bad=0）且拍数=公式值 ±1%",
+  "交付档（无 NN_EN）parity 逐项不变"
+ ],
+ "revision": {
+  "date": "2026-11-03 evening",
+  "supersedes": "本文件的 scenarios/baseline 旧值（由 P0 周期模型 cycle_model.py 取代）",
+  "reason": "OC tile padding（72/88/144 通道在 32-lane 下只省 20~33%，不是减半）+ REQ 按物理字节重算"
+ },
+ "scenarios_model": {
+  "p0": {
+   "cycles": 39891262.0,
+   "effective_mac_per_cycle": 57.0,
+   "fps": {
+    "mhz100": 2.51,
+    "mhz122_22": 3.06,
+    "mhz150": 3.76
+   },
+   "components": {
+    "A": 20302534.0,
+    "B": 13520220.0,
+    "C": 3746862.0,
+    "D": 2321646.0
+   }
+  },
+  "f": {
+   "cycles": 38803229.0,
+   "effective_mac_per_cycle": 58.6,
+   "fps": {
+    "mhz100": 2.58,
+    "mhz122_22": 3.15,
+    "mhz150": 3.87
+   },
+   "components": {
+    "A": 20302534.0,
+    "B": 13520220.0,
+    "C": 3746862.0,
+    "D": 1233613.0
+   }
+  },
+  "lb": {
+   "cycles": 36496255.0,
+   "effective_mac_per_cycle": 62.3,
+   "fps": {
+    "mhz100": 2.74,
+    "mhz122_22": 3.35,
+    "mhz150": 4.11
+   },
+   "components": {
+    "A": 20302534.0,
+    "B": 10125213.0,
+    "C": 3746862.0,
+    "D": 2321646.0
+   }
+  },
+  "dw": {
+   "cycles": 36997587.1,
+   "effective_mac_per_cycle": 61.4,
+   "fps": {
+    "mhz100": 2.7,
+    "mhz122_22": 3.3,
+    "mhz150": 4.05
+   },
+   "components": {
+    "A": 19997803.0,
+    "B": 12154031.4,
+    "C": 2823188.5,
+    "D": 2022564.2
+   }
+  },
+  "wg": {
+   "cycles": 31332142.0,
+   "effective_mac_per_cycle": 72.5,
+   "fps": {
+    "mhz100": 3.19,
+    "mhz122_22": 3.9,
+    "mhz150": 4.79
+   },
+   "components": {
+    "A": 11743414.0,
+    "B": 13520220.0,
+    "C": 3746862.0,
+    "D": 2321646.0
+   }
+  },
+  "m_oc24": {
+   "cycles": 27165997.0,
+   "effective_mac_per_cycle": 83.6,
+   "fps": {
+    "mhz100": 3.68,
+    "mhz122_22": 4.5,
+    "mhz150": 5.52
+   },
+   "components": {
+    "A": 12716886.0,
+    "B": 9304638.0,
+    "C": 3019758.0,
+    "D": 2124715.0
+   }
+  },
+  "m_oc32": {
+   "cycles": 26437665.0,
+   "effective_mac_per_cycle": 85.9,
+   "fps": {
+    "mhz100": 3.78,
+    "mhz122_22": 4.62,
+    "mhz150": 5.67
+   },
+   "components": {
+    "A": 12420198.0,
+    "B": 8970864.0,
+    "C": 2978906.0,
+    "D": 2067697.0
+   }
+  },
+  "m_px16": {
+   "cycles": 25652590.0,
+   "effective_mac_per_cycle": 88.6,
+   "fps": {
+    "mhz100": 3.9,
+    "mhz122_22": 4.76,
+    "mhz150": 5.85
+   },
+   "components": {
+    "A": 11490878.0,
+    "B": 10078936.0,
+    "C": 2257794.0,
+    "D": 1824982.0
+   }
+  },
+  "p1": {
+   "cycles": 32514547.1,
+   "effective_mac_per_cycle": 69.9,
+   "fps": {
+    "mhz100": 3.08,
+    "mhz122_22": 3.76,
+    "mhz150": 4.61
+   },
+   "components": {
+    "A": 19997803.0,
+    "B": 8759024.4,
+    "C": 2823188.5,
+    "D": 934531.2
+   }
+  },
+  "p2": {
+   "cycles": 20425756.9,
+   "effective_mac_per_cycle": 111.2,
+   "fps": {
+    "mhz100": 4.9,
+    "mhz122_22": 5.98,
+    "mhz150": 7.34
+   },
+   "components": {
+    "A": 12115467.0,
+    "B": 5574475.2,
+    "C": 2055232.5,
+    "D": 680582.2
+   }
+  },
+  "p2b": {
+   "cycles": 20343386.7,
+   "effective_mac_per_cycle": 111.7,
+   "fps": {
+    "mhz100": 4.92,
+    "mhz122_22": 6.01,
+    "mhz150": 7.37
+   },
+   "components": {
+    "A": 11328023.0,
+    "B": 6676502.6,
+    "C": 1764162.4,
+    "D": 574698.7
+   }
+  },
+  "p2c": {
+   "cycles": 21053956.7,
+   "effective_mac_per_cycle": 107.9,
+   "fps": {
+    "mhz100": 4.75,
+    "mhz122_22": 5.81,
+    "mhz150": 7.12
+   },
+   "components": {
+    "A": 12412155.0,
+    "B": 5808117.0,
+    "C": 2096084.5,
+    "D": 737600.2
+   }
+  },
+  "p3": {
+   "cycles": 15215196.9,
+   "effective_mac_per_cycle": 149.3,
+   "fps": {
+    "mhz100": 6.57,
+    "mhz122_22": 8.03,
+    "mhz150": 9.86
+   },
+   "components": {
+    "A": 6904907.0,
+    "B": 5574475.2,
+    "C": 2055232.5,
+    "D": 680582.2
+   }
+  },
+  "p3narrow": {
+   "cycles": 15595436.9,
+   "effective_mac_per_cycle": 145.7,
+   "fps": {
+    "mhz100": 6.41,
+    "mhz122_22": 7.84,
+    "mhz150": 9.62
+   },
+   "components": {
+    "A": 7285147.0,
+    "B": 5574475.2,
+    "C": 2055232.5,
+    "D": 680582.2
+   }
+  },
+  "p3c": {
+   "cycles": 16223636.7,
+   "effective_mac_per_cycle": 140.0,
+   "fps": {
+    "mhz100": 6.16,
+    "mhz122_22": 7.53,
+    "mhz150": 9.25
+   },
+   "components": {
+    "A": 7581835.0,
+    "B": 5808117.0,
+    "C": 2096084.5,
+    "D": 737600.2
+   }
+  }
+ },
+ "lead_decisions": {
+  "main_target": "P2 @122.22MHz 为主目标（对外 ~6fps@122，修订后值）；Winograd/150MHz 降级为 stretch",
+  "winograd_gate": {
+   "cos_i8_mean_ge": 0.97,
+   "cos_i8_min_ge": 0.93,
+   "frame_match_ge": 0.98,
+   "prf_drop_le": 0.02,
+   "layer_gate_status": "PASS（见 winograd_validation）"
+  },
+  "ooc_approved": true,
+  "p1_separate_landing": "P1（融合+行缓冲+地址优化，不改阵列）建议排 M6 之后第一批；与解耦/DDR3 主线零冲突",
+  "positioning": "对外口径：240 MAC/拍档位（DPU 等价）、现在只跑 128（53%）"
+ },
+ "winograd_validation": {
+  "script": "results/bottlecap/reports/winograd_check.py",
+  "json": "results/bottlecap/reports/winograd_check.json",
+  "layers": {
+   "83": "refine2.conv1.0",
+   "95": "objectness_tower.0.0"
+  },
+  "imgs": [
+   "0000.png",
+   "0001.png",
+   "0002.png",
+   "0003.png"
+  ],
+  "summary": {
+   "exact": {
+    "n": 8,
+    "cos_i8_mean": 1.0,
+    "cos_i8_min": 1.0,
+    "cos_acc_mean": 1.0,
+    "cos_acc_min": 1.0,
+    "max_abs_diff": 0,
+    "all_exact": true,
+    "verdict": "PASS"
+   },
+   "vclip8": {
+    "n": 8,
+    "cos_i8_mean": 0.975358,
+    "cos_i8_min": 0.967562,
+    "cos_acc_mean": 0.975574,
+    "cos_acc_min": 0.967801,
+    "max_abs_diff": 1013602,
+    "all_exact": false,
+    "verdict": "PASS"
+   },
+   "mclip16": {
+    "n": 8,
+    "cos_i8_mean": 0.304678,
+    "cos_i8_min": 0.230806,
+    "cos_acc_mean": 0.434202,
+    "cos_acc_min": 0.409382,
+    "max_abs_diff": 1355532,
+    "all_exact": false,
+    "verdict": "FAIL"
+   }
+  },
+  "verdict": "P3a 逐层精度门槛 PASS（exact 变体逐位精确 cos=1.0；vclip8 变体 cos 均值 0.9754/最小 0.9676 亦过线；mclip16 失败 ⇒ 累加器必须 >=28-bit）",
+  "note": "全模型框匹配判据待 P2/P3 落地后补；本阶段关闭“精度不确定”风险"
+ },
+ "ooc_validation": {
+  "dir": "results/bottlecap/perf-proto",
+  "method": "datapath probe (probe_top.sv + perf_probe.sv) OOC synth; 10 configs; logs/rtp in perf-proto/",
+  "results": [
+   {
+    "tag": "p128_100",
+    "lut": 2187,
+    "ff": 1753,
+    "dsp": 160,
+    "bram": 0.0,
+    "metric": "MET",
+    "slack_ns": 3.388,
+    "path_ns": 6.58,
+    "logic_levels": 6,
+    "worst_endpoint": "u_dut/y_out_reg[0][0][7]/D",
+    "period_ns": 10.0,
+    "fmax_mhz_est": 151.2
+   },
+   {
+    "tag": "p128_122",
+    "lut": 2187,
+    "ff": 1753,
+    "dsp": 160,
+    "bram": 0.0,
+    "metric": "MET",
+    "slack_ns": 1.57,
+    "path_ns": 6.58,
+    "logic_levels": 6,
+    "worst_endpoint": "u_dut/y_out_reg[0][0][7]/D",
+    "period_ns": 8.182,
+    "fmax_mhz_est": 151.2
+   },
+   {
+    "tag": "p128_150",
+    "lut": 2187,
+    "ff": 1753,
+    "dsp": 160,
+    "bram": 0.0,
+    "metric": "MET",
+    "slack_ns": 0.055,
+    "path_ns": 6.58,
+    "logic_levels": 6,
+    "worst_endpoint": "u_dut/y_out_reg[0][0][7]/D",
+    "period_ns": 6.667,
+    "fmax_mhz_est": 151.2
+   },
+   {
+    "tag": "p192oc24_122",
+    "lut": 5036,
+    "ff": 2413,
+    "dsp": 152,
+    "bram": 0.0,
+    "metric": "MET",
+    "slack_ns": 1.554,
+    "path_ns": 6.596,
+    "logic_levels": 6,
+    "worst_endpoint": "u_dut/y_out_reg[0][0][7]/D",
+    "period_ns": 8.182,
+    "fmax_mhz_est": 150.9
+   },
+   {
+    "tag": "p192oc24_150",
+    "lut": 5036,
+    "ff": 2413,
+    "dsp": 152,
+    "bram": 0.0,
+    "metric": "MET",
+    "slack_ns": 0.039,
+    "path_ns": 6.596,
+    "logic_levels": 6,
+    "worst_endpoint": "u_dut/y_out_reg[0][0][7]/D",
+    "period_ns": 6.667,
+    "fmax_mhz_est": 150.9
+   },
+   {
+    "tag": "p256oc32_100",
+    "lut": 6951,
+    "ff": 3606,
+    "dsp": 192,
+    "bram": 0.0,
+    "metric": "MET",
+    "slack_ns": 3.372,
+    "path_ns": 6.596,
+    "logic_levels": 6,
+    "worst_endpoint": "u_dut/y_out_reg[0][0][7]/D",
+    "period_ns": 10.0,
+    "fmax_mhz_est": 150.9
+   },
+   {
+    "tag": "p256oc32_122",
+    "lut": 6951,
+    "ff": 3606,
+    "dsp": 192,
+    "bram": 0.0,
+    "metric": "MET",
+    "slack_ns": 1.554,
+    "path_ns": 6.596,
+    "logic_levels": 6,
+    "worst_endpoint": "u_dut/y_out_reg[0][0][7]/D",
+    "period_ns": 8.182,
+    "fmax_mhz_est": 150.9
+   },
+   {
+    "tag": "p256oc32_150",
+    "lut": 6951,
+    "ff": 3606,
+    "dsp": 192,
+    "bram": 0.0,
+    "metric": "MET",
+    "slack_ns": 0.039,
+    "path_ns": 6.596,
+    "logic_levels": 6,
+    "worst_endpoint": "u_dut/y_out_reg[0][0][7]/D",
+    "period_ns": 6.667,
+    "fmax_mhz_est": 150.9
+   },
+   {
+    "tag": "p256oc32req32_150",
+    "lut": 8077,
+    "ff": 3742,
+    "dsp": 224,
+    "bram": 0.0,
+    "metric": "MET",
+    "slack_ns": 0.055,
+    "path_ns": 6.58,
+    "logic_levels": 6,
+    "worst_endpoint": "u_dut/y_out_reg[0][0][7]/D",
+    "period_ns": 6.667,
+    "fmax_mhz_est": 151.2
+   },
+   {
+    "tag": "p256px16_150",
+    "lut": 6468,
+    "ff": 3027,
+    "dsp": 192,
+    "bram": 0.0,
+    "metric": "MET",
+    "slack_ns": 0.039,
+    "path_ns": 6.596,
+    "logic_levels": 6,
+    "worst_endpoint": "u_dut/y_out_reg[0][0][7]/D",
+    "period_ns": 6.667,
+    "fmax_mhz_est": 150.9
+   }
+  ],
+  "conclusions": {
+   "fmax_all_configs_mhz": "150.9~151.2（128/192/256/PX16 差异 <0.2%）",
+   "critical_path": "requant 17x16 DSP 输出 -> y_out 寄存器（6.596ns, 6 级），与 MAC 宽度无关",
+   "dsp_oc32": "192 DSP（160 MAC-DSP + 32 requant-DSP）+ CPU 8 = 200/240（83%）可行",
+   "dsp_wide_requant_32lane": "224+8 = 232/240（96.7%）擦边 -> requant 保持 16 lane 时分复用",
+   "delta_256_vs_128": "+4764 LUT / +1853 FF（下界，acc 被部分剪枝）/ +32 DSP",
+   "caveat": "探针无控制逻辑，绝对 LUT 偏小；fmax 为乐观上界；真实 150MHz 风险在 route（wa_r→W 8.88ns）"
+  }
+ }
+}

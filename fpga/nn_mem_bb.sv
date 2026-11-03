@@ -1,11 +1,5 @@
-// ============================================================================
-// nn_mem 黑盒 stub (自动生成 —— 不要手改; 由 nn_mem.sv 的 module header 提取)
-// 用途: 整机综合时把 nn_mem 当 black box, 综合后再用 read_checkpoint -cell
-//       u_nn/u_mem <nn_mem_ooc.dcp> 链接 OOC 综合结果。
-// 背景: W 320KB 常量 ROM 在 in-context 综合里会被展开成 ~5.2M 未映射寄存器,
-//       把综合拖到 2.5-3 小时; OOC DCP 里 W/Q 已落 BRAM (W80+Q12+AB32)。
-// 生成/一致性: tools/gen_nn_mem_bb.py (Lead 维护); 端口必须与 nn_mem.sv 逐字一致。
-// ============================================================================
+// nn_mem 黑盒 stub (自动生成, 勿手改; 由 tools/gen_nn_mem_bb.py 从 nn_mem.sv 提取)
+// 整机综合时替换 nn_mem.sv, 综合后用 read_checkpoint -cell u_nn/u_mem <dcp> 链接 OOC 结果。
 module nn_mem
   import nn_pkg::*;
 #(
@@ -47,7 +41,18 @@ module nn_mem
   input  logic         dbg_we,
   input  logic         dbg_space,     // 0=W, 1=Q
   input  logic [16:0]  dbg_addr,      // 32-bit 字索引
-  input  logic [31:0]  dbg_wdata
+  input  logic [31:0]  dbg_wdata,
+  // ---- [M2] W 流式: 模式/活动银行/填充写口 (默认全 0 => v0.7 ROM 兼容路径) ----
+  input  logic         w_mode,        // 0=综合期 ROM 烧死 / 1=运行期可写流式
+  input  logic         w_bank_sel,    // 引擎读的活动银行 (0/1)
+  input  logic         wfill_we,      // 填充写使能 (写非活动银行 ~w_bank_sel)
+  input  logic [17:0]  wfill_addr,    // 银行内 64-bit 字序号 0..20479
+  input  logic [63:0]  wfill_wdata,
+  // ---- [M2] Q 影子银行: 活动银行/填充写口 (默认全 0 => v0.7 ROM 兼容路径) ----
+  input  logic         q_bank_sel,    // 引擎读的活动 Q 影子银行 (0/1)
+  input  logic         qfill_we,      // 填充写使能 (写非活动银行 ~q_bank_sel)
+  input  logic [12:0]  qfill_addr,    // 影子银行内 64-bit 字序号 0..1023
+  input  logic [63:0]  qfill_wdata
 );
-  // 空 body -> Vivado 推断为 black box; 由 OOC DCP 链接填充
+  // 空 body -> Vivado black box
 endmodule

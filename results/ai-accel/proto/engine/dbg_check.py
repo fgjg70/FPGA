@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 sys.path.insert(0, ".")
 import importlib.util
 spec = importlib.util.spec_from_file_location("gv", "gen_vectors.py")

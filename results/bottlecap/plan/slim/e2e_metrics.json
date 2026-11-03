@@ -1,0 +1,533 @@
+{
+ "golden_check": {
+  "mismatch": 0,
+  "head_mismatch": 0,
+  "n_images": 1,
+  "n_ops": 71,
+  "n_op_img": 71,
+  "fast_vs_quantlib": 0,
+  "n_check_images": 1,
+  "layout_ok": true,
+  "ref_heads": {
+   "path": "D:\\USER\\Desktop\\FPGA\\FPGA\\results\\bottlecap\\slim\\ref_heads.npz",
+   "status": "PASS",
+   "keys": {
+    "image_names": [
+     "<U8",
+     [
+      8
+     ]
+    ],
+    "indices": [
+     "int64",
+     [
+      8
+     ]
+    ],
+    "inputs_float_nchw": [
+     "float32",
+     [
+      8,
+      3,
+      96,
+      96
+     ]
+    ],
+    "inputs_int8_packed3": [
+     "int8",
+     [
+      8,
+      96,
+      96,
+      3
+     ]
+    ],
+    "objectness": [
+     "float32",
+     [
+      8,
+      1,
+      24,
+      24
+     ]
+    ],
+    "class_logits": [
+     "float32",
+     [
+      8,
+      4,
+      24,
+      24
+     ]
+    ],
+    "box_logits": [
+     "float32",
+     [
+      8,
+      4,
+      24,
+      24
+     ]
+    ],
+    "meta": [
+     "<U3795",
+     [
+      1
+     ]
+    ]
+   },
+   "n_samples": 8,
+   "results": {
+    "A_float_model_vs_ref": [
+     {
+      "head": "objectness",
+      "cos_mean": 0.999999999999985,
+      "cos_min": 0.9999999999999812
+     },
+     {
+      "head": "class",
+      "cos_mean": 0.999999999999917,
+      "cos_min": 0.9999999999998567
+     },
+     {
+      "head": "box",
+      "cos_mean": 0.9999999999999807,
+      "cos_min": 0.9999999999999704
+     }
+    ],
+    "B_int8_vs_ref": [
+     {
+      "head": "objectness",
+      "cos_mean": 0.9992234167109719,
+      "cos_min": 0.9987056314018945
+     },
+     {
+      "head": "class",
+      "cos_mean": 0.9701040894012927,
+      "cos_min": 0.9525155318858156
+     },
+     {
+      "head": "box",
+      "cos_mean": 0.9937959065146756,
+      "cos_min": 0.9906621694047831
+     }
+    ],
+    "input_quant_mismatch_pct": 0.8112205222800926,
+    "input_quant_note": "ref 用固定 s=2/255=0.0078431; 本 plan 用 calibration s_in=0.0078124 zp_in=0"
+   },
+   "cos_min": 0.9525155318858156,
+   "cos_min_A": 0.9999999999998567,
+   "cos_min_B": 0.9525155318858156,
+   "head_order": "objectness, class, box (raw logits)",
+   "note": "A(模型/head 顺序): float 模型 on ref float 输入 cos≈1 → 与 slim-train 参考输出 bit-级一致; B(int8): 用 ref 的固定 s=2/255 输入喂本 plan(s_in=0.0078124), 0.81% 输入字节差异 -> class cos≈0.97; hw E2E 以本 plan 口径的 opvec 输入为准"
+  },
+  "float_check_max_abs": [
+   5.4836273193359375e-06,
+   6.616115570068359e-06,
+   3.2186508178710938e-06
+  ],
+  "opvec": {
+   "dir": "results/bottlecap/plan/slim/opvec",
+   "n_images": 2,
+   "subset_ops": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60,
+    61,
+    62,
+    63,
+    64,
+    65,
+    66,
+    67,
+    68,
+    69,
+    70
+   ],
+   "all_ops": true
+  }
+ },
+ "e2e": {
+  "n_images": 500,
+  "thresholds": {
+   "iou_match": 0.5,
+   "conf": 0.2,
+   "nms": 0.35,
+   "pre_nms_topk": 40,
+   "max_detections": 4,
+   "decode": "nut_detector.multi_anchor_free.decode_multi_predictions (与 evaluate_multi_mobilenet_anchor_free.py 一致)"
+  },
+  "float_vs_gt": {
+   "tp": 1248,
+   "fp": 2,
+   "fn": 2,
+   "precision": 0.9984,
+   "recall": 0.9984,
+   "f1": 0.9984,
+   "mean_iou": 0.9494942749540011,
+   "n_gt": 1250,
+   "n_pred": 1250,
+   "n_images": 500,
+   "exact_image_accuracy": 0.996,
+   "count_accuracy": 1.0,
+   "per_class": {
+    "red_cap": {
+     "tp": 311,
+     "fp": 0,
+     "fn": 2,
+     "precision": 1.0,
+     "recall": 0.9936102236421726,
+     "f1": 0.9967948717948718
+    },
+    "purple_cap": {
+     "tp": 313,
+     "fp": 2,
+     "fn": 0,
+     "precision": 0.9936507936507937,
+     "recall": 1.0,
+     "f1": 0.9968152866242038
+    },
+    "green_cap": {
+     "tp": 312,
+     "fp": 0,
+     "fn": 0,
+     "precision": 1.0,
+     "recall": 1.0,
+     "f1": 1.0
+    },
+    "yellow_cap": {
+     "tp": 312,
+     "fp": 0,
+     "fn": 0,
+     "precision": 1.0,
+     "recall": 1.0,
+     "f1": 1.0
+    }
+   },
+   "by_true_object_count": {
+    "1": {
+     "images": 125,
+     "tp": 125,
+     "fp": 0,
+     "fn": 0,
+     "precision": 1.0,
+     "recall": 1.0,
+     "count_accuracy": 1.0,
+     "exact_image_accuracy": 1.0
+    },
+    "2": {
+     "images": 125,
+     "tp": 250,
+     "fp": 0,
+     "fn": 0,
+     "precision": 1.0,
+     "recall": 1.0,
+     "count_accuracy": 1.0,
+     "exact_image_accuracy": 1.0
+    },
+    "3": {
+     "images": 125,
+     "tp": 375,
+     "fp": 0,
+     "fn": 0,
+     "precision": 1.0,
+     "recall": 1.0,
+     "count_accuracy": 1.0,
+     "exact_image_accuracy": 1.0
+    },
+    "4": {
+     "images": 125,
+     "tp": 498,
+     "fp": 2,
+     "fn": 2,
+     "precision": 0.996,
+     "recall": 0.996,
+     "count_accuracy": 1.0,
+     "exact_image_accuracy": 0.984
+    }
+   }
+  },
+  "int8_vs_gt": {
+   "tp": 1247,
+   "fp": 3,
+   "fn": 3,
+   "precision": 0.9976,
+   "recall": 0.9976,
+   "f1": 0.9976,
+   "mean_iou": 0.9291704219632275,
+   "n_gt": 1250,
+   "n_pred": 1250,
+   "n_images": 500,
+   "exact_image_accuracy": 0.994,
+   "count_accuracy": 1.0,
+   "per_class": {
+    "red_cap": {
+     "tp": 310,
+     "fp": 0,
+     "fn": 3,
+     "precision": 1.0,
+     "recall": 0.9904153354632588,
+     "f1": 0.9951845906902087
+    },
+    "purple_cap": {
+     "tp": 313,
+     "fp": 3,
+     "fn": 0,
+     "precision": 0.990506329113924,
+     "recall": 1.0,
+     "f1": 0.9952305246422893
+    },
+    "green_cap": {
+     "tp": 312,
+     "fp": 0,
+     "fn": 0,
+     "precision": 1.0,
+     "recall": 1.0,
+     "f1": 1.0
+    },
+    "yellow_cap": {
+     "tp": 312,
+     "fp": 0,
+     "fn": 0,
+     "precision": 1.0,
+     "recall": 1.0,
+     "f1": 1.0
+    }
+   },
+   "by_true_object_count": {
+    "1": {
+     "images": 125,
+     "tp": 125,
+     "fp": 0,
+     "fn": 0,
+     "precision": 1.0,
+     "recall": 1.0,
+     "count_accuracy": 1.0,
+     "exact_image_accuracy": 1.0
+    },
+    "2": {
+     "images": 125,
+     "tp": 249,
+     "fp": 1,
+     "fn": 1,
+     "precision": 0.996,
+     "recall": 0.996,
+     "count_accuracy": 1.0,
+     "exact_image_accuracy": 0.992
+    },
+    "3": {
+     "images": 125,
+     "tp": 375,
+     "fp": 0,
+     "fn": 0,
+     "precision": 1.0,
+     "recall": 1.0,
+     "count_accuracy": 1.0,
+     "exact_image_accuracy": 1.0
+    },
+    "4": {
+     "images": 125,
+     "tp": 498,
+     "fp": 2,
+     "fn": 2,
+     "precision": 0.996,
+     "recall": 0.996,
+     "count_accuracy": 1.0,
+     "exact_image_accuracy": 0.984
+    }
+   }
+  },
+  "int8_vs_float": {
+   "n_boxes_a": 1250,
+   "n_boxes_b": 1250,
+   "matched_same_class_iou50": 1249,
+   "match_rate_of_a": 0.9992,
+   "match_rate_of_b": 0.9992,
+   "mean_iou_matched": 0.9323396393067366,
+   "class_confusion_pairs_iou50": 1,
+   "count_equal_images": 500,
+   "exact_equal_images": 499,
+   "n_images": 500,
+   "mean_abs_score_diff": 0.015130016973631396
+  },
+  "head_cos_float_vs_int8": {
+   "objectness_mean": 0.9993945373296738,
+   "objectness_min": 0.997928261756897,
+   "class_mean": 0.9574647238254547,
+   "class_min": 0.8519501686096191,
+   "box_mean": 0.9947280522584915,
+   "box_min": 0.9684913158416748
+  },
+  "timing": {
+   "float_s": 3.98,
+   "float_ms_per_img": 7.95,
+   "int8_s": 6.2,
+   "int8_ms_per_img": 12.39
+  },
+  "device": "cuda",
+  "wdq_ceiling": {
+   "n_convs_quantized": 57,
+   "vs_gt": {
+    "tp": 1247,
+    "fp": 3,
+    "fn": 3,
+    "precision": 0.9976,
+    "recall": 0.9976,
+    "f1": 0.9976,
+    "mean_iou": 0.9499221691725822,
+    "n_gt": 1250,
+    "n_pred": 1250,
+    "n_images": 500,
+    "exact_image_accuracy": 0.994,
+    "count_accuracy": 1.0,
+    "per_class": {
+     "red_cap": {
+      "tp": 310,
+      "fp": 0,
+      "fn": 3,
+      "precision": 1.0,
+      "recall": 0.9904153354632588,
+      "f1": 0.9951845906902087
+     },
+     "purple_cap": {
+      "tp": 313,
+      "fp": 3,
+      "fn": 0,
+      "precision": 0.990506329113924,
+      "recall": 1.0,
+      "f1": 0.9952305246422893
+     },
+     "green_cap": {
+      "tp": 312,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+     },
+     "yellow_cap": {
+      "tp": 312,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+     }
+    },
+    "by_true_object_count": {
+     "1": {
+      "images": 125,
+      "tp": 125,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "count_accuracy": 1.0,
+      "exact_image_accuracy": 1.0
+     },
+     "2": {
+      "images": 125,
+      "tp": 249,
+      "fp": 1,
+      "fn": 1,
+      "precision": 0.996,
+      "recall": 0.996,
+      "count_accuracy": 1.0,
+      "exact_image_accuracy": 0.992
+     },
+     "3": {
+      "images": 125,
+      "tp": 375,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "count_accuracy": 1.0,
+      "exact_image_accuracy": 1.0
+     },
+     "4": {
+      "images": 125,
+      "tp": 498,
+      "fp": 2,
+      "fn": 2,
+      "precision": 0.996,
+      "recall": 0.996,
+      "count_accuracy": 1.0,
+      "exact_image_accuracy": 0.984
+     }
+    }
+   },
+   "vs_float": {
+    "n_boxes_a": 1250,
+    "n_boxes_b": 1250,
+    "matched_same_class_iou50": 1249,
+    "match_rate_of_a": 0.9992,
+    "match_rate_of_b": 0.9992,
+    "mean_iou_matched": 0.9964473407396419,
+    "class_confusion_pairs_iou50": 1,
+    "count_equal_images": 500,
+    "exact_equal_images": 499,
+    "n_images": 500,
+    "mean_abs_score_diff": 0.0019016461528903298
+   }
+  }
+ }
+}

@@ -1,0 +1,115 @@
+# bottlecap-E2E int8 golden checksums (plan v0.8, 224x224, enhanced)
+# FNV-1a 32: h=2166136261; for b: h^=b; h=(h*16777619)&0xFFFFFFFF
+# scope: real channels x H x W, compact NHWC logical order (y,x,c); channel padding bytes NOT included
+# input: PACKED3 int8, pattern_v1 seed=12345
+# w_bytes=2020960 q_bytes=90288 arena_bytes=2007040 arena_base=0x01000000
+input 0x33c513c5  # pattern_v1 packed 3B/pixel
+op   0 kind=conv     act=relu flags=0x14 0xcb19ba31
+op   1 kind=conv     act=relu flags=0x10 0xe34a56bf
+op   2 kind=dwconv   act=relu flags=0x11 0x7dc676d7
+op   3 kind=conv     act=none flags=0x00 0x4c6dd7d1
+op   4 kind=add      act=none flags=0x08 0x62bb140d
+op   5 kind=conv     act=relu flags=0x10 0x68f72dee
+op   6 kind=dwconv   act=relu flags=0x11 0x5bfcf329
+op   7 kind=conv     act=none flags=0x00 0x4273108d
+op   8 kind=add      act=none flags=0x08 0x3db993b4
+op   9 kind=conv     act=relu flags=0x10 0x081283fb
+op  10 kind=dwconv   act=relu flags=0x11 0xe74b200b
+op  11 kind=conv     act=none flags=0x00 0x248e4a10
+op  12 kind=conv     act=relu flags=0x10 0x95395c23
+op  13 kind=dwconv   act=relu flags=0x11 0xce593054
+op  14 kind=conv     act=none flags=0x00 0x5c7cda11
+op  15 kind=add      act=none flags=0x08 0x05952fc4
+op  16 kind=conv     act=relu flags=0x10 0x50b1272a
+op  17 kind=dwconv   act=relu flags=0x11 0x3276f53a
+op  18 kind=conv     act=none flags=0x00 0x5dfdf249
+op  19 kind=add      act=none flags=0x08 0x1f996693
+op  20 kind=conv     act=relu flags=0x10 0x9ff70f7f
+op  21 kind=dwconv   act=relu flags=0x11 0x9e5f0380
+op  22 kind=conv     act=none flags=0x00 0x2b33b5f9
+op  23 kind=conv     act=relu flags=0x10 0x4516cb04
+op  24 kind=dwconv   act=relu flags=0x11 0x79351e84
+op  25 kind=conv     act=none flags=0x00 0x4784ecd7
+op  26 kind=add      act=none flags=0x08 0x4c9a01ae
+op  27 kind=conv     act=relu flags=0x10 0x1d9aa911
+op  28 kind=dwconv   act=relu flags=0x11 0xbcba3a0b
+op  29 kind=conv     act=none flags=0x00 0xda504c9e
+op  30 kind=add      act=none flags=0x08 0xd41a4fb6
+op  31 kind=conv     act=relu flags=0x10 0xa9e443b5
+op  32 kind=dwconv   act=relu flags=0x11 0x5ee45726
+op  33 kind=conv     act=none flags=0x00 0x6ea1e193
+op  34 kind=add      act=none flags=0x08 0xb0b3179a
+op  35 kind=conv     act=relu flags=0x10 0x964be4a5
+op  36 kind=dwconv   act=relu flags=0x11 0x3549958b
+op  37 kind=conv     act=none flags=0x00 0xa08afa0c
+op  38 kind=conv     act=relu flags=0x10 0x63e6f9e4
+op  39 kind=dwconv   act=relu flags=0x11 0x0b0cfb19
+op  40 kind=conv     act=none flags=0x00 0xee5797a9
+op  41 kind=add      act=none flags=0x08 0x0bbda452
+op  42 kind=conv     act=relu flags=0x10 0x869add7e
+op  43 kind=dwconv   act=relu flags=0x11 0xd29e0f29
+op  44 kind=conv     act=none flags=0x00 0x9656fe43
+op  45 kind=conv     act=relu flags=0x10 0xf409b850
+op  46 kind=dwconv   act=relu flags=0x11 0x4eb60af9
+op  47 kind=conv     act=none flags=0x00 0xb413134e
+op  48 kind=add      act=none flags=0x08 0x5de767c1
+op  49 kind=conv     act=relu flags=0x10 0x78121f9d
+op  50 kind=dwconv   act=relu flags=0x11 0x4700c214
+op  51 kind=conv     act=none flags=0x00 0x34f2f771
+op  52 kind=add      act=none flags=0x08 0x32f29f3a
+op  53 kind=conv     act=relu flags=0x10 0x025acc7a
+op  54 kind=dwconv   act=relu flags=0x11 0x8945538e
+op  55 kind=conv     act=none flags=0x00 0x207b7553
+op  56 kind=conv     act=relu flags=0x10 0x62e7bf53
+op  57 kind=dwconv   act=relu flags=0x11 0x2a5c5898
+op  58 kind=conv     act=none flags=0x00 0xd9b1d7f6
+op  59 kind=add      act=none flags=0x08 0x44d17b44
+op  60 kind=conv     act=relu flags=0x10 0x7702be52
+op  61 kind=dwconv   act=relu flags=0x11 0x69b673d7
+op  62 kind=conv     act=none flags=0x00 0x50c09e1d
+op  63 kind=add      act=none flags=0x08 0xed33835c
+op  64 kind=conv     act=relu flags=0x10 0xf88662fc
+op  65 kind=conv     act=relu flags=0x10 0x8fca0b84
+op  66 kind=conv     act=none flags=0x18 0x3b3be027
+op  67 kind=conv     act=relu flags=0x10 0x4ffdf236
+op  68 kind=upsample act=none flags=0x00 0x7f8a98bd
+op  69 kind=add      act=relu flags=0x18 0xbdc6bbee
+op  70 kind=conv     act=relu flags=0x10 0x68f6d342
+op  71 kind=conv     act=none flags=0x18 0x74fa5f00
+op  72 kind=conv     act=relu flags=0x10 0x5d01a0a1
+op  73 kind=upsample act=none flags=0x00 0x22d5c9e5
+op  74 kind=add      act=relu flags=0x18 0xbd41b2d3
+op  75 kind=conv     act=relu flags=0x10 0xd9b18cb0
+op  76 kind=conv     act=none flags=0x18 0x22fedb16
+op  77 kind=conv     act=relu flags=0x10 0x1864ddf5
+op  78 kind=upsample act=none flags=0x00 0x8eaef9d5
+op  79 kind=add      act=relu flags=0x18 0x3dbc4b8b
+op  80 kind=conv     act=relu flags=0x10 0x68d63a44
+op  81 kind=conv     act=none flags=0x18 0x272e697c
+op  82 kind=upsample act=none flags=0x00 0x22d5c9e5
+op  83 kind=upsample act=none flags=0x00 0xe770ce45
+op  84 kind=copy     act=none flags=0x00 0x272e697c
+op  85 kind=copy     act=none flags=0x00 0x8eaef9d5
+op  86 kind=copy     act=none flags=0x00 0xe770ce45
+op  87 kind=conv     act=relu flags=0x10 0x9c031f3e
+op  88 kind=conv     act=relu flags=0x10 0x26824257
+op  89 kind=conv     act=none flags=0x18 0x53f2264c
+op  90 kind=conv     act=relu flags=0x10 0xdf03e9b5
+op  91 kind=conv     act=relu flags=0x10 0x5663818f
+op  92 kind=conv     act=relu flags=0x10 0x48b4e813
+op  93 kind=conv     act=none flags=0x00 0xc8b56970
+op  94 kind=conv     act=relu flags=0x10 0xde30d714
+op  95 kind=conv     act=relu flags=0x10 0x3881382e
+op  96 kind=conv     act=relu flags=0x10 0x21b20f95
+op  97 kind=conv     act=none flags=0x00 0x7da98eee
+op  98 kind=conv     act=relu flags=0x10 0xdab5b1bc
+op  99 kind=conv     act=relu flags=0x10 0xe601a99d
+op 100 kind=conv     act=none flags=0x00 0x1564c515
+head tid=77  0xc8b56970  # objectness_logits(objectness_head)
+head tid=81  0x7da98eee  # class_logits(class_head)
+head tid=84  0x1564c515  # box_logits(box_head)
+sha256 plan.json 1096d9cbc6009430839d99210d673ca171d1fb6f9fcfe455ba4edf87974b1c34
+sha256 w.hex d28ed91e65c767695e0c663ad462950952ecb20b5987c9a332ad1f06528b49f8
+sha256 q.hex 286cfa5d534dffff2341c8ac4572f37dde9d246812c0017427605aac7ac275bc
+sha256 model.json 8bf6b6ed6ce147d1b0ee3e939cfb3005e3f5adfe2dd94087c7971ce2a6babd18
+sha256 nn_rom_table.json c3c98057efc16c29449f8a50e079abe54c427219003195384ca6b11b67b24699

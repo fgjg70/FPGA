@@ -71,6 +71,21 @@
 //         32-bit); 或旧 `+nnwq=<yolo_wq.hex>` (94208 行 = W 81920 + Q 12288 顺序)。
 //         本模块内部用小 loader 打包成物理字宽 ($fgets/$sscanf, 仅非 SYNTHESIS)。
 //   激活 A/B 不初始化 (仿真零填充仅为消除 X)。
+//
+// ============================================================================
+// 【M2 (2026-11-03) 流式 W/Q: 双银行 + 填充写口 + Q 影子银行】
+//   目标: W 从"综合期烧死的只读 ROM"变成**运行期可写的 2 银行 L2 缓存**;
+//         Q 增加 2 x 8KiB 可写影子银行 (单层 Q <= 5,200 B)。
+//   双模兼容硬门槛: w_mode=0 (默认) 时 W/Q 读时序与数据**逐拍/逐位等于 v0.7**,
+//   C128 YOLO E2E 与 tb_nn_mem 原有 47,148 checks 不得回退。
+//   新增端口 (全部是输入, 内部对 X/Z 归一为 0, 未接线的旧例化自动走 ROM 兼容路径):
+//     w_mode (0=ROM / 1=STREAM), w_bank_sel (活动银行),
+//     wfill_we/wfill_addr[17:0]/wfill_wdata[63:0]  (64b/拍, 写非活动银行,
+//       地址 = 银行内 64b 字序号 0..20479),
+//     q_bank_sel, qfill_we/qfill_addr[12:0]/qfill_wdata[63:0] (Q 影子银行填充)。
+//   端口增量表/模式语义/双缓冲时序见 results/bottlecap/reports/M2-NNMEM.md。
+//   BRAM: W 仍 80 tiles (4 段深度/字宽不变), Q lo 仍 8 tiles (ROM->RAM 容量不变),
+//         Q hi 仍分布式 ROM; nn_mem 合计 120 tiles, 增量 0。
 // ============================================================================
 
 module nn_mem
@@ -114,7 +129,18 @@ module nn_mem
   input  logic         dbg_we,
   input  logic         dbg_space,     // 0=W, 1=Q
   input  logic [16:0]  dbg_addr,      // 32-bit 字索引
-  input  logic [31:0]  dbg_wdata
+  input  logic [31:0]  dbg_wdata,
+  // ---- [M2] W 流式: 模式/活动银行/填充写口 (默认全 0 => v0.7 ROM 兼容路径) ----
+  input  logic         w_mode,        // 0=综合期 ROM 烧死 / 1=运行期可写流式
+  input  logic         w_bank_sel,    // 引擎读的活动银行 (0/1)
+  input  logic         wfill_we,      // 填充写使能 (写非活动银行 ~w_bank_sel)
+  input  logic [17:0]  wfill_addr,    // 银行内 64-bit 字序号 0..20479
+  input  logic [63:0]  wfill_wdata,
+  // ---- [M2] Q 影子银行: 活动银行/填充写口 (默认全 0 => v0.7 ROM 兼容路径) ----
+  input  logic         q_bank_sel,    // 引擎读的活动 Q 影子银行 (0/1)
+  input  logic         qfill_we,      // 填充写使能 (写非活动银行 ~q_bank_sel)
+  input  logic [12:0]  qfill_addr,    // 影子银行内 64-bit 字序号 0..1023
+  input  logic [63:0]  qfill_wdata
 );
 
   // --------------------------------------------------------------------------
@@ -144,6 +170,52 @@ module nn_mem
   localparam logic [31:0] Q_END = 32'h0005_0000 + Q_BYTES;     // 0x0005_C000
   localparam logic [31:0] WIN   = 32'h1 << CPU_AW;             // 512KB
 
+  // --------------------------------------------------------------------------
+  // [rtl-mem 2026-11-04] act_mem 索引口径 (为 TB 大张量实验支持"放大 A/B"):
+  //   默认契约 (A_BYTES=96KB/B_BYTES=32KB): A_OFF 是 ACT_BYTES 的整数倍且
+  //   ACT_WORDS 是 2 的幂 -> 用**绝对地址位选** addr[ACT_AW+3:4], 与 v0.7 逐位一致,
+  //   综合后无额外逻辑 (常数剪枝)。
+  //   若调用方覆盖参数使前提不成立 (如 tb_nn_engine -gA_BYTES=802816 的 op3 全张量
+  //   实验), 则改用**相对 A_OFF 的偏移** ((addr-A_OFF)>>4)。该分支只在非常规参数下
+  //   生效, 默认配置综合时被常数剪枝 -> 端口/契约/交付档行为/时序均不变。
+  // --------------------------------------------------------------------------
+  localparam bit ACT_ABS_OK = (((int'(nn_pkg::NN_A_OFF) % ACT_BYTES) == 0) &&
+                               ((ACT_WORDS & (ACT_WORDS - 1)) == 0));
+
+  // --------------------------------------------------------------------------
+  // [M2] 流式 W/Q 布局常量 (名字取自 nn_pkg, 数值由参数推导 -> 参数覆盖仍自洽)
+  //   W: 2 银行, 每银行 160KiB = 20480 个 64-bit 字; 引擎 w_addr 在流式模式是
+  //      **银行内**字节偏移 (0..0x27FFF), 填充口地址是银行内 64b 字序号。
+  //   Q: 2 个 8KiB 可写影子银行 (1024 个 64b 字/银行), 单层 Q <= 5,200 B。
+  // --------------------------------------------------------------------------
+  localparam int W_BANKS      = int'(nn_pkg::NN_W_BANKS);        // 2
+  localparam int W_BANK_BYTES = W_BYTES / W_BANKS;               // 160KiB
+  localparam int W_BANK_W64   = W_BANK_BYTES / 8;                // 20,480
+  localparam int W_BANK_AW    = $clog2(W_BANK_BYTES);            // 18 (0..163839)
+  localparam int Q_BANK_W64   = int'(nn_pkg::NN_Q_BANK_W64);     // 1,024
+  localparam int Q_BANK_BYTES = int'(nn_pkg::NN_Q_BANK_BYTES);   // 8KiB
+  localparam int Q_BANK_AW    = int'(nn_pkg::NN_Q_FILL_AW);      // 13 (qfill_addr 位宽)
+
+  // --------------------------------------------------------------------------
+  // [M2] 新模式输入的 X/Z -> 0 归一
+  //   为什么: 旧例化 (tb_nn_engine / proto / 黑盒) 不接这些新端口, 未接线输入是 Z;
+  //   若 Z 直接进地址 mux 会把读数据打成 X。这里用 if 语句归一 (X/Z 走 else),
+  //   综合上等价于一根线 (mux 常 0), 0 LUT 增量; 默认 0 = v0.7 ROM 兼容路径。
+  // --------------------------------------------------------------------------
+  logic w_mode_i, w_bank_sel_i, wfill_we_i, q_bank_sel_i, qfill_we_i;
+  always_comb begin
+    w_mode_i     = 1'b0;
+    if (w_mode)      w_mode_i     = 1'b1;
+    w_bank_sel_i = 1'b0;
+    if (w_bank_sel)  w_bank_sel_i = 1'b1;
+    wfill_we_i   = 1'b0;
+    if (wfill_we)    wfill_we_i   = 1'b1;
+    q_bank_sel_i = 1'b0;
+    if (q_bank_sel)  q_bank_sel_i = 1'b1;
+    qfill_we_i   = 1'b0;
+    if (qfill_we)    qfill_we_i   = 1'b1;
+  end
+
 `ifndef SYNTHESIS
   initial begin
     $display("[nn_mem] v0.7 CONFIG W=%0dKB(%0d words) Q=%0dKB(%0d x64b) A=%0dKB B=%0dKB",
@@ -155,6 +227,16 @@ module nn_mem
       $display("[nn_mem] WARN: B_OFF=0x%05x != nn_pkg::NN_B_OFF=0x%05x", B_OFF, nn_pkg::NN_B_OFF);
     if (WSEG_D <= 0)
       $display("[nn_mem] WARN: W 4 段拆分不成立 (WSEG_D=%0d)", WSEG_D);
+    $display("[nn_mem] M2 CONFIG W banks=%0d x %0dKB (%0d x64b words/bank) Q shadow=%0d x %0dKB, wlen<=128KiB",
+             W_BANKS, W_BANK_BYTES/1024, W_BANK_W64, 2, Q_BANK_BYTES/1024);
+    $display("[nn_mem] ACT CONFIG A=%0dKB B=%0dKB A_OFF=0x%05x B_OFF=0x%05x B_END=0x%05x words=%0d idx=%s",
+             A_BYTES/1024, B_BYTES/1024, A_OFF, B_OFF, B_END, ACT_WORDS,
+             ACT_ABS_OK ? "ABS-SLICE(default)" : "REL-OFFSET(big-A TB mode)");
+    if (W_BANK_W64 != 20480)
+      $display("[nn_mem] WARN: W_BANK_W64=%0d != 20480 (wfill_addr/双银行契约按 20480 定义)",
+               W_BANK_W64);
+    if (Q_BANK_W64 > QLO/2)
+      $display("[nn_mem] WARN: Q_BANK_W64=%0d 超过 lo 阵列一半 (%0d)", Q_BANK_W64, QLO/2);
   end
 `endif
 
@@ -169,31 +251,39 @@ module nn_mem
   assign q_dbg_we = dbg_we && (dbg_space == 1'b1) && (32'(dbg_addr) < 32'(Q_WORDS));
 
   // ==========================================================================
-  // W 区: 4 段 64-bit 宽 ROM, 每段两个满宽读口 (cur = mem[base], next = mem[base+1])
+  // W 区: 4 段 64-bit 宽阵列 (深度/字宽与 v0.7 完全相同 => 仍是 80 个 RAMB36)
+  //   a[0:16383] = 全局 64b 字 0..16383 (128KiB), b/c/d[0:8191] = 各 8192 (64KiB)
+  //   v0.7 的 8B 窗口语义: base = 2*w_idx + w_addr[3], cur=mem[base], next=mem[base+1],
+  //   w_rdata = {next64, cur64} (小端), W 读时延 2 拍 (wpipe 输入寄存)。
   // --------------------------------------------------------------------------
-  //   v0.7 fix(集成阻塞项): 引擎 v3 按 **8B 粒度** 发 w_addr (8-lane tile 的
-  //   row + ic*8, 奇数 ic 时 w_addr[3]=1), 需要 16B 窗口 [w_addr, w_addr+15]。
-  //   物理: 64-bit 宽阵列, base = 2*w_idx + w_addr[3]; 两个读口分别读 base/base+1,
-  //   两个 64-bit 读数据都是满宽使用 -> BRAM36 真双口, 0 额外 BRAM;
-  //   w_rdata = {next64, cur64} (小端: cur64 = 低 8B, next64 = 高 8B)。
-  //   为什么不用 128-bit 宽阵列: 8B 窗口跨 128b 字时第二读口只用 64-bit,
-  //   Vivado 会额外复制 64-bit 存储 (实测 W 147.5 tiles, 超 135 预算; 加 keep
-  //   又会落 54K LUT); 64-bit 宽 + 满宽双读最干净: 80 tiles (4KB/BRAM)。
-  //   段: A=16384 个 64b 字 (128KB), B/C/D=8192 (64KB), 共 40960 = 320KB。
-  // ==========================================================================
-  // [2026-11-01 build fix] W 共 320KB=2.62Mbit 的常量 ROM, 必须显式声明为 Block RAM ROM:
-  // 默认 auto 推断在整机 in-context 综合里会先被展开成 ~5.2M 个未映射寄存器
-  // (RTL partition 5,248,702 instances -> cross-boundary 32min + XDC 34min + timing opt 68min),
-  // 直到 Technology Mapping 才落 BRAM, 整个综合被拖到 3 小时。显式 rom_style=block 后秒过。
-  // BRAM 预算: W80 + Q12 + A/B32 + 核心 ~9.5 = 133.5/135 (仍然放得下)。
-  (* rom_style = "block" *) logic [63:0] w_mem_a [0:WSEG_A-1];
-  (* rom_style = "block" *) logic [63:0] w_mem_b [0:WSEG_B-1];
-  (* rom_style = "block" *) logic [63:0] w_mem_c [0:WSEG_C-1];
-  (* rom_style = "block" *) logic [63:0] w_mem_d [0:WSEG_D-1];
+  // [M2] 双银行 (2 x 160KiB = 2 x 20480 个 64b 字; 物理仍是这 4 段, 0 tile 增量):
+  //   bank0 = 全局字 0..20479     = a[0..16383] + b[0..4095]
+  //   bank1 = 全局字 20480..40959 = b[4096..8191] + c + d
+  //   w_mode=0 (默认): w_addr = W 区字节偏移 (0..0x4FFFF), 走全局字 w_base; 与 v0.7 逐拍一致;
+  //   w_mode=1: w_addr = **银行内**字节偏移 (0..0x27FFF), 引擎读活动银行 w_bank_sel;
+  //             wfill_* 写非活动银行 (~w_bank_sel), 64b/拍, 地址 = 银行内 64b 字序号。
+  //   每段仍是 2 个 BRAM 访问口: port A = 活动银行 cur 读; port B = (活动银行 next 读)
+  //     或 (非活动银行填充写) 分时 -> 不复制存储, 80 tiles 不变。
+  //   读地址全部是位选 (无加法器), 缩短 w_addr_q -> BRAM 地址路径:
+  //     wi = 2*w_addr[17:4] + w_addr[3] (银行内 64b 字序号 0..20479)
+  //     bank0: a_addr = wi[13:0] (wi<16384) / b_addr = wi[11:0] (wi>=16384)
+  //     bank1: b_addr = {1,wi[11:0]} (wi<4096) / c_addr = {wi[13],wi[11:0]} /
+  //            d_addr = {wi[14],wi[11:0]}
+  //   【约束】单层权重 wlen <= 131,072 B (128KiB): 否则 bank0 的 b 半区 (wi>=16384)
+  //   会同时被"引擎 next 读"和"填 bank1 的写"占用 (共享 b 段的 port B 争用)。
+  //   瓶盖模型最大层 124,416 B 满足; M3 的 nn_wload 必须检查 pre_wlen <= 131072。
+  // --------------------------------------------------------------------------
+  // [2026-11-01 build fix] 原为 (* rom_style="block" *): 320KB 常量 ROM 必须显式落 BRAM
+  // (否则自动推断先展开成 5.2M 寄存器, 整机综合 3 小时)。M2 加写口后 W 是 RAM,
+  // 改用 (* ram_style="block" *); 容量/字宽/端口数不变 => 仍推断 80 个 RAMB36。
+  (* ram_style = "block" *) logic [63:0] w_mem_a [0:WSEG_A-1];
+  (* ram_style = "block" *) logic [63:0] w_mem_b [0:WSEG_B-1];
+  (* ram_style = "block" *) logic [63:0] w_mem_c [0:WSEG_C-1];
+  (* ram_style = "block" *) logic [63:0] w_mem_d [0:WSEG_D-1];
 
   // --------------------------------------------------------------------------
   // [wpipe] NPU W 读输入寄存级: w_re/w_addr 先打一拍, BRAM 读用寄存后的地址
-  //   => W 读时延 1->2 拍; 其余逻辑 (8B 窗口 cur/next、Q、A/B、CPU、dbg) 不变。
+  //   => W 读时延 2 拍; 其余逻辑 (8B 窗口 cur/next、Q、A/B、CPU、dbg) 不变。
   //   引擎侧对应 W_RD_LAT=2 (根 nn_conv_engine 默认 2; =1 仍可配旧 mem)。
   // --------------------------------------------------------------------------
   logic        w_re_q;
@@ -208,14 +298,20 @@ module nn_mem
     end
   end
 
-  // 读地址 (来自寄存后的 w_addr_q): w_addr[18:4]=128b 字索引, w_addr[3]=8B 相位
+  // 读字索引: ROM 路径 = 全局 w_base (16b); 流式路径 = 银行内 w_wi (15b)
   logic [14:0] w_idx;
   logic        w_odd;
-  logic [15:0] w_base;      // 64-bit 字索引 = 2*w_idx + w_odd (0..40959)
+  logic [15:0] w_base, w_nbase;
+  logic [14:0] w_wi, w_nwi;
   logic [1:0]  w_seg;
-  assign w_idx  = w_addr_q[18:4];
-  assign w_odd  = w_addr_q[3];
-  assign w_base = {w_idx, 1'b0} | {15'd0, w_odd};
+  assign w_idx   = w_addr_q[18:4];
+  assign w_odd   = w_addr_q[3];
+  assign w_base  = {w_idx, w_odd};            // 2*w_idx + w_odd (0..40959)
+  assign w_nbase = w_base + 16'd1;
+  assign w_wi    = {w_addr_q[17:4], w_odd};   // 2*w_addr_q[17:4] + w_odd (0..20479)
+  assign w_nwi   = w_wi + 15'd1;
+
+  // ROM 段选择 (v0.7 原逻辑, 逐位不变)
   always_comb begin
     w_seg = 2'd3;
     if (w_base < 16'd16384)      w_seg = 2'd0;
@@ -223,7 +319,7 @@ module nn_mem
     else if (w_base < 16'd32768) w_seg = 2'd2;
   end
 
-  // 写地址 (dbg): 32-bit 字索引 -> 64-bit 字索引 + half
+  // 写地址 (dbg): 32-bit 字索引 -> 全局 64-bit 字索引 + half; 仅仿真使用
   logic [15:0] w_wr_idx;
   logic [1:0]  w_wr_seg;
   logic        w_wr_half;
@@ -236,138 +332,230 @@ module nn_mem
     else if (w_wr_idx < 16'd32768) w_wr_seg = 2'd2;
   end
 
-  // next 读地址 (第二读口): 段内 base+1; 段边界时由**下一段**的读口读第 0 个字
-  logic [13:0] w_nxt_ia;
-  logic [12:0] w_nxt_ib, w_nxt_ic, w_nxt_id;
-  assign w_nxt_ia = (w_base < 16'd16384)                            ? (w_base[13:0] + 14'd1) : 14'd0;
-  assign w_nxt_ib = ((w_base >= 16'd16384) && (w_base < 16'd24576)) ? (w_base[12:0] + 13'd1) : 13'd0;
-  assign w_nxt_ic = ((w_base >= 16'd24576) && (w_base < 16'd32768)) ? (w_base[12:0] + 13'd1) : 13'd0;
-  assign w_nxt_id = (w_base >= 16'd32768)                           ? (w_base[12:0] + 13'd1) : 13'd0;
+  // 每段 cur / next 读地址 (纯位选; next 的跨段/越界由输出 mux 处理)
+  logic [13:0] a_ca, a_na;
+  logic [12:0] b_ca, b_na, c_ca, c_na, d_ca, d_na;
+  assign a_ca = w_mode_i ? w_wi[13:0]                         : w_base[13:0];
+  assign a_na = w_mode_i ? w_nwi[13:0]                        : w_nbase[13:0];
+  assign b_ca = w_mode_i ? (w_bank_sel_i ? {1'b1, w_wi[11:0]} : w_wi[11:0])
+                         : w_base[12:0];
+  assign b_na = w_mode_i ? (w_bank_sel_i ? {1'b1, w_nwi[11:0]} : w_nwi[11:0])
+                         : w_nbase[12:0];
+  assign c_ca = w_mode_i ? {w_wi[13],  w_wi[11:0]}            : w_base[12:0];
+  assign c_na = w_mode_i ? {w_nwi[13], w_nwi[11:0]}           : w_nbase[12:0];
+  assign d_ca = w_mode_i ? {w_wi[14],  w_wi[11:0]}            : w_base[12:0];
+  assign d_na = w_mode_i ? {w_nwi[14], w_nwi[11:0]}           : w_nbase[12:0];
+
+  // --------------------------------------------------------------------------
+  // [M2] 填充写口解码: 目标银行 = ~w_bank_sel, 全局字
+  //   G = w_bank_sel ? wfill_addr        (填 bank0, 活动=bank1)
+  //                  : wfill_addr+20480  (填 bank1, 活动=bank0)
+  // --------------------------------------------------------------------------
+  logic        wfill_en, wfill_inr;
+  logic [15:0] wfill_g;
+  logic        fa_we, fb_we, fc_we, fd_we, fb_bwe;
+  logic [13:0] fa_wa;
+  logic [12:0] fb_wa, fc_wa, fd_wa;
+  assign wfill_en  = wfill_we_i && (w_mode_i == nn_pkg::NN_W_MODE_STREAM);
+  assign wfill_inr = (32'(wfill_addr) < 32'(W_BANK_W64));
+  assign wfill_g   = w_bank_sel_i ? {1'b0, wfill_addr[14:0]}
+                                  : (16'(wfill_addr[14:0]) + 16'(W_BANK_W64));
+  assign fa_we = wfill_en && wfill_inr && (wfill_g < 16'(WSEG_A));
+  assign fb_we = wfill_en && wfill_inr && (wfill_g >= 16'(WSEG_A)) &&
+                 (wfill_g < 16'(WSEG_A + WSEG_B));
+  assign fc_we = wfill_en && wfill_inr && (wfill_g >= 16'(WSEG_A + WSEG_B)) &&
+                 (wfill_g < 16'(WSEG_A + WSEG_B + WSEG_C));
+  assign fd_we = wfill_en && wfill_inr && (wfill_g >= 16'(WSEG_A + WSEG_B + WSEG_C));
+  assign fa_wa = wfill_g[13:0];
+  assign fb_wa = wfill_g[12:0];
+  assign fc_wa = wfill_g[12:0];
+  assign fd_wa = wfill_g[12:0];
+  // b 段被两个银行共享 (bank0 的高 32KiB = b[0..4095]; bank1 的低 32KiB = b[4096..8191]):
+  // 活动 bank=1 时 b 的 port B 必须留给引擎 next 读, 此时"填 bank0 高 32KiB"的写丢弃。
+  // 该写只在单层权重 >128KiB 时出现 -> 由上面的 wlen 约束排除 (最大层 124,416 B)。
+  assign fb_bwe = fb_we && ~w_bank_sel_i;
 
   logic [63:0] w_cur_a, w_cur_b, w_cur_c, w_cur_d;
   logic [63:0] w_nxt_a, w_nxt_b, w_nxt_c, w_nxt_d;
   logic [15:0] w_base_r;
+  logic [14:0] w_wi_r;
   logic [1:0]  w_seg_r;
-  logic        w_rd_valid_r;
+  logic        w_mode_r, w_bank_r;
+  logic        w_rd_valid_r, w_addr_ok;
 
+  // port A: 每段一个只读口 (cur)
+  always @(posedge clk) w_cur_a <= w_mem_a[a_ca];
+  always @(posedge clk) w_cur_b <= w_mem_b[b_ca];
+  always @(posedge clk) w_cur_c <= w_mem_c[c_ca];
+  always @(posedge clk) w_cur_d <= w_mem_d[d_ca];
+
+  // port B: 每段一个 **读写同址的单口** (read-write port):
+  //   pba = 填充写 ? 写地址 : next 读地址; 读数据始终寄存 (写拍读到的是旧值, 被忽略)。
+  //   这样每段综合成 (1 只读口 + 1 读写口) = 2 个 BRAM 访问口 -> 不复制存储, 80 tiles。
+  //   [坑, 2026-11-03 OOC 实测] 最初写成 `if (fill) 写 else 读` 且读写地址不同:
+  //   Vivado 把它当 **3 个访问口** -> W 复制成 160 tiles (OOC 需求 ~200 tiles > 135,
+  //   触发 "BRAM overutilized, implement using LUT-RAM", 实测 RAMB36=128 + 57,622 LUTRAM)。
+  //   改成"同址读写单口"(下面这种写法)后 OOC 实测 RAMB36 = 120 (W 80 + Q 8 + A/B 32)。
+  logic [13:0] a_pba;
+  logic [12:0] b_pba, c_pba, d_pba;
+  assign a_pba = fa_we   ? fa_wa : a_na;
+  assign b_pba = fb_bwe  ? fb_wa : b_na;
+  assign c_pba = fc_we   ? fc_wa : c_na;
+  assign d_pba = fd_we   ? fd_wa : d_na;
+
+  // 仿真 dbg 半字写也放在同一块里 (不同地址, 只影响仿真; 综合时该分支被去掉)
   always @(posedge clk) begin
-    w_cur_a <= w_mem_a[w_base[13:0]];
-    w_nxt_a <= w_mem_a[w_nxt_ia];
-  end
+    w_nxt_a <= w_mem_a[a_pba];
 `ifndef SYNTHESIS
-  // dbg 装载写口只存在于仿真 (综合时整个写口不存在 -> W 是纯 ROM, 两个满宽读口
-  // 才能映射成 BRAM36 真双口; SoC 里 dbg 本来就 tie 0)。
-  always @(posedge clk) begin
     if (w_dbg_we && (w_wr_seg == 2'd0)) begin
       if (w_wr_half) w_mem_a[w_wr_idx[13:0]][63:32] <= dbg_wdata;
       else           w_mem_a[w_wr_idx[13:0]][31:0]  <= dbg_wdata;
     end
-  end
 `endif
+    if (fa_we) w_mem_a[a_pba] <= wfill_wdata;
+  end
 
   always @(posedge clk) begin
-    w_cur_b <= w_mem_b[w_base[12:0]];
-    w_nxt_b <= w_mem_b[w_nxt_ib];
-  end
+    w_nxt_b <= w_mem_b[b_pba];
 `ifndef SYNTHESIS
-  always @(posedge clk) begin
     if (w_dbg_we && (w_wr_seg == 2'd1)) begin
       if (w_wr_half) w_mem_b[w_wr_idx[12:0]][63:32] <= dbg_wdata;
       else           w_mem_b[w_wr_idx[12:0]][31:0]  <= dbg_wdata;
     end
-  end
 `endif
+    if (fb_bwe) w_mem_b[b_pba] <= wfill_wdata;
+  end
 
   always @(posedge clk) begin
-    w_cur_c <= w_mem_c[w_base[12:0]];
-    w_nxt_c <= w_mem_c[w_nxt_ic];
-  end
+    w_nxt_c <= w_mem_c[c_pba];
 `ifndef SYNTHESIS
-  always @(posedge clk) begin
     if (w_dbg_we && (w_wr_seg == 2'd2)) begin
       if (w_wr_half) w_mem_c[w_wr_idx[12:0]][63:32] <= dbg_wdata;
       else           w_mem_c[w_wr_idx[12:0]][31:0]  <= dbg_wdata;
     end
-  end
 `endif
+    if (fc_we) w_mem_c[c_pba] <= wfill_wdata;
+  end
 
   always @(posedge clk) begin
-    w_cur_d <= w_mem_d[w_base[12:0]];
-    w_nxt_d <= w_mem_d[w_nxt_id];
-  end
+    w_nxt_d <= w_mem_d[d_pba];
 `ifndef SYNTHESIS
-  always @(posedge clk) begin
     if (w_dbg_we && (w_wr_seg == 2'd3)) begin
       if (w_wr_half) w_mem_d[w_wr_idx[12:0]][63:32] <= dbg_wdata;
       else           w_mem_d[w_wr_idx[12:0]][31:0]  <= dbg_wdata;
     end
-  end
 `endif
+    if (fd_we) w_mem_d[d_pba] <= wfill_wdata;
+  end
 
+  // 输出侧流水寄存 (与读数据同拍; 模式/银行/字索引一起打拍)
+  assign w_addr_ok = w_mode_i ? (32'(w_addr_q) < 32'(W_BANK_BYTES))
+                              : (32'(w_addr_q) < 32'(W_BYTES));
   always @(posedge clk) begin
     if (rst) begin
       w_base_r     <= 16'd0;
+      w_wi_r       <= 15'd0;
       w_seg_r      <= 2'd0;
+      w_mode_r     <= 1'b0;
+      w_bank_r     <= 1'b0;
       w_rd_valid_r <= 1'b0;
     end else begin
       w_base_r     <= w_base;
+      w_wi_r       <= w_wi;
       w_seg_r      <= w_seg;
-      w_rd_valid_r <= w_re_q && (32'(w_addr_q) < 32'(W_BYTES));
+      w_mode_r     <= w_mode_i;
+      w_bank_r     <= w_bank_sel_i;
+      w_rd_valid_r <= w_re_q && w_addr_ok;
     end
   end
 
-  logic [63:0] w_cur_r, w_nxt_r;
+  // ---- ROM 路径输出 (v0.7 原逻辑, 逐位不变) ----
+  logic [63:0] w_cur_rom, w_nxt_rom, w_cur_s, w_nxt_s, w_cur, w_nxt;
   always_comb begin
     case (w_seg_r)
-      2'd0:    w_cur_r = w_cur_a;
-      2'd1:    w_cur_r = w_cur_b;
-      2'd2:    w_cur_r = w_cur_c;
-      default: w_cur_r = w_cur_d;
+      2'd0:    w_cur_rom = w_cur_a;
+      2'd1:    w_cur_rom = w_cur_b;
+      2'd2:    w_cur_rom = w_cur_c;
+      default: w_cur_rom = w_cur_d;
     endcase
   end
-
   // next 64-bit 字: 正常用本段第二读口; 段边界用下一段读口读到的第 0 个字;
   // W 末字 (base=40959) 的 next 越界 -> 0
   always_comb begin
     if (w_base_r == 16'd16383)
-      w_nxt_r = w_nxt_b;             // A 末字 -> B[0]
+      w_nxt_rom = w_nxt_b;             // A 末字 -> B[0]
     else if (w_base_r == 16'd24575)
-      w_nxt_r = w_nxt_c;             // B 末字 -> C[0]
+      w_nxt_rom = w_nxt_c;             // B 末字 -> C[0]
     else if (w_base_r == 16'd32767)
-      w_nxt_r = w_nxt_d;             // C 末字 -> D[0]
+      w_nxt_rom = w_nxt_d;             // C 末字 -> D[0]
     else if (w_base_r == 16'd40959)
-      w_nxt_r = 64'b0;               // W 末字, 高 8B 越界 -> 0
+      w_nxt_rom = 64'b0;               // W 末字, 高 8B 越界 -> 0
     else case (w_seg_r)
-      2'd0:    w_nxt_r = w_nxt_a;
-      2'd1:    w_nxt_r = w_nxt_b;
-      2'd2:    w_nxt_r = w_nxt_c;
-      default: w_nxt_r = w_nxt_d;
+      2'd0:    w_nxt_rom = w_nxt_a;
+      2'd1:    w_nxt_rom = w_nxt_b;
+      2'd2:    w_nxt_rom = w_nxt_c;
+      default: w_nxt_rom = w_nxt_d;
     endcase
   end
 
+  // ---- 流式路径输出: 银行内 wi -> 段 (跨段 next / 银行末字由条件处理) ----
+  always_comb begin
+    if (!w_bank_r) begin
+      w_cur_s = (w_wi_r < 15'd16384) ? w_cur_a : w_cur_b;
+    end else begin
+      w_cur_s = (w_wi_r < 15'd4096)  ? w_cur_b :
+                (w_wi_r < 15'd12288) ? w_cur_c : w_cur_d;
+    end
+    if (w_wi_r == 15'd20479)          w_nxt_s = 64'b0;          // 银行末字
+    else if (!w_bank_r)               w_nxt_s = (w_wi_r < 15'd16383) ? w_nxt_a : w_nxt_b;
+    else                              w_nxt_s = (w_wi_r < 15'd4095)  ? w_nxt_b :
+                                                (w_wi_r < 15'd12287) ? w_nxt_c : w_nxt_d;
+  end
+
+  assign w_cur = w_mode_r ? w_cur_s : w_cur_rom;
+  assign w_nxt = w_mode_r ? w_nxt_s : w_nxt_rom;
+
   // 16B 窗口 = {高 8B (next), 低 8B (cur)}, 小端
-  assign w_rdata = w_rd_valid_r ? {w_nxt_r, w_cur_r} : 128'b0;
+  assign w_rdata = w_rd_valid_r ? {w_nxt, w_cur} : 128'b0;
 
   // ==========================================================================
-  // Q 区: 2 个 64-bit 宽 BRAM ROM (lo 4096 深 + hi 2048 深), 行为与单块 6144 深等价
+  // Q 区: ROM 路径 (w_mode=0) 与 v0.7 完全相同 = lo(4096x64 BRAM) + hi(2048x64 分布式)
   //   读: q_addr = 64-bit Q 字索引; 写: 只给 dbg 装载 (SoC 恒 0 -> ROM)
   //   [2026-11-01 build fix] 综合落 ROM: lo 4096 深用 BRAM (8 tiles);
   //   hi 2048 深改分布式 LUTRAM (~2.1K LUT, 0 BRAM) —— r10 整机 place 报
   //   "272 units needed / 270 sites" (core 实占 12 tiles), 124+12=136 差 1 tile,
   //   hi 改 LUTRAM 后 mem 120 tiles, 整机 120+12=132/135 ✓。
-  //   48KB 全 LUT 常量网络曾 5.2M cells (综合 3h), 但 hi 只 16KB 且是 LUTRAM 推断,
-  //   不会再出现该问题 (OOC 综合 ~1min)。
+  // --------------------------------------------------------------------------
+  // [M2] 流式路径 (w_mode=1): lo 的前 2048 字改作 **2 x 8KiB 可写影子银行**
+  //   bank0 = q_mem_lo[0..1023], bank1 = q_mem_lo[1024..2047];
+  //   引擎读活动银行 q_bank_sel (索引 {q_bank_sel, q_addr[9:0]}, 单层 Q <= 5,200 B);
+  //   qfill_* 写非活动银行 (~q_bank_sel), 64b/拍。
+  //   lo 从 ROM 变 RAM 但容量/字宽不变 => 仍是 8 个 RAMB36 (增量 0); hi 仍是分布式 ROM。
   // ==========================================================================
-  (* rom_style = "block" *) logic [63:0] q_mem_lo [0:QLO-1];        // 8 BRAM36
+  (* ram_style = "block" *) logic [63:0] q_mem_lo [0:QLO-1];        // 8 BRAM36
   (* rom_style = "distributed" *) logic [63:0] q_mem_hi [0:QHI-1];  // distributed ROM -> LUT 逻辑, ~1.6K LUT, 0 BRAM
 
   logic [63:0] q_rd_lo, q_rd_hi, q_rd;
-  logic        q_hi_r;
+  logic        q_hi_r, q_mode_r;
   logic        q_rd_valid_r;
-  // dbg 装载写口只存在于仿真 (综合时写块整体不存在 -> Q 是纯 ROM)。
-`ifndef SYNTHESIS
+
+  // 读地址: ROM = q_addr[11:0]; 流式 = {q_bank_sel, q_addr[9:0]}
+  logic [11:0] q_lo_ra;
+  assign q_lo_ra = w_mode_i ? {1'b0, q_bank_sel_i, q_addr[9:0]} : q_addr[11:0];
+
+  // [M2] 影子银行写口: 目标银行 = ~q_bank_sel; ROM 模式恒关闭。
+  //   与 dbg 装载口并入同一块 (仿真), 综合时 dbg 分支被去掉 => lo 是简单双口 RAM。
+  logic        qfill_en, qfill_inr;
+  logic [11:0] q_lo_wa;
+  assign qfill_en  = qfill_we_i && (w_mode_i == nn_pkg::NN_W_MODE_STREAM);
+  assign qfill_inr = (32'(qfill_addr) < 32'(Q_BANK_W64));
+  assign q_lo_wa   = {1'b0, ~q_bank_sel_i, qfill_addr[9:0]};
   always @(posedge clk) begin
-    if (q_dbg_we) begin
+    if (qfill_en && qfill_inr) begin
+      q_mem_lo[q_lo_wa] <= qfill_wdata;
+    end
+`ifndef SYNTHESIS
+    else if (q_dbg_we) begin
       if (dbg_addr[13:1] < 13'(QLO)) begin
         if (dbg_addr[0]) q_mem_lo[dbg_addr[12:1]][63:32] <= dbg_wdata;
         else             q_mem_lo[dbg_addr[12:1]][31:0]  <= dbg_wdata;
@@ -376,19 +564,24 @@ module nn_mem
         else             q_mem_hi[dbg_addr[11:1]][31:0]  <= dbg_wdata;
       end
     end
-  end
 `endif
+  end
+
   // 两段并行读 (各 1 读口), 按地址高位选择 -> 1 拍延迟不变
   always @(posedge clk) begin
-    q_rd_lo <= q_mem_lo[q_addr[11:0]];
-    q_rd_hi <= q_mem_hi[q_addr[10:0]];   // q_addr-4096 的低 11 位 (4096 = 2^12)
-    q_hi_r  <= q_addr[12];
+    q_rd_lo  <= q_mem_lo[q_lo_ra];
+    q_rd_hi  <= q_mem_hi[q_addr[10:0]];   // q_addr-4096 的低 11 位 (4096 = 2^12)
+    q_hi_r   <= q_addr[12];
+    q_mode_r <= w_mode_i;
   end
+  logic q_addr_ok;
+  assign q_addr_ok = w_mode_i ? (32'(q_addr) < 32'(Q_BANK_W64))
+                              : (32'(q_addr) < 32'(Q64));
   always @(posedge clk) begin
     if (rst) q_rd_valid_r <= 1'b0;
-    else     q_rd_valid_r <= q_re && (q_addr < 13'(Q64));
+    else     q_rd_valid_r <= q_re && q_addr_ok;
   end
-  assign q_rd     = q_hi_r ? q_rd_hi : q_rd_lo;
+  assign q_rd     = q_mode_r ? q_rd_lo : (q_hi_r ? q_rd_hi : q_rd_lo);
   assign q_rdata  = q_rd_valid_r ? q_rd : 64'b0;
 
   // ==========================================================================
@@ -416,10 +609,13 @@ module nn_mem
   logic cpu_sel_act;
   assign cpu_sel_act = (cpu_addr32 >= A_OFF) && (cpu_addr32 < B_END);
 
-  // 读地址: NPU 优先, 否则 CPU (非 A/B 时读 0 号字, 数据不使用)
-  logic [ACT_AW-1:0] act_rd_idx;
-  assign act_rd_idx = a_val_act ? a_addr[ACT_AW+3:4]
-                    : (cpu_sel_act ? cpu_addr[ACT_AW+3:4] : {ACT_AW{1'b0}});
+  // A/B 访问索引: 默认绝对位选 / 大配置相对 A_OFF 偏移 (见 ACT_ABS_OK 注释)
+  logic [ACT_AW-1:0] a_idx, b_idx, cpu_idx, act_rd_idx;
+  assign a_idx   = ACT_ABS_OK ? a_addr[ACT_AW+3:4]   : ACT_AW'((a_addr32   - A_OFF) >> 4);
+  assign b_idx   = ACT_ABS_OK ? b_addr[ACT_AW+3:4]   : ACT_AW'((b_addr32   - A_OFF) >> 4);
+  assign cpu_idx = ACT_ABS_OK ? cpu_addr[ACT_AW+3:4] : ACT_AW'((cpu_addr32 - A_OFF) >> 4);
+  assign act_rd_idx = a_val_act   ? a_idx
+                    : (cpu_sel_act ? cpu_idx : {ACT_AW{1'b0}});
 
   // 写通路: NPU 128b + strobe 优先, 否则 CPU 32b 字节写
   logic [15:0]       act_wr_en;
@@ -432,11 +628,11 @@ module nn_mem
     act_wr_idx  = {ACT_AW{1'b0}};
 
     if (b_val_act) begin
-      act_wr_idx  = b_addr[ACT_AW+3:4];
+      act_wr_idx  = b_idx;
       act_wr_en   = b_wstrb;
       act_wr_data = b_wdata;
     end else if (cpu_we && cpu_sel_act) begin
-      act_wr_idx = cpu_addr[ACT_AW+3:4];
+      act_wr_idx = cpu_idx;
       case (cpu_addr[3:2])
         2'd0: begin act_wr_en[3:0]   = cpu_wstrb; act_wr_data[31:0]    = cpu_wdata; end
         2'd1: begin act_wr_en[7:4]   = cpu_wstrb; act_wr_data[63:32]   = cpu_wdata; end

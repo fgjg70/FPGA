@@ -1,0 +1,1180 @@
+{
+ "schema": "cpu-npu-interface/v1",
+ "generated_at": "2026-11-03T23:55:00+08:00",
+ "repo_root": "D:/USER/Desktop/FPGA/FPGA",
+ "reference_project": "D:/USER/Desktop/FPGA/work/pango_bl/vision (Pango PG2L100H vision: CPU 125MHz / NPU+MMIO 50MHz decoupled)",
+ "markdown_report": "results/bottlecap/reports/CPU-NPU-DECOUPLE.md",
+ "status": "design only; no RTL/top/xdc/tcl modified",
+ "tldr": {
+  "clock_plan": "CPU 150 MHz (VCO1050/7, delivery clock) + NPU independent 100 MHz (VCO1050/10.5); MMCME2_BASE CLKOUT1 + own BUFG + own reset synchronizer",
+  "cdc_items": 10,
+  "job_registers": 20,
+  "result_mailbox_bytes": 2048,
+  "sequencer_states": [
+   "IDLE",
+   "WAIT_PREFETCH",
+   "FETCH",
+   "ISSUE",
+   "RUN",
+   "NEXT",
+   "DONE",
+   "ERR"
+  ],
+  "core_or_lsu_changes_in_mvp": 0,
+  "minimal_first_step": "S1 single-clock job interface: PASS 16 -> PASS 17, no core/LSU/engine/clock change",
+  "decouple_does_not_speed_up_npu": "NPU compute stays 40,060,598 cycles for the 2.27 GMAC bottle-cap model (2.50 fps @100MHz); decoupling buys CPU parallelism, independent NPU clock/reset, and a job container for M3/M4."
+ },
+ "clock_domains": [
+  {
+   "name": "cpu",
+   "freq_mhz": 150,
+   "source": "MMCM CLKOUT0 = VCO/7",
+   "bufg": "u_bufg_sys",
+   "modules": [
+    "core",
+    "imem",
+    "dmem",
+    "mmio_subsys",
+    "nn_job_if (job regs + status mirror + result mailbox read port)"
+   ]
+  },
+  {
+   "name": "npu",
+   "freq_mhz": 100,
+   "source": "MMCM CLKOUT1 = VCO/10.5",
+   "bufg": "u_bufg_npu",
+   "modules": [
+    "nn_subsys",
+    "nn_seq",
+    "nn_conv_engine",
+    "nn_mem (W/Q/A/B)",
+    "nn_wload (clk side)",
+    "nn_tilecache"
+   ]
+  },
+  {
+   "name": "ddr_ui",
+   "freq_mhz": "TBD (MIG ui_clk)",
+   "source": "MIG/DDR controller (not yet integrated)",
+   "modules": [
+    "beh_ddr3 (sim) / MIG (board)",
+    "nn_wload ddr_clk side"
+   ]
+  }
+ ],
+ "mmcm_options": {
+  "device_primitive": "MMCME2_BASE (no IP), VCO range 600-1200 MHz for xc7a100t-2",
+  "base_config_current": {
+   "MULT": 21,
+   "DIVCLK_DIVIDE": 1,
+   "VCO_MHz": 1050,
+   "CLKOUT0_DIVIDE_F": 7,
+   "cpu_MHz": 150,
+   "evidence": "fpga/top_a100t.sv:107-142; fpga/build.tcl:305-326; fpga/daVinciPro.xdc:28-31"
+  },
+  "options": [
+   {
+    "cpu_mhz": 150,
+    "npu_mhz": 100,
+    "vco_mhz": 1050,
+    "clkout0_div": 7.0,
+    "clkout1_div": 10.5,
+    "xdc_generated_clock": "-multiply_by 2 -divide_by 1",
+    "recommended": true,
+    "note": "both exact; NPU 100MHz already met full-impl WNS +0.136 (DELIVERY.md:223-230)"
+   },
+   {
+    "cpu_mhz": 150,
+    "npu_mhz": 105,
+    "vco_mhz": 1050,
+    "clkout0_div": 7.0,
+    "clkout1_div": 10.0,
+    "xdc_generated_clock": "-multiply_by 21 -divide_by 10",
+    "recommended": false,
+    "note": "historically verified 105MHz tier (DELIVERY.md:128)"
+   },
+   {
+    "cpu_mhz": 150,
+    "npu_mhz": 121.74,
+    "vco_mhz": 1050,
+    "clkout0_div": 7.0,
+    "clkout1_div": 8.625,
+    "xdc_generated_clock": "-multiply_by 56 -divide_by 23",
+    "recommended": false,
+    "note": "-0.4% vs 122.22; needs fresh full implementation"
+   },
+   {
+    "cpu_mhz": 150,
+    "npu_mhz": 120,
+    "vco_mhz": 1200,
+    "clkout0_div": 8.0,
+    "clkout1_div": 10.0,
+    "xdc_generated_clock": "-multiply_by 12 -divide_by 5",
+    "recommended": false,
+    "note": "requires MULT=24 (VCO 1200, upper boundary); re-verify"
+   },
+   {
+    "cpu_mhz": 150,
+    "npu_mhz": 122.22,
+    "vco_mhz": null,
+    "clkout0_div": null,
+    "clkout1_div": null,
+    "xdc_generated_clock": null,
+    "recommended": false,
+    "note": "NOT exactly synthesizable from the same VCO as CPU150: 1050/122.22=8.591 is not a 0.125 multiple; 122.22 came from VCO=1100/9 (DELIVERY.md:241)"
+   }
+  ],
+  "implementation_notes": [
+   "Add CLKOUT1_DIVIDE_F / .CLKOUT1 under `ifdef NN_EN (do not touch the delivery-build MMCM port map) to keep the no-NN_EN netlist bit-identical",
+   "New BUFG u_bufg_npu produces net nn_clk (name matches the generated-clock name, same discipline as sys_clk_core)",
+   "XDC: create_generated_clock -name nn_clk -source [get_ports sys_clk] -multiply_by <int> -divide_by <int> [get_pins u_bufg_npu/O]  (integer ratio equivalent, XDC accepts only integers)",
+   "XDC: set_clock_groups -asynchronous -group [get_clocks sys_clk_core] -group [get_clocks nn_clk]",
+   "XDC: set_max_delay -datapath_only on every handshake payload path (<= 1 target period); set_bus_skew optional",
+   "All 2FF synchronizers use (* ASYNC_REG = \"TRUE\" *); only first stage / async reset pins may be relaxed (pango CLOCK_SPLIT.md:26)",
+   "build.tcl + tools/fpga_workflow.py get an NN_NPU_CLK_DIV_F injection with a BUILD_NPU_CLK=... self-check log line (same pattern as NN_CLK_*: build.tcl:159-199,305-326)"
+  ]
+ },
+ "cdc_list": [
+  {
+   "id": "C1",
+   "channel": "job payload",
+   "direction": "cpu_to_npu",
+   "width_bits": 112,
+   "signals": [
+    "job_in[31:0]",
+    "job_out[31:0]",
+    "job_model[7:0]",
+    "job_flags[7:0]",
+    "job_frame[31:0]"
+   ],
+   "method": "holding register + toggle; payload stable until ack",
+   "constraint": "set_max_delay -datapath_only; payload unchanged until ack",
+   "evidence": "work/pango_bl/vision/rtl/vision_video_bridge.v:15-82 (same pattern)"
+  },
+  {
+   "id": "C2",
+   "channel": "doorbell toggle",
+   "direction": "cpu_to_npu",
+   "width_bits": 1,
+   "method": "2FF ASYNC_REG; npu side latches on req_sync != req_seen",
+   "constraint": "async clock group",
+   "evidence": "vision_mmio_bridge.v:79-91"
+  },
+  {
+   "id": "C3",
+   "channel": "job ack toggle",
+   "direction": "npu_to_cpu",
+   "width_bits": 1,
+   "method": "2FF ASYNC_REG",
+   "constraint": "async clock group",
+   "evidence": "vision_mmio_bridge.v:43-63"
+  },
+  {
+   "id": "C4",
+   "channel": "npu soft reset",
+   "direction": "cpu_to_npu",
+   "width_bits": 1,
+   "method": "level W1P from NN_CTRL2[0]; async assert / sync release inside npu domain",
+   "constraint": "false path on async reset pin; sync-release path constrained",
+   "evidence": "CLOCK_SPLIT.md:7,26; top_a100t.sv:159-167 (cpu-domain template)"
+  },
+  {
+   "id": "C5",
+   "channel": "busy level",
+   "direction": "npu_to_cpu",
+   "width_bits": 1,
+   "method": "2FF (level, may lag 2-3 cpu cycles)",
+   "constraint": "async clock group",
+   "evidence": "pango status bit path: vision_soc.v:143-170"
+  },
+  {
+   "id": "C6",
+   "channel": "done toggle",
+   "direction": "npu_to_cpu",
+   "width_bits": 1,
+   "method": "2FF; cpu samples C7 when toggle flips",
+   "constraint": "async clock group",
+   "evidence": "vision_npu.v:116-123; numeric_main.c:197-213"
+  },
+  {
+   "id": "C7",
+   "channel": "result payload",
+   "direction": "npu_to_cpu",
+   "width_bits": 80,
+   "signals": [
+    "frame_no[31:0]",
+    "cycles[31:0]",
+    "err[7:0]",
+    "status[7:0]"
+   ],
+   "method": "npu latches then toggles C6; cpu-side registers capture; stable until next job start",
+   "constraint": "set_max_delay -datapath_only",
+   "evidence": "vision_mmio_bridge.v:43-63 (reverse direction)"
+  },
+  {
+   "id": "C8",
+   "channel": "ack back",
+   "direction": "cpu_to_npu",
+   "width_bits": 1,
+   "method": "reuse C3 toggle flip (ack = toggle return) + optional pulse",
+   "constraint": "async clock group",
+   "evidence": "vision_npu.v:116 (acknowledge clears done)"
+  },
+  {
+   "id": "C9",
+   "channel": "result mailbox data",
+   "direction": "npu_to_cpu",
+   "width_bits": 2048,
+   "method": "true dual-port BRAM: write port npu_clk, read port cpu_clk; no synchronizer",
+   "constraint": "write happens before done toggle; cpu reads only after done",
+   "evidence": "pango result RAM 2KB: ARCHITECTURE.md:53"
+  },
+  {
+   "id": "C10",
+   "channel": "DDR ui_clk <-> npu",
+   "direction": "bidirectional",
+   "width_bits": 128,
+   "method": "async FIFO inside nn_wload (M3 already implemented)",
+   "constraint": "FIFO 2FF + max_delay",
+   "evidence": "nn_wload.sv:23-30,58-100; sim/beh_ddr3.sv:25-44"
+  },
+  {
+   "id": "C11",
+   "channel": "npu irq (optional)",
+   "direction": "npu_to_cpu",
+   "width_bits": 1,
+   "method": "2FF -> core irq_ext (MEIP)",
+   "constraint": "async clock group; tie 0 when NN_EN absent",
+   "evidence": "csr_file.sv:62-63,137-144; core.sv:1039 currently ties irq_ext 1'b0"
+  }
+ ],
+ "job_registers": {
+  "base": "0xA000_0150 (inside existing nn_mmio_sel = ext_addr[31:8]==0xA00001; current regs end at DBG2=0xA000_0148)",
+  "count": 20,
+  "registers": [
+   {
+    "off": "0x150",
+    "name": "NN_ID",
+    "rw": "R",
+    "reset": "0x4E503101",
+    "desc": "signature + version v1"
+   },
+   {
+    "off": "0x154",
+    "name": "NN_STATUS",
+    "rw": "R",
+    "reset": "0",
+    "desc": "bit0 busy, bit1 done(sticky, ack-clears), bit2 err, bit3 irq, bit4 job_pending, bit5 model_ready, bit6 npu_rst, bit7 timeout; [15:8] err_code; [31:16] npu_state"
+   },
+   {
+    "off": "0x158",
+    "name": "NN_FRAME_NO",
+    "rw": "R",
+    "reset": "0",
+    "desc": "frame number of last completed job (latched with done)"
+   },
+   {
+    "off": "0x15C",
+    "name": "NN_CYCLES",
+    "rw": "R",
+    "reset": "0",
+    "desc": "NPU-domain cycles of last job (YOLO reference 1,191,020)"
+   },
+   {
+    "off": "0x160",
+    "name": "NN_JOB_IN",
+    "rw": "W/R",
+    "reset": "0",
+    "desc": "input arena byte address; bit31=0 DDR offset (M4), bit31=1 on-chip A offset (legacy)"
+   },
+   {
+    "off": "0x164",
+    "name": "NN_JOB_OUT",
+    "rw": "W/R",
+    "reset": "0",
+    "desc": "output arena byte address (same bit31 convention)"
+   },
+   {
+    "off": "0x168",
+    "name": "NN_JOB_MODEL",
+    "rw": "W/R",
+    "reset": "0",
+    "desc": "[7:0] model_id (0 YOLO-C128, 1 Bottlecap-224, 2 Slim-160, 3 YOLO-C320); [15:8] ROM table start idx; bit16 irq_en; bit17 debug_csum; bit18 onchip_io; bit19 auto_start"
+   },
+   {
+    "off": "0x16C",
+    "name": "NN_JOB_FRAME",
+    "rw": "W/R",
+    "reset": "0",
+    "desc": "frame number echoed back on completion"
+   },
+   {
+    "off": "0x170",
+    "name": "NN_DOORBELL",
+    "rw": "W/R",
+    "reset": "0",
+    "desc": "write 1 submit; read 1 = pending/running, 0 = idle; write while busy -> dropped + NN_DROP_CNT++"
+   },
+   {
+    "off": "0x174",
+    "name": "NN_ACK",
+    "rw": "W",
+    "reset": "0",
+    "desc": "write 1 clears done/err/irq and releases the result mailbox (pango acknowledge)"
+   },
+   {
+    "off": "0x178",
+    "name": "NN_DROP_CNT",
+    "rw": "R",
+    "reset": "0",
+    "desc": "dropped doorbells/frames counter"
+   },
+   {
+    "off": "0x17C",
+    "name": "NN_TIMEOUT",
+    "rw": "W/R",
+    "reset": "0x05F5E100",
+    "desc": "job watchdog threshold in NPU cycles (100M ~= 1s @100MHz); 0 disables"
+   },
+   {
+    "off": "0x180",
+    "name": "NN_ERR_CODE",
+    "rw": "R",
+    "reset": "0",
+    "desc": "sticky error code; [7:0] code, [15:8] failing op index"
+   },
+   {
+    "off": "0x184",
+    "name": "NN_CTRL2",
+    "rw": "W/R",
+    "reset": "0",
+    "desc": "bit0 npu_reset(W1P), bit1 irq_en, bit2 debug_mode (per-op csum), bit3 pending_en (1-deep queue); [15:8] drop_policy (0 drop-new, 1 overwrite-oldest)"
+   },
+   {
+    "off": "0x188",
+    "name": "NN_JOBS_DONE",
+    "rw": "R",
+    "reset": "0",
+    "desc": "completed jobs counter (cpu domain)"
+   },
+   {
+    "off": "0x18C",
+    "name": "NN_NPU_STATE",
+    "rw": "R",
+    "reset": "0",
+    "desc": "npU debug: {seq_state[3:0], op_idx[7:0], pre_busy, tile_busy}"
+   },
+   {
+    "off": "0x190",
+    "name": "NN_FRAME_IN",
+    "rw": "W/R",
+    "reset": "0",
+    "desc": "input frame slot base (DDR offset or on-chip A)"
+   },
+   {
+    "off": "0x194",
+    "name": "NN_FRAME_STATUS",
+    "rw": "R",
+    "reset": "0",
+    "desc": "bit0 frame_ready, bit1 frame_lost; [15:8] slot; [31:16] latest frame_no low16"
+   },
+   {
+    "off": "0x198",
+    "name": "NN_RESULT_PTR",
+    "rw": "R",
+    "reset": "0",
+    "desc": "current result slot {slot[1:0], addr[29:0]}"
+   },
+   {
+    "off": "0x19C",
+    "name": "NN_RESULT_CSUM",
+    "rw": "R",
+    "reset": "0",
+    "desc": "result header FNV-1a (anti-tear / reconciliation)"
+   }
+  ],
+  "cpu_writes_per_job": [
+   "NN_JOB_IN",
+   "NN_JOB_OUT",
+   "NN_JOB_MODEL",
+   "NN_JOB_FRAME",
+   "NN_DOORBELL",
+   "NN_ACK"
+  ],
+  "evidence": [
+   "rv32_pkg.sv:385-403 (existing regs)",
+   "top_a100t.sv:265 (nn_mmio_sel covers 0xA000_0100..0x01FF)",
+   "results/ai-accel/CONTRACT.md:73-100"
+  ]
+ },
+ "result_mailbox": {
+  "bytes": 2048,
+  "words": 512,
+  "implementation": "true dual-port BRAM (1 tile): write port npu_clk (nn_subsys on job completion), read port cpu_clk mapped into the existing nn_* data window (1-cycle registered read, core unchanged)",
+  "cpu_window": {
+   "base": "0x9004_0000 (NN_BASE)",
+   "offset": "0x00000..0x007FF = mailbox in decoupled mode; 0x00800+ = legacy A/B (kept only in single-clock legacy build)",
+   "read_latency": "1 cycle",
+   "evidence": "core.sv:1541-1560; nn_subsys.sv:147-149; nn_mem.sv:415-417"
+  },
+  "layout": [
+   {
+    "off": "0x000",
+    "field": "magic",
+    "value": "0x4E505552 ('NPUR')"
+   },
+   {
+    "off": "0x004",
+    "field": "frame_no"
+   },
+   {
+    "off": "0x008",
+    "field": "status/err_code"
+   },
+   {
+    "off": "0x00C",
+    "field": "cycles"
+   },
+   {
+    "off": "0x010",
+    "field": "model_id/flags"
+   },
+   {
+    "off": "0x014",
+    "field": "result_slot_ddr_addr"
+   },
+   {
+    "off": "0x018",
+    "field": "csum (FNV-1a of header+summary)"
+   },
+   {
+    "off": "0x01C",
+    "field": "num_heads"
+   },
+   {
+    "off": "0x020..0x7FF",
+    "field": "reserved (scalar/small results; big tensors live in DDR output arena)"
+   }
+  ],
+  "anti_tear": "header (magic+frame_no) written last; consumer checks magic+frame_no+csum; NPU does not start the next job before ACK (pango start && !done semantics)",
+  "evidence": [
+   "ARCHITECTURE.md:53 (pango result RAM 2KB)",
+   "vision_npu.v:116-123",
+   "vision_soc.v:143-170"
+  ]
+ },
+ "ddr_map": {
+  "assumption": "2 DDR3 chips on board (user-confirmed, interfaces TBD); 32-bit total width assumed; MIG not yet integrated (zero evidence in repo)",
+  "regions": [
+   {
+    "start": "0x0000_0000",
+    "size": "16 MB",
+    "use": "video/camera frame buffer (P3 reservation)",
+    "evidence": "P3-320-ARENA.md:11-13; WEIGHT-STREAMING-DESIGN.md:108-118"
+   },
+   {
+    "start": "0x0100_0000",
+    "size": "4 MB",
+    "use": "activation arena (measured peak 1,806,336 B)",
+    "evidence": "DDR3-FEASIBILITY.md:167-183"
+   },
+   {
+    "start": "0x0140_0000",
+    "size": "2 MB",
+    "use": "weight image (2,020,960 B, op-order contiguous, 16B aligned)",
+    "evidence": "WEIGHT-STREAMING-DESIGN.md:114,117"
+   },
+   {
+    "start": "0x0160_0000",
+    "size": "128 KB",
+    "use": "Q image (90,048 B)",
+    "evidence": "WEIGHT-STREAMING-DESIGN.md:115"
+   },
+   {
+    "start": "0x0162_0000",
+    "size": "128 KB",
+    "use": "output/result arena: 3 slots x 32KB (triple buffering; YOLO 20.4KB, bottlecap 28.2KB per frame)",
+    "new": true
+   },
+   {
+    "start": "0x0164_0000",
+    "size": "256 KB",
+    "use": "input frame double buffer (2 x 128KB; 224-packed 150,528B/frame needs 2x160KB -> may live in the 16MB video region instead)",
+    "new": true
+   },
+   {
+    "start": "0x0168_0000",
+    "size": "512 KB",
+    "use": "reserved (model table / persistent mailbox / DDR self-test image / future batch)",
+    "new": true
+   }
+  ]
+ },
+ "onchip_assets": {
+  "current": {
+   "W": "320KB, 80 BRAM36, ROM (M2: 2x160KiB writable banks)",
+   "Q": "48KB (lo 8 tiles BRAM + hi LUTRAM)",
+   "A": "96KB (24 tiles)",
+   "B": "32KB (8 tiles)",
+   "ROM": "128 x 256 bit (v1)",
+   "nn_mem_tiles": 120,
+   "core_tiles": 12,
+   "total": "132/135, 3 free"
+  },
+  "decoupled_recommendation": {
+   "W": "2 banks x 128KiB = 64 tiles (max layer 124,416 B; nn_wload already caps prefetch at 128KiB) -> frees 16 tiles",
+   "Q": "2 x 8KiB shadow banks (M2)",
+   "A_B": "reused as M4 IBUF/OBUF tile cache (IBUF 2x16KB + OBUF 2x12KB = 56KB = 12.4 tiles)",
+   "ROM": "128 x 256 bit = 1-2 tiles (256 deep if runtime model switching is required)",
+   "result_mailbox": "2KB TDP BRAM = 1 tile",
+   "budget_after": "W64 + Q8 + A/B32 + ROM2 + mailbox1 + job LUTRAM ~= 107 tiles -> ~28 free (tile cache 12.4 + headroom)"
+  },
+  "evidence": [
+   "nn_pkg.sv:43-60,118-148",
+   "nn_mem.sv:91-144",
+   "nn_wload.sv:48-55",
+   "mem-report.md:104,223-245",
+   "SPEC-SPECIALIZED.md:71-77"
+  ]
+ },
+ "cpu_window_policy": {
+  "legacy_single_clock_build": "keep A/B mapping unchanged (C128 YOLO E2E, tb_nn_mem, tb_sw_nn_yolo depend on it); busy -> 0xDEADBEEF",
+  "decoupled_build": "disable CPU A/B access (read 0, write ignored + err); map window offset 0x00000..0x007FF to the 2KB result mailbox; CPU never touches A/B (pango-style private NPU RAM)",
+  "why_no_A_B_cdc": "a 512KB CPU data window crossing two clocks would need a full window bridge (read latency + CDC); decoupling removes the need entirely; the only result path is the 2KB TDP mailbox",
+  "evidence": [
+   "nn_subsys.sv:147-149",
+   "nn_mem.sv:415-417",
+   "core.sv:1541-1560",
+   "ARCHITECTURE.md:12-18,53"
+  ]
+ },
+ "frame_pipeline": {
+  "input": {
+   "buffers": 2,
+   "placement": "DDR input arena (or on-chip A for slim/legacy)",
+   "commit": "producer writes last byte -> frame_commit pulse + frame_no + slot -> NN_FRAME_STATUS.frame_ready",
+   "start_modes": [
+    "CPU doorbell (default)",
+    "auto_start on new frame (pango-style, CTRL2.bit19)"
+   ],
+   "drop_policy": "if NPU busy OR done-not-acked -> drop new frame (DROP_CNT++, frame_lost=1); never overwrite the buffer in use; do not pause the producer (pango: camera/LCD never pause)",
+   "evidence": [
+    "ARCHITECTURE.md:20",
+    "vision_snapshot.v:50-71"
+   ]
+  },
+  "output": {
+   "buffers": 3,
+   "slot_bytes": 32768,
+   "write_order": "tensors first, header (magic/frame_no/model/flags/csum) last",
+   "consume": "CPU/display reads only a done + unacked slot; ACK releases it; 3rd slot + flow control prevents overwrite",
+   "anti_tear": "magic+frame_no+csum match; display commits at frame boundary (pango vision_soc.v:269-280)",
+   "evidence": [
+    "ARCHITECTURE.md:20,89",
+    "vision_soc.v:269-280"
+   ]
+  },
+  "pitfalls": [
+   {
+    "id": "K1",
+    "pitfall": "frame drop policy inconsistent (overwrite in-use buffer)",
+    "mitigation": "double buffer + busy/done gating; drop new frame instead of overwriting; drop counter"
+   },
+   {
+    "id": "K2",
+    "pitfall": "input tearing (NPU reads half a frame)",
+    "mitigation": "commit after last byte; NPU only consumes frame_ready; check frame_no"
+   },
+   {
+    "id": "K3",
+    "pitfall": "output/display tearing",
+    "mitigation": "triple buffer + header last + frame-boundary commit"
+   },
+   {
+    "id": "K4",
+    "pitfall": "job hang -> whole system looks dead",
+    "mitigation": "job watchdog + per-op watchdog + err code + jobs_done reconciliation; CPU 1s-no-result check"
+   },
+   {
+    "id": "K5",
+    "pitfall": "reset isolation violation",
+    "mitigation": "independent npu reset; only NPU domain + pending cleared; mailbox/CPU counters cleared by software"
+   },
+   {
+    "id": "K6",
+    "pitfall": "CDC handshake stuck",
+    "mitigation": "both-side timeout, single outstanding transaction, ack toggle; cpu_timeout sticky"
+   },
+   {
+    "id": "K7",
+    "pitfall": "multi-bit payload tear",
+    "mitigation": "stable payload + toggle; unchanged until ack; max_delay constraint"
+   },
+   {
+    "id": "K8",
+    "pitfall": "priority inversion (CPU polling starves NPU)",
+    "mitigation": "job/status live in CPU domain (0-wait mirror); only debug regs use the wait bridge"
+   },
+   {
+    "id": "K9",
+    "pitfall": "frame_no wrap",
+    "mitigation": "unsigned difference (pango convention)"
+   },
+   {
+    "id": "K10",
+    "pitfall": "done set before DDR writes complete",
+    "mitigation": "wait ddr_wr_done before writing mailbox header/toggle"
+   }
+  ]
+ },
+ "wait_state_protocol": {
+  "option_P_recommended_mvp": {
+   "changes": "none in core/LSU",
+   "how": "job regs + status mirror in CPU clock domain; posted payload+toggle crossing; 2KB TDP result mailbox read via existing nn window; no CPU stall"
+  },
+  "option_W_pango_style": {
+   "purpose": "coherent MMIO reads of NPU-private debug registers (and optional IRQ)",
+   "core_lsu_changes": [
+    {
+     "id": "W1",
+     "file": "core.sv",
+     "loc": "ext port block :74-80",
+     "change": "add input logic ext_ready (inside ifdef NN_EN)"
+    },
+    {
+     "id": "W2",
+     "file": "core.sv",
+     "loc": "new wire near ext ports",
+     "change": "wire external_wait = NN_EN_WAIT && (ext_we||ext_re) && !ext_ready;  (ext_we/ext_re generated at :1576-1582)"
+    },
+    {
+     "id": "W3",
+     "file": "core.sv",
+     "loc": ":1281 (hazard_unit instantiation .lsu_stall(lsu_stall))",
+     "change": ".lsu_stall(lsu_stall || external_wait)"
+    },
+    {
+     "id": "W4",
+     "file": "load_store_unit.sv",
+     "loc": "state machine :285-309 and captures :335,:372-377",
+     "change": "add input logic stall_external; gate state advance + head/spec capture with if (!stall_external)"
+    },
+    {
+     "id": "W5",
+     "file": "core.sv",
+     "loc": ":1548-1560 (ext_rdata_r/sel_*_r capture)",
+     "change": "wrap capture with if (!external_wait)"
+    },
+    {
+     "id": "W6",
+     "file": "core.sv",
+     "loc": ":1633-1647 (wb_data mux)",
+     "change": "no change needed in default build (wb_data driven by registered ext_rdata_r after W5); pango's wait_wb_data only needed if the read path is combinational"
+    },
+    {
+     "id": "W7",
+     "file": "fpga/top_a100t.sv",
+     "loc": ":263-266",
+     "change": "ext_ready = nn_mmio_sel ? nn_ready : 1'b1; drive nn_ready from nn_cdc_bridge"
+    },
+    {
+     "id": "W8",
+     "file": "top/core ports",
+     "loc": "all",
+     "change": "everything inside ifdef NN_EN; no-NN_EN netlist bit-identical"
+    }
+   ],
+   "per_access_cost": "~6-9 CPU cycles at 150/100 ratio (2FF sync + execute + 2FF back)",
+   "pango_reference": [
+    "work/pango_bl/vision/rtl/cpu/core.v:4,172-173,470,512,540-554,595",
+    "work/pango_bl/vision/rtl/cpu/load_store_unit.v:6,30,127",
+    "work/pango_bl/vision/CLOCK_SPLIT.md:26-28"
+   ]
+  }
+ },
+ "modules_to_add": {
+  "nn_job_if": {
+   "type": "new RTL",
+   "clock_domains": "cpu (regs/mailbox read) + npu (handshake side)",
+   "ports": {
+    "cpu": [
+     "cpu_clk",
+     "cpu_rst",
+     "cpu_we",
+     "cpu_re",
+     "cpu_addr[31:0]",
+     "cpu_wdata[31:0]",
+     "cpu_wstrb[3:0]",
+     "cpu_rdata[31:0]"
+    ],
+    "npu": [
+     "npu_clk",
+     "npu_rst",
+     "job_start",
+     "job_desc{in,out,model,frame,flags}",
+     "npu_busy",
+     "npu_done",
+     "npu_err[7:0]",
+     "npu_cycles[31:0]",
+     "job_abort"
+    ],
+    "mailbox": [
+     "mb_wr_clk",
+     "mb_wr_en",
+     "mb_wr_addr[8:0]",
+     "mb_wr_data[31:0]",
+     "mb_rd_clk",
+     "mb_rd_addr[8:0]",
+     "mb_rd_data[31:0]"
+    ]
+   },
+   "function": "job registers + doorbell/ack posted CDC + status mirror (done/frame/cycles/err) + 2KB TDP result mailbox + frame-ready/drop counters + npu reset"
+  },
+  "nn_cdc_bridge": {
+   "type": "new RTL (optional, option W)",
+   "ports": {
+    "cpu": [
+     "cpu_clk",
+     "cpu_rst",
+     "cpu_req",
+     "cpu_we",
+     "cpu_addr[31:0]",
+     "cpu_wdata[31:0]",
+     "cpu_wstrb[3:0]",
+     "cpu_ready",
+     "cpu_rdata[31:0]",
+     "cpu_timeout"
+    ],
+    "npu": [
+     "npu_clk",
+     "npu_rst",
+     "npu_re",
+     "npu_we",
+     "npu_addr[31:0]",
+     "npu_wdata[31:0]",
+     "npu_wstrb[3:0]",
+     "npu_rdata[31:0]"
+    ]
+   },
+   "internal": "single outstanding transaction, 70-bit held request, req/ack toggles with 2FF, timeout counter, stale-toggle watchdog",
+   "reference": "work/pango_bl/vision/rtl/vision_mmio_bridge.v:22-92",
+   "timeout_cycles_default": 1024
+  },
+  "nn_frame_if": {
+   "type": "new RTL (optional, S3)",
+   "function": "input frame double buffer commit/drop + output triple buffer seq/ack + frame_no/csum/anti-tear"
+  }
+ },
+ "sequencer_job_mode": {
+  "current": {
+   "states": [
+    "IDLE",
+    "FETCH",
+    "ISSUE",
+    "WAIT",
+    "NEXT",
+    "DONE",
+    "ERR"
+   ],
+   "per_op_cycles": 4,
+   "guard_max": 4000000,
+   "evidence": "nn_seq.sv:44-66,114-139"
+  },
+  "target_states": [
+   "IDLE",
+   "WAIT_PREFETCH",
+   "FETCH",
+   "ISSUE",
+   "RUN",
+   "NEXT",
+   "DONE",
+   "ERR"
+  ],
+  "changes": [
+   {
+    "state": "IDLE",
+    "change": "accept job_start; latch model_id/table_start/input/output/frame_no; clear cycles/err"
+   },
+   {
+    "state": "WAIT_PREFETCH",
+    "change": "issue pre_start for layer0 (M3 nn_wload); wait pre_done; pre_err -> ERR 0xE6"
+   },
+   {
+    "state": "FETCH",
+    "change": "op_idx = table_start + model_local_idx; ROM v1 256-bit fields incl wlen/qlen/tile"
+   },
+   {
+    "state": "ISSUE",
+    "change": "engine start; M4 tile mode: one start per band (tile.band_rows); engine ports unchanged"
+   },
+   {
+    "state": "RUN",
+    "change": "wait eng_done; accumulate cycles; eng_err -> ERR; on op end toggle w_bank_sel and prefetch next layer (M3)"
+   },
+   {
+    "state": "DONE",
+    "change": "write result mailbox header (magic/frame/cycles/err/csum); set job done; wait ACK"
+   },
+   {
+    "state": "ERR",
+    "change": "latch err_code + failing op idx; set done+err; wait ACK"
+   },
+   {
+    "global": "job watchdog counter from IDLE, abort -> ERR 0xE4; per-op guard kept (0xE3); op_idx bounded by NN_ROM_LEN; illegal kind -> 0xE5"
+   }
+  ],
+  "handoff": {
+   "M3": "pre_start/pre_done/pre_err from nn_wload; wlen/qlen from ROM v1",
+   "M4": "band/tile descriptor + tile cache fill/flush credit; per-band engine start driven by nn_seq",
+   "M2": "w_bank_sel toggle + fill ports",
+   "M5": "nn_subsys job regs (this design) + result mailbox write port"
+  }
+ },
+ "error_codes": {
+  "0xE1": "illegal descriptor / ROM entry (ic/oc/shape)",
+  "0xE2": "CPU window access violation while NPU owns A/B (decoupled mode: write ignored + err)",
+  "0xE3": "per-op watchdog timeout (nn_seq.sv GUARD_MAX)",
+  "0xE4": "job watchdog timeout (NN_TIMEOUT)",
+  "0xE5": "ROM runaway / illegal kind / model table out of range",
+  "0xE6": "DDR/prefetch error (nn_wload pre_err / DDR model err)",
+  "0xE7": "unsupported model id",
+  "layout": "NN_ERR_CODE = {failing_op_idx[15:8], code[7:0]}"
+ },
+ "relations": {
+  "M1_engine": "no coupling; engine ports unchanged",
+  "M2_nn_mem": "uses existing w_mode/w_bank_sel/wfill_*/qfill_* ports (nn_mem.sv:133-143); recommend W bank 128KiB to free 16 tiles",
+  "M3_stream": "S_WAIT_PREFETCH calls nn_wload; job_in/job_out are the DDR addresses; wlen/qlen come from ROM v1",
+  "M4_tile": "job supplies arena addresses; band loop driven by nn_seq; tile cache exposed through unchanged engine a/b ports",
+  "M5_subsys": "this design is the M5 input spec (registers + FSM + CDC + mailbox)",
+  "task_11_perf": {
+   "orthogonal": true,
+   "fps_projection": [
+    {
+     "config": "current same-clock 100MHz, 128 MAC/cycle",
+     "fps": 2.5,
+     "evidence": "DDR3-FEASIBILITY.md:141-153"
+    },
+    {
+     "config": "decoupled 100MHz, 128 MAC/cycle",
+     "fps": 2.5,
+     "note": "same compute; CPU now free and NPU independently reset/clocked"
+    },
+    {
+     "config": "decoupled 121.74MHz, 128 MAC/cycle",
+     "fps": 3.05,
+     "note": "needs full impl re-run at 121.74"
+    },
+    {
+     "config": "decoupled 121.74MHz + 256 MAC/cycle (task-11)",
+     "fps": "~5.5-6 (paper estimate)"
+    },
+    {
+     "config": "decoupled 121.74MHz + 512 MAC/cycle (task-11)",
+     "fps": "~9-10 (paper estimate, resource/timing TBD by task-11)"
+    }
+   ],
+   "caveat": "decoupling does not change NPU compute (40,060,598 cycles @100MHz for the 2.27 GMAC bottle-cap model); pango states the same (CLOCK_SPLIT.md:46)"
+  }
+ },
+ "minimal_steps": [
+  {
+   "id": "S1",
+   "name": "single-clock job interface",
+   "recommended_first": true,
+   "changes": [
+    "new nn_job_if.sv (single-clock mode)",
+    "nn_subsys.sv: job ports + job mode (reuse MODE_AUTO path)",
+    "rv32_pkg.sv: 20 MMIO constants 0xA000_0150..0x19C",
+    "new sw/nn_job_demo.c",
+    "new sim/tb_nn_job.sv",
+    "Lead: register files in build.tcl/read_verilog + fpga_workflow.py CORE_SV_ORDER and test matrix"
+   ],
+   "criteria": [
+    "tb_nn_job: NN_JOB_TB PASS",
+    "npu_cycles == 1,191,020",
+    "mailbox csum == golden",
+    "python tools/fpga_workflow.py verify --force -> PASS 17 (old 16 unchanged, npu_cycles unchanged)"
+   ],
+   "risk": "low",
+   "est_work": "4 files + 1 TB + 1 firmware"
+  },
+  {
+   "id": "S2",
+   "name": "dual clock + CDC (option P, core untouched)",
+   "changes": [
+    "top_a100t.sv: MMCM CLKOUT1 + u_bufg_npu + dual reset synchronizers (inside ifdef NN_EN)",
+    "move nn_subsys to nn_clk; job_if CDC mode (C1-C9)",
+    "new nn_cdc_bridge.sv (debug only, optional)",
+    "xdc: nn_clk generated clock + async clock groups + max_delay; build.tcl NPU clock injection",
+    "new sim/tb_nn_cdc.sv"
+   ],
+   "criteria": [
+    "tb_nn_cdc: 1000 random jobs, 0 lost / 0 torn payload / done-ack 1:1",
+    "timeout injection -> cpu_timeout",
+    "npu reset does not disturb cpu counters",
+    "report_cdc: no unconstrained async crossings",
+    "single-clock build still PASS 17; dual-clock synth WNS >= 0 in both domains"
+   ],
+   "risk": "medium",
+   "est_work": "2 new files + 3 modified + 2 TBs + constraints"
+  },
+  {
+   "id": "S3",
+   "name": "frame pipeline + auto start + private DDR memory",
+   "changes": [
+    "nn_job_if/nn_frame_if: input double buffer, output triple buffer, auto_start, drop policy",
+    "nn_subsys/nn_job_if: job timeout/error codes/NPU state",
+    "nn_seq.sv: job FSM + prefetch/tile hooks; nn_wload/nn_tilecache wiring",
+    "ddr map + MIG integration (when user inputs arrive)"
+   ],
+   "criteria": [
+    "tb_nn_framepipe: 30fps producer vs 2.5fps NPU -> exact drop counts, no tear (magic/frame/csum)",
+    "timeout/ROM-error injection -> correct err code and recovery",
+    "job-mode E2E: per-op FNV == converter golden",
+    "verify --force only grows"
+   ],
+   "risk": "medium-high",
+   "est_work": "2 new files + 3 modified + 2 TBs + MIG integration"
+  }
+ ],
+ "risks": [
+  {
+   "id": "R1",
+   "risk": "DDR3/MIG not integrated (no pins/IP/ref clock in repo; 6 user inputs missing)",
+   "prob": "high",
+   "impact": "blocks S3",
+   "mitigation": "use sim/beh_ddr3.sv for full-chain simulation; S1/S2 do not depend on DDR",
+   "evidence": "DDR3-FEASIBILITY.md:16-27,49-73"
+  },
+  {
+   "id": "R2",
+   "risk": "CDC constraint/reset errors",
+   "prob": "medium",
+   "impact": "rare wrong frames, hard to reproduce",
+   "mitigation": "3 crossing structures only; tb_nn_cdc random stress; report_cdc gate; ASYNC_REG",
+   "evidence": "CLOCK_SPLIT.md:26"
+  },
+  {
+   "id": "R3",
+   "risk": "payload tearing",
+   "prob": "medium",
+   "impact": "wrong address/frame number",
+   "mitigation": "stable payload + toggle + unchanged until ack + max_delay",
+   "evidence": "vision_video_bridge.v:15-82"
+  },
+  {
+   "id": "R4",
+   "risk": "NPU-domain timing margin (current 100MHz WNS +0.136)",
+   "prob": "medium",
+   "impact": "blocks higher NPU clock",
+   "mitigation": "independent constraints; deliver 100MHz first; 121.74 as target with fresh impl",
+   "evidence": "DELIVERY.md:223-230"
+  },
+  {
+   "id": "R5",
+   "risk": "only 3 spare BRAM tiles",
+   "prob": "high",
+   "impact": "tile cache does not fit",
+   "mitigation": "shrink W banks 160->128KiB (frees 16 tiles; nn_wload already caps at 128KiB)",
+   "evidence": "SPEC-SPECIALIZED.md:71-77; nn_wload.sv:48-55"
+  },
+  {
+   "id": "R6",
+   "risk": "core/LSU changes regress all tests (option W only)",
+   "prob": "medium",
+   "impact": "all tests",
+   "mitigation": "option P MVP changes nothing; option W under ifdef NN_EN and stall_external=0 must be cycle-identical",
+   "evidence": "core.sv:1281; load_store_unit.sv:285-309"
+  },
+  {
+   "id": "R7",
+   "risk": "multi-model ROM depth (YOLO 112 + bottlecap 105 > 128)",
+   "prob": "medium",
+   "impact": "runtime model switching impossible",
+   "mitigation": "one model per bitstream by default; ROM 256 (2 tiles) if switching is required; job_model selects table range",
+   "evidence": "nn_pkg.sv:118; ROM-V1.md:39-51"
+  },
+  {
+   "id": "R8",
+   "risk": "no engine abort port",
+   "prob": "medium",
+   "impact": "job timeout cannot stop the engine instantly",
+   "mitigation": "timeout sets err/clears busy; rely on per-op 4M guard; add eng_abort later",
+   "evidence": "nn_seq.sv:129-133,44-45"
+  },
+  {
+   "id": "R9",
+   "risk": "mailbox read/write concurrency",
+   "prob": "low",
+   "impact": "CPU reads half-new data",
+   "mitigation": "read only after done; ACK before next write; TDP BRAM"
+  },
+  {
+   "id": "R10",
+   "risk": "IRQ needs a new core port (irq_ext tied 0)",
+   "prob": "low",
+   "impact": "no interrupts",
+   "mitigation": "poll first (pango-style); IRQ later via core port + existing csr MEIP support",
+   "evidence": "core.sv:1039; csr_file.sv:62-63,137-144"
+  }
+ ],
+ "verification_plan": [
+  {
+   "tb": "tb_nn_job",
+   "step": "S1",
+   "clocks": "single 50MHz like tb_sw",
+   "criteria": [
+    "NN_JOB_TB PASS",
+    "npu_cycles == 1,191,020",
+    "mailbox csum == golden"
+   ],
+   "evidence": "sim/tb_sw.sv:54,65"
+  },
+  {
+   "tb": "tb_nn_cdc",
+   "step": "S2",
+   "clocks": "dual 150/100",
+   "criteria": [
+    "1000 random jobs: 0 lost, 0 torn",
+    "done-ack 1:1",
+    "timeout path",
+    "npu reset isolation"
+   ],
+   "reference": "work/pango_bl/vision/sim/tb_cdc.v:5-7,43-77,100-120"
+  },
+  {
+   "tb": "tb_nn_framepipe",
+   "step": "S3",
+   "clocks": "dual + behavioral DDR",
+   "criteria": [
+    "drop counter exact",
+    "no tear (magic/frame/csum)",
+    "reset isolation"
+   ]
+  },
+  {
+   "tb": "tb_nn_decouple_e2e",
+   "step": "S3",
+   "clocks": "dual + +nnwq/DDR image",
+   "criteria": [
+    "YOLO 112-op via job mode: per-op FNV == golden",
+    "npu_cycles unchanged"
+   ]
+  },
+  {
+   "tb": "verify --force",
+   "step": "all",
+   "criteria": [
+    "PASS 16 -> 17 -> ... (never decrease)",
+    "delivery build (no NN_EN): LUT 3098 / FF 1447 / BRAM 9 / DSP 8 / WNS +0.007 / fmax 150.2 unchanged"
+   ],
+   "evidence": "DELIVERY.md:266-284; .fpga-cache/verify-state.json"
+  }
+ ],
+ "future_files": {
+  "new_rtl": [
+   "nn_job_if.sv",
+   "nn_cdc_bridge.sv",
+   "nn_frame_if.sv"
+  ],
+  "modified_rtl": [
+   "fpga/top_a100t.sv",
+   "nn_subsys.sv",
+   "nn_seq.sv",
+   "(option W only) core.sv",
+   "(option W only) load_store_unit.sv"
+  ],
+  "pkg_and_registration": [
+   "nn_pkg.sv",
+   "rv32_pkg.sv",
+   "fpga/daVinciPro.xdc",
+   "fpga/build.tcl",
+   "tools/fpga_workflow.py"
+  ],
+  "tb": [
+   "sim/tb_nn_job.sv",
+   "sim/tb_nn_cdc.sv",
+   "sim/tb_nn_framepipe.sv",
+   "sim/tb_nn_decouple_e2e.sv"
+  ],
+  "software": [
+   "sw/nn_job_demo.c"
+  ]
+ },
+ "open_questions": [
+  {
+   "id": "Q1",
+   "question": "DDR3 part/pins/ref clock/rate/usage split/MIG-IP policy (6 user inputs)",
+   "status": "missing; blocks S3",
+   "evidence": "DDR3-FEASIBILITY.md:63-73"
+  },
+  {
+   "id": "Q2",
+   "question": "Runtime model switching required? (YOLO + bottlecap + slim share one ROM?)",
+   "status": "needs decision: single-model bitstream (ROM depth 128) vs ROM 256 (2 tiles)",
+   "evidence": "nn_pkg.sv:118; ROM-V1.md:39-51"
+  },
+  {
+   "id": "Q3",
+   "question": "NPU target frequency for the decoupled build (100 vs 121.74 vs 120)",
+   "status": "recommend 100 first; 121.74 requires fresh full implementation"
+  },
+  {
+   "id": "Q4",
+   "question": "W bank size in M2: keep 2x160KiB or shrink to 2x128KiB to free 16 BRAM tiles for tile cache?",
+   "status": "recommend 128KiB (max layer 124,416 B; nn_wload caps 128KiB)"
+  },
+  {
+   "id": "Q5",
+   "question": "IRQ required or is polling enough?",
+   "status": "pango used polling; IRQ needs a new core port (irq_ext tied 0 today)"
+  },
+  {
+   "id": "Q6",
+   "question": "Input producer for bring-up: CPU synthetic frame writer vs camera DVP vs DDR DMA",
+   "status": "design supports all three; camera RTL not present in this repo line"
+  }
+ ],
+ "evidence_index": {
+  "pango_reference": [
+   "work/pango_bl/vision/ARCHITECTURE.md:5,20,45,53,57-89",
+   "work/pango_bl/vision/CLOCK_SPLIT.md:5,13-30,46",
+   "work/pango_bl/vision/rtl/vision_mmio_bridge.v:22-92",
+   "work/pango_bl/vision/rtl/vision_soc.v:99-121,130-170,269-280",
+   "work/pango_bl/vision/rtl/vision_snapshot.v:50-71",
+   "work/pango_bl/vision/rtl/vision_npu.v:3-17,64,116-123",
+   "work/pango_bl/vision/rtl/vision_video_bridge.v:15-82",
+   "work/pango_bl/vision/firmware/numeric_main.c:32-36,197-213",
+   "work/pango_bl/vision/rtl/cpu/core.v:4,172-173,470,512,540-554,595",
+   "work/pango_bl/vision/rtl/cpu/load_store_unit.v:6,30,127",
+   "work/pango_bl/vision/sim/tb_cdc.v:5-7,43-77,100-120"
+  ],
+  "our_repo": [
+   "fpga/top_a100t.sv:107-167,177-187,192-222,228-256,263-299",
+   "fpga/daVinciPro.xdc:5,28-31,34-49",
+   "fpga/build.tcl:149,159-199,305-326",
+   "core.sv:74-80,1039,1264-1290,1367-1386,1400-1425,1535-1560,1576-1585,1602-1647",
+   "load_store_unit.sv:85-92,285-309,335,372-377",
+   "csr_file.sv:62-63,89-91,137-144,197",
+   "rv32_pkg.sv:326-327,385-403,434-435",
+   "nn_subsys.sv:32-66,71-96,147-153,210-257,262-282,287-383,388-412",
+   "nn_seq.sv:44-66,114-139,141-184",
+   "nn_mem.sv:91-144,156-185",
+   "nn_pkg.sv:35-60,65-107,118-148",
+   "nn_wload.sv:23-100",
+   "sim/beh_ddr3.sv:25-65",
+   "tools/fpga_workflow.py:1125-1143,1147-1179,3333-3335",
+   "sim/tb_sw.sv:54,65,83-160"
+  ],
+  "reports": [
+   "results/ai-accel/CONTRACT.md:43,73-100,446-459,477-491",
+   "results/ai-accel/DELIVERY.md:128,223-244,266-284",
+   "results/bottlecap/reports/PLAN-V1.md:16-45,65-71,83-109",
+   "results/bottlecap/ddr3/DDR3-FEASIBILITY.md:16-27,49-94,141-153,167-183",
+   "results/bottlecap/ddr3/WEIGHT-STREAMING-DESIGN.md:38-148",
+   "results/bottlecap/ddr3/ROM-V1.md:39-51,84-108,133-156",
+   "results/ai-accel/P3-320-ARENA.md:11-13",
+   "results/ai-accel/SPEC-SPECIALIZED.md:71-77"
+  ]
+ }
+}

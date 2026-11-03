@@ -150,6 +150,12 @@ CORE_SV_ORDER = [
     "core.sv",
     # ---- AI 加速子系统 (仅 NN_EN 构建被例化; 交付档不例化 -> 网表不变) ----
     "nn_mem.sv", "nn_conv_engine.sv", "nn_seq.sv", "nn_subsys.sv",
+    # [M3 2026-11-03] DDR3 权重流式预取引擎 (DDR3 -> nn_mem W/Q 双银行填充口)。
+    #   含子模块 nn_wload_afifo (同文件); 仅 NN_EN + 流式模式被例化 (M5 接线),
+    #   当前不例化 -> 综合后被优化掉, 交付档不受影响。
+    "nn_wload.sv",
+    # [M4 2026-11-03] ???? tile cache (DDR3 <-> IBUF/OBUF, ?? a/b ? tile ??)?
+    "nn_tilecache.sv",
 ]
 
 
@@ -700,6 +706,17 @@ def cmd_check(args) -> int:
     for key, spec in BUILD_FILES.items():
         expect = core_set if spec["expected"] == "core" else canon_set
         listed = parse_tcl_list(spec["path"], spec["pattern"])
+        if listed is not None:
+            # 【已知解析限制】build.tcl 的 nn_mem 走 `$NN_MEM_SRC` 变量 (OOC 黑盒模式要能切换成
+            # fpga/nn_mem_bb.sv), 文本解析看不到字面 nn_mem.sv -> 会产生假的 "缺少 nn_mem.sv"。
+            # 这里按"脚本里出现 $NN_MEM_SRC 即视为已列 nn_mem.sv"补偿 (2026-11-03 复核: HEAD 版
+            # build.tcl 早已如此, 是解析器限制而非清单漂移)。
+            try:
+                _txt = read_text(abspath(spec["path"]))
+            except OSError:
+                _txt = ""
+            if "$NN_MEM_SRC" in _txt and "nn_mem.sv" not in listed:
+                listed = list(listed) + ["nn_mem.sv"]
         if listed is None:
             problems.append(f"{spec['path']}: 解析不出文件清单 (正则失效? 文件被改写了?)")
             print(f"  ??   {key:18s} {spec['path']:26s} 解析失败")
@@ -736,6 +753,38 @@ def cmd_check(args) -> int:
                         f"{BUILD_FILES[a]['path']} 有而 {BUILD_FILES[b]['path']} 没有: "
                         + ", ".join(sorted(only_a)))
                     print(f"       [FAIL] 清单互相漂移: {a} 有 {sorted(only_a)}, 但 {b} 没有")
+
+    # ---- 2. 未接线模块 ----
+    # ---- 1b. 编码闸门: RTL/脚本不得带 UTF-8 BOM ----
+    # 【为什么需要】2026-11-03 实测: 用 PowerShell 改 `rv32_pkg.sv` 带进了 EF BB BF,
+    #   ModelSim 报 "Syntax error, unexpected non-printable character with the hex
+    #   value '0xef'" -> 全仓 16 项回归级联全红; `fpga/build.tcl` 带 BOM 会让 Vivado
+    #   解析异常。BOM 在编辑器里肉眼几乎看不出来, 只能靠闸门拦。
+    print("\n[1b] 编码闸门 (UTF-8 BOM 检查: *.sv/*.tcl/*.bat/*.py/*.h/*.c/*.xdc)")
+    bom_exts = (".sv", ".tcl", ".bat", ".py", ".h", ".c", ".xdc", ".S", ".ps1")
+    bom_skip = ("\\.Xil", "ila_proj", "\\refs\\", "\\legacy", "\\.fpga-cache",
+                "\\results\\bottlecap\\perf-proto", "\\results\\ai-accel\\proto")
+    bom_bad = []
+    for _root, _dirs, _files in os.walk(REPO):
+        for _fn in _files:
+            if not _fn.endswith(bom_exts):
+                continue
+            _full = os.path.join(_root, _fn)
+            if any(s in _full for s in bom_skip):
+                continue
+            try:
+                with open(_full, "rb") as _fb:
+                    _head = _fb.read(3)
+            except OSError:
+                continue
+            if _head == b"\xef\xbb\xbf":
+                bom_bad.append(os.path.relpath(_full, REPO).replace("\\", "/"))
+    if bom_bad:
+        for _f in sorted(bom_bad):
+            print(f"  [FAIL] {_f}: 带 UTF-8 BOM (ModelSim/Vivado 会解析失败)")
+            problems.append(f"{_f} 带 UTF-8 BOM -> 请去掉 BOM (见 PLAN-V1.md §4 第 6 条)")
+    else:
+        print("  OK   没有带 BOM 的 RTL/脚本文件")
 
     # ---- 2. 未接线模块 ----
     print("\n[2] 未接线模块 (RTL 存在但没有任何地方例化它)")
@@ -1176,6 +1225,79 @@ def test_matrix() -> list[dict]:
             "plus": [], "max_cycles": None, "timeout": 600,
             "pass_marker": "NN_SEQ_TB: PASS",
             "desc": "AI 加速: nn_seq 微码序列器自检 (ROM 顺序/周期累加/错误注入)",
+        })
+    # ---- [M3 2026-11-03] 权重流式: DDR3(行为级) -> nn_wload -> nn_mem 填充口 ----
+    # 条件登记: 镜像 (yolo_ddr_img.hex) 与 TB 同时存在才进矩阵。
+    # 用 `+define+HAVE_NNMEM` 接**真 nn_mem**, 覆盖最全 (纯单元版无此 define 时只测 wload)。
+    if (os.path.exists(abspath("sim/tb_nn_wstream.sv"))
+            and os.path.exists(abspath("results/bottlecap/stream/yolo_ddr_img.hex"))):
+        tests.append({
+            "name": "tb_nn_wstream", "top": "tb_nn_wstream",
+            "rtl": ["nn_pkg.sv", "nn_mem.sv", "nn_wload.sv", "sim/beh_ddr3.sv"],
+            "tb": "sim/tb_nn_wstream.sv", "defines": ("HAVE_NNMEM",),
+            "plus": ["+img=@REPO@/results/bottlecap/stream/yolo_ddr_img.hex",
+                     "+layers=@REPO@/results/bottlecap/stream/yolo_layers.txt",
+                     "+stream_img=@REPO@/results/bottlecap/stream/yolo_ddr_stream_img.hex",
+                     "+stream_layers=@REPO@/results/bottlecap/stream/yolo_stream_layers.txt"],
+            "max_cycles": None, "timeout": 900,
+            "pass_marker": "WSTREAM_TB: PASS",
+            "desc": "M3: DDR3->nn_wload->nn_mem 填充口逐位预取 (102 真实 YOLO 层)",
+        })
+    # ---- [M5-S1 2026-11-03] job 级接口 (CPU 写 1 个 job -> NPU 自主跑 ROM -> 结果邮箱) ----
+    # 【条件登记的关键】只有 RTL 里真的出现 job 寄存器译码后才进矩阵:
+    #   nn_subsys.sv 尚未落 job 逻辑时, 固件读 JOB_ID 会得到 0 -> 必然假红。
+    #   这样 npu-spec 落 RTL 的同一提交里该测试自动生效, 之前基线保持绿 (PASS 16/17)。
+    _nn_subsys_job_ready = False
+    try:
+        with open(abspath("nn_subsys.sv"), encoding="utf-8", errors="ignore") as _f:
+            _nn_subsys_job_ready = "MMIO_NN_JOB" in _f.read()
+    except OSError:
+        _nn_subsys_job_ready = False
+    if (_nn_subsys_job_ready and os.path.exists(abspath("sim/tb_sw_nn_job.sv"))
+            and os.path.exists(abspath("sim/prog/nn_job_demo.hex"))):
+        tests.append({
+            "name": "tb_sw_nn_job", "top": "tb_sw_nn_job", "rtl": "rtl", "tb": "sim/tb_sw_nn_job.sv",
+            "defines": ("NN_EN",),
+            "imem": "sim/prog/nn_job_demo.hex", "dmem": "sim/prog/nn_job_demo.dmem.hex",
+            "nnwq": "sim/prog/yolo/yolo_wq.hex",
+            "plus": ["+watchdog_ms=6000"], "max_cycles": 100_000_000, "timeout": 3600,
+            "pass_marker": "NN_JOB_TB: PASS",
+            "desc": "M5-S1: 单时钟 job 模式 (doorbell/结果邮箱/ACK/drop)",
+        })
+    # ---- [M4 2026-11-03] 激活分带 tile cache: DDR3 <-> IBUF/OBUF, 引擎 a/b 口 tile 相对 ----
+    if os.path.exists(abspath("sim/tb_nn_tilecache.sv")):
+        tests.append({
+            "name": "tb_nn_tilecache", "top": "tb_nn_tilecache",
+            "rtl": ["nn_tilecache.sv", "sim/beh_ddr3.sv"],
+            "tb": "sim/tb_nn_tilecache.sv",
+            "plus": [], "max_cycles": None, "timeout": 900,
+            "pass_marker": "TILECACHE_TB: PASS",
+            "desc": "M4: 激活分带 tile cache (fill/engine/flush, 96x96x8=6band 逐字节)",
+        })
+    # ---- [M6a 2026-11-04] slim model (96x96, 71 op) SoC E2E: zero-RTL-change on current NPU ----
+    # Gated: set env DSH_SLIM_E2E=1 or create results/bottlecap/plan/slim/TB_READY to register.
+    # ROM variant: slim nn_rom_pkg replaces standard nn_rom_pkg.sv IN PLACE
+    # (package name is also nn_rom_pkg; must precede nn_seq which imports it).
+    _slim_ready = (os.environ.get("DSH_SLIM_E2E") == "1"
+                   or os.path.exists(abspath("results/bottlecap/plan/slim/TB_READY")))
+    _slim_tb = "sim/tb_sw_nn_slim.sv"
+    _slim_imem = "sim/prog/slim_demo.hex"
+    _slim_rom = "results/bottlecap/plan/slim/nn_rom_pkg_slim_as_nn_rom_pkg.sv"
+    if (_slim_ready and os.path.exists(abspath(_slim_tb))
+            and os.path.exists(abspath(_slim_imem)) and os.path.exists(abspath(_slim_rom))):
+        _rtl = list(canonical_rtl())
+        _rtl = [(_slim_rom if os.path.basename(f) == "nn_rom_pkg.sv" else f) for f in _rtl]
+        tests.append({
+            "name": "tb_sw_nn_slim", "top": "tb_sw_nn_slim", "rtl": _rtl, "tb": _slim_tb,
+            "defines": ("NN_EN",),
+            "imem": _slim_imem, "dmem": "sim/prog/slim_demo.dmem.hex",
+            "plus": ["+nnw=@REPO@/results/bottlecap/plan/slim/w.hex",
+                     "+nnq=@REPO@/results/bottlecap/plan/slim/q.hex",
+                     "+slim_input=@REPO@/results/bottlecap/plan/slim/opvec/0349/input.hex",
+                     "+max_cycles=60000000", "+watchdog_ms=12000"],
+            "max_cycles": 60_000_000, "timeout": 3600,
+            "pass_marker": "SLIM_TB: PASS",
+            "desc": "M6a: slim model 96x96/71op SoC E2E (real+pattern+MODE_AUTO, per-op FNV)",
         })
     return tests
 

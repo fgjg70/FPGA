@@ -1,0 +1,1276 @@
+{
+ "plan": "results\\bottlecap\\plan\\fused_a\\plan.json",
+ "ops": 101,
+ "macs": 2271966928,
+ "baseline": {
+  "params": {
+   "px_lanes": 8,
+   "oc_lanes": 16,
+   "mac_width": 128,
+   "w_rd_lat": 2
+  },
+  "cycles": 39722608.0,
+  "components": {
+   "A_mac": 20302534.0,
+   "B_load_addr": 13680156.0,
+   "C_requant_write": 3746862.0,
+   "D_other": 1993056.0
+  },
+  "fps": {
+   "mhz100": 2.52,
+   "mhz122_22": 3.08,
+   "mhz150": 3.78
+  },
+  "effective_mac_per_cycle": 57.2
+ },
+ "narrow_layer_ids": [
+  80,
+  81,
+  88,
+  89,
+  90,
+  91,
+  92,
+  94,
+  95,
+  96,
+  98,
+  99
+ ],
+ "per_op": [
+  {
+   "id": 0,
+   "kind": "conv",
+   "module": "backbone.stem.0+bn",
+   "cycles": 398297.0,
+   "A": 112896.0,
+   "B": 244608.0,
+   "C": 29792.0,
+   "D": 11001.0
+  },
+  {
+   "id": 1,
+   "kind": "conv",
+   "module": "backbone.stage1.0.block.0.0+bn",
+   "cycles": 357580.0,
+   "A": 100352.0,
+   "B": 112896.0,
+   "C": 100352.0,
+   "D": 43980.0
+  },
+  {
+   "id": 2,
+   "kind": "dwconv",
+   "module": "backbone.stage1.0.block.1.0+bn",
+   "cycles": 853088.0,
+   "A": 112896.0,
+   "B": 376320.0,
+   "C": 275968.0,
+   "D": 87904.0
+  },
+  {
+   "id": 3,
+   "kind": "conv",
+   "module": "backbone.stage1.0.block.2+bn",
+   "cycles": 249337.0,
+   "A": 100352.0,
+   "B": 112896.0,
+   "C": 25088.0,
+   "D": 11001.0
+  },
+  {
+   "id": 4,
+   "kind": "add",
+   "module": "add",
+   "cycles": 125449,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 125449
+  },
+  {
+   "id": 5,
+   "kind": "conv",
+   "module": "backbone.stage1.1.block.0.0+bn",
+   "cycles": 357580.0,
+   "A": 100352.0,
+   "B": 112896.0,
+   "C": 100352.0,
+   "D": 43980.0
+  },
+  {
+   "id": 6,
+   "kind": "dwconv",
+   "module": "backbone.stage1.1.block.1.0+bn",
+   "cycles": 853088.0,
+   "A": 112896.0,
+   "B": 376320.0,
+   "C": 275968.0,
+   "D": 87904.0
+  },
+  {
+   "id": 7,
+   "kind": "conv",
+   "module": "backbone.stage1.1.block.2+bn",
+   "cycles": 249337.0,
+   "A": 100352.0,
+   "B": 112896.0,
+   "C": 25088.0,
+   "D": 11001.0
+  },
+  {
+   "id": 8,
+   "kind": "add",
+   "module": "add_1",
+   "cycles": 125449,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 125449
+  },
+  {
+   "id": 9,
+   "kind": "conv",
+   "module": "backbone.stage2.0.block.0.0+bn",
+   "cycles": 536366.0,
+   "A": 150528.0,
+   "B": 169344.0,
+   "C": 150528.0,
+   "D": 65966.0
+  },
+  {
+   "id": 10,
+   "kind": "dwconv",
+   "module": "backbone.stage2.0.block.1.0+bn",
+   "cycles": 418796.0,
+   "A": 42336.0,
+   "B": 239904.0,
+   "C": 103488.0,
+   "D": 33068.0
+  },
+  {
+   "id": 11,
+   "kind": "conv",
+   "module": "backbone.stage2.0.block.2+bn",
+   "cycles": 181140.0,
+   "A": 75264.0,
+   "B": 84672.0,
+   "C": 15680.0,
+   "D": 5524.0
+  },
+  {
+   "id": 12,
+   "kind": "conv",
+   "module": "backbone.stage2.1.block.0.0+bn",
+   "cycles": 261233.0,
+   "A": 84672.0,
+   "B": 95256.0,
+   "C": 56448.0,
+   "D": 24857.0
+  },
+  {
+   "id": 13,
+   "kind": "dwconv",
+   "module": "backbone.stage2.1.block.1.0+bn",
+   "cycles": 480014.0,
+   "A": 63504.0,
+   "B": 211680.0,
+   "C": 155232.0,
+   "D": 49598.0
+  },
+  {
+   "id": 14,
+   "kind": "conv",
+   "module": "backbone.stage2.1.block.2+bn",
+   "cycles": 261108.0,
+   "A": 112896.0,
+   "B": 127008.0,
+   "C": 15680.0,
+   "D": 5524.0
+  },
+  {
+   "id": 15,
+   "kind": "add",
+   "module": "add_2",
+   "cycles": 47049,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 47049
+  },
+  {
+   "id": 16,
+   "kind": "conv",
+   "module": "backbone.stage2.2.block.0.0+bn",
+   "cycles": 261233.0,
+   "A": 84672.0,
+   "B": 95256.0,
+   "C": 56448.0,
+   "D": 24857.0
+  },
+  {
+   "id": 17,
+   "kind": "dwconv",
+   "module": "backbone.stage2.2.block.1.0+bn",
+   "cycles": 480014.0,
+   "A": 63504.0,
+   "B": 211680.0,
+   "C": 155232.0,
+   "D": 49598.0
+  },
+  {
+   "id": 18,
+   "kind": "conv",
+   "module": "backbone.stage2.2.block.2+bn",
+   "cycles": 261108.0,
+   "A": 112896.0,
+   "B": 127008.0,
+   "C": 15680.0,
+   "D": 5524.0
+  },
+  {
+   "id": 19,
+   "kind": "add",
+   "module": "add_3",
+   "cycles": 47049,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 47049
+  },
+  {
+   "id": 20,
+   "kind": "conv",
+   "module": "backbone.stage3.0.block.0.0+bn",
+   "cycles": 261233.0,
+   "A": 84672.0,
+   "B": 95256.0,
+   "C": 56448.0,
+   "D": 24857.0
+  },
+  {
+   "id": 21,
+   "kind": "dwconv",
+   "module": "backbone.stage3.0.block.1.0+bn",
+   "cycles": 179630.0,
+   "A": 18144.0,
+   "B": 102816.0,
+   "C": 44352.0,
+   "D": 14318.0
+  },
+  {
+   "id": 22,
+   "kind": "conv",
+   "module": "backbone.stage3.0.block.2+bn",
+   "cycles": 110603.0,
+   "A": 48384.0,
+   "B": 54432.0,
+   "C": 5376.0,
+   "D": 2411.0
+  },
+  {
+   "id": 23,
+   "kind": "conv",
+   "module": "backbone.stage3.1.block.0.0+bn",
+   "cycles": 252314.0,
+   "A": 96768.0,
+   "B": 108864.0,
+   "C": 32256.0,
+   "D": 14426.0
+  },
+  {
+   "id": 24,
+   "kind": "dwconv",
+   "module": "backbone.stage3.1.block.1.0+bn",
+   "cycles": 274580.0,
+   "A": 36288.0,
+   "B": 120960.0,
+   "C": 88704.0,
+   "D": 28628.0
+  },
+  {
+   "id": 25,
+   "kind": "conv",
+   "module": "backbone.stage3.1.block.2+bn",
+   "cycles": 213419.0,
+   "A": 96768.0,
+   "B": 108864.0,
+   "C": 5376.0,
+   "D": 2411.0
+  },
+  {
+   "id": 26,
+   "kind": "add",
+   "module": "add_4",
+   "cycles": 23529,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 23529
+  },
+  {
+   "id": 27,
+   "kind": "conv",
+   "module": "backbone.stage3.2.block.0.0+bn",
+   "cycles": 252314.0,
+   "A": 96768.0,
+   "B": 108864.0,
+   "C": 32256.0,
+   "D": 14426.0
+  },
+  {
+   "id": 28,
+   "kind": "dwconv",
+   "module": "backbone.stage3.2.block.1.0+bn",
+   "cycles": 274580.0,
+   "A": 36288.0,
+   "B": 120960.0,
+   "C": 88704.0,
+   "D": 28628.0
+  },
+  {
+   "id": 29,
+   "kind": "conv",
+   "module": "backbone.stage3.2.block.2+bn",
+   "cycles": 213419.0,
+   "A": 96768.0,
+   "B": 108864.0,
+   "C": 5376.0,
+   "D": 2411.0
+  },
+  {
+   "id": 30,
+   "kind": "add",
+   "module": "add_5",
+   "cycles": 23529,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 23529
+  },
+  {
+   "id": 31,
+   "kind": "conv",
+   "module": "backbone.stage3.3.block.0.0+bn",
+   "cycles": 252314.0,
+   "A": 96768.0,
+   "B": 108864.0,
+   "C": 32256.0,
+   "D": 14426.0
+  },
+  {
+   "id": 32,
+   "kind": "dwconv",
+   "module": "backbone.stage3.3.block.1.0+bn",
+   "cycles": 274580.0,
+   "A": 36288.0,
+   "B": 120960.0,
+   "C": 88704.0,
+   "D": 28628.0
+  },
+  {
+   "id": 33,
+   "kind": "conv",
+   "module": "backbone.stage3.3.block.2+bn",
+   "cycles": 213419.0,
+   "A": 96768.0,
+   "B": 108864.0,
+   "C": 5376.0,
+   "D": 2411.0
+  },
+  {
+   "id": 34,
+   "kind": "add",
+   "module": "add_6",
+   "cycles": 23529,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 23529
+  },
+  {
+   "id": 35,
+   "kind": "conv",
+   "module": "backbone.stage4.0.block.0.0+bn",
+   "cycles": 252314.0,
+   "A": 96768.0,
+   "B": 108864.0,
+   "C": 32256.0,
+   "D": 14426.0
+  },
+  {
+   "id": 36,
+   "kind": "dwconv",
+   "module": "backbone.stage4.0.block.1.0+bn",
+   "cycles": 90116.0,
+   "A": 9072.0,
+   "B": 51408.0,
+   "C": 22176.0,
+   "D": 7460.0
+  },
+  {
+   "id": 37,
+   "kind": "conv",
+   "module": "backbone.stage4.0.block.2+bn",
+   "cycles": 89883.0,
+   "A": 40320.0,
+   "B": 45360.0,
+   "C": 3136.0,
+   "D": 1067.0
+  },
+  {
+   "id": 38,
+   "kind": "conv",
+   "module": "backbone.stage4.1.block.0.0+bn",
+   "cycles": 133523.0,
+   "A": 54432.0,
+   "B": 61236.0,
+   "C": 12096.0,
+   "D": 5759.0
+  },
+  {
+   "id": 39,
+   "kind": "dwconv",
+   "module": "backbone.stage4.1.block.1.0+bn",
+   "cycles": 103418.0,
+   "A": 13608.0,
+   "B": 45360.0,
+   "C": 33264.0,
+   "D": 11186.0
+  },
+  {
+   "id": 40,
+   "kind": "conv",
+   "module": "backbone.stage4.1.block.2+bn",
+   "cycles": 132723.0,
+   "A": 60480.0,
+   "B": 68040.0,
+   "C": 3136.0,
+   "D": 1067.0
+  },
+  {
+   "id": 41,
+   "kind": "add",
+   "module": "add_7",
+   "cycles": 8829,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 8829
+  },
+  {
+   "id": 42,
+   "kind": "conv",
+   "module": "backbone.stage4.2.block.0.0+bn",
+   "cycles": 133523.0,
+   "A": 54432.0,
+   "B": 61236.0,
+   "C": 12096.0,
+   "D": 5759.0
+  },
+  {
+   "id": 43,
+   "kind": "dwconv",
+   "module": "backbone.stage4.2.block.1.0+bn",
+   "cycles": 103418.0,
+   "A": 13608.0,
+   "B": 45360.0,
+   "C": 33264.0,
+   "D": 11186.0
+  },
+  {
+   "id": 44,
+   "kind": "conv",
+   "module": "backbone.stage4.2.block.2+bn",
+   "cycles": 159312.0,
+   "A": 72576.0,
+   "B": 81648.0,
+   "C": 3808.0,
+   "D": 1280.0
+  },
+  {
+   "id": 45,
+   "kind": "conv",
+   "module": "backbone.stage4.3.block.0.0+bn",
+   "cycles": 194609.0,
+   "A": 81312.0,
+   "B": 91476.0,
+   "C": 14784.0,
+   "D": 7037.0
+  },
+  {
+   "id": 46,
+   "kind": "dwconv",
+   "module": "backbone.stage4.3.block.1.0+bn",
+   "cycles": 126398.0,
+   "A": 16632.0,
+   "B": 55440.0,
+   "C": 40656.0,
+   "D": 13670.0
+  },
+  {
+   "id": 47,
+   "kind": "conv",
+   "module": "backbone.stage4.3.block.2+bn",
+   "cycles": 193584.0,
+   "A": 88704.0,
+   "B": 99792.0,
+   "C": 3808.0,
+   "D": 1280.0
+  },
+  {
+   "id": 48,
+   "kind": "add",
+   "module": "add_8",
+   "cycles": 10789,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 10789
+  },
+  {
+   "id": 49,
+   "kind": "conv",
+   "module": "backbone.stage4.4.block.0.0+bn",
+   "cycles": 194609.0,
+   "A": 81312.0,
+   "B": 91476.0,
+   "C": 14784.0,
+   "D": 7037.0
+  },
+  {
+   "id": 50,
+   "kind": "dwconv",
+   "module": "backbone.stage4.4.block.1.0+bn",
+   "cycles": 126398.0,
+   "A": 16632.0,
+   "B": 55440.0,
+   "C": 40656.0,
+   "D": 13670.0
+  },
+  {
+   "id": 51,
+   "kind": "conv",
+   "module": "backbone.stage4.4.block.2+bn",
+   "cycles": 193584.0,
+   "A": 88704.0,
+   "B": 99792.0,
+   "C": 3808.0,
+   "D": 1280.0
+  },
+  {
+   "id": 52,
+   "kind": "add",
+   "module": "add_9",
+   "cycles": 10789,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 10789
+  },
+  {
+   "id": 53,
+   "kind": "conv",
+   "module": "backbone.stage5.0.block.0.0+bn",
+   "cycles": 194609.0,
+   "A": 81312.0,
+   "B": 91476.0,
+   "C": 14784.0,
+   "D": 7037.0
+  },
+  {
+   "id": 54,
+   "kind": "dwconv",
+   "module": "backbone.stage5.0.block.1.0+bn",
+   "cycles": 41852.0,
+   "A": 4158.0,
+   "B": 23562.0,
+   "C": 10164.0,
+   "D": 3968.0
+  },
+  {
+   "id": 55,
+   "kind": "conv",
+   "module": "backbone.stage5.0.block.2+bn",
+   "cycles": 72296.0,
+   "A": 33264.0,
+   "B": 37422.0,
+   "C": 1008.0,
+   "D": 602.0
+  },
+  {
+   "id": 56,
+   "kind": "conv",
+   "module": "backbone.stage5.1.block.0.0+bn",
+   "cycles": 125288.0,
+   "A": 54432.0,
+   "B": 61236.0,
+   "C": 6048.0,
+   "D": 3572.0
+  },
+  {
+   "id": 57,
+   "kind": "dwconv",
+   "module": "backbone.stage5.1.block.1.0+bn",
+   "cycles": 52604.0,
+   "A": 6804.0,
+   "B": 22680.0,
+   "C": 16632.0,
+   "D": 6488.0
+  },
+  {
+   "id": 58,
+   "kind": "conv",
+   "module": "backbone.stage5.1.block.2+bn",
+   "cycles": 117278.0,
+   "A": 54432.0,
+   "B": 61236.0,
+   "C": 1008.0,
+   "D": 602.0
+  },
+  {
+   "id": 59,
+   "kind": "add",
+   "module": "add_10",
+   "cycles": 4419,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 4419
+  },
+  {
+   "id": 60,
+   "kind": "conv",
+   "module": "backbone.stage5.2.block.0.0+bn",
+   "cycles": 125288.0,
+   "A": 54432.0,
+   "B": 61236.0,
+   "C": 6048.0,
+   "D": 3572.0
+  },
+  {
+   "id": 61,
+   "kind": "dwconv",
+   "module": "backbone.stage5.2.block.1.0+bn",
+   "cycles": 52604.0,
+   "A": 6804.0,
+   "B": 22680.0,
+   "C": 16632.0,
+   "D": 6488.0
+  },
+  {
+   "id": 62,
+   "kind": "conv",
+   "module": "backbone.stage5.2.block.2+bn",
+   "cycles": 117278.0,
+   "A": 54432.0,
+   "B": 61236.0,
+   "C": 1008.0,
+   "D": 602.0
+  },
+  {
+   "id": 63,
+   "kind": "add",
+   "module": "add_11",
+   "cycles": 4419,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 4419
+  },
+  {
+   "id": 64,
+   "kind": "conv",
+   "module": "lateral5.0+bn",
+   "cycles": 11826.0,
+   "A": 5040.0,
+   "B": 5670.0,
+   "C": 784.0,
+   "D": 332.0
+  },
+  {
+   "id": 65,
+   "kind": "conv",
+   "module": "refine5.conv1.0+bn",
+   "cycles": 35136.0,
+   "A": 22680.0,
+   "B": 10395.0,
+   "C": 1729.0,
+   "D": 332.0
+  },
+  {
+   "id": 66,
+   "kind": "conv",
+   "module": "refine5.conv2.0+bn+fused_add",
+   "cycles": 35136.0,
+   "A": 22680.0,
+   "B": 10395.0,
+   "C": 1729.0,
+   "D": 332.0
+  },
+  {
+   "id": 67,
+   "kind": "conv",
+   "module": "lateral4.0+bn",
+   "cycles": 30383.0,
+   "A": 12320.0,
+   "B": 13860.0,
+   "C": 3136.0,
+   "D": 1067.0
+  },
+  {
+   "id": 68,
+   "kind": "upsample",
+   "module": "interpolate(up2x#1)",
+   "cycles": 2213,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 2213
+  },
+  {
+   "id": 69,
+   "kind": "add",
+   "module": "add_13",
+   "cycles": 8829,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 8829
+  },
+  {
+   "id": 70,
+   "kind": "conv",
+   "module": "refine4.conv1.0+bn",
+   "cycles": 140283.0,
+   "A": 90720.0,
+   "B": 41580.0,
+   "C": 6916.0,
+   "D": 1067.0
+  },
+  {
+   "id": 71,
+   "kind": "conv",
+   "module": "refine4.conv2.0+bn+fused_add",
+   "cycles": 140283.0,
+   "A": 90720.0,
+   "B": 41580.0,
+   "C": 6916.0,
+   "D": 1067.0
+  },
+  {
+   "id": 72,
+   "kind": "conv",
+   "module": "lateral3.0+bn",
+   "cycles": 73671.0,
+   "A": 26880.0,
+   "B": 30240.0,
+   "C": 12544.0,
+   "D": 4007.0
+  },
+  {
+   "id": 73,
+   "kind": "upsample",
+   "module": "interpolate_1(up2x#1)",
+   "cycles": 8828,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 8828
+  },
+  {
+   "id": 74,
+   "kind": "add",
+   "module": "add_15",
+   "cycles": 35289,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 35289
+  },
+  {
+   "id": 75,
+   "kind": "conv",
+   "module": "refine3.conv1.0+bn",
+   "cycles": 560871.0,
+   "A": 362880.0,
+   "B": 166320.0,
+   "C": 27664.0,
+   "D": 4007.0
+  },
+  {
+   "id": 76,
+   "kind": "conv",
+   "module": "refine3.conv2.0+bn+fused_add",
+   "cycles": 560871.0,
+   "A": 362880.0,
+   "B": 166320.0,
+   "C": 27664.0,
+   "D": 4007.0
+  },
+  {
+   "id": 77,
+   "kind": "conv",
+   "module": "lateral2.0+bn",
+   "cycles": 157671.0,
+   "A": 47040.0,
+   "B": 52920.0,
+   "C": 43904.0,
+   "D": 13807.0
+  },
+  {
+   "id": 78,
+   "kind": "upsample",
+   "module": "interpolate_2(up2x#1)",
+   "cycles": 35288,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 35288
+  },
+  {
+   "id": 79,
+   "kind": "add",
+   "module": "add_17",
+   "cycles": 141129,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 141129
+  },
+  {
+   "id": 80,
+   "kind": "conv",
+   "module": "refine2.conv1.0+bn",
+   "cycles": 1962831.0,
+   "A": 1270080.0,
+   "B": 582120.0,
+   "C": 96824.0,
+   "D": 13807.0
+  },
+  {
+   "id": 81,
+   "kind": "conv",
+   "module": "refine2.conv2.0+bn+fused_add",
+   "cycles": 1962831.0,
+   "A": 1270080.0,
+   "B": 582120.0,
+   "C": 96824.0,
+   "D": 13807.0
+  },
+  {
+   "id": 82,
+   "kind": "upsample",
+   "module": "interpolate_4(up2x#1)",
+   "cycles": 8828,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 8828
+  },
+  {
+   "id": 83,
+   "kind": "upsample",
+   "module": "interpolate_4(up2x#2)",
+   "cycles": 35288,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 35288
+  },
+  {
+   "id": 84,
+   "kind": "copy",
+   "module": "cat",
+   "cycles": 56456,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 56456
+  },
+  {
+   "id": 85,
+   "kind": "copy",
+   "module": "cat",
+   "cycles": 56456,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 56456
+  },
+  {
+   "id": 86,
+   "kind": "copy",
+   "module": "cat",
+   "cycles": 56456,
+   "A": 0.0,
+   "B": 0.0,
+   "C": 0.0,
+   "D": 56456
+  },
+  {
+   "id": 87,
+   "kind": "conv",
+   "module": "multi_scale_fusion.0.0+bn",
+   "cycles": 957351.0,
+   "A": 423360.0,
+   "B": 476280.0,
+   "C": 43904.0,
+   "D": 13807.0
+  },
+  {
+   "id": 88,
+   "kind": "conv",
+   "module": "multi_scale_fusion.1.conv1.0+bn",
+   "cycles": 1962831.0,
+   "A": 1270080.0,
+   "B": 582120.0,
+   "C": 96824.0,
+   "D": 13807.0
+  },
+  {
+   "id": 89,
+   "kind": "conv",
+   "module": "multi_scale_fusion.1.conv2.0+bn+fused_add",
+   "cycles": 1962831.0,
+   "A": 1270080.0,
+   "B": 582120.0,
+   "C": 96824.0,
+   "D": 13807.0
+  },
+  {
+   "id": 90,
+   "kind": "conv",
+   "module": "objectness_tower.0.0+bn",
+   "cycles": 1962831.0,
+   "A": 1270080.0,
+   "B": 582120.0,
+   "C": 96824.0,
+   "D": 13807.0
+  },
+  {
+   "id": 91,
+   "kind": "conv",
+   "module": "objectness_tower.1.0+bn",
+   "cycles": 1962831.0,
+   "A": 1270080.0,
+   "B": 582120.0,
+   "C": 96824.0,
+   "D": 13807.0
+  },
+  {
+   "id": 92,
+   "kind": "conv",
+   "module": "objectness_tower.2.0+bn",
+   "cycles": 1962831.0,
+   "A": 1270080.0,
+   "B": 582120.0,
+   "C": 96824.0,
+   "D": 13807.0
+  },
+  {
+   "id": 93,
+   "kind": "conv",
+   "module": "objectness_head",
+   "cycles": 69011.0,
+   "A": 28224.0,
+   "B": 31752.0,
+   "C": 6272.0,
+   "D": 2763.0
+  },
+  {
+   "id": 94,
+   "kind": "conv",
+   "module": "class_tower.0.0+bn",
+   "cycles": 1962831.0,
+   "A": 1270080.0,
+   "B": 582120.0,
+   "C": 96824.0,
+   "D": 13807.0
+  },
+  {
+   "id": 95,
+   "kind": "conv",
+   "module": "class_tower.1.0+bn",
+   "cycles": 1962831.0,
+   "A": 1270080.0,
+   "B": 582120.0,
+   "C": 96824.0,
+   "D": 13807.0
+  },
+  {
+   "id": 96,
+   "kind": "conv",
+   "module": "class_tower.2.0+bn",
+   "cycles": 1962831.0,
+   "A": 1270080.0,
+   "B": 582120.0,
+   "C": 96824.0,
+   "D": 13807.0
+  },
+  {
+   "id": 97,
+   "kind": "conv",
+   "module": "class_head",
+   "cycles": 69011.0,
+   "A": 28224.0,
+   "B": 31752.0,
+   "C": 6272.0,
+   "D": 2763.0
+  },
+  {
+   "id": 98,
+   "kind": "conv",
+   "module": "box_tower.0.0+bn",
+   "cycles": 1962831.0,
+   "A": 1270080.0,
+   "B": 582120.0,
+   "C": 96824.0,
+   "D": 13807.0
+  },
+  {
+   "id": 99,
+   "kind": "conv",
+   "module": "box_tower.1.0+bn",
+   "cycles": 1962831.0,
+   "A": 1270080.0,
+   "B": 582120.0,
+   "C": 96824.0,
+   "D": 13807.0
+  },
+  {
+   "id": 100,
+   "kind": "conv",
+   "module": "box_head",
+   "cycles": 69011.0,
+   "A": 28224.0,
+   "B": 31752.0,
+   "C": 6272.0,
+   "D": 2763.0
+  }
+ ],
+ "scenarios": {
+  "p0": {
+   "config": {},
+   "cycles": 39722608.0,
+   "effective_mac_per_cycle": 57.2,
+   "fps": {
+    "mhz100": 2.52,
+    "mhz122_22": 3.08,
+    "mhz150": 3.78
+   }
+  },
+  "f": {
+   "config": {
+    "fusion": true
+   },
+   "cycles": 39783123.0,
+   "effective_mac_per_cycle": 57.1,
+   "fps": {
+    "mhz100": 2.51,
+    "mhz122_22": 3.07,
+    "mhz150": 3.77
+   }
+  },
+  "lb": {
+   "config": {
+    "bopt": 0.7
+   },
+   "cycles": 36279620.2,
+   "effective_mac_per_cycle": 62.6,
+   "fps": {
+    "mhz100": 2.76,
+    "mhz122_22": 3.37,
+    "mhz150": 4.13
+   }
+  },
+  "dw": {
+   "config": {
+    "dwpath": true
+   },
+   "cycles": 37306790.4,
+   "effective_mac_per_cycle": 60.9,
+   "fps": {
+    "mhz100": 2.68,
+    "mhz122_22": 3.28,
+    "mhz150": 4.02
+   }
+  },
+  "wg": {
+   "config": {
+    "winograd": "all"
+   },
+   "cycles": 31163488.0,
+   "effective_mac_per_cycle": 72.9,
+   "fps": {
+    "mhz100": 3.21,
+    "mhz122_22": 3.92,
+    "mhz150": 4.81
+   }
+  },
+  "m_oc24": {
+   "config": {
+    "mac_width": 192,
+    "scheme": "oc24"
+   },
+   "cycles": 26997343.0,
+   "effective_mac_per_cycle": 84.2,
+   "fps": {
+    "mhz100": 3.7,
+    "mhz122_22": 4.53,
+    "mhz150": 5.56
+   }
+  },
+  "m_oc32": {
+   "config": {
+    "mac_width": 256,
+    "scheme": "oc32"
+   },
+   "cycles": 26269011.0,
+   "effective_mac_per_cycle": 86.5,
+   "fps": {
+    "mhz100": 3.81,
+    "mhz122_22": 4.65,
+    "mhz150": 5.71
+   }
+  },
+  "m_px16": {
+   "config": {
+    "mac_width": 256,
+    "scheme": "px16"
+   },
+   "cycles": 25403968.0,
+   "effective_mac_per_cycle": 89.4,
+   "fps": {
+    "mhz100": 3.94,
+    "mhz122_22": 4.81,
+    "mhz150": 5.9
+   }
+  },
+  "p1_rtl": {
+   "config": {
+    "fusion": true
+   },
+   "cycles": 39783123.0,
+   "effective_mac_per_cycle": 57.1,
+   "fps": {
+    "mhz100": 2.51,
+    "mhz122_22": 3.07,
+    "mhz150": 3.77
+   }
+  },
+  "p1": {
+   "config": {
+    "fusion": true,
+    "bopt": 0.7,
+    "dwpath": true
+   },
+   "cycles": 33924317.6,
+   "effective_mac_per_cycle": 67.0,
+   "fps": {
+    "mhz100": 2.95,
+    "mhz122_22": 3.6,
+    "mhz150": 4.42
+   }
+  },
+  "p2": {
+   "config": {
+    "fusion": true,
+    "bopt": 0.7,
+    "dwpath": true,
+    "mac_width": 256,
+    "scheme": "oc32"
+   },
+   "cycles": 21811321.4,
+   "effective_mac_per_cycle": 104.2,
+   "fps": {
+    "mhz100": 4.58,
+    "mhz122_22": 5.6,
+    "mhz150": 6.88
+   }
+  },
+  "p2b": {
+   "config": {
+    "fusion": true,
+    "bopt": 0.7,
+    "dwpath": true,
+    "mac_width": 256,
+    "scheme": "px16"
+   },
+   "cycles": 21450724.2,
+   "effective_mac_per_cycle": 105.9,
+   "fps": {
+    "mhz100": 4.66,
+    "mhz122_22": 5.7,
+    "mhz150": 6.99
+   }
+  },
+  "p2c": {
+   "config": {
+    "fusion": true,
+    "bopt": 0.7,
+    "dwpath": true,
+    "mac_width": 192,
+    "scheme": "oc24"
+   },
+   "cycles": 22439521.2,
+   "effective_mac_per_cycle": 101.2,
+   "fps": {
+    "mhz100": 4.46,
+    "mhz122_22": 5.45,
+    "mhz150": 6.68
+   }
+  },
+  "p3": {
+   "config": {
+    "fusion": true,
+    "bopt": 0.7,
+    "dwpath": true,
+    "mac_width": 256,
+    "scheme": "oc32",
+    "winograd": "all"
+   },
+   "cycles": 16600761.4,
+   "effective_mac_per_cycle": 136.9,
+   "fps": {
+    "mhz100": 6.02,
+    "mhz122_22": 7.36,
+    "mhz150": 9.04
+   }
+  },
+  "p3narrow": {
+   "config": {
+    "fusion": true,
+    "bopt": 0.7,
+    "dwpath": true,
+    "mac_width": 256,
+    "scheme": "oc32",
+    "winograd": "narrow"
+   },
+   "cycles": 16981001.4,
+   "effective_mac_per_cycle": 133.8,
+   "fps": {
+    "mhz100": 5.89,
+    "mhz122_22": 7.2,
+    "mhz150": 8.83
+   }
+  },
+  "p3c": {
+   "config": {
+    "fusion": true,
+    "bopt": 0.7,
+    "dwpath": true,
+    "mac_width": 192,
+    "scheme": "oc24",
+    "winograd": "narrow"
+   },
+   "cycles": 17609201.2,
+   "effective_mac_per_cycle": 129.0,
+   "fps": {
+    "mhz100": 5.68,
+    "mhz122_22": 6.94,
+    "mhz150": 8.52
+   }
+  }
+ }
+}

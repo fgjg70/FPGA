@@ -69,9 +69,19 @@ module tb_nn_mem #(
   logic         dbg_space;
   logic [16:0]  dbg_addr;
   logic [31:0]  dbg_wdata;
+  // ---- [M2] 流式 W/Q 端口 ----
+  logic         w_mode, w_bank_sel, wfill_we;
+  logic [17:0]  wfill_addr;
+  logic [63:0]  wfill_wdata;
+  logic         q_bank_sel, qfill_we;
+  logic [12:0]  qfill_addr;
+  logic [63:0]  qfill_wdata;
 
   // ---- 计分板 ----
   int n_checks, n_mismatch, n_xerr, n_w_sweep, n_q_sweep, n_act, n_cpu;
+  int n_legacy, n_stream;      // [M2] legacy(ROM 路径) / stream(w_mode=1) 检查点计数
+  localparam int WBANK64 = 20480;   // 单银行 64-bit 字数 (160KiB, 与 nn_pkg::NN_W_BANK_W64 一致)
+  localparam int QBANK64 = 1024;    // Q 影子银行 64-bit 字数 (8KiB)
 
   // ---- 期望值模式 (必须与 proto/mem/gen_wq_image.py 一致) ----
   function automatic logic [31:0] wpat32(input logic [31:0] i);
@@ -123,6 +133,9 @@ module tb_nn_mem #(
     a_re = 0; a_sel = 0; a_addr = 0;
     b_we = 0; b_sel = 0; b_addr = 0; b_wdata = 0; b_wstrb = 0;
     dbg_we = 0; dbg_space = 0; dbg_addr = 0; dbg_wdata = 0;
+    // [M2] 默认 = ROM 兼容路径: w_mode=0, 银行 0, 填充关闭
+    w_mode = 0; w_bank_sel = 0; wfill_we = 0; wfill_addr = 0; wfill_wdata = 0;
+    q_bank_sel = 0; qfill_we = 0; qfill_addr = 0; qfill_wdata = 0;
   endtask
 
   task automatic cpu_write(input logic [31:0] addr, input logic [31:0] data, input logic [3:0] strb);
@@ -181,6 +194,29 @@ module tb_nn_mem #(
     dbg_we = 0;
   endtask
 
+  // ---- [M2] 流式填充任务: wfill 写非活动银行 (~w_bank_sel), qfill 写 ~q_bank_sel ----
+  task automatic wfill_word(input logic [17:0] a, input logic [63:0] d);
+    @(negedge clk);
+    wfill_we = 1; wfill_addr = a; wfill_wdata = d;
+    @(negedge clk);
+    wfill_we = 0;
+  endtask
+
+  task automatic qfill_word(input logic [12:0] a, input logic [63:0] d);
+    @(negedge clk);
+    qfill_we = 1; qfill_addr = a; qfill_wdata = d;
+    @(negedge clk);
+    qfill_we = 0;
+  endtask
+
+  // 流式读 + 比对 (w_addr = wi*8, 自动按当前 w_bank_sel 选银行)
+  task automatic chk_w_stream(input int bank, input int wi, input string m);
+    logic [127:0] rdx;
+    w_read(24'(wi*8), rdx);
+    chk128(rdx, w_exp_stream(bank, wi), m);
+    n_stream++;
+  endtask
+
   // 期望值 (无镜像时全 0)
   function automatic logic [127:0] w_exp(input bit has_img, input logic [31:0] k128);
     if (has_img) w_exp = {wpat32(4*k128+3), wpat32(4*k128+2), wpat32(4*k128+1), wpat32(4*k128)};
@@ -205,6 +241,21 @@ module tb_nn_mem #(
     else         q_exp = 64'b0;
   endfunction
 
+  // ---- [M2] 流式模式测试样图: 由 (bank, 银行内 64b 字序号) 唯一确定 ----
+  function automatic logic [63:0] wbank64(input int bank, input int wi);
+    wbank64 = {p32(32'(wi*2 + bank*100003 + 7)), p32(32'(wi*2 + bank*100003))};
+  endfunction
+  function automatic logic [63:0] qbank64(input int bank, input int qi);
+    qbank64 = {qpat32(32'(qi*2 + bank*7777 + 1)), qpat32(32'(qi*2 + bank*7777))};
+  endfunction
+  // 流式模式 16B 窗口期望: {下一个 64b 字, 当前 64b 字}; 银行末字 next -> 0
+  function automatic logic [127:0] w_exp_stream(input int bank, input int wi);
+    logic [63:0] nxt;
+    if (wi >= WBANK64 - 1) nxt = 64'b0;
+    else                   nxt = wbank64(bank, wi + 1);
+    w_exp_stream = {nxt, wbank64(bank, wi)};
+  endfunction
+
   // ==========================================================================
   // 主序列
   // ==========================================================================
@@ -217,6 +268,7 @@ module tb_nn_mem #(
   initial begin : main
     n_checks = 0; n_mismatch = 0; n_xerr = 0;
     n_w_sweep = 0; n_q_sweep = 0; n_act = 0; n_cpu = 0;
+    n_legacy = 0; n_stream = 0;
     fnv_wr = 32'h811c_9dc5; fnv_we = 32'h811c_9dc5;
     fnv_qr = 32'h811c_9dc5; fnv_qe = 32'h811c_9dc5;
 
@@ -457,9 +509,140 @@ module tb_nn_mem #(
     chk32(rd32, 32'h1234_5678, "after reset: CPU-visible A content retained");
     n_cpu++;
 
+    // ==========================================================================
+    // [M2] 流式模式 (w_mode=1) 用例:
+    //   S1 填 bank0 -> 翻转读 bank0; S2 填 bank1 -> 读 bank1 (含跨段/末字);
+    //   S3 银行翻转/内容保持; S4 Q 影子银行 (2x8KiB) 填充/读回/翻转/越界;
+    //   S5 并发: 引擎连续读活动银行 + 填充写非活动银行; S6 模式回到 ROM 路径自洽。
+    //   全部 pattern 由 TB 自己写入 (不依赖 +nnwq 镜像), 因此有/无镜像两种口径都可跑。
+    // ==========================================================================
+    n_legacy = n_checks;
+    $display("[MEM_TB] SUMMARY_LEGACY(ROM 路径) checks=%0d w_sweep=%0d q_sweep=%0d act=%0d cpu=%0d",
+             n_legacy, n_w_sweep, n_q_sweep, n_act, n_cpu);
+
+    n_stream = 0;
+    w_mode   = 1'b1;
+    w_bank_sel = 1'b1;
+
+    // ---------- S1: 填 bank0 (活动=bank1 => 填非活动银行), 翻转后读 bank0 ----------
+    //   bank0 的可填充区 = wi < 16384 (128KiB): 共享 b 段的上 32KiB 在活动 bank=1 时
+    //   port B 必须留给引擎 next 读, 填充写被丢弃 -> 单层 wlen <= 128KiB 约束 (见 S1b)。
+    for (int i = 0; i < 16; i++)        wfill_word(18'(i),     wbank64(0, i));
+    for (int i = 16368; i < 16384; i++) wfill_word(18'(i),     wbank64(0, i));
+    w_bank_sel = 1'b0;
+    for (int i = 0; i < 15; i++)        chk_w_stream(0, i,     "S1 bank0 read a 区");
+    for (int i = 16368; i < 16383; i++) chk_w_stream(0, i,     "S1 bank0 read a 区高段");
+    chk_w_stream(0, 16382, "S1 bank0 read 118KiB 附近 (16B 窗口跨字)");
+
+    // ---------- S1b: 文档化约束实测: bank0 高 32KiB (wi>=16384, 共享 b 段) 的填充被丢弃 ----------
+    w_bank_sel = 1'b0;
+    w_read(24'(16384*8), rd128);          // 先读 b[0..1] 的当前值
+    exp128 = rd128;
+    w_bank_sel = 1'b1;                    // 活动 bank1 => 试图填 bank0 的高 32KiB
+    wfill_word(18'(16384), 64'hDEAD_BEEF_DEAD_BEEF);
+    wfill_word(18'(16385), 64'hDEAD_BEEF_DEAD_BEEF);
+    w_bank_sel = 1'b0;
+    w_read(24'(16384*8), rd128);
+    chk128(rd128, exp128, "S1b bank0 高 32KiB 填充被丢弃 (共享 b 段 portB 约束)");
+    n_stream++;
+
+    // ---------- S2: 填 bank1 (活动=bank0), 翻转后读 bank1 (b->c / c->d 跨段) ----------
+    w_bank_sel = 1'b0;
+    for (int i = 0; i < 16; i++)        wfill_word(18'(i),     wbank64(1, i));
+    for (int i = 4088; i < 4104; i++)   wfill_word(18'(i),     wbank64(1, i));
+    for (int i = 12280; i < 12296; i++) wfill_word(18'(i),     wbank64(1, i));
+    for (int i = 20464; i < 20480; i++) wfill_word(18'(i),     wbank64(1, i));
+    w_bank_sel = 1'b1;
+    for (int i = 0; i < 15; i++)        chk_w_stream(1, i,     "S2 bank1 read b 低区");
+    for (int i = 4088; i < 4103; i++)   chk_w_stream(1, i,     "S2 bank1 read b->c 跨段");
+    for (int i = 12280; i < 12295; i++) chk_w_stream(1, i,     "S2 bank1 read c->d 跨段");
+    for (int i = 20464; i < 20479; i++) chk_w_stream(1, i,     "S2 bank1 read d 高区");
+    chk_w_stream(1, 20479, "S2 bank1 末字 next=0");
+
+    // ---------- S3: 银行翻转: 同一银行内地址, w_bank_sel 不同 => 不同银行数据 ----------
+    for (int i = 0; i < 3; i++) begin
+      w_bank_sel = 1'b0; chk_w_stream(0, i, "S3 翻转读 bank0");
+      w_bank_sel = 1'b1; chk_w_stream(1, i, "S3 翻转读 bank1");
+    end
+    w_bank_sel = 1'b0; chk_w_stream(0, 0, "S3 翻回 bank0 内容保持");
+    w_bank_sel = 1'b1; chk_w_stream(1, 0, "S3 翻回 bank1 内容保持");
+
+    // ---------- S4: Q 影子银行 (2 x 8KiB) 填充/读回/翻转/越界 ----------
+    q_bank_sel = 1'b1;    // 填 Q bank0
+    for (int i = 0; i < 16; i++)        qfill_word(13'(i), qbank64(0, i));
+    for (int i = 1010; i < 1024; i++)   qfill_word(13'(i), qbank64(0, i));
+    q_bank_sel = 1'b0;
+    for (int i = 0; i < 16; i++) begin
+      q_read(13'(i), rd64); chk64(rd64, qbank64(0, i), "S4 Q bank0 read"); n_stream++;
+    end
+    for (int i = 1010; i < 1024; i++) begin
+      q_read(13'(i), rd64); chk64(rd64, qbank64(0, i), "S4 Q bank0 tail read"); n_stream++;
+    end
+    // 填 Q bank1 (活动=bank0), 翻转后读 bank1
+    for (int i = 0; i < 16; i++)        qfill_word(13'(i), qbank64(1, i));
+    for (int i = 1010; i < 1024; i++)   qfill_word(13'(i), qbank64(1, i));
+    q_bank_sel = 1'b1;
+    for (int i = 0; i < 16; i++) begin
+      q_read(13'(i), rd64); chk64(rd64, qbank64(1, i), "S4 Q bank1 read"); n_stream++;
+    end
+    for (int i = 1010; i < 1024; i++) begin
+      q_read(13'(i), rd64); chk64(rd64, qbank64(1, i), "S4 Q bank1 tail read"); n_stream++;
+    end
+    q_bank_sel = 1'b0;    // bank0 内容仍在
+    for (int i = 0; i < 3; i++) begin
+      q_read(13'(i), rd64); chk64(rd64, qbank64(0, i), "S4 Q bank0 retained"); n_stream++;
+    end
+    q_read(13'd1024, rd64); chk64(rd64, 64'b0, "S4 Q addr=1024 -> 0 (影子银行外)"); n_stream++;
+    q_read(13'd6143, rd64); chk64(rd64, 64'b0, "S4 Q addr=6143 -> 0 (影子银行外)"); n_stream++;
+
+    // ---------- S5: 并发: 引擎连续读活动银行(bank1) + 填充写非活动银行(bank0) ----------
+    w_bank_sel = 1'b1;
+    @(negedge clk);
+    for (int t = 0; t < 600; t++) begin
+      w_re        = 1'b1;
+      w_addr      = 24'((t % 15) * 8);          // bank1 已填 0..15, 窗口(pi,pi+1)都确定
+      wfill_we    = 1'b1;
+      wfill_addr  = 18'(t);                     // 填 bank0 (=~活动银行)
+      wfill_wdata = wbank64(0, t);
+      @(negedge clk);
+      if (t >= 1) begin                        // 读时延 2 拍: 本拍读到 t-1 发的地址
+        chk128(w_rdata, w_exp_stream(1, (t - 1) % 15),
+               "S5 并发: 活动银行读不受填充影响");
+        n_stream++;
+      end
+    end
+    w_re = 1'b0; wfill_we = 1'b0; wfill_addr = 18'd0; wfill_wdata = 64'd0;
+    w_bank_sel = 1'b0;
+    for (int i = 0; i < 4; i++) chk_w_stream(0, i, "S5 填充的 bank0 数据正确");
+
+    // ---------- S6: 模式回到 ROM 路径 (dbg 预置字经原 ROM 读口读回) + 流式越界 ----------
+    w_mode = 1'b0; w_bank_sel = 1'b0; q_bank_sel = 1'b0;
+    dbg_write(1'b0, 17'd512, 32'h5A5A_0000);   // 全局 64b 字 256 低半
+    dbg_write(1'b0, 17'd513, 32'hA5A5_0001);   // 字 256 高半
+    dbg_write(1'b0, 17'd514, 32'h1234_0002);   // 字 257 低半
+    dbg_write(1'b0, 17'd515, 32'h5678_0003);   // 字 257 高半
+    dbg_write(1'b0, 17'd516, 32'h9ABC_0004);   // 字 258 低半
+    dbg_write(1'b0, 17'd517, 32'hDEF0_0005);   // 字 258 高半
+    w_read(24'(256*8), rd128);
+    chk128(rd128, {64'h5678_0003_1234_0002, 64'hA5A5_0001_5A5A_0000},
+           "S6 ROM 模式读回 (全局字 256/257)");
+    n_stream++;
+    w_read(24'(257*8), rd128);
+    chk128(rd128, {64'hDEF0_0005_9ABC_0004, 64'h5678_0003_1234_0002},
+           "S6 ROM 模式读回 (全局字 257/258)");
+    n_stream++;
+    w_mode = 1'b1; w_bank_sel = 1'b1;
+    w_read(24'h028000, rd128);                       // 163,840 = 银行容量 -> 越界
+    chk128(rd128, 128'h0, "S6 流式越界 w_addr=0x28000 -> 0"); n_stream++;
+    w_read(24'h07FFFF, rd128);
+    chk128(rd128, 128'h0, "S6 流式越界 w_addr=0x7FFFF -> 0"); n_stream++;
+    w_mode = 1'b0; w_bank_sel = 1'b0;                // 回到默认 ROM 模式
+
     // ---------- 收尾 ----------
     $display("[MEM_TB] SUMMARY checks=%0d w_sweep=%0d q_sweep=%0d act=%0d cpu=%0d",
              n_checks, n_w_sweep, n_q_sweep, n_act, n_cpu);
+    $display("[MEM_TB] SUMMARY_LEGACY(ROM)=%0d + STREAM(w_mode=1)=%0d",
+             n_legacy, n_stream);
     if (n_mismatch == 0 && n_xerr == 0)
       $display("MEM_TB: PASS (checks=%0d, mismatch=0, xerr=0)", n_checks);
     else
@@ -469,8 +652,10 @@ module tb_nn_mem #(
   end
 
   // ---- 看门狗 ----
+  // [M2] 200,000 -> 400,000: 增加 w_mode=1 的流式用例 (填充/并发)。带镜像的
+  // legacy 全量扫描约 13.6 万拍, 流式用例约 0.4 万拍, 400k 仍有 ~2.4x 余量。
   initial begin : watchdog
-    repeat (200000) @(posedge clk);
+    repeat (400000) @(posedge clk);
     $display("MEM_TB: FAIL (watchdog timeout)");
     $fatal(1);
   end
@@ -511,7 +696,17 @@ module tb_nn_mem #(
     .dbg_we    (dbg_we),
     .dbg_space (dbg_space),
     .dbg_addr  (dbg_addr),
-    .dbg_wdata (dbg_wdata)
+    .dbg_wdata (dbg_wdata),
+    // [M2] 流式 W/Q 端口
+    .w_mode      (w_mode),
+    .w_bank_sel  (w_bank_sel),
+    .wfill_we    (wfill_we),
+    .wfill_addr  (wfill_addr),
+    .wfill_wdata (wfill_wdata),
+    .q_bank_sel  (q_bank_sel),
+    .qfill_we    (qfill_we),
+    .qfill_addr  (qfill_addr),
+    .qfill_wdata (qfill_wdata)
   );
 
 endmodule

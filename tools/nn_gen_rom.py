@@ -48,12 +48,26 @@ def read_pkg_int(name, default=None):
 
 
 NUM_FIELDS = [
-    # (名字, 位宽)
-    ('kind', 4), ('flags', 7), ('ks', 4), ('pad', 3), ('stride', 2),
+    # (名字, 位宽)  —— v1 (瓶盖模型迁移): src/dst 19->22, 新增 wlen/qlen/tile, 总宽 256 bit
+    ('kind', 4), ('flags', 8), ('ks', 4), ('pad', 3), ('stride', 2),
     ('ic', 10), ('oc', 10), ('ih', 9), ('iw', 9),
-    ('src', 19), ('dst', 19), ('woff', 19), ('qoff', 16),
-    ('aux0', 16), ('aux1', 16), ('csum', 32), ('rsvd', 5),
+    ('src', 22), ('dst', 22), ('woff', 19), ('qoff', 16),
+    ('wlen', 18), ('qlen', 13), ('tile', 8),
+    ('aux0', 16), ('aux1', 16), ('csum', 32), ('rsvd', 15),
 ]
+
+# 每层 Q 区字节 = 6*OC_pad + 16 (CONTRACT §7); add(ADD_R) 用 16B 块 (CONTRACT §12.3)
+Q_BYTES_PER_LAYER = lambda oc8: 6 * oc8 + 16
+Q_BYTES_ADD_R = 16
+# 单层权重上限: 128 KiB (W 双银行的 portB 在 128KiB 之上会被"引擎 next 读"与"DMA 填充写"争用)
+W_LEN_MAX = 128 * 1024
+# ROM 模式(综合期常驻 W BRAM)可容纳的权重上限; 超过它必须走 DDR3 权重流式(woff/qoff 归零)
+W_BYTES_MAX_ROM = 320 * 1024
+
+
+def pad8(c):
+    return ((int(c) + 7) // 8) * 8
+
 TOTAL_BITS = sum(w for _, w in NUM_FIELDS)
 
 # flags 位（与 nn_pkg.sv 一致）
@@ -64,6 +78,7 @@ F_UP2X = 3
 F_POOLMAX = 4
 F_PACKED3 = 5
 F_ADD_R = 6
+F_RELU = 7
 
 KIND_CODE = {
     'conv': 0, 'dwconv': 1, 'pool': 2, 'upsample': 3, 'add': 4, 'copy': 5,
@@ -97,17 +112,24 @@ def op_flags(op, kind_code):
     """把 plan 的 flags 约定映射到 nn_pkg::NN_F_* 的位位置。
 
     plan.json (v0.6, T-model 生成) 的 flags 约定:
-      bit0 = depthwise, bit1 = leaky, bit2 = PACKED3, bit3 = ADD_R
-    nn_pkg 的位位置: depthwise=0, leaky=1, add=2, up2x=3, poolmax=4, packed3=5, add_r=6
+      bit0 = depthwise, bit1 = leaky, bit2 = PACKED3, bit3 = ADD_R, bit4 = RELU (v0.8 新增)
+    nn_pkg 的位位置: depthwise=0, leaky=1, add=2, up2x=3, poolmax=4, packed3=5, add_r=6, relu=7
     （两者**不是同一张表** —— 首版直接照搬 plan.flags 会让 ROM 的 PACKED3/ADD_R 丢失,
       引擎就会按普通 conv/add 跑，数值全错。这里显式映射并在文件头记下差异。）
+
+    v0.8 (瓶盖模型): RELU 由 plan.flags bit4 或 op['relu'] / op['act']=='relu' 表达;
+      RELU 与 LEAKY 互斥, 同时置位时 RELU 优先 (引擎侧三态) —— 这里显式清掉 LEAKY。
     """
     pf = int(op.get('flags', 0) or 0)
+    act = str(op.get('act') or op.get('activation') or '').lower()
     f = 0
     if op.get('kind') == 'dwconv' or (pf & 1) or op.get('depthwise'):
         f |= 1 << F_DEPTHWISE
-    if (pf & 2) or op.get('leaky'):
+    is_relu = bool(pf & 16) or bool(op.get('relu')) or act in ('relu', 'relu6')
+    if ((pf & 2) or op.get('leaky')) and not is_relu:
         f |= 1 << F_LEAKY
+    if is_relu:
+        f |= 1 << F_RELU
     if (pf & 4) or op.get('packed3'):
         f |= 1 << F_PACKED3
     if (pf & 8) or (op.get('kind') == 'add' and ('r_scale' in op or 'R' in op)):
@@ -121,14 +143,31 @@ def op_flags(op, kind_code):
     return f
 
 
-def build_entries(plan, a_off, b_off):
-    """把 plan.op 展开成 ROM 项（只做结构转换，不改数值语义）。"""
+def build_entries(plan, a_off, b_off, arena_base=None, stream_mode=False):
+    """把 plan.op 展开成 ROM 项（只做结构转换，不改数值语义）。
+
+    [v1] 地址口径（两种 plan 都支持）:
+      - 若 op 带 src_arena_off/dst_arena_off（DDR3 流式 plan）: src/dst = 绝对地址 - arena_base（22-bit 相对偏移）
+      - 否则（YOLO C128 ROM 模式）: src/dst = A/B 窗口绝对字节偏移（abs_off）
+      - stream_mode=True 时 woff/qoff 归零（权重/Q 由 nn_wload 逐层装填到银行基址, 引擎从 0 起算）
+    """
     entries = []
     ops = plan['ops']
     for idx, op in enumerate(ops):
         k = op.get('kind')
         if k not in KNOWN_KINDS:
             fail('op#%d 未知 kind=%r' % (idx, k))
+
+        def pick_addr(kind_key):
+            abs_k = kind_key + '_arena_off'
+            if arena_base is not None and abs_k in op:
+                rel = int(op[abs_k]) - arena_base
+                if rel < 0:
+                    fail('op#%d %s=0x%X 小于 arena_base=0x%X' % (idx, abs_k, int(op[abs_k]), arena_base))
+                if rel >= (1 << 22):
+                    fail('op#%d %s 相对偏移 0x%X 超出 22-bit（4MB）arena 窗口' % (idx, abs_k, rel))
+                return rel
+            return None
         if k in ('cpu_concat', 'cpu_copy'):
             # 展开成多个 copy（8 通道粒度）；最后一项带该 op 的 csum 供 debug 对照
             sources = op.get('sources', [])
@@ -137,16 +176,26 @@ def build_entries(plan, a_off, b_off):
             oc_t = int(op.get('oc_tensor') or op.get('oc') or 0)
             if oc_t % 8:
                 fail('op#%d concat 目标通道 %d 不是 8 的倍数' % (idx, oc_t))
-            dst_base = abs_off(op['dst']['buf'], op['dst']['off'], a_off, b_off)
+            dst_base_arena = pick_addr('dst')
+            if dst_base_arena is not None:
+                dst_base = dst_base_arena
+            else:
+                dst_base = abs_off(op['dst']['buf'], op['dst']['off'], a_off, b_off)
             ch = 0
             for si, s in enumerate(sources):
                 sc = int(s['c'])
                 if sc % 8:
                     fail('op#%d 源#%d 通道 %d 不是 8 的倍数（引擎 copy 限制）' % (idx, si, sc))
-                src = abs_off(s['buf'], s['off'], a_off, b_off)
+                if arena_base is not None and 'arena_off' in s:
+                    src = int(s['arena_off']) - arena_base
+                    if src < 0 or src >= (1 << 22):
+                        fail('op#%d 源#%d arena 偏移 0x%X 超出 22-bit 窗口' % (idx, si, src))
+                else:
+                    src = abs_off(s['buf'], s['off'], a_off, b_off)
                 e = dict(kind='copy', flags=0, ks=1, pad=0, stride=1,
                          ic=sc, oc=oc_t, ih=int(op.get('ih', 0)), iw=int(op.get('iw', 0)),
                          src=src, dst=dst_base + ch, woff=0, qoff=0, aux0=0, aux1=0,
+                         wlen=0, qlen=0, tile=0,
                          csum=(int(op['csum']) & 0xFFFFFFFF) if si == len(sources) - 1 else 0)
                 entries.append(e)
                 ch += sc
@@ -177,13 +226,63 @@ def build_entries(plan, a_off, b_off):
             if not (0 < R <= 0xFFFF):
                 fail('op#%d add R=%d 超出 16 位 (需 0<R≤65535)' % (idx, R))
             aux0, aux1 = R, K
+        # [M6c 2026-11-04] conv/dwconv: aux0[7:0] = 该 op 输入张量的 zp_in (符号扩展 16 位)。
+        #   用途: band tile 模式物化竖直/水平 pad 行/列时需要 zp_in, nn_seq 在引擎启动前就要知道。
+        #   CONTRACT §11 里 conv/dwconv/pool/copy 的 aux0/aux1 空闲 (只有 add 用 R/KADD), 零冲突;
+        #   YOLO plan 无 tile_zp_in -> aux0=0, 旧路径逐位不变。
+        if kind_code in (0, 1) and op.get('tile_zp_in') is not None:
+            _z = int(op['tile_zp_in']) & 0xFF
+            aux0 = (_z | 0xFF00) if (_z & 0x80) else _z
         e = dict(kind=k, flags=flags, ks=int(op.get('k', 1) or 1),
                  pad=int(op.get('pad', 0) or 0), stride=int(op.get('stride', 1) or 1),
                  ic=ic, oc=oc, ih=ih, iw=iw,
-                 src=abs_off(op['src']['buf'], op['src']['off'], a_off, b_off),
-                 dst=abs_off(op['dst']['buf'], op['dst']['off'], a_off, b_off),
-                 woff=woff, qoff=qoff, aux0=aux0, aux1=aux1,
+                 src=(pick_addr('src') if pick_addr('src') is not None
+                      else abs_off(op['src']['buf'], op['src']['off'], a_off, b_off)),
+                 dst=(pick_addr('dst') if pick_addr('dst') is not None
+                      else abs_off(op['dst']['buf'], op['dst']['off'], a_off, b_off)),
+                 woff=(0 if stream_mode else woff), qoff=(0 if stream_mode else qoff),
+                 aux0=aux0, aux1=aux1,
                  csum=(int(op.get('csum', 0)) & 0xFFFFFFFF))
+        # ---- [v1] 流式字段: wlen / qlen / tile ----
+        ks_i = e['ks']
+        ic8, oc8 = pad8(ic), pad8(oc)
+        if kind_code in (0, 1):                       # conv / dwconv
+            n_tap = ks_i * ks_i
+            if kind_code == 1:                        # depthwise: K*K*OC_pad
+                wlen = n_tap * oc8
+            else:                                     # dense: K*K*IC_pad*OC_pad
+                wlen = n_tap * ic8 * oc8
+            qlen = Q_BYTES_PER_LAYER(oc8)
+        elif kind_code == 4 and (flags & (1 << F_ADD_R)):
+            wlen, qlen = 0, Q_BYTES_ADD_R
+        else:
+            wlen, qlen = 0, 0
+        # plan 自带精确 wlen/qlen 时以 plan 为准（量化侧按 8 通道对齐算过）
+        if 'wlen' in op:
+            wlen = int(op['wlen'])
+        if 'qlen' in op:
+            qlen = int(op['qlen'])
+        if wlen > W_LEN_MAX:
+            fail('op#%d wlen=%d 超过单层权重上限 %d B（W 双银行 portB 争用约束）' % (idx, wlen, W_LEN_MAX))
+        if qlen > 8192:
+            fail('op#%d qlen=%d 超过 Q 影子银行 8192 B' % (idx, qlen))
+        e['wlen'] = wlen
+        e['qlen'] = qlen
+        # [M6c] tile[7:0] 语义 (M4-TILECACHE 附录 A):
+        #   [7:4]=band_rows-1 (1..16), [3]=add_mode(ADD_R 融合), [2]=packed3_stream, [1:0]=保留
+        #   仅当 plan 显式标注 tile_mode='band' 时非 0; YOLO/C128 与 op0(PACKED3 whole) 为 0。
+        _tile = 0
+        if str(op.get('tile_mode', '')) == 'band':
+            _tp = op.get('tile_plan') or {}
+            _br = int(_tp.get('band_rows', 0) or 0)
+            if 1 <= _br <= 16:
+                _tile |= ((_br - 1) & 0xF) << 4
+            _tile |= 1 << 1          # [1]=band_en: 显式使能 (band_rows=1 时 [7:4]=0, 不能靠 [7:4]!=0 判)
+            if op.get('fused_add') or (op.get('fusion_host') is not None):
+                _tile |= 1 << 3
+            if kind_code == 0 and (flags & (1 << F_PACKED3)):
+                _tile |= 1 << 2
+        e['tile'] = _tile
         entries.append(e)
     return entries
 
@@ -289,12 +388,26 @@ def main():
     ap.add_argument('--table', default=None, help='同时输出可核对 JSON 表')
     ap.add_argument('--check-table', default=None,
                     help='交叉校验: 与模型侧 ROM 数据源 (T-model 的 sim/prog/yolo/nn_rom_table.json) 比对')
+    ap.add_argument('--arena-base', default=None,
+                    help='DDR3 arena 基址 (plan 里 src_arena_off/dst_arena_off 为绝对地址时用于换算成 22-bit 相对偏移;'
+                         ' 缺省用 plan.arena_base)')
     args = ap.parse_args()
 
     plan = json.load(open(args.plan, encoding='utf-8'))
     a_off = read_pkg_int('NN_A_OFF')
     b_off = read_pkg_int('NN_B_OFF')
     depth_max = 128
+
+    # [v1] DDR3 流式 plan: arena 绝对地址 -> 22-bit arena 相对偏移; 权重/Q 由预取引擎逐层装填 => woff/qoff 归零
+    arena_base = None
+    if args.arena_base is not None:
+        arena_base = int(args.arena_base, 0)
+    elif 'arena_base' in plan:
+        arena_base = int(plan['arena_base'])
+    stream_mode = int(plan.get('w_bytes', 0) or 0) > W_BYTES_MAX_ROM
+    if stream_mode and arena_base is None:
+        fail('plan 是流式权重 (%d B > %d B) 但缺少 arena_base / --arena-base'
+             % (int(plan.get('w_bytes', 0)), W_BYTES_MAX_ROM))
 
     legacy = [op.get('kind') for op in plan['ops'] if str(op.get('kind', '')).startswith('cpu_')]
     if legacy:
@@ -303,8 +416,18 @@ def main():
         print('[WARN] plan 含 CPU kind %r -> 生成占位空 ROM（MODE_AUTO 不可用，等 v0.6 plan）'
               % sorted(set(legacy)))
         entries = []
+        print('[INFO] mode=%s arena_base=%s' % ('STR' if stream_mode else 'ROM',
+                                                ('0x%X' % arena_base) if arena_base is not None else '-'))
     else:
-        entries = build_entries(plan, a_off, b_off)
+        entries = build_entries(plan, a_off, b_off, arena_base=arena_base, stream_mode=stream_mode)
+        sw = sum(int(e.get('wlen', 0) or 0) for e in entries)
+        sq = sum(int(e.get('qlen', 0) or 0) for e in entries)
+        print('[INFO] mode=%s arena_base=%s ops=%d sum_wlen=%d sum_qlen=%d'
+              % ('STR' if stream_mode else 'ROM',
+                 ('0x%X' % arena_base) if arena_base is not None else '-', len(entries), sw, sq))
+        plan_w = int(plan.get('w_bytes', 0) or 0)
+        if plan_w and sw != plan_w:
+            fail('ROM 权重字节和 %d != plan.w_bytes %d（wlen 与权重镜像不一致）' % (sw, plan_w))
     if len(entries) > depth_max:
         fail('ROM 项数 %d > %d，需要加深 ROM（改 nn_pkg::NN_ROM_DEPTH）' % (len(entries), depth_max))
 

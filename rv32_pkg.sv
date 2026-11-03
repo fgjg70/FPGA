@@ -401,6 +401,23 @@ package rv32_pkg;
   localparam logic [31:0] MMIO_NN_DBG0   = 32'hA000_0140;  // R: 引擎状态
   localparam logic [31:0] MMIO_NN_DBG1   = 32'hA000_0144;  // R: {cur_ic, cur_oc}
   localparam logic [31:0] MMIO_NN_DBG2   = 32'hA000_0148;  // R: {cycles, err_code}
+  // ---- [M5-S1 2026-11-03] Job 级接口 (CPU-NPU 解耦第一版, CPU 写 1 个 job -> NPU 自主跑 ROM) ----
+  //   设计: results/bottlecap/reports/CPU-NPU-DECOUPLE.md §4.2 / M5-JOB-IF.md §2
+  //   S1 语义: 单时钟, 输入仍在片上 A; 结果经 2KB 邮箱由 nn_subsys 从 OUT_ADDR 窗口拷贝。
+  localparam logic [31:0] MMIO_NN_JOB_ID        = 32'hA000_0150;  // R: 0x4E503101 ("NP1")
+  localparam logic [31:0] MMIO_NN_JOB_STATUS    = 32'hA000_0154;  // R: [0]busy [1]done [2]err [3]pending [4]model_ready [6]timeout [7]mbox_valid [15:8]err_code
+  localparam logic [31:0] MMIO_NN_JOB_FRAME_NO  = 32'hA000_0158;  // R: 最近完成 job 的帧号
+  localparam logic [31:0] MMIO_NN_JOB_CYCLES    = 32'hA000_015C;  // R: 最近 job 的 npu cycles
+  localparam logic [31:0] MMIO_NN_JOB_IN_ADDR   = 32'hA000_0160;  // W/R: 输入 arena 偏移 (S1 记录, S3 消费)
+  localparam logic [31:0] MMIO_NN_JOB_OUT_ADDR  = 32'hA000_0164;  // W/R: 邮箱 payload 拷贝源窗口偏移 (16B 对齐)
+  localparam logic [31:0] MMIO_NN_JOB_MODEL     = 32'hA000_0168;  // W/R: 模型号 (S1 只接受 0)
+  localparam logic [31:0] MMIO_NN_JOB_FRAME     = 32'hA000_016C;  // W/R: 本 job 帧号
+  localparam logic [31:0] MMIO_NN_JOB_DOORBELL  = 32'hA000_0170;  // W: 写 1 提交; R: 1=pending/running
+  localparam logic [31:0] MMIO_NN_JOB_ACK       = 32'hA000_0174;  // W: 写 1 清 done/err/timeout
+  localparam logic [31:0] MMIO_NN_JOB_ERR_CODE  = 32'hA000_0178;  // R: [7:0] err (E1..E7)
+  localparam logic [31:0] MMIO_NN_JOB_LEN       = 32'hA000_017C;  // W/R: 邮箱 payload 字节数 (<=2016)
+  localparam logic [31:0] MMIO_NN_JOB_DONE_CNT  = 32'hA000_0180;  // R: 完成 job 累计
+  localparam logic [31:0] MMIO_NN_JOB_DROP_CNT  = 32'hA000_0184;  // R: 被丢弃 doorbell 累计
 
   // --------------------------------------------------------------------------
   // 陷阱原因码

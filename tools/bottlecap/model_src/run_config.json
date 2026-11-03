@@ -1,0 +1,33 @@
+{
+  "dataset_dir": "bottle_cap_color_dataset_multi_augmented_7to1",
+  "train_images": 3500,
+  "test_images": 500,
+  "epochs": 32,
+  "batch_size": 32,
+  "learning_rate": 0.0004,
+  "fpn_channels": 72,
+  "backbone_width": 0.55,
+  "parameter_count": 2048721,
+  "initialized_from": "runs\\daily_goods\\enhanced_daily_goods_detector_2m_transfer\\best_model.pt",
+  "transfer_source_domain": "daily_goods",
+  "transfer_source_epoch": 24,
+  "transfer_skipped_keys": [
+    "class_head.weight",
+    "class_head.bias"
+  ],
+  "freeze_backbone_epochs": 3,
+  "teacher_checkpoint": null,
+  "teacher_epoch": null,
+  "distill_weight": 0.0,
+  "model_variant": "enhanced_mobilenetv2_fpn_decoupled_head",
+  "objectness_training": "4x focal positive + 2x heatmap + 2x center-confidence constraint",
+  "max_detections": 4,
+  "seed": 20260807,
+  "class_names": [
+    "red_cap",
+    "purple_cap",
+    "green_cap",
+    "yellow_cap"
+  ],
+  "domain": "bottle_cap_colors"
+}

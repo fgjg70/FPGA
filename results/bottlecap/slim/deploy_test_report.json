@@ -1,0 +1,171 @@
+{
+  "checkpoint": "D:\\USER\\Desktop\\FPGA\\FPGA\\results\\bottlecap\\slim\\best_model.pt",
+  "checkpoint_epoch": 62,
+  "input_size": 96,
+  "preprocess": {
+    "target_size": 96,
+    "fitted_height": 72,
+    "pad_top": 12,
+    "pad_bottom": 12,
+    "normalize": "pixel/127.5-1",
+    "label_normalize": "/(input_size-1)"
+  },
+  "parameter_count": 136321,
+  "metrics": {
+    "test_images": 500,
+    "true_objects": 1250,
+    "predicted_objects": 1250,
+    "true_positive": 1248,
+    "false_positive": 2,
+    "false_negative": 2,
+    "precision": 0.9984,
+    "recall": 0.9984,
+    "f1": 0.9984,
+    "mean_matched_iou": 0.9495043877798778,
+    "count_accuracy": 1.0,
+    "exact_image_accuracy": 0.996,
+    "per_class": {
+      "red_cap": {
+        "true_objects": 313,
+        "predicted_objects": 311,
+        "matched_objects": 311,
+        "precision": 1.0,
+        "recall": 0.9936102236421726
+      },
+      "purple_cap": {
+        "true_objects": 313,
+        "predicted_objects": 315,
+        "matched_objects": 313,
+        "precision": 0.9936507936507937,
+        "recall": 1.0
+      },
+      "green_cap": {
+        "true_objects": 312,
+        "predicted_objects": 312,
+        "matched_objects": 312,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "yellow_cap": {
+        "true_objects": 312,
+        "predicted_objects": 312,
+        "matched_objects": 312,
+        "precision": 1.0,
+        "recall": 1.0
+      }
+    },
+    "by_true_object_count": {
+      "1": {
+        "images": 125,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "count_accuracy": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "2": {
+        "images": 125,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "count_accuracy": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "3": {
+        "images": 125,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "count_accuracy": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "4": {
+        "images": 125,
+        "precision": 0.996,
+        "recall": 0.996,
+        "f1": 0.996,
+        "count_accuracy": 1.0,
+        "exact_image_accuracy": 0.984
+      }
+    },
+    "by_lighting_profile": {
+      "bright": {
+        "images": 69,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "cool": {
+        "images": 68,
+        "precision": 0.9938271604938271,
+        "recall": 0.9938271604938271,
+        "f1": 0.9938271604938271,
+        "exact_image_accuracy": 0.9852941176470589
+      },
+      "dim": {
+        "images": 76,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "low_contrast": {
+        "images": 69,
+        "precision": 0.9942196531791907,
+        "recall": 0.9942196531791907,
+        "f1": 0.9942196531791907,
+        "exact_image_accuracy": 0.9855072463768116
+      },
+      "neutral": {
+        "images": 78,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "transition": {
+        "images": 61,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "warm": {
+        "images": 79,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "exact_image_accuracy": 1.0
+      }
+    }
+  },
+  "training_report": "D:\\USER\\Desktop\\FPGA\\FPGA\\results\\bottlecap\\slim\\test_report.json",
+  "matches_training_report": true,
+  "deltas_vs_training": {
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0,
+    "mean_matched_iou": 0.0,
+    "exact_image_accuracy": 0.0,
+    "count_accuracy": 0.0,
+    "true_positive": 0.0,
+    "false_positive": 0.0,
+    "false_negative": 0.0
+  },
+  "decode": {
+    "grid_hw": [
+      24,
+      24
+    ],
+    "objectness_activation": "sigmoid",
+    "local_max": "sigmoid(obj) == max_pool2d(sigmoid(obj), 3, stride=1, pad=1)",
+    "confidence": "sigmoid(obj) * softmax(class).max",
+    "confidence_threshold": 0.2,
+    "pre_nms_topk": 40,
+    "nms": "class-aware greedy NMS",
+    "nms_iou_threshold": 0.35,
+    "max_detections": 4,
+    "box_decode": "(cx,cy) = (gx + sigmoid(tx), gy + sigmoid(ty)) / G ; (w,h) = sigmoid(tw,th)"
+  }
+}

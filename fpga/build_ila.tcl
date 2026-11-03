@@ -239,7 +239,7 @@ create_project -force -part $part $root/fpga/ila_proj
 
 # File list must be on one line: Tcl backslash continuation gets split into
 # separate commands here.
-add_files -norecurse [list "$root/rv32_pkg.sv" "$root/nn_pkg.sv" "$root/nn_rom_pkg.sv" "$root/alu.sv" "$root/branch_unit.sv" "$root/control_unit.sv" "$root/imm_gen.sv" "$root/pc.sv" "$root/regfile.sv" "$root/id_ex_reg.sv" "$root/ex_mem_reg.sv" "$root/mem_wb_reg.sv" "$root/hazard_unit.sv" "$root/load_store_unit.sv" "$root/imem.sv" "$root/dmem.sv" "$root/btb.sv" "$root/bht.sv" "$root/ras.sv" "$root/muldiv.sv" "$root/csr_file.sv" "$root/core.sv" "$root/gemm_accel.sv" "$root/nn_mem.sv" "$root/nn_conv_engine.sv" "$root/nn_seq.sv" "$root/nn_subsys.sv" "$root/fpga/mmio_subsys.sv" "$root/fpga/top_a100t.sv"]
+add_files -norecurse [list "$root/rv32_pkg.sv" "$root/nn_pkg.sv" "$root/nn_rom_pkg.sv" "$root/alu.sv" "$root/branch_unit.sv" "$root/control_unit.sv" "$root/imm_gen.sv" "$root/pc.sv" "$root/regfile.sv" "$root/id_ex_reg.sv" "$root/ex_mem_reg.sv" "$root/mem_wb_reg.sv" "$root/hazard_unit.sv" "$root/load_store_unit.sv" "$root/imem.sv" "$root/dmem.sv" "$root/btb.sv" "$root/bht.sv" "$root/ras.sv" "$root/muldiv.sv" "$root/csr_file.sv" "$root/core.sv" "$root/gemm_accel.sv" "$root/nn_mem.sv" "$root/nn_conv_engine.sv" "$root/nn_seq.sv" "$root/nn_subsys.sv" "$root/nn_wload.sv" "$root/nn_tilecache.sv" "$root/fpga/mmio_subsys.sv" "$root/fpga/top_a100t.sv"]
 add_files -fileset constrs_1 -norecurse [list "$root/fpga/daVinciPro.xdc"]
 
 # ---- X-10 / R41: record WHICH RTL went into this bitstream ------------------

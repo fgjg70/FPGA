@@ -47,6 +47,18 @@ package nn_pkg;
   localparam int unsigned NN_W_WORDS   = NN_W_BYTES / 4;      // 81,920 个 32-bit 字 (BRAM 初始化口径)
   localparam int unsigned NN_Q_WORDS   = NN_Q_BYTES / 4;      // 12,288 个 32-bit 字 (LUTRAM)
 
+  // [v0.8 瓶盖模型迁移] W 区双银行 L2 缓存 / Q 影子缓冲 (权重与 Q 随层流式)
+  //   参考: results/bottlecap/ddr3/WEIGHT-STREAMING-DESIGN.md §2.1 M1-M6
+  localparam int unsigned NN_W_BANKS     = 2;
+  localparam int unsigned NN_W_BANK_BYTES = NN_W_BYTES / NN_W_BANKS;   // 160*1024 B
+  localparam int unsigned NN_W_BANK_W64   = NN_W_BANK_BYTES / 8;        // 20,480 个 64-bit 字
+  localparam int unsigned NN_W_BANK_AW    = 18;                         // 银行内字节地址 (0..163839)
+  localparam logic        NN_W_MODE_ROM   = 1'b0;                       // w_mode=0: 综合期 ROM 路径 (默认, 逐位兼容)
+  localparam logic        NN_W_MODE_STREAM= 1'b1;                       // w_mode=1: 双银行 L2 流式路径
+  localparam int unsigned NN_Q_BANK_BYTES = 8*1024;                     // Q 影子银行容量 (单层 Q <= 5,200 B)
+  localparam int unsigned NN_Q_BANK_W64   = NN_Q_BANK_BYTES / 8;        // 1,024 个 64-bit 字
+  localparam int unsigned NN_Q_FILL_AW    = 13;                         // qfill_addr 位宽 (64b 字索引)
+
   // CPU 窗口 (v0.7): 只映射 A/B; 其余地址读 0 / 写忽略。
   localparam logic [31:0] NN_CPU_A_OFF = NN_A_OFF;
   localparam logic [31:0] NN_CPU_B_OFF = NN_B_OFF;
@@ -70,6 +82,9 @@ package nn_pkg;
   // [v0.7 新增]
   localparam int unsigned NN_F_PACKED3   = 5;  // 1 = 输入激活按 3B/像素 packed 寻址 (conv0 专用)
   localparam int unsigned NN_F_ADD_R     = 6;  // 1 = add 用 per-tensor 源 requant: out=clamp(q_d+(((q_s-zp_s)*R)>>KADD))
+  // [v0.8 新增, 瓶盖模型迁移]
+  localparam int unsigned NN_F_RELU     = 7;  // 1 = 激活为 ReLU: requant 负支 M_neg=0 (输出下界 zp_out);
+                                              //     ADD 时表示 out = max(out, zp_d). 与 LEAKY 互斥 (RELU 优先).
 
   // --------------------------------------------------------------------------
   // 引擎描述符 (nn_subsys / nn_seq 从 ROM/MMIO 拼好, start 拍整体有效)
@@ -77,7 +92,7 @@ package nn_pkg;
   // --------------------------------------------------------------------------
   typedef struct packed {
     logic [1:0]  op;         // nn_op_e
-    logic [6:0]  flags;      // NN_F_* 位 (v0.7: 5→7 位, 容纳 PACKED3/ADD_R)
+    logic [7:0]  flags;      // NN_F_* 位 (v0.8: 7→8 位, 容纳 RELU)
     logic [3:0]  ks;         // 卷积核 1/3/5; pool 核 2/3/5/9
     logic [1:0]  stride;     // 1 / 2
     logic [2:0]  pad;        // conv pad ≤2; pool pad ≤4 (K=9)
@@ -110,23 +125,30 @@ package nn_pkg;
 
   typedef struct packed {
     logic [3:0]  kind;       // NN_ROM_KIND_*
-    logic [6:0]  flags;      // NN_F_* (PACKED3/ADD_R/LEAKY/DEPTHWISE/POOLMAX/UP2X)
+    logic [7:0]  flags;      // NN_F_* (PACKED3/ADD_R/LEAKY/DEPTHWISE/POOLMAX/UP2X/RELU)
     logic [3:0]  ks;         // 卷积核 1/3/5; pool 核 2/3/5/9
     logic [2:0]  pad;
     logic [1:0]  stride;
-    logic [9:0]  ic;         // 真实输入通道 (≤1024)
+    logic [9:0]  ic;         // 真实输入通道 (≤1023)
     logic [9:0]  oc;         // 真实输出通道
     logic [8:0]  ih;         // 输入高 (≤511)
     logic [8:0]  iw;         // 输入宽
-    logic [18:0] src;        // A/B 窗口内字节偏移 (A=0x60000/B=0x78000, <0x80000 ⇒ 19 位)
-    logic [18:0] dst;
-    logic [18:0] woff;       // W 区字节偏移 (<320KB)
-    logic [15:0] qoff;       // Q 区字节偏移 (<48KB)
-    logic [15:0] aux0;       // add: R
+    // ---- [v1] 地址/流式字段 (瓶盖模型迁移; ROM-V1.md) ----
+    logic [21:0] src;        // 源激活字节地址: ROM 模式 = NN 窗口内偏移; 流式模式 = DDR3 arena 内偏移 (4MB)
+    logic [21:0] dst;        // 目的激活字节地址 (同上)
+    logic [18:0] woff;       // W 区扁平字节偏移 (<320KB); 流式模式下恒 0 (层从银行基址开始)
+    logic [15:0] qoff;       // Q 区扁平字节偏移 (<48KB); 流式模式下为层内相对偏移
+    logic [17:0] wlen;       // [v1] 本层 int8 权重字节数 (整层预取用; 必须 ≤131072 以保双银行单口不冲突)
+    logic [12:0] qlen;       // [v1] 本层 Q 字节数 (≤8192)
+    logic [7:0]  tile;       // [v1] band/tile 控制 (语义见 M4-TILECACHE.md 附录 A + 2026-11-04 修订):
+                             //   [7:4]=band_rows-1 (1..16), [3]=add_mode(ADD_R 融合), [1]=band_en(显式使能;
+                             //   为 0 = 不做 tiling, 因 band_rows=1 时 [7:4]=0), [2]=packed3_stream, [0]=保留
+                             //   n_bands=ceil(oh/band_rows) 由 nn_seq 运行时算, 不占 ROM
+    logic [15:0] aux0;       // add: R; copy: 源通道偏移
     logic [15:0] aux1;       // add: KADD
     logic [31:0] csum;       // golden FNV (debug)
-    logic [4:0]  rsvd;       // 对齐到 200 bit (25B/项, 128 项 = 3.2KB LUTRAM)
-  } nn_rom_t;                // 4+7+4+3+2+10+10+9+9+19+19+19+16+16+16+32+5 = 200 bit
+    logic [14:0] rsvd;       // 对齐到 256 bit (128 项 x 256 bit = 32Kb = 1 BRAM36 或 LUTROM)
+  } nn_rom_t;                // 4+8+4+3+2+10+10+9+9+22+22+19+16+18+13+8+16+16+32+15 = 256 bit
 
   // --------------------------------------------------------------------------
   // ROM 项 → 引擎描述符 (纯组合; nn_seq 用)

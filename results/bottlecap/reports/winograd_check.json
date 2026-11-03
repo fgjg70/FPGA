@@ -1,0 +1,608 @@
+{
+ "meta": {
+  "plan": "D:\\USER\\Desktop\\FPGA\\FPGA\\results\\bottlecap\\plan\\plan.json",
+  "weights": "D:\\USER\\Desktop\\FPGA\\FPGA\\results\\bottlecap\\plan\\w.hex",
+  "ckpt": "D:\\USER\\Desktop\\FPGA\\FPGA\\tools\\bottlecap\\model_src\\best_model.pt",
+  "imgs": [
+   "0000.png",
+   "0001.png",
+   "0002.png",
+   "0003.png"
+  ],
+  "targets": {
+   "83": "refine2.conv1.0",
+   "95": "objectness_tower.0.0"
+  },
+  "thresholds": {
+   "cos_i8_mean_ge": 0.97,
+   "cos_i8_min_ge": 0.93
+  },
+  "note": "cos_i8 用两路径共用的 per-tensor requant；误差只来自 Winograd 中间域"
+ },
+ "summary": {
+  "exact": {
+   "n": 8,
+   "cos_i8_mean": 1.0,
+   "cos_i8_min": 1.0,
+   "cos_acc_mean": 1.0,
+   "cos_acc_min": 1.0,
+   "max_abs_diff": 0,
+   "all_exact": true,
+   "verdict": "PASS"
+  },
+  "vclip8": {
+   "n": 8,
+   "cos_i8_mean": 0.975358,
+   "cos_i8_min": 0.967562,
+   "cos_acc_mean": 0.975574,
+   "cos_acc_min": 0.967801,
+   "max_abs_diff": 1013602,
+   "all_exact": false,
+   "verdict": "PASS"
+  },
+  "mclip16": {
+   "n": 8,
+   "cos_i8_mean": 0.304678,
+   "cos_i8_min": 0.230806,
+   "cos_acc_mean": 0.434202,
+   "cos_acc_min": 0.409382,
+   "max_abs_diff": 1355532,
+   "all_exact": false,
+   "verdict": "FAIL"
+  }
+ },
+ "details": [
+  {
+   "op": 83,
+   "module": "refine2.conv1.0+bn",
+   "img": "0000.png",
+   "variant": "exact",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.07092883540134803,
+    "zp": -128,
+    "min": 0.0,
+    "max": 18.08685302734375
+   },
+   "max_abs_diff": 0,
+   "rms_diff": 0.0,
+   "cos_acc": 1.0,
+   "cos_i8": 1.0,
+   "exact": true
+  },
+  {
+   "op": 83,
+   "module": "refine2.conv1.0+bn",
+   "img": "0000.png",
+   "variant": "vclip8",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.07092883540134803,
+    "zp": -128,
+    "min": 0.0,
+    "max": 18.08685302734375
+   },
+   "max_abs_diff": 756964,
+   "rms_diff": 260931.3302,
+   "cos_acc": 0.972268,
+   "cos_i8": 0.972089,
+   "exact": false
+  },
+  {
+   "op": 83,
+   "module": "refine2.conv1.0+bn",
+   "img": "0000.png",
+   "variant": "mclip16",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.07092883540134803,
+    "zp": -128,
+    "min": 0.0,
+    "max": 18.08685302734375
+   },
+   "max_abs_diff": 1044230,
+   "rms_diff": 375130.9943,
+   "cos_acc": 0.427397,
+   "cos_i8": 0.367521,
+   "exact": false
+  },
+  {
+   "op": 83,
+   "module": "refine2.conv1.0+bn",
+   "img": "0001.png",
+   "variant": "exact",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.09140214359059054,
+    "zp": -128,
+    "min": 0.0,
+    "max": 23.307546615600586
+   },
+   "max_abs_diff": 0,
+   "rms_diff": 0.0,
+   "cos_acc": 1.0,
+   "cos_i8": 1.0,
+   "exact": true
+  },
+  {
+   "op": 83,
+   "module": "refine2.conv1.0+bn",
+   "img": "0001.png",
+   "variant": "vclip8",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.09140214359059054,
+    "zp": -128,
+    "min": 0.0,
+    "max": 23.307546615600586
+   },
+   "max_abs_diff": 772065,
+   "rms_diff": 286030.2591,
+   "cos_acc": 0.981836,
+   "cos_i8": 0.981656,
+   "exact": false
+  },
+  {
+   "op": 83,
+   "module": "refine2.conv1.0+bn",
+   "img": "0001.png",
+   "variant": "mclip16",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.09140214359059054,
+    "zp": -128,
+    "min": 0.0,
+    "max": 23.307546615600586
+   },
+   "max_abs_diff": 1043659,
+   "rms_diff": 401233.5288,
+   "cos_acc": 0.447485,
+   "cos_i8": 0.374125,
+   "exact": false
+  },
+  {
+   "op": 83,
+   "module": "refine2.conv1.0+bn",
+   "img": "0002.png",
+   "variant": "exact",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.11276895859662224,
+    "zp": -128,
+    "min": 0.0,
+    "max": 28.756084442138672
+   },
+   "max_abs_diff": 0,
+   "rms_diff": 0.0,
+   "cos_acc": 1.0,
+   "cos_i8": 1.0,
+   "exact": true
+  },
+  {
+   "op": 83,
+   "module": "refine2.conv1.0+bn",
+   "img": "0002.png",
+   "variant": "vclip8",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.11276895859662224,
+    "zp": -128,
+    "min": 0.0,
+    "max": 28.756084442138672
+   },
+   "max_abs_diff": 791080,
+   "rms_diff": 292345.744,
+   "cos_acc": 0.977647,
+   "cos_i8": 0.977435,
+   "exact": false
+  },
+  {
+   "op": 83,
+   "module": "refine2.conv1.0+bn",
+   "img": "0002.png",
+   "variant": "mclip16",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.11276895859662224,
+    "zp": -128,
+    "min": 0.0,
+    "max": 28.756084442138672
+   },
+   "max_abs_diff": 1065298,
+   "rms_diff": 407441.3773,
+   "cos_acc": 0.448911,
+   "cos_i8": 0.364755,
+   "exact": false
+  },
+  {
+   "op": 83,
+   "module": "refine2.conv1.0+bn",
+   "img": "0003.png",
+   "variant": "exact",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.0727627623314951,
+    "zp": -128,
+    "min": 0.0,
+    "max": 18.55450439453125
+   },
+   "max_abs_diff": 0,
+   "rms_diff": 0.0,
+   "cos_acc": 1.0,
+   "cos_i8": 1.0,
+   "exact": true
+  },
+  {
+   "op": 83,
+   "module": "refine2.conv1.0+bn",
+   "img": "0003.png",
+   "variant": "vclip8",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.0727627623314951,
+    "zp": -128,
+    "min": 0.0,
+    "max": 18.55450439453125
+   },
+   "max_abs_diff": 744218,
+   "rms_diff": 270672.7912,
+   "cos_acc": 0.981727,
+   "cos_i8": 0.98156,
+   "exact": false
+  },
+  {
+   "op": 83,
+   "module": "refine2.conv1.0+bn",
+   "img": "0003.png",
+   "variant": "mclip16",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.0727627623314951,
+    "zp": -128,
+    "min": 0.0,
+    "max": 18.55450439453125
+   },
+   "max_abs_diff": 1016942,
+   "rms_diff": 385638.9049,
+   "cos_acc": 0.443316,
+   "cos_i8": 0.377497,
+   "exact": false
+  },
+  {
+   "op": 95,
+   "module": "objectness_tower.0.0+bn",
+   "img": "0000.png",
+   "variant": "exact",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.0416874979056564,
+    "zp": -128,
+    "min": 0.0,
+    "max": 10.630311965942383
+   },
+   "max_abs_diff": 0,
+   "rms_diff": 0.0,
+   "cos_acc": 1.0,
+   "cos_i8": 1.0,
+   "exact": true
+  },
+  {
+   "op": 95,
+   "module": "objectness_tower.0.0+bn",
+   "img": "0000.png",
+   "variant": "vclip8",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.0416874979056564,
+    "zp": -128,
+    "min": 0.0,
+    "max": 10.630311965942383
+   },
+   "max_abs_diff": 1013119,
+   "rms_diff": 352917.8156,
+   "cos_acc": 0.967801,
+   "cos_i8": 0.967562,
+   "exact": false
+  },
+  {
+   "op": 95,
+   "module": "objectness_tower.0.0+bn",
+   "img": "0000.png",
+   "variant": "mclip16",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.0416874979056564,
+    "zp": -128,
+    "min": 0.0,
+    "max": 10.630311965942383
+   },
+   "max_abs_diff": 1341984,
+   "rms_diff": 483769.8426,
+   "cos_acc": 0.409382,
+   "cos_i8": 0.24841,
+   "exact": false
+  },
+  {
+   "op": 95,
+   "module": "objectness_tower.0.0+bn",
+   "img": "0001.png",
+   "variant": "exact",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.041089076621859684,
+    "zp": -128,
+    "min": 0.0,
+    "max": 10.477714538574219
+   },
+   "max_abs_diff": 0,
+   "rms_diff": 0.0,
+   "cos_acc": 1.0,
+   "cos_i8": 1.0,
+   "exact": true
+  },
+  {
+   "op": 95,
+   "module": "objectness_tower.0.0+bn",
+   "img": "0001.png",
+   "variant": "vclip8",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.041089076621859684,
+    "zp": -128,
+    "min": 0.0,
+    "max": 10.477714538574219
+   },
+   "max_abs_diff": 1008503,
+   "rms_diff": 372912.6716,
+   "cos_acc": 0.973271,
+   "cos_i8": 0.973022,
+   "exact": false
+  },
+  {
+   "op": 95,
+   "module": "objectness_tower.0.0+bn",
+   "img": "0001.png",
+   "variant": "mclip16",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.041089076621859684,
+    "zp": -128,
+    "min": 0.0,
+    "max": 10.477714538574219
+   },
+   "max_abs_diff": 1346346,
+   "rms_diff": 504597.1139,
+   "cos_acc": 0.422024,
+   "cos_i8": 0.241023,
+   "exact": false
+  },
+  {
+   "op": 95,
+   "module": "objectness_tower.0.0+bn",
+   "img": "0002.png",
+   "variant": "exact",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.055111144570743335,
+    "zp": -128,
+    "min": 0.0,
+    "max": 14.05334186553955
+   },
+   "max_abs_diff": 0,
+   "rms_diff": 0.0,
+   "cos_acc": 1.0,
+   "cos_i8": 1.0,
+   "exact": true
+  },
+  {
+   "op": 95,
+   "module": "objectness_tower.0.0+bn",
+   "img": "0002.png",
+   "variant": "vclip8",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.055111144570743335,
+    "zp": -128,
+    "min": 0.0,
+    "max": 14.05334186553955
+   },
+   "max_abs_diff": 1013602,
+   "rms_diff": 363899.2788,
+   "cos_acc": 0.970375,
+   "cos_i8": 0.970131,
+   "exact": false
+  },
+  {
+   "op": 95,
+   "module": "objectness_tower.0.0+bn",
+   "img": "0002.png",
+   "variant": "mclip16",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.055111144570743335,
+    "zp": -128,
+    "min": 0.0,
+    "max": 14.05334186553955
+   },
+   "max_abs_diff": 1342278,
+   "rms_diff": 495921.258,
+   "cos_acc": 0.422773,
+   "cos_i8": 0.230806,
+   "exact": false
+  },
+  {
+   "op": 95,
+   "module": "objectness_tower.0.0+bn",
+   "img": "0003.png",
+   "variant": "exact",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.04554587719487209,
+    "zp": -128,
+    "min": 0.0,
+    "max": 11.614198684692383
+   },
+   "max_abs_diff": 0,
+   "rms_diff": 0.0,
+   "cos_acc": 1.0,
+   "cos_i8": 1.0,
+   "exact": true
+  },
+  {
+   "op": 95,
+   "module": "objectness_tower.0.0+bn",
+   "img": "0003.png",
+   "variant": "vclip8",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.04554587719487209,
+    "zp": -128,
+    "min": 0.0,
+    "max": 11.614198684692383
+   },
+   "max_abs_diff": 1007543,
+   "rms_diff": 382315.733,
+   "cos_acc": 0.979666,
+   "cos_i8": 0.979405,
+   "exact": false
+  },
+  {
+   "op": 95,
+   "module": "objectness_tower.0.0+bn",
+   "img": "0003.png",
+   "variant": "mclip16",
+   "shape": {
+    "ic": 72,
+    "oc": 72,
+    "oh": 56,
+    "ow": 56
+   },
+   "quant": {
+    "scale": 0.04554587719487209,
+    "zp": -128,
+    "min": 0.0,
+    "max": 11.614198684692383
+   },
+   "max_abs_diff": 1355532,
+   "rms_diff": 515346.965,
+   "cos_acc": 0.452327,
+   "cos_i8": 0.233288,
+   "exact": false
+  }
+ ]
+}
