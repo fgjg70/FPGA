@@ -38,6 +38,9 @@ module tb_board;
         begin keys_n[index] = 0; cycles(20); keys_n[index] = 1; cycles(20); end
     endtask
     initial begin
+        if (dut.cpu_clock_gen.pll.CLKIN_FREQ / dut.cpu_clock_gen.pll.STATIC_RATIOI > 40.0 &&
+            dut.cpu_clock_gen.pll.BANDWIDTH != "HIGH")
+            $fatal(1, "CPU PLL PFD above 40MHz requires HIGH bandwidth (UG041001)");
         repeat (12) @(negedge sys_clk);
         reset_n = 1;
         wait(dut.pll_locked === 1'b1 && dut.cpu_pll_locked === 1'b1);
@@ -69,8 +72,14 @@ module tb_board;
             if (period_ns < 79.999 || period_ns > 80.001) $fatal(1, "Camera MCLK mismatch: %f ns", period_ns);
             previous_edge = $realtime;
         end
+        @(negedge dut.clk_27m);
+        force dut.video.horizontal = 10'd43;
+        force dut.video.vertical = 9'd12;
         wait(de === 1'b1);
         if ({red, green, blue} !== 24'hffff00) $fatal(1, "RGB565 to RGB888 expansion failed");
+        @(negedge dut.clk_27m);
+        release dut.video.horizontal;
+        release dut.video.vertical;
         @(posedge dclk); previous_edge = $realtime;
         for (edge_index = 0; edge_index < 30; edge_index = edge_index + 1) begin
             @(posedge dclk); period_ns = $realtime - previous_edge;
@@ -90,11 +99,18 @@ module tb_board;
         if (dut.cpu_illegal) $fatal(1, "CPU illegal instruction on board wrapper");
         reset_n = 0;
         repeat (12) @(negedge sys_clk);
+        if (!dut.reset || !dut.cpu_reset) $fatal(1, "SW2 failed to assert both clock-domain resets");
         reset_n = 1;
-        wait(dut.pll_locked === 1'b1);
+        wait(dut.pll_locked === 1'b1 && dut.cpu_pll_locked === 1'b1);
         cycles(10);
         if (!dut.reset) $fatal(1, "PLL relock failed to restart reset sequence");
-        $display("PASS board actual Pango GPLL model, system 50MHz, video PLL 27MHz, LCD 9MHz, camera MCLK 12.5MHz, DVP reset/power, RGB888, four keys, reset/relock");
+        force dut.powerup = 16'hffff;
+        cycles(4);
+        release dut.powerup;
+        wait(dut.reset === 1'b0 && dut.cpu_reset === 1'b0);
+        cycles(4);
+        if (dut.cpu_illegal) $fatal(1, "CPU illegal instruction after SW2 reset/relock");
+        $display("PASS board actual Pango GPLL model, CPU 125MHz, system 50MHz, PLL bandwidth guard, video PLL 27MHz, LCD 9MHz, camera MCLK 12.5MHz, DVP reset/power, RGB888, four keys, SW2 reset/relock/release");
         $finish;
     end
     initial begin #4000000; $fatal(1, "Board test timeout"); end

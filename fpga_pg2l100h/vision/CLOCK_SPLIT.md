@@ -2,7 +2,9 @@
 
 目标器件为PG2L100H / -6 / FBG676，所有活动RTL继续使用Verilog-2005。本轮目标为CPU、IMEM、DMEM和寄存器堆125 MHz；NPU、摄像头采集、快照、UART、按键和MMIO设备50 MHz；视频27 MHz、LCD像素9 MHz。当前最终布局布线及下载状态以 `build/j11/build_summary.json` 和 `validation/hardware_summary.json` 为准，PLL仿真通过本身不代表125 MHz时序收敛或实际运行已验证。
 
-2026-11-02 22:46:59已完成三模式版本的原生综合、布局布线和位流生成，详细时序CPU建立WNS为+0.553 ns、50 MHz域为+7.006 ns，所有约束通过；映射LUT4469、FF3706、APM10、DRM64。七项定向检查通过，包括两种手势类别头文件的实际固件测试、Verilog、核验状态机、主机工具、LCD及两套实际RV32整机；模式测试新增去抖按键的完整三模式循环、忙时取消和COCO80未部署互锁，源码及暂存RTL/固件/模型哈希在测试前后保持一致。当前位流SHA256为 `0b3b59514c567ab5c313c3f858d7659f19aaf005ab8c7cebcca95e7adaf78baa`，报告见 `validation/three_modes/summary.json`。
+2026-11-03修正CPU PLL带宽。原配置输入50 MHz、IDIV=1，PFD为50 MHz，却使用OPTIMIZED带宽；PDS附带UG041001 V1.4第33页要求GPLL在40～450 MHz PFD范围使用HIGH。现将 `vision_cpu_clock.v` 的BANDWIDTH改为HIGH，输出仍为125 MHz；视频PLL的PFD为25 MHz，继续使用OPTIMIZED。系统上电复位等待两个PLL锁定，原错误会让显示、按键和CPU一起保持复位。新增参数合法性检查可拒绝旧配置，并覆盖SW2复位、两个PLL重新锁定及同步释放；板级仿真跳过上电等待和消隐计数，单独检查控制与时钟，不能视作外部频率测量。新布局布线CPU建立WNS为+0.609 ns、50 MHz域为+7.052 ns；01:07:47重新写入FPGA RAM后，两次JTAG读回PLL锁定标志为1。LCD与物理按键的应用验收见 `BOARD_VALIDATION.md`。
+
+2026-11-02 22:46:59曾完成三模式版本的原生综合、布局布线和位流生成，详细时序CPU建立WNS为+0.553 ns、50 MHz域为+7.006 ns，所有约束通过；映射LUT4469、FF3706、APM10、DRM64。七项定向检查通过，包括两种手势类别头文件的实际固件测试、Verilog、核验状态机、主机工具、LCD及两套实际RV32整机；模式测试新增去抖按键的完整三模式循环、忙时取消和COCO80未部署互锁，源码及暂存RTL/固件/模型哈希在测试前后保持一致。该次位流SHA256为 `0b3b59514c567ab5c313c3f858d7659f19aaf005ab8c7cebcca95e7adaf78baa`，报告见 `validation/three_modes/summary.json`。
 
 首次时钟拆分版本的15项完整回归及22:15下载失败记录保存在 `validation/hardware_20261102/cpu125_npu50_20261102_220034/`，其中位流和时序属于该次旧版。后续三模式位流、测试和JTAG状态统一见 `MODES.md`、`BOARD_VALIDATION.md` 与 `validation/hardware_summary.json`，证据目录由 `validation/latest_three_mode_attempt.txt` 指向。配置成功也不代替应用运行和实际时钟测量验收。
 

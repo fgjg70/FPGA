@@ -1,6 +1,24 @@
 # PG2L100H实际下载与待完成联调
 
-## 最新三模式125/50 MHz版本：RAM烧录成功，时钟启动待确认
+## 2026-11-03 13:30：发现FPGA未配置，重新下载125/50 MHz版
+
+用户再次反馈白屏、SW2及其他按键无反应。13:28:00扫描确认器件PG2L100H、ID0x00602899，但DONE为0；配置状态0x00180c80，done和done_i均为0，gwen、grsn、gouten也为0。当时没有运行已完成配置的用户逻辑，按SW2逻辑复位不能重新装入工程。之前的JTAG下载均仅写FPGA RAM；断电会丢失，配置清除或重新上电也需重新下载。本轮没有证据区分此前配置被清除的具体原因。未配置状态的pll_lock虽为1，但不能据此认定CPU时钟或应用在运行。
+
+核对本地源码、暂存项目、模型与固件哈希通过，并确认位流为已修正HIGH带宽的125/50 MHz版，SHA256为 `f179a403c71df8d6c4075faacc28616d2268e9121c35fcd45d82d7eb1162fef2`。13:30:00已重新下载到FPGA RAM，13:30:02和13:30:52两次读回均为0x081ffca0，DONE、done_i及PLL锁定均为1，五项配置错误均为0。CPU、指令存储和数据存储仍配置125 MHz，NPU、采集及MMIO仍为50 MHz，未更改RTL或重新生成位流。
+
+用户随后确认“摄像头显示在屏幕上了”，本次位流的摄像头到LCD预览通路已得到实物目视确认。CPU固件执行、LED心跳、实际按键、识别精度和图像方向仍未单独确认；预览硬件可独立于CPU运行。JTAG客户端及本轮服务器均已退出，未写Flash。证据见 `validation/hardware_20261103/cpu125_white_screen_followup/`。调试时保持供电；断电后需重新下载，SW2只能复位已加载的逻辑。
+
+## 2026-11-03：修正125 MHz PLL带宽并重新烧录
+
+用户反馈125 MHz版白屏，SW2及其他按键无反应；修复前JTAG实读状态0x0817fca0，PLL锁定标志为0。CPU PLL使用50 MHz输入、IDIV=1，PFD为50 MHz，却选择OPTIMIZED带宽，违反PDS附带UG041001 V1.4第33页的带宽要求。系统复位等待视频PLL与CPU PLL均锁定，因此PLL未锁定会同时阻止LCD、摄像头、按键和CPU启动。
+
+将CPU PLL的BANDWIDTH修正为HIGH，CPU、指令存储和数据存储仍为125 MHz，NPU、MMIO和摄像头采集仍为50 MHz。01:05:28完成原生综合、布局布线及新位流生成，所有约束通过，CPU建立WNS为+0.609 ns，50 MHz域为+7.052 ns。严格Verilog-2005编译和Pango PLL模型板级仿真均通过；新增检查可拒绝旧带宽配置，并检查SW2复位、两个PLL重新锁定和复位释放。
+
+01:07:47已将修正版写入FPGA RAM，器件ID0x00602899，DONE及done_i均为1，五项配置错误均为0；01:07:49和01:08:11两次状态均为0x081ffca0，PLL锁定标志已变为1。位流3791112字节，SHA256为 `f179a403c71df8d6c4075faacc28616d2268e9121c35fcd45d82d7eb1162fef2`。本轮JTAG客户端与服务器均已退出。
+
+当前已验证配置完成及PLL锁定，尚未取得修复后LCD画面、物理按键响应或应用UART的实物确认，也未用示波器测量125 MHz。下一步观察LCD是否显示CAM WAIT、CAM ERR或实时画面，以及SW2复位和SW5彩条切换是否响应。证据、修复前后状态、位流及本轮两项回归见 `validation/hardware_20261103/cpu125_white_screen/`；机器可读状态见 `validation/hardware_summary.json`。
+
+## 历史三模式125/50 MHz版本：配置完成，但PLL未锁定
 
 2026-11-02本轮将SW4长按统一为HANDWRITE→GESTURE→COCO80三模式循环。CPU、IMEM和DMEM维持125 MHz，NPU、MMIO和摄像头保持50 MHz。七项定向检查通过，包括实际生产固件九类/十类头文件、严格Verilog、状态机、工具、LCD和两套RV32整机；新增去抖按键完整循环、忙时取消和未部署模式互锁。原生布局布线和详细时序均通过，CPU建立WNS为+0.553 ns，50 MHz域为+7.006 ns；映射LUT4469、FF3706、APM10、DRM64。操作见 `MODES.md`，时钟计时区别见 `CLOCK_SPLIT.md`。
 

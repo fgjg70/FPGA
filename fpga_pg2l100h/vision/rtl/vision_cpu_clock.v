@@ -16,7 +16,7 @@ module vision_cpu_clock (
         .STATIC_RATIO4(8), .STATIC_DUTY4(8),
         .STATIC_RATIO5(8), .STATIC_DUTY5(8),
         .STATIC_RATIO6(8), .STATIC_DUTY6(8),
-        .INTERNAL_FB("CLKOUTF"), .EXTERNAL_FB("DISABLE"), .BANDWIDTH("OPTIMIZED")
+        .INTERNAL_FB("CLKOUTF"), .EXTERNAL_FB("DISABLE"), .BANDWIDTH("HIGH")
     ) pll (
         .CLKIN1(clk_50m), .CLKIN2(1'b0), .CLKIN_SEL(1'b0),
         .CLKFB(1'b0), .RST(reset), .PLL_PWD(1'b0),

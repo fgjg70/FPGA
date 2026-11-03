@@ -2,7 +2,7 @@
 
 PG2L100H视觉工程入口见 [fpga_pg2l100h/vision/README.md](fpga_pg2l100h/vision/README.md)。活动RTL为Verilog-2005，CPU、指令存储和数据存储目标125 MHz，NPU、摄像头采集及MMIO为50 MHz；摄像头接J7，AN430 LCD接J11。
 
-该版本已通过原生布局布线和时序检查，并成功下载到FPGA RAM；配置状态中的PLL锁定标志仍为0，板上时钟启动和应用运行待确认。最新记录见 [BOARD_VALIDATION.md](fpga_pg2l100h/vision/BOARD_VALIDATION.md)。北方一到十手势尚待实拍训练，COCO80模型尚未部署，功能边界见 [MODES.md](fpga_pg2l100h/vision/MODES.md)。
+该版本已通过原生布局布线和时序检查。2026-11-03修正125 MHz CPU PLL的带宽配置并重新下载到FPGA RAM后，PLL锁定标志已由0变为1，用户已确认摄像头画面显示在LCD上；CPU固件执行和物理按键仍待单独验证。当前为易失RAM配置，断电后需要重新下载。最新记录见 [BOARD_VALIDATION.md](fpga_pg2l100h/vision/BOARD_VALIDATION.md)。北方一到十手势尚待实拍训练，COCO80模型尚未部署，功能边界见 [MODES.md](fpga_pg2l100h/vision/MODES.md)。
 
 之前的CPU/NPU均为50 MHz的源码基线保存在 [releases/cpu50mhz](releases/cpu50mhz/README.md)，来自2026-11-02 20:22的完整备份，包含独立构建入口、模型和历史验证记录。
 
