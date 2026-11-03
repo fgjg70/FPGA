@@ -18,7 +18,7 @@
  *   real_input_csum == 0xbb23c676 且 real_hw_bad == 0（71 op）
  *   pattern_input_csum == 0xe40efcc5 且 pattern_hw_bad == 0（71 op）
  *   auto_bad == 0（head FNV）、auto_npu_cycles == hw npu_cycles（同 ROM/同 op 序列）
- *   npu_cycles 在 HANDOFF 预期 504,895 ±30% 内（353,426 ~ 656,363）
+ *   npu_cycles 在 A7a 后预期 653,129 ±2% 内（640,066 ~ 666,192；A7a 前为 799,520）
  * 全部满足 -> 打印 `SLIM_TB: PASS` + report_done()。
  *
  * 构建（Lead 在 tools/build_sw.py 注册；手工等价）：
@@ -54,9 +54,12 @@ static inline u32 rd32(u32 off) { return *(volatile u32 *)(NN_WIN + off); }
  * = 799,520；ModelSim 实测 = 799,520（逐拍一致，与 YOLO E2E 公式=实测 1,191,020 同源）。
  * HANDOFF §④ 的 504,895 是 converter 的粗估（每块固定 +40 拍），低估 ~58%，
  * 已确认是估算器问题（非 RTL 差异），这里以 v3 公式为准（±1.1% 窗口）。 */
-#define EXPECT_NPU_CYCLES 799520u
-#define CYCLES_LO         791000u
-#define CYCLES_HI         808000u
+/* [A7a 2026-11-04] dw 16-lane 后 dwconv 周期减半: 799,520 -> 653,129 (-18.3%).
+ * 模型值: conv 447,935 + dwconv 147,021(A7a 后) + add 49,959 + upsample 7,584 = 652,499
+ * 实测 653,129 (+630 拍 = 每 op 固定开销), 取 +/-2% 窗口。 */
+#define EXPECT_NPU_CYCLES 653129u
+#define CYCLES_LO         640066u
+#define CYCLES_HI         666192u
 
 /* 真实图 0349 的逐 op FNV（opvec/0349/checksums.txt，71 op 全量；opvec 已由
  * converter 重导为全量 71 op：input 0xbb23c676 + 每个 op 一行）。 */

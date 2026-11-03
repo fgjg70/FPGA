@@ -1088,12 +1088,12 @@
    "config": {
     "dwpath": true
    },
-   "cycles": 37306790.4,
-   "effective_mac_per_cycle": 60.9,
+   "cycles": 37571214.0,
+   "effective_mac_per_cycle": 60.5,
    "fps": {
-    "mhz100": 2.68,
-    "mhz122_22": 3.28,
-    "mhz150": 4.02
+    "mhz100": 2.66,
+    "mhz122_22": 3.25,
+    "mhz150": 3.99
    }
   },
   "wg": {
@@ -1159,18 +1159,31 @@
     "mhz150": 3.77
    }
   },
+  "p1_a7a": {
+   "config": {
+    "fusion": true,
+    "dwpath": true
+   },
+   "cycles": 37631729.0,
+   "effective_mac_per_cycle": 60.4,
+   "fps": {
+    "mhz100": 2.66,
+    "mhz122_22": 3.25,
+    "mhz150": 3.99
+   }
+  },
   "p1": {
    "config": {
     "fusion": true,
     "bopt": 0.7,
     "dwpath": true
    },
-   "cycles": 33924317.6,
-   "effective_mac_per_cycle": 67.0,
+   "cycles": 34188741.2,
+   "effective_mac_per_cycle": 66.5,
    "fps": {
-    "mhz100": 2.95,
-    "mhz122_22": 3.6,
-    "mhz150": 4.42
+    "mhz100": 2.92,
+    "mhz122_22": 3.57,
+    "mhz150": 4.39
    }
   },
   "p2": {
@@ -1181,12 +1194,12 @@
     "mac_width": 256,
     "scheme": "oc32"
    },
-   "cycles": 21811321.4,
-   "effective_mac_per_cycle": 104.2,
+   "cycles": 22075745.0,
+   "effective_mac_per_cycle": 102.9,
    "fps": {
-    "mhz100": 4.58,
-    "mhz122_22": 5.6,
-    "mhz150": 6.88
+    "mhz100": 4.53,
+    "mhz122_22": 5.54,
+    "mhz150": 6.79
    }
   },
   "p2b": {
@@ -1197,12 +1210,12 @@
     "mac_width": 256,
     "scheme": "px16"
    },
-   "cycles": 21450724.2,
-   "effective_mac_per_cycle": 105.9,
+   "cycles": 21592756.4,
+   "effective_mac_per_cycle": 105.2,
    "fps": {
-    "mhz100": 4.66,
-    "mhz122_22": 5.7,
-    "mhz150": 6.99
+    "mhz100": 4.63,
+    "mhz122_22": 5.66,
+    "mhz150": 6.95
    }
   },
   "p2c": {
@@ -1213,12 +1226,12 @@
     "mac_width": 192,
     "scheme": "oc24"
    },
-   "cycles": 22439521.2,
-   "effective_mac_per_cycle": 101.2,
+   "cycles": 22703944.8,
+   "effective_mac_per_cycle": 100.1,
    "fps": {
-    "mhz100": 4.46,
-    "mhz122_22": 5.45,
-    "mhz150": 6.68
+    "mhz100": 4.4,
+    "mhz122_22": 5.38,
+    "mhz150": 6.61
    }
   },
   "p3": {
@@ -1230,12 +1243,12 @@
     "scheme": "oc32",
     "winograd": "all"
    },
-   "cycles": 16600761.4,
-   "effective_mac_per_cycle": 136.9,
+   "cycles": 16865185.0,
+   "effective_mac_per_cycle": 134.7,
    "fps": {
-    "mhz100": 6.02,
-    "mhz122_22": 7.36,
-    "mhz150": 9.04
+    "mhz100": 5.93,
+    "mhz122_22": 7.25,
+    "mhz150": 8.89
    }
   },
   "p3narrow": {
@@ -1247,12 +1260,12 @@
     "scheme": "oc32",
     "winograd": "narrow"
    },
-   "cycles": 16981001.4,
-   "effective_mac_per_cycle": 133.8,
+   "cycles": 17245425.0,
+   "effective_mac_per_cycle": 131.7,
    "fps": {
-    "mhz100": 5.89,
-    "mhz122_22": 7.2,
-    "mhz150": 8.83
+    "mhz100": 5.8,
+    "mhz122_22": 7.09,
+    "mhz150": 8.7
    }
   },
   "p3c": {
@@ -1264,12 +1277,12 @@
     "scheme": "oc24",
     "winograd": "narrow"
    },
-   "cycles": 17609201.2,
-   "effective_mac_per_cycle": 129.0,
+   "cycles": 17873624.8,
+   "effective_mac_per_cycle": 127.1,
    "fps": {
-    "mhz100": 5.68,
-    "mhz122_22": 6.94,
-    "mhz150": 8.52
+    "mhz100": 5.59,
+    "mhz122_22": 6.84,
+    "mhz150": 8.39
    }
   }
  }

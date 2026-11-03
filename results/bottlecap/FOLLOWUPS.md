@@ -15,7 +15,8 @@
 
 - `python tools/fpga_workflow.py verify --force` = **PASS 20**（16 基线 + `tb_nn_wstream` / `tb_nn_tilecache` / `tb_sw_nn_job` / `tb_sw_nn_slim`）
 - 交付档（无 `NN_EN`）与 C128 YOLO 112-op E2E **红线未动**：`hw_bad=0`、`auto_bad=0`、`npu_cycles=1,191,020`
-- 性能（`cycle_model` 实测口径，fused 101-op plan）：当前 RTL **39,783,123 拍**（3.07 fps@122.22 MHz）→ +A7/A8 **33,924,318**（3.60 fps）→ +PX16 **21,450,724**（5.70 fps）
+- 性能（`cycle_model` 实测口径，fused 101-op plan）：**当前 RTL（融合+A7a）37,631,729 拍（3.25 fps@122.22 MHz）** → +bopt **34,188,741**（3.57 fps）→ +PX16 **21,592,756**（5.66 fps）
+- cycle 基线（A7a 后）：YOLO E2E `npu_cycles=1,049,089`（−11.9%）；slim E2E `npu_cycles=653,129`（−18.3%，`sw/slim_demo.c` 期望窗口已同步 640,066~666,192）
 - BRAM（瓶盖配置）：**122/135 tiles**（W 80 + Q 4 + IBUF 20 + OBUF 6 + core 12）
 
 ## 3. 后续事项（GitHub issues）
@@ -24,7 +25,7 @@
 |---|---|---|---|
 | [#19](https://github.com/fgjg70/FPGA/issues/19) | **M6b**：tilecache Path A 水平 pad 物化 + banded 8/12/106-op E2E 并注册回归 | rtl-stream | M6c 已完成 |
 | [#20](https://github.com/fgjg70/FPGA/issues/20) | **M6**：全模型 E2E + nn_seq 自主执行接线（nn_subsys streaming 端口 + DDR 读仲裁） | npu-spec + rtl-stream | #19、M6c |
-| [#21](https://github.com/fgjg70/FPGA/issues/21) | **性能 Step A**：A7a 保守版（dw 16-lane）+ A7b 行缓冲 + A8 地址优化 → 33.92M / 3.60 fps | ddr3-feas | — |
+| [#21](https://github.com/fgjg70/FPGA/issues/21) | **性能 Step A**：~~A7a 保守版~~（**已完成 2026-11-04：YOLO −11.9%、OOC +1.048ns MET**）+ bopt 行缓冲/地址优化 → 34.19M / 3.57 fps | ddr3-feas | A7a done |
 | [#22](https://github.com/fgjg70/FPGA/issues/22) | **性能 Step B**：PX16 256-MAC → 21.45M / 5.70 fps | ddr3-feas | #21 |
 | [#23](https://github.com/fgjg70/FPGA/issues/23) | **上板**：MIG/DDR3 接入（需 6 项硬件资料：颗粒型号/引脚 XDC/参考时钟/速度等级/单双片/MIG 许可）+ 交付档回归 | 待资料 | 用户提供 |
 | [#24](https://github.com/fgjg70/FPGA/issues/24) | **S2/S3**：双时钟 CPU-NPU 解耦（盘古式）+ 帧流水/显示 | npu-spec + rtl-stream | #20、#23 |

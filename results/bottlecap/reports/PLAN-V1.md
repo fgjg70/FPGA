@@ -218,3 +218,17 @@
 - **M6b v1 的"1 band = 整张量（`desc.ih`=112）"不是引擎 dense 路径的合法执行形态**（PACKED3 路径恰好不受影响）；且 stock `nn_mem` 的 A 窗口被 `nn_mem.sv:508` 硬卡 96KB ⇒ 整张量 802KB 在 wall 模式结构性不可行；
 - ⇒ **M6b v2 / M6 一律按 banded 执行**（TB 按 `band_plan.json` 逐 band 发起，IBUF 2×32KiB + OBUF 2×12KiB 紧配置），这也是既定的 M6 形态；
 - 尾部 X：banded wall 模式无 X；X 出现在 M6b v1 的 band 收尾处（`a_rdata` 上游），banded 重构后需用 `$isunknown` 断言清零。
+
+
+---
+
+## [A7a 落地 2026-11-04 01:3x] dw 16-lane（保守版，dense 共用流水零改动）
+
+| 项 | 结果 |
+|---|---|
+| 实现 | dw 专用 128b 窗口 `dwbuf/dwbsh/dw_win` + `f_dw16 = f_dw && d_oc%16==0 && d_ic%16==0 && d_oc==d_ic`；非 16 通道 dw 回退旧 8-lane 路径逐位不变 |
+| 回归 | `ENGINE_TB: PASS (58 cases)`；只有 3 个 dw16 case 周期变化（1118→569、3806→1913、45260→22958，≈-49%），其余 55 case 逐拍不变 |
+| YOLO E2E | `hw_bad=0/auto_bad=0`；`npu_cycles = 1,049,089`（基线 1,191,020，**-11.9%**）；与 cycle_model 对账误差 **+0.08%** |
+| slim E2E | `hw_bad` 全 0；`npu_cycles = 653,129`（原 799,520，**-18.3%**）；固件期望窗口已同步（640,066~666,192） |
+| OOC @122MHz | **Slack (MET) +1.048ns**；LUT 30,700 / FF 19,731 / DSP 200（+16） |
+| 周期口径（fused_a 101-op） | 融合 39,783,123 → **当前 RTL（+A7a）37,631,729（3.25fps@122）** → +bopt 34,188,741（3.57） → +PX16 21,592,756（5.66） |
