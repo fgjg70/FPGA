@@ -1,3 +1,5 @@
+> **范围/口径声明（交付主体）**：本文属于**紫光同创 PG2L100H** 交付主体线。文中"实测"指上板实测并应附证据路径；"未达成/未部署"项见根 [`COMPLIANCE.md`](COMPLIANCE.md) §4 边界清单。注意：**Pango 侧 Flash 当前尚未写入**（JTAG RAM 下载），详见 [`fpga_pg2l100h/vision/BOARD_VALIDATION.md`](fpga_pg2l100h/vision/BOARD_VALIDATION.md)。
+
 # 数字料箱标签防错核验终端 NUMGUARD
 
 本项目选择《全国大学生嵌入式芯片与系统设计竞赛2026 FPGA创新设计赛道选题指南（紫光同创）》的**选题一：基于紫光同创 RISCV 指令集 CPU 设计**，以数字料箱核验作为高阶 AI 加速应用。指南 PDF 第10～11页要求 RV32I、不少于三级流水、外设、CoreMark、资源和性能分析；第10页高阶任务明确提出 RISC-V + 边缘 AI + 传感器/显示设备。原有自研 CPU 与摄像头、LCD 可以直接形成完整系统。若赛事组织方对自备板或选题归属另有要求，以书面确认为准。

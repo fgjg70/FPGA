@@ -1,3 +1,5 @@
+> **范围/口径声明（交付主体）**：本文属于**紫光同创 PG2L100H** 交付主体线。文中"实测"指上板实测并应附证据路径；"未达成/未部署"项见根 [`COMPLIANCE.md`](COMPLIANCE.md) §4 边界清单。注意：**Pango 侧 Flash 当前尚未写入**（JTAG RAM 下载），详见 [`fpga_pg2l100h/vision/BOARD_VALIDATION.md`](fpga_pg2l100h/vision/BOARD_VALIDATION.md)。
+
 # COCO80预训练YOLO：实际核查与部署边界
 
 本轮核查对象是已下载的YOLO-FastestV2原作者COCO2017权重，源提交 `ac2a5e3060bff76dd1e45f9b921dd77bfbeb194d`，权重SHA256为 `bdd956aa079bf1cdd3e0090a295ac26d73c40aef7b61b6405981b1afcbea985c`。缓存ZIP的提交标识和各源文件哈希均已核对。`audit_coco.py`使用`weights_only=True`加载状态，并对原版80类检测器做strict=True完整匹配及128、160、352输入前向运行；仅移除未使用的torchsummary导入，没有改变网络。

@@ -1,3 +1,5 @@
+> **范围/口径声明（交付主体）**：本文属于**紫光同创 PG2L100H** 交付主体线。文中"实测"指上板实测并应附证据路径；"未达成/未部署"项见根 [`COMPLIANCE.md`](COMPLIANCE.md) §4 边界清单。注意：**Pango 侧 Flash 当前尚未写入**（JTAG RAM 下载），详见 [`fpga_pg2l100h/vision/BOARD_VALIDATION.md`](fpga_pg2l100h/vision/BOARD_VALIDATION.md)。
+
 # 本项目手势约定：按用户参考图的一到十
 
 标准编号：`user_northern_reference_1_10_v1`。以用户上传的图片为准，训练、人工标注、固件解码和LCD标签使用同一套定义。

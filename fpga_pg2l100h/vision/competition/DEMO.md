@@ -1,3 +1,5 @@
+> **范围/口径声明（交付主体）**：本文属于**紫光同创 PG2L100H** 交付主体线。文中"实测"指上板实测并应附证据路径；"未达成/未部署"项见根 [`COMPLIANCE.md`](COMPLIANCE.md) §4 边界清单。注意：**Pango 侧 Flash 当前尚未写入**（JTAG RAM 下载），详见 [`fpga_pg2l100h/vision/BOARD_VALIDATION.md`](fpga_pg2l100h/vision/BOARD_VALIDATION.md)。
+
 # 三分钟演示脚本与答辩准备
 
 三分钟是本项目的材料组织目标。最终格式和资格时间以当届赛事通知为准。录像注明开发板、时钟、模型、光照和距离，保留连续操作；界面仿真截图必须标明仿真。

@@ -1,3 +1,5 @@
+> **范围/口径声明（交付主体）**：本文属于**紫光同创 PG2L100H** 交付主体线。文中"实测"指上板实测并应附证据路径；"未达成/未部署"项见根 [`COMPLIANCE.md`](COMPLIANCE.md) §4 边界清单。注意：**Pango 侧 Flash 当前尚未写入**（JTAG RAM 下载），详见 [`fpga_pg2l100h/vision/BOARD_VALIDATION.md`](fpga_pg2l100h/vision/BOARD_VALIDATION.md)。
+
 # 轻量开源模型与本工程的兼容性
 
 核查日期：2026-11-01。以下参数和预训练能力来自原作者仓库或论文；它们不是 PG2L100H 的资源利用率、时序或摄像头识别实测。

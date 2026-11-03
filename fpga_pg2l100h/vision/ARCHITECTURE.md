@@ -1,3 +1,5 @@
+> **范围/口径声明（交付主体）**：本文属于**紫光同创 PG2L100H** 交付主体线。文中"实测"指上板实测并应附证据路径；"未达成/未部署"项见根 [`COMPLIANCE.md`](COMPLIANCE.md) §4 边界清单。注意：**Pango 侧 Flash 当前尚未写入**（JTAG RAM 下载），详见 [`fpga_pg2l100h/vision/BOARD_VALIDATION.md`](fpga_pg2l100h/vision/BOARD_VALIDATION.md)。
+
 # 网络、存储与控制接口
 
 当前源码将CPU/IMEM/DMEM独立到125 MHz目标域，NPU、相机采集和MMIO设备继续50 MHz，通过带等待的请求/应答握手交接，详见 `CLOCK_SPLIT.md`。本页MMIO计时器仍是50 MHz，不能用该计时器频率代替CPU频率；原模型结构及固定NPU保持不变。COCO80部署所需的新算子与存储边界见 `model/COCO80_FEASIBILITY.md`。

@@ -1,3 +1,5 @@
+> **参考资料声明（第三方/历史工程）**：本目录是板卡厂商示例或早期开发工程，**不是赛题交付主体**；其中的结论/数字不进入交付成绩，引用时需标注来源并置于"跨厂商对比/参考资料"语境。
+
 # sv2v: SystemVerilog to Verilog
 
 sv2v converts SystemVerilog ([IEEE 1800-2017]) to Verilog ([IEEE 1364-2005]),

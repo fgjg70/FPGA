@@ -1,3 +1,5 @@
+> **范围/口径声明（交付主体）**：本文属于**紫光同创 PG2L100H** 交付主体线。文中"实测"指上板实测并应附证据路径；"未达成/未部署"项见根 [`COMPLIANCE.md`](COMPLIANCE.md) §4 边界清单。注意：**Pango 侧 Flash 当前尚未写入**（JTAG RAM 下载），详见 [`fpga_pg2l100h/vision/BOARD_VALIDATION.md`](fpga_pg2l100h/vision/BOARD_VALIDATION.md)。
+
 # 当前交付状态：2026-11-02
 
 最新三模式CPU125 MHz / NPU50 MHz源码通过七项定向检查和实际原生布局布线，CPU详细建立WNS为+0.553 ns，LUT4469、FF3706、APM10、DRM64。SW4长按循环手写数字、数字手势、COCO80，未部署模式停止NPU并显示NO MODEL。2026-11-02 23:09:23已成功写入FPGA RAM，ID0x00602899、DONE及done_i为1、配置错误位为0；配置状态的pll_lock位仍为0，125 MHz实际时钟启动及应用运行待确认。操作与完整状态见 `MODES.md`、`CLOCK_SPLIT.md`、`BOARD_VALIDATION.md` 和 `validation/hardware_summary.json`。首次时钟拆分的15项完整回归保存在其冻结目录，下文保留历史50 MHz基线。COCO80尚未部署为FPGA模型，手势仍为旧九类权重，完整北方1～10模型待实拍训练。

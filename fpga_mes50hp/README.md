@@ -1,3 +1,5 @@
+> **参考资料声明（第三方/历史工程）**：本目录是板卡厂商示例或早期开发工程，**不是赛题交付主体**；其中的结论/数字不进入交付成绩，引用时需标注来源并置于"跨厂商对比/参考资料"语境。
+
 # MES50HP 盘古50工程
 
 板卡基础外设调试使用独立工程 [io_debug/README.md](io_debug/README.md)：验证 HDMI 显示、115200 UART 和 KEY2～KEY7 六个按键。执行 `python io_debug/build.py` 生成对应 PDS 工程及 `top_io_debug.sbit`。

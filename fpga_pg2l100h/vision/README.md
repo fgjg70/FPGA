@@ -1,3 +1,5 @@
+> **范围/口径声明（交付主体）**：本文属于**紫光同创 PG2L100H** 交付主体线。文中"实测"指上板实测并应附证据路径；"未达成/未部署"项见根 [`COMPLIANCE.md`](COMPLIANCE.md) §4 边界清单。注意：**Pango 侧 Flash 当前尚未写入**（JTAG RAM 下载），详见 [`fpga_pg2l100h/vision/BOARD_VALIDATION.md`](fpga_pg2l100h/vision/BOARD_VALIDATION.md)。
+
 # NUMGUARD：RISC-V 数字料箱标签防错核验终端
 
 本轮按用户要求新增CPU125 MHz / NPU50 MHz的独立时钟和MMIO握手，设计、验证与实际构建状态见 `CLOCK_SPLIT.md`。COCO80原版YOLO-FastestV2已在电脑端严格加载并核算算子/存储，当前固定NPU尚未支持该网络，详见 `model/COCO80_FEASIBILITY.md`。最新下载及验收以 `BOARD_VALIDATION.md` 和 `validation/hardware_summary.json` 为准。

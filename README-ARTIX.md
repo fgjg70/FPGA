@@ -1,5 +1,6 @@
 <!-- 本文件为 Artix-7 XC7A100T 交付档的完整说明；仓库总览见 README.md。 -->
-> **本文件是 Artix-7 交付档的详细说明（历史交付线，用于跨厂商对比）。比赛交付主体见 [README.md](README.md) 与 [fpga_pg2l100h/](fpga_pg2l100h/)。**
+> **本文件是 Artix-7 交付档的详细说明（历史交付线，用于跨厂商对比）。比赛交付主体见 [README.md](README.md) 与 [fpga_pg2l100h/](fpga_pg2l100h/)。
+> **数字口径（务必引用时带上）**：CoreMark 324.19 为 2026-10-17 上板实测（`-Os` 旧固件，日志 `results/uart_flash_boot_final.txt`）；405.9 为 `-O2` 配方派生值、**从未上板**；自研 NPU 的 401.9× 是「CPU 软件基线 vs NPU 纯计算」的仿真口径（B 级）。所有 Artix-7 数字[跨厂商对比]，不构成交付成绩。**
 
 # RV32IM 五级流水线处理器
 
