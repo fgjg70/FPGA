@@ -8,7 +8,7 @@
 ## 0. 合规与证据（先读）
 
 - **交付主体 = 紫光同创 PG2L100H**；Artix-7 XC7A100T 线仅作**跨厂商对比**（赛题规则 3.4）。
-- **数字必须带级别与证据**：A 实测（上板） / B 实测（仿真） / C 综合 / D 派生 / E 未测——见 [`COMPLIANCE.md`](COMPLIANCE.md)。
+- **数字必须带级别与证据**：A 实测（上板） / B 实测（仿真） / C 综合 / D 派生 / E 未测——见 [`COMPLIANCE.md`](https://github.com/fgjg70/FPGA/blob/main/COMPLIANCE.md)。
 - **证据登记**：[`docs/EVIDENCE.md`](docs/EVIDENCE.md)（每个对外数字对应一行 + 状态）。
 - **提交清单**：[`docs/SUBMISSION-CHECKLIST.md`](docs/SUBMISSION-CHECKLIST.md)（截止 2026-11-04 18:00）。
 - **逐文件合规审计**：[`docs/COMPLIANCE-AUDIT.md`](docs/COMPLIANCE-AUDIT.md)（覆盖全库 836 文件）。
@@ -83,7 +83,7 @@
 - [`docs/REPRODUCE.md`](docs/REPRODUCE.md) — 两条线的构建/仿真/上板复现步骤
 - [`docs/EVIDENCE.md`](docs/EVIDENCE.md) — 证据登记表（含待补清单）
 - [`docs/SUBMISSION-CHECKLIST.md`](docs/SUBMISSION-CHECKLIST.md) — 提交检查清单
-- [`COMPLIANCE.md`](COMPLIANCE.md) — 合规规范（证据分级/禁用词/边界清单）
+- [`COMPLIANCE.md`](https://github.com/fgjg70/FPGA/blob/main/COMPLIANCE.md) — 合规规范（证据分级/禁用词/边界清单）
 - [`docs/README.md`](docs/README.md) — 全部文档索引
 
 ## 7. 仓库整理记录
