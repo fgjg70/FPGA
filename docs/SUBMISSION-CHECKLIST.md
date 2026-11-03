@@ -34,7 +34,7 @@
 | C2 | 全量文件合规审计（`docs/COMPLIANCE-AUDIT.md`） | ✅ 2026-11-03 |
 | C3 | 合规规范与证据分级（`COMPLIANCE.md`） | ✅ 2026-11-03 |
 | C4 | 技术总览/复现/证据登记（`docs/TECHNICAL-OVERVIEW.md` 等） | ✅ 2026-11-03 |
-| C5 | 禁用词/未标注数字自动检查（`tools/compliance_check.py`） | ✅ 2026-11-03 |
+| C5 | 禁用词/未标注数字自动检查（`tools/compliance_check.py`） | ⚠️ 已运行；默认 exit 1（209 条含历史/负面清单误报），以 `docs/COMPLIANCE-AUDIT.md` 为准 |
 | C6 | 分支/tag 收口（main + feat/ai-accel + feat/isa-ac；tag 归档） | ✅ 2026-11-03 |
 
 ## D. 提交动作（建议时间盒）

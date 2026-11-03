@@ -171,7 +171,7 @@ python tools/fpga_workflow.py check       # 7 项漂移检测 + 综合警告门
 | 文件 | 作用 |
 |---|---|
 | `fpga/build.tcl` (545) | **非工程模式**综合流程：`synth → opt → Pblock → place → phys_opt → route → bitstream`；宏开关集中在文件头；路径用 `$root` 相对化；**内建 `BUILD_TIMING=PASS/FAIL` 时序门** |
-| `fpga/daVinciPro.xdc` (54) | 引脚 + **`create_clock -period 20.000`**（板载 50 MHz 输入）+ `create_generated_clock -name sys_clk_core -multiply_by 21 -divide_by 8`（⇒ **131.25 MHz**，**频率无关命名**）|
+| `fpga/daVinciPro.xdc` (54) | 引脚 + **`create_clock -period 20.000`**（板载 50 MHz 输入）+ `create_generated_clock -name sys_clk_core -multiply_by 21 -divide_by 7`（⇒ **150 MHz**，**频率无关命名**）|
 | `fpga/build_ila.tcl` (331) + `ila_cap_*.tcl` | 上板 ILA 调试闭环（`jtag_probe` / `build_ila` / `ila_cap_done`）；内建 `ILA_TIMING=FAIL` 门；抓取后写 **采集清单 `results/ila_done.capture.json`** |
 | `tools/check_equiv.py` (175) | LSU 字节通道等价性穷举（**675 万组，~5 s**）—— 交付版访存 mux 的正确性论证 |
 

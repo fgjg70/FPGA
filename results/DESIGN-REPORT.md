@@ -7,8 +7,8 @@
 | 项 | 内容 |
 |---|---|
 | 作品名 | RV32IM 五级流水 RISC-V 软核处理器（含分支预测、精确异常/中断、原子扩展、QSPI 自启动） |
-| 目标平台 | 现场可编程门阵列（FPGA），**最终交付需在紫光同创器件上复现**（见 §6.4 迁移状态） |
-| 当前实测平台 | Xilinx Artix-7 XC7A100T-FGG484-**2**（达芬奇 Pro，板载 50 MHz 晶振 + MMCM） |
+| 交付主体平台 | **紫光同创 PG2L100H**（Logos2 / -6 / FBG676，PDS 2022.2-SP6.1）：CPU/IMEM/DMEM 125 MHz、NPU/采集/MMIO 50 MHz（**已上板**，见 §6.4） |
+| 跨厂商对比平台 | Xilinx Artix-7 XC7A100T-FGG484-**2**（达芬奇 Pro）；本报告 §1–§5 的 150 MHz / 324.19 均为该参照线实测，**仅作跨厂商对比** |
 | 交付档 | **150 MHz**，fmax **150.2 MHz**（WNS **+0.007 ns**），CoreMark **324.19**（规范口径），CoreMark/MHz **2.1613** |
 | 文档日期 | 2026-10-17 |
 | 数据纪律 | 本报告所有数字均标注来源文件/行：`results/coremark.csv`（逐档台账）、`results/uart_*.txt`（上板原始输出）、`results/ila_done.*`、`fpga/timing.rpt`、`fpga/util.rpt`。**无一数字来自记忆或转述。** |
@@ -551,18 +551,17 @@ cmd /c fpga\prog_uart.bat
 powershell -File tools\flash_boot.ps1 -Bit fpga\cpu_a100t_spix4.bit -Iface SPIx4
 ```
 
-### 6.4 紫光同创迁移状态（**必须如实标注**）
+### 6.4 紫光同创迁移与交付状态（**2026-11-03 更新，必须如实标注**）
 
 | 项 | 状态 | 说明 |
 |---|---|---|
-| 目标器件 | 紫光同创（赛题原文指定 **PGL22G**） | 迁移面：顶层 + 约束（XDC→PDC）+ 时钟原语（MMCM→PLL）+ 构建流程 |
-| 现状 | **尚未在紫光同创器件上实跑** | 本报告全部数字来自 **Artix-7 XC7A100T-2** |
-| 有利条件 | **CPU 核零厂商原语**（BRAM 全行为级推断、不例化 IP） | 迁移不需要改 CPU 核内部 |
-| 资源预算 | 本档 LUT 3098 / FF 1447 / BRAM 9.5 / DSP 8 vs PGL22G ~22K LUT 级 | **能装下**；主要风险是 BRAM/DSP 数量与布线质量 |
-| 预期频率 | **会下降**（40nm Logos vs 28nm Artix-7） | 迁移后必须重测；CoreMark 分数预计下降，但 **CM/MHz（架构效率）不变** |
+| 交付器件 | **紫光同创 PG2L100H**（Logos2 / -6 / FBG676，PDS 2022.2-SP6.1） | 早期规划曾以 PGL22G 为目标；**已按实际获得板卡迁移到 PG2L100H** |
+| 现状 | ✅ **已完成迁移并上板** | CPU/IMEM/DMEM **125 MHz**（WNS +0.609）、NPU/采集/MMIO **50 MHz**（WNS +7.052）；LUT **4469** / FF **3706** / APM **10** / DRM **64**；摄像头→LCD 预览已目视确认；位流 SHA256 `f179a403c71df8d6c4075faacc28616d2268e9121c35fcd45d82d7eb1162fef2`（详见 `fpga_pg2l100h/vision/BOARD_VALIDATION.md`） |
+| 本报告数字口径 | §1–§5 的 **150 MHz / 324.19 / 2.1613** 均来自 Artix-7 参照线 | 按赛题规则**仅作跨厂商对比**，不构成紫光同创交付成绩；Pango 交付档数字以上表与 `README.md` 为准 |
+| 待补证据 | Pango CoreMark 原始日志**未入库**；Pango **Flash 未写入** | 见 `docs/EVIDENCE.md` P-09/P-10 与 `COMPLIANCE.md` §4；不得把未入库数字写进报告 |
 
-> **诚实声明**：本报告的"150 MHz / 324.19 分"是 **Artix-7 上的实测**，不是紫光同创上的实测。
-> 迁移后的数字必须重新测量，**不得沿用**。
+> **诚实声明**：Artix-7 的 150 MHz / 324.19 是参照线实测；紫光同创交付数字见 `README.md` 与 `BOARD_VALIDATION.md`。
+> 两套数字**不得混用**；Pango CoreMark 在原始日志入库前不引用具体分数。
 
 ---
 
@@ -612,7 +611,7 @@ powershell -File tools\flash_boot.ps1 -Bit fpga\cpu_a100t_spix4.bit -Iface SPIx4
 | 指令集覆盖扩展 | ⬜ **计划中** | 候选：RV32C（压缩）、Zbb/Zbs（位操作）、Zicntr；C 扩展约 3~5 天 |
 | RTL 合规补强 | 🟡 **部分完成** | 已修 `mcause` 中断位、`mtval`、R-01/R48 精确性；待做：mtvec 向量模式、load/store access fault、指令地址非对齐异常 |
 | **PPA 补功耗** | ⬜ **待补** | 需 `report_power` / PDS 功耗报告（本报告 §4.2 唯一空缺） |
-| PDS 迁移 + 紫光同创实跑 | ⬜ **P0 待做** | 见 §6.4；**这是合规硬门槛** |
+| PDS 迁移 + 紫光同创实跑 | ✅ **已完成** | PG2L100H CPU 125 / NPU 50 MHz 已上板（见 §6.4）；早期 PGL22G 计划仅作历史 |
 
 > **不夸大声明**：以上"计划中"项**均未实现**，不计入本报告任何成绩数字。
 

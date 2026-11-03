@@ -26,7 +26,7 @@
 | RV32手势整机 | 忙时串口g取消标签推理，RGB565轮廓→手势1（全局类别3），LCD框140,20,356,255；4096字节一致、模式位和数字映射正确，l安全切回 |
 | 板级包装 | 50 MHz系统、实际Pango GPLL模型50→27 MHz视频域、LCD9 MHz、相机MCLK 12.5 MHz和RESET/PWDN、RGB888、SW4短按/长按、复位与PLL重新锁定 |
 
-使用者已完成CoreMark跑分，已有成绩和原始测试条件保留，本轮不要求重跑，也未覆盖历史跑分记录。备用CoreMark工程及计时移植层已同步为50 MHz。`validation/coremark.log` 和 `coremark_functional.json` 是此前27 MHz版本的短迭代功能检查，仅记录参考CRC，不属于本次50 MHz回归或使用者的正式跑分。
+使用者侧曾做过 CoreMark 跑分；**原始日志/成绩尚未入库**（`docs/EVIDENCE.md` P-09），本轮不重跑，也不把口头成绩写入报告。备用CoreMark工程及计时移植层已同步为50 MHz。`validation/coremark.log` 和 `coremark_functional.json` 是此前27 MHz版本的短迭代功能检查，仅记录参考CRC，不属于本次50 MHz回归或使用者的正式跑分。
 
 ## 模型与工程
 

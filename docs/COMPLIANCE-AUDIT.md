@@ -884,4 +884,4 @@
 | `fpga_pg2l100h/vision/competition/DEMO.md` 等 | "零误检/通用YOLO"字样 | 均为"不能宣称"的负面清单；已加交付主体范围声明 |
 | `results/*`（Artix 实测数据） | 324.19/405.9 易混淆 | 已加证据/对比范围声明；324.19=A 实测旧固件，405.9=D 派生未上板 |
 | `fpga_mes50hp/**`、`ebf_*` | 第三方/历史结论 | 已加参考资料声明，不进入交付成绩 |
-| 根目录 HANDOFF/CODE-MAP/FREQ-VERDICT/COMPETITION-PLAN | 历史 105/128.125 MHz 声明 | 已加"历史文档/历史记录"标注，当前口径 150 MHz |
+| 根目录 HANDOFF/CODE-MAP/FREQ-VERDICT/COMPETITION-PLAN | 历史 105/128.125 MHz 声明 | 已加历史标注并修正正文现在时表述（2026-11-03 终审后），当前口径 150 MHz |

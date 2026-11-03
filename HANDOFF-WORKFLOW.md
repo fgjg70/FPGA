@@ -89,7 +89,7 @@ cmd /c D:\USER\Desktop\FPGA\FPGA\fpga\build.bat
 # ✅ 现在直接用工具: python tools\fpga_workflow.py metrics
 #    M-01 已修: 解析器从 Clock Summary 取各时钟周期, 在 Intra Clock Table 里按【设计主时钟】
 #    取 setup WNS, fmax = 1000/(T - WNS), 并把推导整行打印出来。当前主时钟名 = sys_clk_core
-#    (131.25 MHz 目标档 @7.619 ns), 近期收敛档是 105 MHz: fmax = 1000/(9.524 - 0.117) = 106.30
+#    (150 MHz 交付档 @6.667 ns); 历史档 105 MHz: fmax = 1000/(9.524 - 0.117) = 106.30（历史）
 #    ⇒ 只写 "fmax=xx" 的文档一律不合格: 必须带时钟名 + 周期 + 运行频率 + WNS。
 # ⚠️ 反面教材(已失效, 别再照抄): 从 `sys_clk` 行取第一个数再按硬编码 20ns 换算 ——
 #    引入 MMCM 后 `sys_clk` 行不再有 setup 端点, 该正则会静默抓到【脉宽余量 WPWS=7.000】,
