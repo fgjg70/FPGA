@@ -26,8 +26,8 @@
 // ⚠ 本文件里"70 MHz / 1050 MHz / 14.286 ns"这类数字是**当时的推导记录(历史)**,
 //   不是当前配置。当前档位的唯一真相是下面这三处, 它们必须同源:
 //     `.CLKFBOUT_MULT_F` / `.CLKOUT0_DIVIDE_F`(本文件) + `create_generated_clock`(xdc)
-//   2026-10-11 的档位序列(全部实测): 70 -> 75 -> 95.45 -> 105(已上板)
-//     -> 131.25(差0.077) -> 128.125(交付) MHz
+//   2026-10-11 的档位序列(历史, 全部实测): 70 -> 75 -> 95.45 -> 105 -> 128.125 -> 131.25 MHz
+//   **当前交付档 = 150 MHz** (2026-10-17 QSPI 自启动, WNS +0.007; 见 results/NEXT-BURN.md)
 // ============================================================================
 
 module top_a100t
@@ -43,19 +43,20 @@ module top_a100t
   localparam logic [31:0] TOHOST_ADDR = DMEM_BASE + 32'h2000;   // 与 sw/link.ld 保持一致
 
   // ==========================================================================
-  // 时钟: 板载 50 MHz -> MMCM -> 75 MHz  (MMCME2_BASE 原语 + BUFG, 不用 IP)
+  // 时钟: 板载 50 MHz -> MMCM -> **150 MHz**  (MMCME2_BASE 原语 + BUFG, 不用 IP)
+  // (历史: 2026-10-11 时钟阶梯上曾用 75/95.45/105/128.125/131.25 MHz;
+  //  2026-10-17 起交付档固定为 150 MHz —— 见 results/NEXT-BURN.md)
   // --------------------------------------------------------------------------
-  // 核算 (XC7A100T-2, Artix-7 MMCME2 的合法区间):
+  // 核算 (XC7A100T-2, Artix-7 MMCME2 的合法区间; 当前交付配置):
   //   Fvco = Fclkin * CLKFBOUT_MULT_F / DIVCLK_DIVIDE
   //        = 50 MHz * 21 / 1 = **1050.000 MHz**
-  //   Artix-7 MMCME2 的 VCO 合法区间 = 600 ~ 1200 MHz (SpeedGrade -2, BANDWIDTH
-  //   OPTIMIZED) ==> 1050 MHz 落在区间内, 且距上下限都有余量。
-  //   Fclkout0 = Fvco / CLKOUT0_DIVIDE_F = 1050 / 14 = **75.000 MHz** (精确相等,
-  //   无小数误差)  ==> 周期 1/75 MHz = 13.3333 ns。
+  //   Artix-7 MMCME2 的 VCO 合法区间 = 600 ~ 1200 MHz (SpeedGrade -2) ==> 在区间内。
+  //   Fclkout0 = Fvco / CLKOUT0_DIVIDE_F = 1050 / 7 = **150.000 MHz** (精确相等)
+  //   ==> 周期 1/150 MHz = **6.667 ns**; WNS +0.007 (结果: results/coremark.csv 行 legal150-*)。
   //   PFD 频率 = Fclkin / DIVCLK_DIVIDE = 50 / 1 = 50 MHz, 合法区间 10 ~ 500 MHz。
-  //   【70 -> 75 MHz 这一步只换抽头, 不动 PLL 参数】CLKFBOUT_MULT_F / DIVCLK_DIVIDE
-  //   都没变 (VCO 仍 1050 MHz), 只是 CLKOUT0_DIVIDE_F 从 15 改成 14。所以这一步
-  //   不引入新的 PLL 锁定/VCO 风险, 唯一的风险是**时序** (见下方缺口核算)。
+  //   【历史说明】2026-10-11 的时钟阶梯曾从 70 -> 75 -> 95.45 -> 105 -> 128.125 -> 131.25 MHz
+  //   逐档实测（当时的目标是逼近 150）；最终 150 MHz 于 2026-10-17 达成并 QSPI 自启动。
+  //   阶梯细节仅作优化记录，仍保留在 results/CHANGELOG.md / FREQ-VERDICT.md（标注为历史）。
   //   为什么是 21/1 而不是 3/2: CLKFBOUT_MULT_F / DIVCLK_DIVIDE 是 MMCM 内部
   //   反馈分频比, 它决定"输出对输入的倍率" = 21/1 = 21; 而 1050/14 = 75 正好是
   //   50 的 3/2。两个比值的乘积才是最终结果: 21/1 * 1/14 = 3/2。XDC 里的
@@ -78,7 +79,7 @@ module top_a100t
   //   绝不能把这行删掉, 也不要改成空连接。
   // ==========================================================================
   logic clk_fb;
-  logic clk_75_raw;
+  logic clk_75_raw;   // 历史信号名（曾为 75 MHz）；当前 MMCM 输出 = 150 MHz，保留名字避免改网表
   logic sys_clk_core;
   logic mmcm_locked;
 
@@ -118,7 +119,7 @@ module top_a100t
   // BUFG 的输出网就叫 sys_clk_core —— 与 XDC 里 `create_generated_clock -name sys_clk_core`
   // **同名**(见 fpga/daVinciPro.xdc), 所以 timing summary 的时钟表里能直接看到这条约束的
   // 名字与周期, 不用靠自动推导名去反推。
-  // 名字刻意**不含频率**: 本轮在时钟阶梯上迭代(75/95.45/105/128.125/131.25 MHz...),
+  // 名字刻意**不含频率**: 历史在时钟阶梯上迭代(75/95.45/105/128.125/131.25 MHz...; 当前 150 MHz),
   // 名字里带频率每改一档就过期一次 —— 那正是本工程最忌讳的"标签与事实不一致"。
   // (2026-10-11 风格审查 P0: 这里原来叫 sys_clk_75 且注释断言 14.286 ns, 而 XDC 早已改名。)
   BUFG u_bufg_sys (
@@ -128,7 +129,7 @@ module top_a100t
 
   // ---- 复位同步: 异步置位 / 同步释放, 且**要求 MMCM 已锁定** ----
   // rst 只有在 "sys_rst_n 释放" 且 "MMCM 已锁定" 之后才会拉低; 未锁定时
-  // (上电 / 掉锁) 内核一直被复位, 不会在 70 MHz 未稳的时钟上跑。
+  // (上电 / 掉锁) 内核一直被复位, 不会在时钟未稳时跑。
   (* ASYNC_REG = "TRUE" *) logic [2:0] rst_sync;
   logic rst;
 

@@ -14,7 +14,7 @@
 
 ## 比赛/评审
 - `results/COMPETITION-PLAN.md` — 赛题拆解与优先级
-- `results/STAGE-REVIEW-1103.md` — 提交前 24h 阶段性评审
+- 提交前 24h 阶段性评审（`results/STAGE-REVIEW-1103.md`）**在 `feat/ai-accel` 分支**，main 树未包含
 - `results/DESIGN-REPORT.md` — 设计报告素材
 - `results/CHANGELOG.md` — 逐轮优化与决策记录
 - `results/gap-analysis.md` — 赛题逐项对照
@@ -38,5 +38,5 @@
 - `docs/REPRODUCE.md` — 两条线复现指南
 - `docs/EVIDENCE.md` — 证据登记表（含待补清单）
 - `docs/SUBMISSION-CHECKLIST.md` — 提交检查清单（截止 11-04 18:00）
-- `docs/COMPLIANCE-AUDIT.md` — 全库逐文件合规审计（835 文件）
+- `docs/COMPLIANCE-AUDIT.md` — 全库逐文件合规审计（836 文件）
 - `tools/compliance_check.py` — 禁用词/缺级别数字自动检查

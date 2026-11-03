@@ -48,7 +48,7 @@
 
 ## 5. 文件级合规审计
 
-- 全量逐文件审计表见 [`docs/COMPLIANCE-AUDIT.md`](docs/COMPLIANCE-AUDIT.md)（覆盖仓库全部 835 个文件；文本文件逐条列出，代码/数据/二进制分组标注）。
+- 全量逐文件审计表见 [`docs/COMPLIANCE-AUDIT.md`](docs/COMPLIANCE-AUDIT.md)（覆盖仓库全部 836 个文件；文本文件逐条列出，代码/数据/二进制分组标注）。
 - 可复现检查器：`python tools/compliance_check.py`（扫描禁用词、缺级别数字、Artix 未标注对比语境等）。
 - 新增/修改任何对外文档时：① 按本文件分级；② 跑一次 compliance_check；③ 在 PR 描述里贴检查结果。
 
