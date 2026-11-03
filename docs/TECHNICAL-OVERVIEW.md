@@ -14,7 +14,7 @@
 Artix-7 XC7A100T 参照线（[跨厂商对比]，Vivado）
 ├─ CPU 150 MHz      : RV32IM 五级流水 + BTB/PHT + 非对齐访存拆分 + Zicsr
 ├─ 自研 INT8 NPU    : 112 op 全硬件 YOLO-Fastest v1.1（128 MAC/cycle 特化引擎）
-└─ 软件/测试        : ModelSim 回归 PASS 16；112-op 双模 E2E 位精确 PASS
+└─ 软件/测试        : ModelSim 回归 PASS 12（`feat/ai-accel` 分支含 NN 4 项共 16）；112-op 双模 E2E 位精确 PASS
 ```
 
 ## 2. CPU 微架构（两条线同源、实现不同）

@@ -227,7 +227,7 @@ portable_fini(core_portable *p)
 /* CoreMark 结束后由 core_main.c 调 exit(); 我们借它把结论通知宿主 (W-01)。
  *
  * 【为什么必须按 code 区分】以前这里无论 code 是多少都写 tohost=1, 而
- * sim/tb_sw.sv 只看 tohost: 于是"CRC 不匹配"也报 RESULT : PASS —— 11 项回归里
+ * sim/tb_sw.sv 只看 tohost: 于是"CRC 不匹配"也报 RESULT : PASS —— 早期 11 项回归里（当前矩阵 12 项）
  * CoreMark 这一项在结果错时仍是绿灯。现在:
  *   code == 0 -> tohost=1 (tb_sw 判 PASS)
  *   code != 0 -> tohost=2 (tb_sw $fatal -> 回归变红)
