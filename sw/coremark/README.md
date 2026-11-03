@@ -15,7 +15,7 @@ In a typical Linux system, to build and run the benchmark, type
 
 Full results are available in the files `run1.log` and `run2.log`. CoreMark result can be found in `run1.log`.
 
-For information on using CoreMark with microcontrollers or embedded processor systems without an OS, please see [barebones_porting.md](./barebones_porting.md).
+For information on using CoreMark with microcontrollers or embedded processor systems without an OS, please see the EEMBC "barebones_porting.md" document (not redistributed in this repo).
 
 ## Cross Compiling
 
