@@ -283,3 +283,42 @@ python tools\fpga_workflow.py verify --only tb_sw_nn_job
 | slim E2E | `hw_bad` 全 0；`npu_cycles = 653,129`（原 799,520，**-18.3%**）；固件期望窗口已同步（640,066~666,192） |
 | OOC @122MHz | **Slack (MET) +1.048ns**；LUT 30,700 / FF 19,731 / DSP 200（+16） |
 | 周期口径（fused_a 101-op） | 融合 39,783,123 → **当前 RTL（+A7a）37,631,729（3.25fps@122）** → +bopt 34,188,741（3.57） → +PX16 21,592,756（5.66） |
+
+
+---
+
+## 8. 交付验收清单（目标 → 证据）
+
+> 本清单把最初目标逐项映射到仓库内可复现证据，用于"是否完成"的机器可判核对。
+
+| # | 目标项 | 交付结果 | 证据（仓库路径 / 命令） |
+|---|---|---|---|
+| 1 | 迁移训练工程（两个源包） | 模型/训练/评估源码 + 500 图测试集 + 训练报告迁入；转换器工具链 9 个脚本 | `tools/bottlecap/`、`results/bottlecap/model/`、`results/bottlecap/reports/四色瓶盖模型训练过程.md` |
+| 2 | 可行性判定（CPU+NPU 能否承载） | **能**：106 op 全有原语；int8 F1=0.9956 / 框匹配 99.60%；容量缺口 = W 6.17×/Q 1.84×/A 峰值 1.2MB ⇒ 需 DDR3 流式 | 本报告 §2、`results/bottlecap/spec/NPU-CAPABILITY.md`、`results/bottlecap/ddr3/DDR3-FEASIBILITY.md` |
+| 3 | 模型量化 + 计划生成 | 106-op `plan.json` + ROM v1(256bit) + W/Q 镜像 + 逐 op 金标 + 融合版 101-op(bit-exact) + 瘦身版 71-op | `results/bottlecap/plan/{plan.json,nn_rom_pkg_bottlecap.sv,checksums.txt,GOLDEN-REPORT.md}`、`plan/fused_a/`、`plan/slim/FINAL.json` |
+| 4 | golden / ModelSim 端到端验证 | **瘦身模型：SoC 级 E2E PASS（位精确）**；原 2M：golden 级（numpy 独立复算 = 0 字节差）+ 硬件链路分段验证（op0 全链路 200,704 B 位精确；banded op1/op3/op4 PASS） | `.fpga-cache/logs/tb_sw_nn_slim.log`（`SLIM_TB: PASS`）、`results/bottlecap/reports/M6A-SLIM-E2E.md`、`M6B-DDR-CHAIN.md`、`results/bottlecap/proto/recompute_op.py` |
+| 5a | 必要时模型瘦身 | **SlimMobileNet 96×96，136,321 参数**：int8 F1=0.9976 / 匹配 99.92%；容量全 PASS（DEPLOY-CHECK 25/25） | `results/bottlecap/plan/slim/{FINAL.json,DEPLOY-CHECK.json,GOLDEN-REPORT-SLIM.md}`、`results/bottlecap/slim/SLIM-REPORT.md` |
+| 5b | 必要时存储扩展 | **DDR3 流式架构**全部落地：W 双银行可写缓存 + Q 影子缓冲 + 权重预取（399 MB/s，102 层位精确）+ 激活 band tile cache（M4 7/7）+ job 接口（M5-S1）+ nn_seq band 循环（M6c PASS） | `results/bottlecap/reports/{M2-NNMEM,M3-WSTREAM,M4-TILECACHE,M5-JOB-IF,M6C-NNSEQ-BAND}.md`、`nn_{mem,wload,tilecache,seq,subsys}.sv` |
+| 6 | 带证据的结论 + 后续路线 | 本报告 + `FOLLOWUPS.md`（进度快照）+ GitHub PR #26 + issue #19–#25（含验收判据/owner/依赖） | `results/bottlecap/FOLLOWUPS.md`、<https://github.com/fgjg70/FPGA/pull/26> |
+| 7 | 工程红线不许回退 | `verify --force = PASS 20`；交付档（LUT 3098/FF 1447/BRAM 9/DSP 8、WNS +0.007）与 C128 YOLO E2E（`hw_bad=0`、`auto_bad=0`）逐位不变；YOLO 周期因 A7a 优化下降并已对账（1,191,020→1,049,089，模型 +0.08%） | `python tools/fpga_workflow.py verify --force`、`.fpga-cache/verify-state.json` |
+
+### 最终交付数字（一页速查）
+
+| 项 | 数值 |
+|---|---|
+| 瘦身模型 E2E | **PASS**，71/71 op 位精确（真实图+pattern），int8 F1=0.9976，`npu_cycles=653,129`（≈6.5 ms/帧 @100 MHz，≈5.3 ms @122 MHz），**零 RTL 改动** |
+| 原 2M 模型数值 | int8 F1=0.9956 / 框匹配 99.60%；numpy 独立复算 = golden 0 字节差 |
+| 原 2M 模型计划 | 106 op ≤ ROM 128；W 2,020,960 B / Q 90,368 B；融合版 101-op（−268,075 拍、流量 −2.9%、bit-exact） |
+| 2M 硬件链路 | op0 全链路 200,704 B 位精确；banded dense/ADD op PASS；全模型 E2E = issue #19/#20 |
+| 性能阶梯（fused 101-op） | 当前 RTL（融合+A7a）**37,631,729 拍 = 3.25 fps@122**；+bopt 34.19M = 3.57；+PX16 21.59M = **5.66 fps@122** |
+| 回归 | `verify --force` **PASS 20**（16 基线 + wstream/tilecache/job/slim）；交付档与 YOLO 红线不变 |
+
+### 未完成项（已转 GitHub issue，不影响"可行性+可运行成果"结论）
+
+- [#19](https://github.com/fgjg70/FPGA/issues/19) M6b：tilecache Path A 水平 pad 物化 + banded 8/12/106-op E2E（→ 全模型 2M ModelSim E2E 的直接前置）
+- [#20](https://github.com/fgjg70/FPGA/issues/20) M6：全模型 E2E + nn_seq 自主执行接线（nn_subsys streaming 端口 + DDR 读仲裁）
+- [#21](https://github.com/fgjg70/FPGA/issues/21) 性能 bopt（→ 34.19M / 3.57 fps）
+- [#22](https://github.com/fgjg70/FPGA/issues/22) 性能 PX16（→ 21.59M / 5.66 fps）
+- [#23](https://github.com/fgjg70/FPGA/issues/23) 上板 MIG/DDR3（需 6 项硬件资料）
+- [#24](https://github.com/fgjg70/FPGA/issues/24) S2/S3 双时钟解耦 + 帧流水/显示
+- [#25](https://github.com/fgjg70/FPGA/issues/25) 剩余融合（B/C 类）
