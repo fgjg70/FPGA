@@ -1006,7 +1006,7 @@ def test_matrix() -> list[dict]:
         # 的消费者**。后者是"停顿次数变了"而不是"每次多 1 拍", 任何靠推理算代价的做法
         # 都会算错(实测 +8.9% vs 推理 +6.9%)。这个微基准用三个阶段(距离 3/2/1)把
         # "每类事件各花几拍"直接量出来, 并检查被停顿的消费者读到正确结果。
-        # ⚠ 加入这一项后全量回归是 **PASS 12**(文档里的"PASS 11"需要同步更新)。
+        # ⚠ 加入这一项后全量回归是 **PASS 12**（文档已同步；历史版本曾为 PASS 11）。
         {"name": "tb_sw_lu_bench", "top": "tb_sw", "rtl": "rtl", "tb": "sim/tb_sw.sv",
          "imem": "sim/prog/lu_bench.hex",
          "plus": ["+lu_bubbles=2", "+expect_hazards=1024", "+expect_d2_cost=1024",
