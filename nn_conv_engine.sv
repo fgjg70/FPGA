@@ -106,6 +106,9 @@ module nn_conv_engine
   logic is_conv, is_pool, is_copy, is_add;
   logic f_dw, f_leaky, f_up2x, f_p3, f_add_r, f_relu;   // f_relu: v0.8 NN_F_RELU
   wire dense = is_conv && !f_dw;
+  // v0.9 [A7a] dw 16-lane 仅用于 ic==oc 且 %16==0 的层（16B 对齐，无尾 tile）；
+  //            其余 dw（24/72/88...）回退旧 8-lane 路径，保证逐位等价。
+  wire f_dw16 = f_dw && ((d_oc[3:0] == 4'd0) && (d_ic[3:0] == 4'd0) && (d_oc == d_ic));
 
   wire [2:0] pad_eff = (is_pool && (d_pad == 3'd0))
       ? (({1'b0, d_ks} - 4'd1) >> 1) : d_pad;
@@ -226,8 +229,7 @@ module nn_conv_engine
   // ==========================================================================
   logic [63:0] abuf  [0:BANDW-1];
   logic [63:0] bshift[0:WINW-1];
-  // v0.9 [A7a] dw 专用 128b 窗口（16 通道/像素）：只有 f_dw 装载/移位，
-  //            dense 的 abuf/bshift/win_sel 一字节不动（共用流水零改动）。
+  // v0.9 [A7a] dw 专用 128b 窗口（16 通道/像素）：仅 f_dw 装载/移位，dense 共用流水零改动
   logic [127:0] dwbuf [0:BANDW-1];
   logic [127:0] dwbsh [0:WINW-1];
 
@@ -328,9 +330,9 @@ module nn_conv_engine
   wire [15:0] qm_w  = {11'd0, qm_w_r};          // mpos 64b 字数 (4 lane/字)
   wire [15:0] q_tot = {11'd0, q_tot_r};         // 总字数
   // dense 16-lane tile: 每像素 2 个 8B 写 beat; 其余 1 beat
-  wire single16 = ((dense || f_dw) && (act_l == 16'd16) && (oc8_r[3:0] == 4'd0) &&
+  wire single16 = ((dense || f_dw16) && (act_l == 16'd16) && (oc8_r[3:0] == 4'd0) &&
                    (d_dst[3:0] == 4'd0));
-  wire wr_dense16 = (dense || f_dw) && (act_l == 16'd16);
+  wire wr_dense16 = (dense || f_dw16) && (act_l == 16'd16);
   wire [15:0] req_beats = wr_dense16 ? (single16 ? 16'd8 : 16'd16) : 16'd8;
   // S_DRN 打拍的控制 (避免 ocw_r -> b_wdata mux 长路径)
   logic        wr16_r, wrs16_r;
@@ -475,7 +477,7 @@ module nn_conv_engine
         win_sel[px] = st2_r ? bshift[2*px] : bshift[px];
     end
   end
-  // v0.9 [A7a] dw 专用 128b 窗口（16 通道/像素；仅 f_dw 使用）
+  // v0.9 [A7a] dw 专用 128b 窗口（仅 f_dw 使用）
   logic [127:0] dw_win [0:PX-1];
   always_comb begin
     for (int px = 0; px < PX; px++)
@@ -787,7 +789,7 @@ module nn_conv_engine
       if (ld_ret_v) begin
         if (ld_fill_d) abuf[ld_j_d] <= {8{ld_fillbyte_d}};
         else           abuf[ld_j_d] <= ld_half_d ? a_rdata[127:64] : a_rdata[63:0];
-        // v0.9 [A7a] dw 专用：完整 16B 存入 128b 窗口（dense 不进这里）
+        // v0.9 [A7a] dw16（ic8=oc8 且 %16==0 => 16B 对齐）用完整 128b；其余 dw 不用 dwbuf
         dwbuf[ld_j_d] <= ld_fill_d ? {16{ld_fillbyte_d}} : a_rdata;
       end
 
@@ -801,8 +803,8 @@ module nn_conv_engine
           for (int oc = 0; oc < OCL; oc++) begin
             if (dense)
               a_pipe[px][oc] <= win_sel[px][sel_byte_base +: 8];
-            else if (f_dw)
-              a_pipe[px][oc] <= dw_win[px][oc*8 +: 8];
+            else if (f_dw16)
+              a_pipe[px][oc] <= (16'(oc) < act_l) ? dw_win[px][oc*8 +: 8] : 8'sd0;
             else
               a_pipe[px][oc] <= (oc < 8) ? win_sel[px][oc*8 +: 8] : 8'sd0;
           end
@@ -854,8 +856,7 @@ module nn_conv_engine
       if (win_adv) begin
         for (int i = 0; i < WINW-1; i++) bshift[i] <= bshift[i+1];
         bshift[WINW-1] <= abuf[15 + cur_kx[3:0]];
-        // v0.9 [A7a] dw 专用 128b 窗口滑动（dense 不受影响）
-        for (int i = 0; i < WINW-1; i++) dwbsh[i] <= dwbsh[i+1];
+        for (int i = 0; i < WINW-1; i++) dwbsh[i] <= dwbsh[i+1];      // v0.9 [A7a]
         dwbsh[WINW-1] <= dwbuf[15 + cur_kx[3:0]];
       end
 
@@ -977,12 +978,12 @@ module nn_conv_engine
               ic8_r <= ic8;
               oc8_r <= oc8;
               st2_r <= (d_st == 2'd2);
-              ocw_r <= is_pool ? 16'd8 : 16'd16;   // v0.9 [A7a] dw 也 16 lane（pool 保持 8）
+              ocw_r <= is_pool ? 16'd8 : ((f_dw && !f_dw16) ? 16'd8 : 16'd16);   // v0.9 [A7a] 仅 dw16 用 16
             end
             16'd1: begin
               icb_n_r <= ic8_r >> 3;
               oc_limit_r <= is_pool  ? (ic8_r >> 3)
-                          : ((oc8_r + 16'd15) >> 4);
+                          : ((f_dw && !f_dw16) ? (oc8_r >> 3) : ((oc8_r + 16'd15) >> 4));
               if (is_copy) begin
                 oh_w <= f_up2x ? (d_ih << 1) : d_ih;
                 ow_w <= f_up2x ? (d_iw << 1) : d_iw;
@@ -1150,8 +1151,8 @@ module nn_conv_engine
             la        <= blk_base;
           end
           else begin
-            band_base <= f_dw ? (blk_base + (c_ocb << 4)) : blk_base;   // v0.9 [A7a] dw 16 lane/tile
-            la        <= f_dw ? (blk_base + (c_ocb << 4)) : blk_base;
+            band_base <= f_dw ? (blk_base + (f_dw16 ? (c_ocb << 4) : (c_ocb << 3))) : blk_base;
+            la        <= f_dw ? (blk_base + (f_dw16 ? (c_ocb << 4) : (c_ocb << 3))) : blk_base;
           end
           x_ld   <= x0_c;
           x0_ld  <= x0_c;
