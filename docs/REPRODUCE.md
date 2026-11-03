@@ -26,7 +26,7 @@ python fpga_pg2l100h/vision/build.py --help
 ## 2. Artix-7 对比线（[跨厂商对比]）
 
 ```powershell
-# 仿真回归（PASS 16）
+# 仿真回归（PASS 12；feat/ai-accel 分支含 NN 回归共 16）
 python tools/fpga_workflow.py verify --force
 # 交付档综合/实现（150 MHz 合法配方）
 python tools/fpga_workflow.py synth --tag legal150 --no-lc --fanout-limit 128 `

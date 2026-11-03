@@ -57,7 +57,7 @@ CORE_TICKS get_time(void) { return t_stop - t_start; }
  *   写非 0/1  -> [tb_sw] $fatal -> 回归变红
  *
  * 【为什么必须由程序自己写】以前不管程序算出什么都无条件打印
- * "RESULT : PASS", 于是算错也是绿灯 (11 项里有 3 项的结论只靠人眼看日志)。
+ * "RESULT : PASS", 于是算错也是绿灯 (早期 11 项里有 3 项的结论只靠人眼看日志；当前矩阵 12 项)。
  * 所以每个程序都必须把"算得对不对"编码进 tohost:
  *   全部自检通过 -> report_done()  (tohost = 1)
  *   任何自检失败 -> report_fail()  (tohost = 2, 并**自旋**)

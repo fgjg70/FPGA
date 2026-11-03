@@ -1234,7 +1234,7 @@ def _cmd_verify(args) -> int:
         # 【默认配置 = imem/dmem 都用 BRAM】= 上板验证过的配置。
         # 历史上那些宏曾默认为开, 但那是基于无效实验 —— ModelSim 侧宏传递写错
         # (见 PITFALLS R17), 宏从未在仿真生效, 所以"零代价"是假的。
-        # 修好后实测: IMEM_REG_READ 已打通并**转为默认**(回归 PASS 11, ticks 逐位一致);
+        # 修好后实测: IMEM_REG_READ 已打通并**转为默认**(当时回归 PASS 11, ticks 逐位一致; 当前矩阵 12 项);
         # LOAD_RESULT_REG 会 timeout(已否决); BTB_GSHARE 能跑但慢 6%。
         # 回退 imem 组合读用 --imem_comb_read; 其余用 --gshare / --load_reg / --a-ext。
         defs = list(_global_defines(args))

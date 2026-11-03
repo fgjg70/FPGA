@@ -56,7 +56,7 @@
 4. 验收与演示脚本：`fpga_pg2l100h/vision/competition/{ACCEPTANCE.md,DEMO.md}`
 
 ### 3.2 Artix-7 对比线
-见 [`README-ARTIX.md`](README-ARTIX.md)；仿真回归：`python tools/fpga_workflow.py verify`（PASS 16）。
+见 [`README-ARTIX.md`](README-ARTIX.md)；仿真回归：`python tools/fpga_workflow.py verify`（**PASS 12**；`feat/ai-accel` 分支另含 4 项 NN 回归共 16）。
 
 ### 3.3 自研 INT8 NPU 对比材料（feat/ai-accel 分支）
 `feat/ai-accel` 分支（远端已推送）包含：YOLO-Fastest v1.1 int8 **112 op 全硬件 E2E 位精确 PASS**、NPU **1,191,020 周期**、CPU 软件基线 **473,254,313 周期** ⇒ **加速比 401.9×**、XC7A100T **100 MHz 位流**（sha `537af245…`）与最高已验证 **122.22 MHz**。
