@@ -954,3 +954,49 @@ BUILD_NN_XDC_GEN=.../daVinciPro_ai_12.xdc (create_generated_clock divide_by 12)
 LUT ≈ 1.8e4）。不一致就先怀疑 DCE/常量折叠，而不是"优化效果很好"。
 **修法**：wrapper 顶层把被写存储的数据引出来当观测输出（如 `a_rdata_o/w_rdata_o/b_wdata_o`），
 或保留 CPU 读回口；再看时序。
+
+### R54. **两个脚本写同一个镜像文件 ⇒ 配方/迭代数漂移，而"板上跑得更快"看起来像好成绩** ✅(2026-11-03 实测)
+
+**症状**：交付档 tag `deliv150-o2ira` 宣称 CoreMark 绝对吞吐 **405.9**（`-O2 -mbranch-cost=1
+-fira-loop-pressure`），但**照操作单 `results/NEXT-BURN.md` §3 烧上去永远拿不到**。
+**物证**：2026-10-17 的上板实测日志 `results/uart_final150.txt` 第 9 行
+```
+Compiler flags : -Os -march=rv32im -mabi=ilp32
+```
+—— 板上跑的是 **`-Os`**，不是交付档配方。
+
+**根因**：`sim/prog/cm_hw.hex` 有**两个**写入者，各写死了一份配方：
+| 脚本 | 配方 | ITERATIONS |
+|---|---|---|
+| `tools/build_sw.py --all --with-hw` | `-O2 -mbranch-cost=1 -fira-loop-pressure` | 写死 3000 |
+| `tools/mk_cm_hw.py <iters>` | **`-Os`**（漏了全部三个开关） | 命令行传入 |
+
+两者**写同一个文件**，谁最后跑谁赢；而 `mk_cm_hw.py` 写进 `cm_hw.build.json` 的
+`expect_tick` 又是从 **-O2** 仿真日志推的 ⇒ **镜像与清单自相矛盾 25%**
+（`-Os` 每迭代 463,366 拍 vs `-O2` 369,506 拍）。
+
+**三个"看起来没事"的连锁**：
+1. 烧上去的是 `-Os` ⇒ 实测 324.19，**离 405.9 差 25%**，但成绩**依然合法**（≥10 s、CRC 全对）
+   ⇒ 没有任何"报错"提示你配方没生效；
+2. `expect_tick` 与镜像差 25% ⇒ `fpga_workflow.py hw` 的 0.5% tick 门**必然 FAIL**，
+   而这个 FAIL 会被误读成"板子跑歪了"，而不是"清单算错了"；
+3. `build_sw --with-hw` 那个写死的 `ITERATIONS=3000` 在 150 MHz 下只跑 **7.39 s** ——
+   **跌破赛题"必须 ≥ 10 s"的硬门**，而"跑得更快"看起来像个**好成绩**。
+
+**修法（三层，从根到表）**：
+1. **单一事实来源**（根）：新增 `tools/cm_recipe.py` 存 `CM_OPT` / `cm_flags_str()`，
+   `build_sw.py` 与 `mk_cm_hw.py` **都从它取**。改配方只改这一个文件。
+2. **漂移即失败**闸门（防复发，比"改对一次"更重要）：
+   `mk_cm_hw.py` 比对**仿真日志里 CoreMark 自报的 `Compiler flags`**（`core_main.c:403` 打印
+   `FLAGS_STR`）与本次要用的配方，不一致直接 **BLOCK**。这是**运行期自证**，不依赖记忆或文档。
+3. **端到端闭环**（表）：`tools/uart_capture.py --parse` 把板上读回的
+   **配方 / 迭代数 / tick(±0.5%) / ≥10 s** 四项逐项对 `cm_hw.build.json`，
+   给 `=> PASS` 或 `=> FAIL`。板上自报的 `Compiler flags` 就是"烧的是哪份镜像"的证据。
+
+**判据**：`python tools\mk_cm_hw.py 4600` 必须打印
+`[recipe] ... (与仿真日志自报的 Compiler flags 一致)`；
+`python tools\uart_capture.py --parse results/uart_final150.txt` 必须报 **FAIL**（那份是 `-Os` 旧配方）。
+
+**通用教训**：**任何"多处各写一份、写到同一个产物"的常量，都要收敛成单一来源 + 一道自动闸门**。
+特别当"两份值不同"的后果是"**成绩变好**"而不是"报错"时 —— 那是最容易被漏掉的形态。
+（本条与 R41「多写入者要记源文件哈希」同族：R41 防的是"不知道烧的是哪份"，R54 防的是"知道是哪份、但那份不是你以为的那份"。）

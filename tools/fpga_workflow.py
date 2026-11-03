@@ -875,6 +875,88 @@ def cmd_check(args) -> int:
     if os.path.exists(abspath(SYNTH_LOG)):
         print(f"  OK     {SYNTH_LOG} / {ILA_SYNTH_LOG} 均无 {R43_WARN_CODE} 反馈环警告 (R43 判据)")
 
+    # ---- [7b] CoreMark 配方 / 镜像 / 清单 三者同源 (R54) --------------------
+    # 【为什么单独列一节】cm_hw.hex 有**两个**写入者 (build_sw --with-hw 与
+    # mk_cm_hw.py), 配方与 ITERATIONS 一旦漂移:
+    #   · 板上跑的是旧配方 -> 成绩"合法但非最优", 没有任何报错提示你;
+    #   · 清单里的 expect_tick 与镜像差 25% -> 上板 tick 门必然 FAIL, 且这个
+    #     FAIL 会被误读成"板子跑歪了"而不是"清单算错了";
+    #   · build_sw 写死的 ITERATIONS=3000 在 150 MHz 下只跑 7.39 s, 跌破赛题
+    #     ">= 10 s"硬门 —— 而"跑得更快"看起来像个**好成绩**。
+    # 这里做**静态**三项核对: 配方来源唯一 / 清单的配方 == 配方来源 /
+    # 清单的迭代数在当前主频下满足 >= 10 s。
+    print("\n[7b] CoreMark 配方 / 镜像 / 清单 三者同源  (R54)")
+    try:
+        sys.path.insert(0, os.path.join(REPO, "tools"))
+        from cm_recipe import CM_OPT, cm_flags_str  # noqa: E402
+        import cm_recipe as _cr  # noqa: E402
+
+        # ① 配方来源唯一: 全仓库不允许再有第二处硬编码 CoreMark 配方
+        recipe_hits = []
+        for root, dirs, files in os.walk(REPO):
+            dirs[:] = [d for d in dirs if d not in (".git", ".fpga-cache", "results",
+                                                    "skills", "refs", "node_modules")]
+            for n in files:
+                if not n.endswith(".py"):
+                    continue
+                p = os.path.join(root, n)
+                if os.path.basename(p) == "cm_recipe.py":
+                    continue
+                try:
+                    with open(p, encoding="utf-8", errors="replace") as fh:
+                        txt = fh.read()
+                except OSError:
+                    continue
+                # 找形如 opt = "-O2 ..." / CM_OPT = '...' 的**赋值**
+                for i, line in enumerate(txt.splitlines(), 1):
+                    s = line.strip()
+                    if not (s.startswith("opt") or s.startswith("CM_OPT")):
+                        continue
+                    if "=" not in s or "im.get(" in s or s.startswith("opt = cm_flags"):
+                        continue
+                    # 必须是**编译优化级别**的字面量赋值。
+                    # 排除通用默认值写法 (dict.get('opt', '-Os')) —— 那是"没指定就用 -Os",
+                    # 不是"给 CoreMark 定了一个配方"。
+                    if "-O" not in s:
+                        continue
+                    recipe_hits.append("%s:%d  %s" % (posix(os.path.relpath(p, REPO)), i, s))
+        if recipe_hits:
+            for h in recipe_hits:
+                print(f"  [FAIL] 配方被硬编码在第二处 (必须只写在 tools/cm_recipe.py): {h}")
+            problems.append("CoreMark 配方有 %d 处硬编码, 应收敛到 tools/cm_recipe.py" % len(recipe_hits))
+        else:
+            print(f"  OK    配方来源唯一: tools/cm_recipe.py (CM_OPT = {CM_OPT})")
+
+        # ② 清单里的配方 == 配方来源
+        bj = load_build_json("cm_hw")
+        want = cm_flags_str()
+        got = bj.get("compiler_flags")
+        if not got:
+            print("  [warn] 构建清单没有 compiler_flags 字段 (旧清单, 建议重跑 mk_cm_hw.py)")
+            warnings.append("cm_hw.build.json 缺 compiler_flags")
+        elif [t for t in str(got).split()] == [t for t in want.split()]:
+            print(f"  OK    清单配方 == 配方来源: {want}")
+        else:
+            print(f"  [FAIL] 清单配方与配方来源不一致:\n         清单: {got}\n         来源: {want}")
+            problems.append("cm_hw.build.json 的 compiler_flags 与 tools/cm_recipe.py 不一致")
+
+        # ③ 清单的迭代数在当前主频下 >= 10 s (赛题硬门)
+        iters = bj.get("iterations")
+        clk = bj.get("clk_hz")
+        exp = bj.get("expect_tick")
+        if iters and clk and exp:
+            secs = float(exp) / float(clk)
+            if secs >= 10.0:
+                print(f"  OK    迭代 {iters} @ {clk/1e6:.0f}MHz = {secs:.2f} s (>= 10 s ✓)")
+            else:
+                print(f"  [FAIL] 迭代 {iters} @ {clk/1e6:.0f}MHz = {secs:.2f} s "
+                      f"**跌破赛题 10 s 硬门** (且'跑得更快'看起来像好成绩)")
+                problems.append(f"cm_hw 迭代 {iters} 只跑 {secs:.2f}s, 跌破 10s 硬门")
+        elif iters and clk:
+            print("  [warn] 清单缺 expect_tick, 跳过 >=10 s 核对")
+    except Exception as e:  # noqa: BLE001
+        print(f"  [warn] 配方同源检查异常: {e}")
+
     # ---- [HIL] 硬件在环健康度 ------------------------------------------------
     # 【为什么单独列一节】用户明确要求: 硬件在环是本项目的核心验证手段, 板子
     # 掉线就等于闭环断了 —— 必须**立刻发现并停下报告**, 而不是自己继续推代码

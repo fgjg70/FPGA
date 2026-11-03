@@ -104,7 +104,84 @@ def parse(text):
     verdict["coremark"] = float(m.group(1)) if m else None
     m = re.search(r"Total ticks\s*:\s*(\d+)", text)
     verdict["ticks"] = int(m.group(1)) if m else None
+    # 【R54】板上**自报**的编译配方 —— 这是"烧上去的是哪份镜像"的运行期证据。
+    # CoreMark 自己打印 `Compiler flags : <FLAGS_STR>` (core_main.c:403)。
+    m = re.search(r"Compiler flags\s*:\s*(.+)", text)
+    verdict["compiler_flags"] = m.group(1).strip() if m else None
+    # 规范口径的分数 (core_portme.c 的 [portme] score=... spec)
+    m = re.search(r"\[portme\]\s*score=([\d.]+)\s*spec", text)
+    verdict["spec_score"] = float(m.group(1)) if m else None
+    # 硬件侧的 >=10 s 自证 (CM_MIN_SECS_CHECK 打开时才有这行)
+    m = re.search(r"\[portme\]\s*rate gate:\s*clk=(\d+)\s*Hz\s*ticks=(\d+)\s*secs=(\d+)\s*min10s=(\w+)", text)
+    if m:
+        verdict["gate_clk_hz"] = int(m.group(1))
+        verdict["gate_ticks"] = int(m.group(2))
+        verdict["gate_secs"] = int(m.group(3))
+        verdict["min10s"] = m.group(4)
     return verdict
+
+
+def check_against_manifest(verdict, manifest_path=None):
+    """把板上读回的判据与**构建清单**逐项核对 (端到端闭环)。
+
+    这是 R54 的最后一块拼图: 前面保证"烧的镜像"与"清单"同源,
+    这里保证"板上跑的那个"确实就是清单描述的那个 ——
+    靠的是 CoreMark **自己打印**的 Compiler flags 与清单里的 compiler_flags 逐字比对。
+
+    返回 (ok: bool, lines: list[str])
+    """
+    import json
+    import os
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    mp = manifest_path or os.path.join(repo, 'sim', 'prog', 'cm_hw.build.json')
+    lines = []
+    try:
+        with open(mp, encoding='utf-8') as f:
+            man = json.load(f)
+    except (OSError, ValueError) as e:
+        return False, ['[WARN] 读不到构建清单 %s (%s) -> 跳过交叉核对' % (mp, e)]
+
+    ok = True
+    # ① 配方一致 (最重要: 这是"烧的是哪份镜像"的证据)
+    want = man.get('compiler_flags')
+    got = verdict.get('compiler_flags')
+    if want and got:
+        if [t for t in got.split()] == [t for t in want.split()]:
+            lines.append('  [OK] 配方一致: %s' % got)
+        else:
+            ok = False
+            lines.append('  [FAIL] 配方不一致 —— 板上跑的不是清单描述的那份镜像!')
+            lines.append('         清单: %s' % want)
+            lines.append('         板上: %s' % got)
+    elif want and not got:
+        ok = False
+        lines.append('  [FAIL] 板上没打印 Compiler flags -> 无法确认烧的是哪份镜像')
+    # ② 迭代数一致
+    if man.get('iterations') and verdict.get('iterations'):
+        if int(man['iterations']) == int(verdict['iterations']):
+            lines.append('  [OK] iterations 一致: %d' % verdict['iterations'])
+        else:
+            ok = False
+            lines.append('  [FAIL] iterations 不一致: 清单 %s vs 板上 %s'
+                         % (man['iterations'], verdict['iterations']))
+    # ③ tick 与预期一致 (门限 0.5%, 与 fpga_workflow hw 用的同一个门)
+    if man.get('expect_tick') and verdict.get('ticks'):
+        exp = int(man['expect_tick'])
+        dev = abs(verdict['ticks'] - exp) / exp * 100.0
+        if dev <= 0.5:
+            lines.append('  [OK] tick %d 与预期 %d 一致 (偏差 %.3f%% <= 0.5%%)'
+                         % (verdict['ticks'], exp, dev))
+        else:
+            ok = False
+            lines.append('  [FAIL] tick %d 与预期 %d 偏差 %.3f%% (> 0.5%%)'
+                         % (verdict['ticks'], exp, dev))
+    # ④ 时长 >= 10 s (赛题硬门)
+    if verdict.get('min10s'):
+        lines.append('  [%s] 硬件侧时长自证: min10s=%s'
+                     % ('OK' if verdict['min10s'] == 'ok' else 'FAIL', verdict['min10s']))
+        if verdict['min10s'] != 'ok':
+            ok = False
+    return ok, lines
 
 
 def main():
@@ -115,6 +192,9 @@ def main():
     ap.add_argument("--seconds", type=float, default=25.0)
     ap.add_argument("--out", default=".fpga-cache/logs/uart_capture.txt")
     ap.add_argument("--parse", help="只解析已有的输出文件（不需要串口）")
+    ap.add_argument("--manifest", help="构建清单路径 (默认 sim/prog/cm_hw.build.json)")
+    ap.add_argument("--no-check", action="store_true",
+                    help="只打印解析结果, 不与构建清单做交叉核对")
     a = ap.parse_args()
 
     if a.list:
@@ -125,14 +205,32 @@ def main():
         v = parse(txt)
         for k, val in v.items():
             print("  %-14s %s" % (k, val))
+        if not a.no_check:
+            ok, lines = check_against_manifest(v, a.manifest)
+            print("\n  === 与构建清单交叉核对 ===")
+            for ln in lines:
+                print(ln)
+            print("  => %s" % ("PASS (板上跑的确实就是清单描述的那份镜像)" if ok
+                              else "FAIL —— 见上面的 FAIL 行"))
         return 0
     if not a.port:
         raise SystemExit("  需要 --port（先 --list 看有哪些口）")
     txt = capture(a.port, a.seconds, a.out, a.baud).decode("utf-8", "replace")
     print("\n  === 判据 ===")
-    for k, val in parse(txt).items():
+    v = parse(txt)
+    for k, val in v.items():
         print("  %-14s %s" % (k, val))
-    return 0
+    rc = 0
+    if not a.no_check:
+        ok, lines = check_against_manifest(v, a.manifest)
+        print("\n  === 与构建清单交叉核对 ===")
+        for ln in lines:
+            print(ln)
+        verdict = ("PASS (板上跑的确实就是清单描述的那份镜像)" if ok
+                   else "FAIL —— 见上面的 FAIL 行")
+        print("  => %s" % verdict)
+        rc = 0 if ok else 1
+    return rc
 
 
 if __name__ == "__main__":

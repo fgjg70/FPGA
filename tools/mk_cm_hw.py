@@ -36,6 +36,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 PY = sys.executable
 
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+# 【R54 单一事实来源】编译配方从 tools/cm_recipe.py 取, 不在这里硬编码。
+# 以前这里是 `opt = "-Os"`, 而 tools/build_sw.py 里是 '-O2 -mbranch-cost=1 -fira-loop-pressure'
+# —— 两者**写同一个文件** sim/prog/cm_hw.hex, 于是:
+#   烧上去的是 -Os 镜像 (板上实测 324.19), 但 expect_tick 却是按 -O2 的每迭代拍数算的
+#   => 清单与镜像自相矛盾 (差 25%), 且交付档宣称的 405.9 永远烧不出来。
+from cm_recipe import CM_OPT, CM_MARCH, CM_MABI, cm_flags_str, cm_flags_define  # noqa: E402
+
 CM_SRC = ["core_main.c", "core_list_join.c", "core_matrix.c",
           "core_state.c", "core_util.c", "core_portme.c", "ee_printf.c"]
 
@@ -104,15 +113,82 @@ def read_ticks_per_iter():
     return int(m.group(1)) // n
 
 
+def read_log_compiler_flags():
+    """从 CoreMark 仿真日志里读出程序**自报的** Compiler flags。
+
+    CoreMark 自己会打印 `Compiler flags   : <FLAGS_STR>` (core_main.c:403)。
+    那是**编译进镜像的那个宏** —— 于是它成了"这份镜像是用什么配方编的"的
+    **运行期自证**, 不依赖任何人的记忆或文档。
+
+    【为什么必须有这个函数】(R54)
+    expect_tick 是从这份日志的 `Total ticks` 推导的, 而 ticks 取决于**编译配方**
+    (实测 -Os 每迭代 463,366 拍 vs -O2+bc1+ira 每迭代 369,506 拍, 差 25%)。
+    所以"日志的 flags"必须与"本次要编的 flags"**完全一致**, 否则 expect_tick 就是错的。
+    以前这两个数在两个文件里各写一份, 已经漂移过一次(见 cm_recipe.py 的说明)。
+    """
+    for name in ("tb_sw_coremark.default.log", "tb_sw_coremark.log"):
+        p = os.path.join(REPO, ".fpga-cache", "logs", name)
+        try:
+            with open(p, encoding="utf-8", errors="replace") as f:
+                txt = f.read()
+        except OSError:
+            continue
+        m = re.search(r"Compiler flags\s*:\s*(.+)", txt)
+        if m:
+            return m.group(1).strip()
+    return None
+
+
+def check_recipe_consistency():
+    """**漂移即失败**闸门: 核对"日志自报的 flags"与"本次要用的配方"。
+
+    两者不一致 ⇒ expect_tick 是按另一个配方算的 ⇒ 上板 tick 判据必然假失败,
+    而且**镜像与清单互相矛盾**。这时候必须 BLOCK, 不许"先烧了再说"。
+
+    返回 (ok: bool, msg: str)
+    """
+    want = cm_flags_str()
+    got = read_log_compiler_flags()
+    if got is None:
+        return False, ("读不到仿真日志里的 `Compiler flags` (需要 .fpga-cache/logs/"
+                       "tb_sw_coremark.default.log)")
+    # CoreMark 打印的可能带前后空格/多个空格; 按 token 归一化后逐个比。
+    norm = lambda s: [t for t in s.split() if t]
+    if norm(got) != norm(want):
+        return False, ("仿真日志自报的配方与本次要编的不一致:\n"
+                       "          日志: %s\n"
+                       "          本次: %s\n"
+                       "          => expect_tick 是按**另一个**配方算的, 上板 tick 门必然假失败。"
+                       % (got, want))
+    return True, want
+
+
 def main():
     if len(sys.argv) > 1:
         iters = int(sys.argv[1])
     else:
         iters = 3000
-    opt = "-Os"
-    march = "rv32im"
+    opt = CM_OPT
+    march = CM_MARCH
     clk_hz = read_clk_hz()
     out = os.path.join(REPO, "sim", "prog", "cm_hw.hex")
+
+    # ------------------------------------------------------------------
+    # 【R54 漂移即失败】先核对"仿真日志自报的配方" == "本次要编的配方"。
+    # 不一致就 BLOCK: expect_tick 是从那份日志的 Total ticks 推出来的,
+    # 而 ticks 依赖编译配方 (实测 -Os 与 -O2+bc1+ira 差 25%),
+    # 所以配方漂了 => expect_tick 就是错的 => 上板 tick 门必然假失败,
+    # 且"镜像内容"与"清单"互相矛盾 (这正是 2026-11-03 发现的静默故障)。
+    # ------------------------------------------------------------------
+    ok, msg = check_recipe_consistency()
+    if not ok:
+        print("  [BLOCK] 配方不一致 —— 拒绝生成上板镜像。")
+        print("          %s" % msg)
+        print("          修法: 先重建回归镜像并重跑一次仿真, 让日志里的 flags 与配方对上:")
+        print("                python tools\\build_sw.py --all")
+        print("                python tools\\fpga_workflow.py verify --force")
+        return 1
+    print("  [recipe] %s (与仿真日志自报的 Compiler flags 一致)" % msg)
 
     cmd = [PY, os.path.join(HERE, "build_sw.py")]
     # 与 run_coremark.py 的 CM_SRC **完全一致** (少一个 core_portme.c 就会
@@ -131,7 +207,7 @@ def main():
             # 的时长门静默失效, 而打印出来的秒数还会按 50 MHz 算 (少报 1.4 倍)。
             "-D", "HW_CLK_HZ=%d" % clk_hz,
             # 必须是**一个** argv 元素, 且内含双引号 —— 这是 shell 里做不到的部分
-            "-D", 'FLAGS_STR="%s -march=%s -mabi=ilp32"' % (opt, march),
+            "-D", cm_flags_define(),
             "--march=" + march, "--opt=" + opt, "-o", out]
 
     print("[mk_cm_hw] ITERATIONS=%d opt=%s march=%s" % (iters, opt, march))
@@ -236,6 +312,11 @@ def main():
         "prog": "cm_hw", "iterations": iters,
         "expect_tick": expect_tick, "wait_seconds": wait_seconds,
         "clk_hz": clk_hz, "generated_by": "tools/mk_cm_hw.py",
+        # 【R54】配方指纹写进清单: 以后任何"这份镜像是怎么编的"都能从清单直接读,
+        # 不用去翻 git log 或猜文档。同时它也是**可核对**的 —— 板上 UART 日志里
+        # CoreMark 自报的那一行 `Compiler flags : ...` 必须与 opt 逐字符相同。
+        "opt": opt, "march": march,
+        "compiler_flags": cm_flags_str(),
     }
     jp = os.path.join(REPO, "sim", "prog", "cm_hw.build.json")
     with open(jp, "w", encoding="utf-8", newline="\n") as f:
@@ -243,6 +324,7 @@ def main():
     print("  %-18s %s" % ("cm_hw.build.json", "OK"))
     print("  [build.json] ITERATIONS=%d expect_tick=%d wait_seconds=%ds clk=%dHz"
           % (iters, expect_tick, wait_seconds, clk_hz))
+    print("  [build.json] opt=%s" % opt)
     return 0
 
 

@@ -27,6 +27,9 @@ import argparse, glob, os, re, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+from cm_recipe import CM_OPT, CM_MARCH, CM_MABI, cm_flags_str, cm_flags_define  # noqa: E402
 DEFAULT_GCC_DIR = r'D:\software\tools\riscv-none-elf\xpack-riscv-none-elf-gcc-15.2.0-1\bin'
 DEFAULT_LD = os.path.join(REPO, 'sw', 'link.ld')
 ALWAYS = [os.path.join(REPO, 'sw', 'crt0.S'), os.path.join(REPO, 'sw', 'libc_min.c')]
@@ -178,6 +181,31 @@ def asm_image(name):
     return 0
 
 
+def read_hw_iterations():
+    """从构建清单 `sim/prog/cm_hw.build.json` 读上板镜像的 ITERATIONS。
+
+    【R54 为什么清单是权威】`cm_hw.hex` 有**两个**写入者 (build_sw --with-hw 与
+    mk_cm_hw.py), 而 ITERATIONS 决定了 "跑多久" (赛题要求 >= 10 s) 与 "tick 多少"
+    (上板判据的基准)。两份迭代数不一致 => 要么镜像违反 10 s 门, 要么镜像与清单矛盾。
+
+    实测踩到的形态: build_sw 硬编码 3000, 而 150 MHz 档真实需要 4600。
+    3000 迭代在 150 MHz 下只跑 **7.39 s** —— 跌破赛题硬门, 而且"跑得更快"
+    看起来像个**好成绩**, 属于最该拦的那类形态。
+
+    规矩: **上板镜像的 ITERATIONS 由 mk_cm_hw.py 按当前主频算出来并写进清单**,
+    这里只负责读回来照做。读不到就返回 None (调用方不构建 cm_hw)。
+    """
+    import json
+    p = os.path.join(REPO, 'sim', 'prog', 'cm_hw.build.json')
+    try:
+        with open(p, encoding='utf-8') as f:
+            j = json.load(f)
+        n = int(j.get('iterations'))
+        return n if n > 0 else None
+    except (OSError, ValueError, TypeError):
+        return None
+
+
 def regression_images(include_hw=False, clk_hz=None):
     """--all 构建的镜像清单。每一项都是 dict(kind=..., ...)。"""
     imgs = [dict(kind='asm', name=n) for n in ASM_IMAGES]
@@ -222,6 +250,12 @@ def regression_images(include_hw=False, clk_hz=None):
         print('[skip] yolo_demo/yolo_board: 缺 sw/yolo_plan.h 或 sim/prog/yolo/plan.json '
               '(先跑 tools/nn_gen_sw.py)')
     cm_srcs = ['sw/coremark/' + f for f in CM_SRC]
+    # 【R54 单一事实来源】CoreMark 的编译配方**不在这里**定义 —— 见 tools/cm_recipe.py。
+    # 以前这里是 `CM_OPT = '-O2 -mbranch-cost=1 -fira-loop-pressure'`, 而 tools/mk_cm_hw.py
+    # 里硬编码了 `opt = "-Os"`; 两者**写同一个文件** sim/prog/cm_hw.hex, 于是漂移成了
+    # "烧上去的镜像" 与 "清单里 expect_tick" 互相矛盾 (差 25%)。现在两处都从
+    # cm_recipe 取, 且 mk_cm_hw 会对仿真日志里的 Compiler flags 做**漂移即失败**的核对。
+    #
     # 【I-0 / 2026-10-23】CoreMark 优化级别 -Os -> -O2。
     # 实测(本机 ModelSim): ticks 463,364 -> 371,390, CM/MHz 2.158 -> 2.693 (+24.8%),
     # CRC-valid=1。代价: .text 9,676 -> 13,152 B (imem 占用 59% -> 80%)。
@@ -240,21 +274,40 @@ def regression_images(include_hw=False, clk_hz=None):
     #   ⚠ 体积余量只剩 272 B: cm_rv32im .text 13,152 -> 13,456 B;
     #     cm_hw(ITERATIONS=3000+HW_CLK_HZ) 15,804 -> 16,112 B / imem 16,384 B。
     #     给 CoreMark 加任何代码前先量 .text。
-    CM_OPT = '-O2 -mbranch-cost=1 -fira-loop-pressure'
-    cm_defs = ['FLAGS_STR="%s -march=rv32im -mabi=ilp32"' % CM_OPT]
+    cm_defs = [cm_flags_define()]
     imgs.append(dict(kind='cc', name='cm_rv32im', sources=cm_srcs,
-                     includes=[os.path.join(SW, 'coremark')], march='rv32im',
+                     includes=[os.path.join(SW, 'coremark')], march=CM_MARCH,
                      opt=CM_OPT, defines=['ITERATIONS=1'] + cm_defs,
                      out='sim/prog/cm_rv32im.hex'))
     # 上板跑分镜像: ITERATIONS 按 R35 给足 >=10 s (70 MHz 下 3000 次约 17.7 s),
     # 并传入真实主频 (HW_CLK_HZ) 让 >=10 s 判定与时间口径都是真的。
+    # ⚠ **ITERATIONS 必须与 tools/mk_cm_hw.py 用的那个一致** —— 两者写同一个文件。
+    #   这里固定 3000, 而 mk_cm_hw.py 按当前主频算 >=10 s 所需的迭代数 (当前 150 MHz 档
+    #   是 4600)。**上板镜像以 mk_cm_hw.py 为准** (它会写 cm_hw.build.json 清单);
+    #   这条 --with-hw 只是"顺手也建一份", 供全量回归用。
+    # 【R54】上面那段"固定 3000"曾经造成第二个漂移: 3000 迭代在 150 MHz 下只跑
+    #   **7.39 s** —— 跌破赛题"必须 >= 10 s"的硬门, 而它**看起来完全像个好成绩**
+    #   (跑得快 = 分数高)。而 mk_cm_hw 的清单里写的是 4600 => 镜像与清单互相矛盾。
+    #   现在改成: **清单是权威** —— 有 cm_hw.build.json 就按它的 iterations 编
+    #   (逐字节与 mk_cm_hw 产出一致); 没有清单就**不构建** cm_hw, 并明确告诉
+    #   使用者上板镜像必须由 mk_cm_hw.py 生成。宁可少一个镜像, 也不留一个
+    #   "能烧、但烧出来违规、且与清单矛盾"的镜像。
     if include_hw:
-        hw_defs = ['ITERATIONS=3000'] + cm_defs
-        if clk_hz:
-            hw_defs.append('HW_CLK_HZ=%d' % clk_hz)
-        imgs.append(dict(kind='cc', name='cm_hw', sources=cm_srcs,
-                         includes=[os.path.join(SW, 'coremark')], march='rv32im',
-                         opt=CM_OPT, defines=hw_defs, out='sim/prog/cm_hw.hex'))
+        hw_iters = read_hw_iterations()
+        if hw_iters is None:
+            print('[skip] cm_hw: 没有 sim/prog/cm_hw.build.json -> **不构建**上板镜像')
+            print('       上板镜像必须用 tools/mk_cm_hw.py <iters> 生成: 它按赛题'
+                  ' ">= 10 s"硬门')
+            print('       计算迭代数, 并把 iterations/expect_tick/clk/配方写进清单。')
+            print('       (这里若随便编一个迭代数, 150 MHz 下 3000 次只跑 7.39 s, '
+                  '跌破 10 s 门且与清单矛盾)')
+        else:
+            hw_defs = ['ITERATIONS=%d' % hw_iters] + cm_defs
+            if clk_hz:
+                hw_defs.append('HW_CLK_HZ=%d' % clk_hz)
+            imgs.append(dict(kind='cc', name='cm_hw', sources=cm_srcs,
+                             includes=[os.path.join(SW, 'coremark')], march=CM_MARCH,
+                             opt=CM_OPT, defines=hw_defs, out='sim/prog/cm_hw.hex'))
     return imgs
 
 
@@ -287,8 +340,16 @@ def build_all(args):
         return 0
 
     if args.with_hw:
-        print('[build_sw --all] 上板镜像 cm_hw: ITERATIONS=3000 HW_CLK_HZ=%s' %
-              (clk_hz if clk_hz else '(未读到, 退回 50 MHz 默认 —— W-02 会失真)'))
+        # 【R54】ITERATIONS 必须来自清单 (mk_cm_hw.py 算出来的那个), 不能在这里
+        # 另写一个 —— 写死的 3000 在 150 MHz 下只跑 7.39 s, 跌破赛题 10 s 硬门。
+        _hw_it = read_hw_iterations()
+        if _hw_it is None:
+            print('[build_sw --all] 上板镜像 cm_hw: **跳过** (没有构建清单 -> '
+                  'ITERATIONS 无从确定; 见上面的说明)')
+        else:
+            print('[build_sw --all] 上板镜像 cm_hw: ITERATIONS=%d (取自 cm_hw.build.json) '
+                  'HW_CLK_HZ=%s' %
+                  (_hw_it, clk_hz if clk_hz else '(未读到, 退回 50 MHz 默认 —— W-02 会失真)'))
     failed = []
     for im in imgs:
         out = im['out'] if im['kind'] == 'cc' else 'sim/prog/%s.hex' % im['name']
