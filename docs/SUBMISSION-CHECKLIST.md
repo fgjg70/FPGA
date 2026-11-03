@@ -1,7 +1,7 @@
 # 提交检查清单（docs/SUBMISSION-CHECKLIST.md）
 
 > 截止：**2026-11-04 18:00**。状态截至 2026-11-03 晚。
-> 规则依据：赛题 1.4/1.8/2.4/2.5/2.7/3.4 + 指南第 10–11 页高阶任务（见 `results/COMPETITION-PLAN.md`、`results/STAGE-REVIEW-1103.md`）。
+> 规则依据：赛题 1.4/1.8/2.4/2.5/2.7/3.4 + 指南第 10–11 页高阶任务（见 `results/COMPETITION-PLAN.md`；阶段性评审在 `feat/ai-accel` 分支）。
 
 ## A. 硬性提交物
 

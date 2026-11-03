@@ -8,18 +8,16 @@ create_clock -period 20.000 -name sys_clk [get_ports sys_clk]
 
 # ---- 时序: MMCM 输出的核心时钟 (top_a100t.sv 的 u_bufg_sys/O) ----
 # 约束写法与 RTL 里的 MMCME2_BASE 逐项对齐, 不做人脑换算:
-#   RTL   : CLKFBOUT_MULT_F = 21.0, DIVCLK_DIVIDE = 1, CLKOUT0_DIVIDE_F = 8.0
-#   XDC   : -multiply_by 21 -divide_by 8   ->  50 MHz * 21 / 8 = 131.25 MHz
-#   阶梯记录(全部实测): VCO 1050 + N=14/11/10/8 -> 75 / 95.45 / 105 / 131.25 MHz
-#   131.25 档实测 WNS -0.173(差 0.173ns ⇒ 时序门已拒绝写 bitstream), 达成 fmax 128.34;
-#   对照组 125MHz(VCO1000+N=8) 只达成 119.6 ⇒ **约束与工具结果是非单调的**,
-#   所以选档要看"达成 fmax"而不是"目标更低就更保险"。
-# 时钟名从 sys_clk_75 改成**频率无关**的 sys_clk_core: 本轮在阶梯上迭代,
+#   RTL   : CLKFBOUT_MULT_F = 21.0, DIVCLK_DIVIDE = 1, CLKOUT0_DIVIDE_F = 7.0
+#   XDC   : -multiply_by 21 -divide_by 7   ->  50 MHz * 21 / 7 = **150.00 MHz** (周期 6.667 ns)
+#   历史阶梯(2026-10-11, 全部实测): VCO 1050 + N=14/11/10/8 -> 75 / 95.45 / 105 / 131.25 MHz;
+#   其中 131.25 档 WNS -0.173 被时序门拒绝；最终 150 MHz 于 2026-10-17 达成 (WNS +0.007)。
+# 时钟名从 sys_clk_75 改成**频率无关**的 sys_clk_core: 历史在阶梯上迭代,
 #   名字里带频率会每改一次档就过期一次(本工程最忌讳的"标签与事实不一致")。
-# 周期 = 1/131.25 MHz = 7.619 ns. 下面这行是**声明性**的:
-#   它告诉 STA "这个 net 是 sys_clk 的 21/14 倍频", 相位与 sys_clk 对齐,
-#   跨时钟域路径 (keyin 50 MHz 域 -> 75 MHz 域, 目前没有功能通路) 因此可分析。
-# 用 create_generated_clock 而不是 create_clock -period 13.333: 前者带
+# 周期 = 1/150 MHz = 6.667 ns. 下面这行是**声明性**的:
+#   它告诉 STA "这个 net 是 sys_clk 的 21/7 倍频", 相位与 sys_clk 对齐,
+#   跨时钟域路径 (keyin 50 MHz 域 -> 150 MHz 域, 目前没有功能通路) 因此可分析。
+# 用 create_generated_clock 而不是 create_clock -period 6.667: 前者带
 #   -source 关系, 工具会把相位/抖动与源时钟关联; 后者会造出一个与源无关的
 #   新时钟, 跨域路径会被当成异步路径而**不再被分析** (静默丢掉检查)。
 # -source 必须给**端口/引脚**对象, 不能给 clock 对象:
@@ -27,7 +25,7 @@ create_clock -period 20.000 -name sys_clk [get_ports sys_clk]
 #     CRITICAL WARNING [Constraints 18-611/18-612]:
 #     "list of objects specified for option 'source' contains '1' objects of
 #      types '(clock)' other than the types '(port,pin)' supported" -> 约束不生效,
-#     时钟会退回 Vivado 自动推导名 (实测叫 sys_clk_raw), 报告里看不到 sys_clk_75。
+#     时钟会退回 Vivado 自动推导名 (实测叫 sys_clk_raw), 报告里看不到 sys_clk_core。
 #   改成 [get_ports sys_clk] (与上面 create_clock 的源是同一个对象) 才成立。
 # 该行不得含非 ASCII 字符, 否则 Vivado 2018.3 可能解析失败。
 create_generated_clock -name sys_clk_core \

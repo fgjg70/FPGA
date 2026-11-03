@@ -40,11 +40,10 @@ graph LR
 | ② | 该档上板实测 | tick **2,128,330,453**、**14 s**、**CoreMark 规范分数 324.19**（固件 `[portme] score=324.19 spec` 行）、硬件 CoreMark/MHz **2.1613**、`Correct operation validated`（CRC 全对）。注：核心打印的 `Iterations/Sec 328` 是整数秒截断值，**不作为宣称分数**（成因见 `results/CHANGELOG.md` §13.4） | `results/uart_flash_boot_final.txt`（FLASH 断电重启自启动原始输出）+ `results/uart_scoreprint.txt`（JTAG 通道输出） |
 | ② | 该档综合 | fmax **150.2 MHz**（WNS **+0.007** @6.667 ns，压线但 MET，**0 Critical Warning**）；LUT **3098** / FF **1447** / BRAM **9** / DSP **8** | `results/coremark.csv` 行 `legal150-*` |
 | ③ | **当前设计目标档** | **150 MHz 已达成**（无未收敛目标）。构建配置：`--no-lc` + `--fanout_limit 128` + `--pblock-range off` + `--contain-routing` + `--place-directive AltSpreadLogic_high`（**合法，0 Critical Warning**） | `results/NEXT-BURN.md` §1 + `results/coremark.csv` 行 `deliv150-final` |
-| — | **当前源码仿真**（C-12c 操作数寄存 + 候选 E′） | ticks **463,366** ⇒ CoreMark/MHz **2.1581**（**已上板**，即上面 ② 那一版） | `.fpga-cache/logs/tb_sw_coremark.default.log` |
+| — | **仿真/派生口径说明** | 板上实测以 ② 的 **324.19** 为准（`-Os` 旧固件）；`-O2` 配方的 **405.9** 是**派生值、从未上板**（见 `COMPLIANCE.md`）。历史仿真数（463,366 tick 等）仅作优化记录，引用时必须带级别。 | `results/CHANGELOG.md`、`results/NEXT-BURN.md` §0 |
 
-> ⚠️ **上板的那一版比当前源码早**：15:22 的采集清单覆盖 **22** 个 `.sv`，而当前树是 **23** 个
-> （`bht.sv` 由 `028ca4d` 在 **15:55** 引入）—— 所以"硬件 CM/MHz 2.1728"是 C-1 之前的数，
-> 与当前源码仿真的 **2.2029** 不同。**别把两者当成同一个配置**（这正是 X-03 要防的事）。
+> ⚠️ **历史注记**：本文更早版本记录过 105 MHz 时期的上板数据（tick 1,380,682,494 / CM/MHz 2.1728 / 采集仅覆盖 22 个 `.sv`），
+> 那些是 **2026-10-11 的历史口径，已被 2026-10-17 的 150 MHz 交付档（② 行）取代**。引用时不要混用两代数字。
 >
 > **fmax 的来源怎么读（`fmax_src` 列尚待 M-04 落地）**：本文/其他文档此前要求"引用 `coremark.csv`
 > 的 `fmax` 列必须配 `fmax_src` 列" —— **该列目前并不存在**（表头 12 列无此列，`tools/`+`coremark.csv`

@@ -49,7 +49,7 @@ Artix-7 XC7A100T 参照线（[跨厂商对比]，Vivado）
 
 ## 5. 软件与工具
 
-- 裸机 C：CoreMark（实测配方 `-O2 -mbranch-cost=1 -fira-loop-pressure`，`tools/cm_recipe.py` 为单一事实来源）、NN demo、YOLO 双模驱动；
+- 裸机 C：CoreMark（`-O2 -mbranch-cost=1 -fira-loop-pressure` 实测配方；配方统一修复 R54 见 `results/NEXT-BURN.md` §0，`tools/cm_recipe.py` 属本地待推送分支）、NN demo、YOLO 双模驱动；
 - 统一工作流：`tools/fpga_workflow.py`（doctor/check/verify/synth/report/metrics/profile/hw）；
 - Pango：`fpga_pg2l100h/vision/build.py`（PDS 构建/下载）；Artix：Vivado 2018.3 + `fpga/build.tcl`。
 - 复现步骤见 [`REPRODUCE.md`](REPRODUCE.md)；证据登记见 [`EVIDENCE.md`](EVIDENCE.md)。
