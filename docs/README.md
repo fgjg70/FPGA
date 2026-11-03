@@ -11,6 +11,8 @@
 - `fpga_pg2l100h/vision/competition/DEMO.md` — 三分钟演示脚本与答辩准备
 - `fpga_pg2l100h/vision/CAMERA_DEBUG.md` — 摄像头/引脚调试记录
 - `fpga_pg2l100h/vision/model/COCO80_FEASIBILITY.md` — COCO80 可行性边界
+- `fpga_pg2l100h/vision/PERFORMANCE-ANALYSIS.md` — **CoreMark 流水线效率分析报告（最终版 PG2L100H）**
+- `fpga_pg2l100h/vision/CODE-STANDARDS.md` — **代码规范（模块化/时序约束/注释完整性）**
 
 ## 比赛/评审
 - `results/COMPETITION-PLAN.md` — 赛题拆解与优先级
