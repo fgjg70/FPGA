@@ -476,18 +476,20 @@ def fig2(scale: int = 2) -> Image.Image:
         c.rr(b, STYLE["r_node"], c.color(tone, "tint"), c.color(tone, "edge"),
              STYLE["stroke_node"], shadow=True)
         c.block((b[0] + b[2]) / 2, (b[1] + b[3]) / 2,
-                [(title, fs["node"] - 1, True, STYLE["ink"], 3),
-                 (sub, fs["node_sub"] - 0.5, False, STYLE["ink_soft"], 0)])
+                c.fit([(title, fs["node"] - 1, True, STYLE["ink"], 3),
+                       (sub, fs["node_sub"] - 0.5, False, STYLE["ink_soft"], 0)],
+                      (b[2] - b[0]) - 24))
 
     # 供电链三节点（原图为橙/棕，统一为琥珀色系）
     pw_boxes = [(28, 62, 190, 148), (28, 170, 190, 276), (28, 298, 190, 396)]
     for b, (title, sub, tag) in zip(pw_boxes, FIG2_BOARD["power"]):
         c.rr(b, STYLE["r_node"], STYLE["paper"], c.color("amber", "edge"),
              STYLE["stroke_node"], shadow=True)
+        pw_parts = ([(title, fs["node"], True, STYLE["ink"], 7),
+                     (sub, fs["node_sub"], False, STYLE["ink_soft"], 5 if tag else 0)]
+                    + ([(tag, fs["node_tag"], True, STYLE["amber"]["deep"], 0)] if tag else []))
         c.block((b[0] + b[2]) / 2, (b[1] + b[3]) / 2,
-                [(title, fs["node"], True, STYLE["ink"], 7),
-                 (sub, fs["node_sub"], False, STYLE["ink_soft"], 5 if tag else 0)]
-                + ([(tag, fs["node_tag"], True, STYLE["amber"]["deep"], 0)] if tag else []))
+                c.fit(pw_parts, (b[2] - b[0]) - 22))
     c.link([(109, 148), (109, 170)], "amber", width=1.8)
     c.link([(109, 276), (109, 298)], "amber", width=1.8)
 
@@ -507,7 +509,7 @@ def fig2(scale: int = 2) -> Image.Image:
                   7 if tag else 0)]
         if tag:
             parts.append((tag, fs["node_tag"], True, c.color(tone, "deep"), 0))
-        c.block(cx, cy, parts)
+        c.block(cx, cy, c.fit(parts, (b[2] - b[0]) - 26))
 
     # 底部五个接口小块
     chip_w, chip_gap, chip_x = 126, 8, 228
