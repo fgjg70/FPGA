@@ -1,0 +1,55 @@
+﻿INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/rv32_pkg.sv" into library work
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/nn_pkg.sv" into library work
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/nn_rom_pkg.sv" into library work
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/nn_full.v" into library work
+INFO: [VRFC 10-311] analyzing module nn_conv_engine
+INFO: [VRFC 10-311] analyzing module nn_mem
+INFO: [VRFC 10-311] analyzing module nn_seq
+INFO: [VRFC 10-311] analyzing module nn_wload
+INFO: [VRFC 10-311] analyzing module nn_wload_afifo
+INFO: [VRFC 10-311] analyzing module nn_tilecache
+INFO: [VRFC 10-311] analyzing module nn_subsys
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/alu.sv" into library work
+INFO: [VRFC 10-311] analyzing module alu
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/bht.sv" into library work
+INFO: [VRFC 10-311] analyzing module bht
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/branch_unit.sv" into library work
+INFO: [VRFC 10-311] analyzing module branch_unit
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/btb.sv" into library work
+INFO: [VRFC 10-311] analyzing module btb
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/control_unit.sv" into library work
+INFO: [VRFC 10-311] analyzing module control_unit
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/csr_file.sv" into library work
+INFO: [VRFC 10-311] analyzing module csr_file
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/dmem.sv" into library work
+INFO: [VRFC 10-311] analyzing module dmem
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/ex_mem_reg.sv" into library work
+INFO: [VRFC 10-311] analyzing module ex_mem_reg
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/gemm_accel.sv" into library work
+INFO: [VRFC 10-311] analyzing module gemm_accel
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/hazard_unit.sv" into library work
+INFO: [VRFC 10-311] analyzing module hazard_unit
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/id_ex_reg.sv" into library work
+INFO: [VRFC 10-311] analyzing module id_ex_reg
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/imem.sv" into library work
+INFO: [VRFC 10-311] analyzing module imem
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/imm_gen.sv" into library work
+INFO: [VRFC 10-311] analyzing module imm_gen
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/load_store_unit.sv" into library work
+INFO: [VRFC 10-311] analyzing module load_store_unit
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/mem_wb_reg.sv" into library work
+INFO: [VRFC 10-311] analyzing module mem_wb_reg
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/muldiv.sv" into library work
+INFO: [VRFC 10-311] analyzing module muldiv
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/pc.sv" into library work
+INFO: [VRFC 10-311] analyzing module pc
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/ras.sv" into library work
+INFO: [VRFC 10-311] analyzing module ras
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/regfile.sv" into library work
+INFO: [VRFC 10-311] analyzing module regfile
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/core.sv" into library work
+INFO: [VRFC 10-311] analyzing module core
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/mmio_subsys.sv" into library work
+INFO: [VRFC 10-311] analyzing module mmio_subsys
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/tb_sw_nn_job.sv" into library work
+INFO: [VRFC 10-311] analyzing module tb_sw_nn_job

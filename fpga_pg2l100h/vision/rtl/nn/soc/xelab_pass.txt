@@ -1,0 +1,46 @@
+﻿Vivado Simulator 2018.3
+Copyright 1986-1999, 2001-2018 Xilinx, Inc. All Rights Reserved.
+Running: D:/software/Learn/Xilinx/Vivado/2018.3/bin/unwrapped/win64.o/xelab.exe -L work tb_sw_nn_job --snapshot job_sim --debug typical 
+Multi-threading is on. Using 22 slave threads.
+Starting static elaboration
+WARNING: [VRFC 10-3645] port 'dbg_stall' remains unconnected for this instance [D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/tb_sw_nn_job.sv:58]
+WARNING: [VRFC 10-3645] port 'mark' remains unconnected for this instance [D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/tb_sw_nn_job.sv:71]
+WARNING: [VRFC 10-3645] port 'pre_start' remains unconnected for this instance [D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/nn_full.v:4592]
+Completed static elaboration
+Starting simulation data flow analysis
+Completed simulation data flow analysis
+Time Resolution for simulation is 1ps
+Compiling package work.rv32_pkg
+Compiling module work.pc(XLEN=32'b0100000,RESET_PC=32'...
+Compiling module work.imem(BASE=32'b100000000000000000...
+Compiling module work.bht(IDX_BITS=32'b01101,GH_BITS=3...
+Compiling module work.btb(PC_BASE=32'b1000000000000000...
+Compiling module work.control_unit
+Compiling module work.imm_gen
+Compiling module work.regfile(XLEN=32'b0100000)
+Compiling module work.id_ex_reg
+Compiling module work.alu(XLEN=32'b0100000)
+Compiling module work.muldiv(XLEN=32'b0100000)
+Compiling module work.branch_unit(XLEN=32'b0100000)
+Compiling module work.csr_file
+Compiling module work.hazard_unit
+Compiling module work.ex_mem_reg
+Compiling module work.load_store_unit
+Compiling module work.dmem(BASE=32'b100100000000000000...
+Compiling module work.mem_wb_reg
+Compiling module work.core
+Compiling module work.mmio_subsys_default
+Compiling module work.nn_mem(W_BYTES=32'sb010100000000...
+Compiling module work.nn_conv_engine_default
+Compiling module work.nn_seq
+Compiling module work.nn_subsys_default
+Compiling module work.tb_sw_nn_job
+Built simulation snapshot job_sim
+
+****** Webtalk v2018.3 (64-bit)
+  **** SW Build 2405991 on Thu Dec  6 23:38:27 MST 2018
+  **** IP Build 2404404 on Fri Dec  7 01:43:56 MST 2018
+    ** Copyright 1986-2018 Xilinx, Inc. All Rights Reserved.
+
+source D:/USER/Desktop/FPGA/FPGA/.fpga-cache/socsim/xsim.dir/job_sim/webtalk/xsim_webtalk.tcl -notrace
+INFO: [Common 17-206] Exiting Webtalk at Wed Nov  4 15:05:33 2026...
