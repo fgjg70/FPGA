@@ -1,0 +1,61 @@
+Copyright 1986-2018 Xilinx, Inc. All Rights Reserved.
+-------------------------------------------------------------------------------------------------------------------------
+| Tool Version : Vivado v.2018.3 (win64) Build 2405991 Thu Dec  6 23:38:27 MST 2018
+| Date         : Wed Nov  4 16:12:19 2026
+| Host         : fgjg running 64-bit major release  (build 9200)
+| Command      : report_design_analysis -congestion -file D:/USER/Desktop/FPGA/FPGA/.fpga-cache/impl/impl_congestion.rpt
+| Design       : nn_conv_engine
+| Device       : xc7a100t
+-------------------------------------------------------------------------------------------------------------------------
+
+Report Design Analysis
+
+Table of Contents
+-----------------
+1. Placer Final Level Congestion Reporting
+2. Initial Estimated Router Congestion Reporting
+3. SLR Net Crossing Reporting
+
+1. Placer Final Level Congestion Reporting
+------------------------------------------
+
++-----------+-------+------------+-----------------------------------+----------------------+---------------+---------------+------+--------+------+------+------+-----+-------+-----+
+| Direction | Level | Congestion |               Window              |      Cell Names      | Combined LUTs | Avg LUT Input |  LUT | LUTRAM | Flop | MUXF | RAMB | DSP | CARRY | SRL |
++-----------+-------+------------+-----------------------------------+----------------------+---------------+---------------+------+--------+------+------+------+-----+-------+-----+
+| North     |     0 |       116% | (CLBLM_R_X49Y105,CLBLM_R_X49Y105) | nn_conv_engine(100%) |            0% |         6.000 | 100% | 0%     |  31% |  16% | NA   | NA  |    0% |  0% |
+| East      |     1 |       108% | (CLBLM_L_X28Y107,CLBLL_R_X29Y108) | nn_conv_engine(100%) |           43% |         5.656 | 100% | 0%     |  39% |   4% | NA   | NA  |    0% |  0% |
+| South     |     0 |       117% | (NULL_X28Y77,NULL_X28Y77)         |                      |            NA |            NA | NA   | NA     |   NA |   NA | NA   | NA  |    NA |  NA |
+| West      |     0 |        83% | (CLBLL_R_X23Y128,CLBLL_R_X23Y128) | nn_conv_engine(100%) |          200% |         6.000 | 100% | NA     | 100% |   0% | NA   | NA  |    0% |  NA |
++-----------+-------+------------+-----------------------------------+----------------------+---------------+---------------+------+--------+------+------+------+-----+-------+-----+
+
+
+2. Initial Estimated Router Congestion Reporting
+------------------------------------------------
+
++-----------+--------+-------+------------------+-----------------------------------+----------------------+---------------+---------------+------+--------+------+------+------+-----+-------+-----+
+| Direction |  Type  | Level | Percentage Tiles |               Window              |      Cell Names      | Combined LUTs | Avg LUT Input |  LUT | LUTRAM | Flop | MUXF | RAMB | DSP | CARRY | SRL |
++-----------+--------+-------+------------------+-----------------------------------+----------------------+---------------+---------------+------+--------+------+------+------+-----+-------+-----+
+| North     | Global |     0 |           0.026% | (CLBLL_R_X21Y70,CLBLL_R_X21Y70)   | nn_conv_engine(100%) |            0% |         5.875 | 100% | NA     |   6% |   0% | NA   | NA  |    5% |  NA |
+| South     | Global |     0 |           0.069% | (CLBLM_L_X20Y63,CLBLM_L_X20Y63)   | nn_conv_engine(100%) |          100% |         5.750 | 100% | 0%     |  56% |   0% | NA   | NA  |    0% |  0% |
+| East      | Global |     1 |           0.284% | (CLBLM_L_X22Y65,CLBLL_R_X23Y67)   | nn_conv_engine(100%) |           20% |         4.792 | 79%  | 0%     |  29% |   8% | NA   | NA  |    2% |  0% |
+| West      | Global |     0 |           0.009% | (CLBLM_L_X46Y62,CLBLM_L_X46Y62)   | nn_conv_engine(100%) |            0% |         1.250 | 25%  | 0%     |  75% |   0% | NA   | NA  |    0% |  0% |
+| North     | Long   |     0 |           0.784% | (CLBLM_R_X11Y166,CLBLM_R_X11Y166) |                      |            0% |         0.000 | 0%   | 0%     |   0% |   0% | NA   | NA  |    0% |  0% |
+| South     | Long   |     0 |           0.767% | (CLBLL_R_X19Y152,CLBLL_R_X19Y152) |                      |            0% |         0.000 | 0%   | NA     |   0% |   0% | NA   | NA  |    0% |  NA |
+| East      | Long   |     1 |           3.664% | (CLBLM_L_X26Y106,CLBLL_R_X27Y107) | nn_conv_engine(100%) |           12% |         5.781 | 100% | 0%     |  18% |  25% | NA   | NA  |    0% |  0% |
+| West      | Long   |     1 |           3.647% | (NULL_X94Y111,CLBLM_R_X39Y107)    | nn_conv_engine(100%) |           12% |         5.375 | 100% | 0%     |  31% |   0% | NA   | NA  |    2% |  0% |
+| North     | Short  |     2 |           1.164% | (CLBLM_L_X20Y72,CLBLL_R_X23Y75)   | nn_conv_engine(100%) |           10% |         4.211 | 86%  | 0%     |  21% |   4% | NA   | NA  |    6% |  0% |
+| South     | Short  |     2 |           3.259% | (CLBLM_L_X24Y112,CLBLL_R_X27Y115) | nn_conv_engine(100%) |           31% |         5.000 | 87%  | 0%     |  28% |   5% | NA   | NA  |    1% |  0% |
+| East      | Short  |     2 |           2.103% | (CLBLM_L_X24Y104,CLBLL_R_X27Y107) | nn_conv_engine(100%) |           25% |         5.508 | 96%  | 0%     |  28% |  11% | NA   | NA  |    0% |  0% |
+| West      | Short  |     1 |           0.509% | (CLBLM_L_X34Y72,CLBLM_L_X34Y73)   | nn_conv_engine(100%) |            0% |         2.562 | 93%  | 0%     |   0% |   0% | NA   | NA  |   11% |  0% |
++-----------+--------+-------+------------------+-----------------------------------+----------------------+---------------+---------------+------+--------+------+------+------+-----+-------+-----+
+
+
+3. SLR Net Crossing Reporting
+-----------------------------
+
++------------+-----------------------------+
+| Cell Names | Number of Nets crossing SLR |
++------------+-----------------------------+
+* The current part is not an SSI device
+
+
