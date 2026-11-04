@@ -152,3 +152,6 @@ sim/prog/*.bak
 __pycache__/
 .Xil/
 *.tmp
+
+# 交付包（独立开源仓库，嵌套）
+submission/
