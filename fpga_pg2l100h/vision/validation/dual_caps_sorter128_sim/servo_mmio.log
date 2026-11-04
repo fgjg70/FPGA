@@ -1,0 +1,2 @@
+PASS servo_mmio full-word writes; channel readback; address isolation; UART FIFO ordering, wrap, overflow, simultaneous push/pop and reset
+C:\Users\chenq\Desktop\RISCV\FPGA-main\fpga_pg2l100h\vision\sim\tb_servo_mmio.v:120: $finish called at 3242000 (1ps)

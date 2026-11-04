@@ -1,0 +1,8 @@
+{
+  "object_domain": "bottle_caps",
+  "gesture_active_count": 5,
+  "object_classes": ["red_cap", "purple_cap", "green_cap", "yellow_cap"],
+  "object_fpga_ready": true,
+  "reason": "Three-function on-chip application: CoreMark, numeric gestures 1-5, and bottle caps. Servo 1 feeds every five seconds; green/yellow/red use servos 2/3/4.",
+  "gesture_status": "Only legacy numeric gestures 1 through 5 are decoded. Restricting classes does not constitute retraining or proof of board accuracy."
+}

@@ -2,7 +2,7 @@ OUTPUT_ARCH(riscv)
 ENTRY(_start)
 MEMORY
 {
-    IMEM (rx) : ORIGIN = 0x80000000, LENGTH = 16K
+    IMEM (rx) : ORIGIN = 0x80000000, LENGTH = 64K
     DMEM (rw) : ORIGIN = 0x90000000, LENGTH = 16K
 }
 __stack_top = ORIGIN(DMEM) + LENGTH(DMEM);

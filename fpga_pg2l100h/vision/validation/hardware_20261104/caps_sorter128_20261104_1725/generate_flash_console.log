@@ -1,0 +1,8 @@
+Executing : cfg_set_tcl_break -flag true
+Executing : cfg_set_tcl_break -flag true successfully.
+Executing : cfg_gen_sfc -sbit C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/validation/hardware_20261104/caps_sorter128_20261104_1725/top_pg2l100h_vision.sbit -sfc C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/validation/hardware_20261104/caps_sorter128_20261104_1725/flash_image.sfc -device_name W25Q128Q -opcode 11
+W: Configuration-4002: Tcl parameter check failed: C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/validation/hardware_20261104/caps_sorter128_20261104_1725/flash_image.sfc does not exist, now create the file..
+The Start Address of bit file C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/validation/hardware_20261104/caps_sorter128_20261104_1725/top_pg2l100h_vision.sbit: 0x0
+Executing : cfg_gen_sfc -sbit C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/validation/hardware_20261104/caps_sorter128_20261104_1725/top_pg2l100h_vision.sbit -sfc C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/validation/hardware_20261104/caps_sorter128_20261104_1725/flash_image.sfc -device_name W25Q128Q -opcode 11 successfully.
+Executing : cfg_close
+Executing : cfg_close successfully.

@@ -9,7 +9,7 @@
 #define HAS_STDIO 0
 #define HAS_PRINTF 0
 #define COMPILER_VERSION __VERSION__
-#define COMPILER_FLAGS "rv32im ilp32 O2 no-lto no-relax freestanding"
+#include "benchmark_flags.h"
 #define MEM_LOCATION "FPGA on-chip DMEM"
 #define SEED_METHOD SEED_VOLATILE
 #define MEM_METHOD MEM_STATIC

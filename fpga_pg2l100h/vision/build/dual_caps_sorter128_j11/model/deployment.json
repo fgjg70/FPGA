@@ -1,0 +1,125 @@
+{
+  "banks": [
+    {
+      "name": "bottle_caps",
+      "available": true,
+      "model_sha256": "b72c08197536603c0f5282dfe72757ea7e731581d9742382aaca03e8db41e4e2"
+    },
+    {
+      "name": "gesture",
+      "available": true,
+      "model_sha256": "2872a84f4d6aa1d62dd7082b002a00ece66a819463af79ff668193c7e78343bf"
+    }
+  ],
+  "padded_weight_rom_bytes": 65536,
+  "padded_bias_rom_bytes": 2048,
+  "parallel_mac_lanes": 128,
+  "runtime_mode_register": "0xa100005c",
+  "available_mode_mask": 3,
+  "capabilities_register": "0xa1000064",
+  "application_modes": [
+    {
+      "id": 0,
+      "name": "bottle_caps",
+      "model_bank": 0,
+      "available": true,
+      "classes": [
+        "red_cap",
+        "purple_cap",
+        "green_cap",
+        "yellow_cap"
+      ],
+      "reason": "compact INT8 bank selected; board accuracy unverified"
+    },
+    {
+      "id": 1,
+      "name": "gesture",
+      "model_bank": 1,
+      "available": true,
+      "classes": [
+        "hand 1",
+        "hand 2",
+        "hand 3",
+        "hand 4",
+        "hand 5"
+      ],
+      "reason": "compact INT8 bank selected; board accuracy unverified"
+    },
+    {
+      "id": 2,
+      "name": "coremark",
+      "available": true
+    }
+  ],
+  "rom_sha256": {
+    "weights.hex": "1b36ede2b6b7ff6c473919988d9a1d33db5d614b54e4fcabf95d39c266cd4d1b",
+    "biases.hex": "33014c78f09ba602aeb12abdab928ec177295c658879fe86835f8c087236c0c8",
+    "shifts.hex": "1581dabcefc364cb38bf2dc40c67d5b379014f018e6cab7f07b61de8cb809820",
+    "weights_0.hex": "a4317cce46d1e68c97a74a53bb9904795b7fed682843b9614aeb6aa14178fa24",
+    "biases_0.hex": "ed8c7cfbcbbdff926fa6e67fde11bdd40e4975f962f0dd59a4164b21c8cea11c",
+    "weights_1.hex": "adf36a7a8d6ef85829c20a287a0ea19a5203c8893b9e26b2c53f611b1429f7f3",
+    "biases_1.hex": "f1a2d52fe02eb2fb361211e72ffae0c1d3a435e292821be28cb2a8825f07efc5",
+    "weights_2.hex": "664ba63abd4f23994e00c023536c1e8b13b201dd9406df8bee77276fd72d6bfb",
+    "biases_2.hex": "eb7d02eb726e3628ea16df6f3cda9dc49898ac7a614b62fdcb4a45230bf80ae1",
+    "weights_3.hex": "36ec7c25a7d2966ab1ed07b62ccb9194cf52e7ca9b82ff114421973f8b76e401",
+    "biases_3.hex": "e8d64baa5cbf4c97b016584c4a159ce667a566d024a1a6ba32d3afe8a728d13f",
+    "npu128_weights_0.hex": "8f9834ee4b78cb62eeac2aea174cd3981f6e7491bae64c2cbf3fa55083d75ef4",
+    "npu128_weights_1.hex": "2d49ae5282413b3dd4e6efec533c655488c794010b8725807b9ac00a6c79be98",
+    "npu128_weights_2.hex": "4b6f5c23cda88056a11ec877c522e47609da2908c4abb3a016d03046b72962ff",
+    "npu128_weights_3.hex": "d631025fe8f59e5f1db331ab57cedc5f508c782c4021086fb55d167cbb8427d8",
+    "npu128_weights_4.hex": "7e600ba188c06ec0383141b4f4061f0f165a3bff4f8808657893a8bf45e35534",
+    "npu128_weights_5.hex": "c6f163a7eda96eaf46047df4e9d9892ac98849ac7d1eec3103ab87de058f5ab6",
+    "npu128_weights_6.hex": "ae44822bc5ba2441fef6c791e0eb4acad8f7ac543c7d28b2c08caf191cda6e49",
+    "npu128_weights_7.hex": "59aae18695ceabf97388641f4e214b3c78f85a9760d6f093511e098fa6e7ce7b",
+    "npu128_weights_8.hex": "befcf3d7657f2d7f1f81bfbefab119723ce0caf3271dba4f37ef0ccb48c53f0c",
+    "npu128_weights_9.hex": "5edeebfb4151882b71a742e459b38a545989556085b143d10bdd132202d6a784",
+    "npu128_weights_10.hex": "168c8843aa3b9c63a5eef616a863c6f1b57d2ece08f7eb1136c580917d234ae0",
+    "npu128_weights_11.hex": "e3558dfc52f6e9a4ed6157886f4a6c944394c547e7970781888b6a6033f22153",
+    "npu128_weights_12.hex": "0d197af431d63efcb73cacfebc1d3fbe50b2686e411856cb73a08118e39c800b",
+    "npu128_weights_13.hex": "1d333159e2067f25c1a1f98e8bf133a06d53b6b4518b60910c660fff94adb6d9",
+    "npu128_weights_14.hex": "50d919567ae5be4c76c307a7ea56e493137c49b6f9e5faecdb8b8190ec11f2a1",
+    "npu128_weights_15.hex": "df3eddb58340455831c1b405bb07f4bcf765bf50cd4dfecc62129912791a7f5a",
+    "npu128_quant.hex": "9d900591fc997a48e4408fc2a830f253f7557d553c14227d758427f4669917dc",
+    "npu128_descriptors.hex": "bae4d308a8f5a29dd32400458d9a98f9550ef4b2292a394bebd54c44dd1ac595",
+    "npu128_layout.json": "d24cc8ba19d0ca0c0b314153cfcfc74efcf39b47f519909b3f82f68e38f5f5f1"
+  },
+  "sorter": {
+    "mode": "bottle_caps",
+    "feeder_servo": 1,
+    "feed_period_ms": 5000,
+    "release_hold_ms": 500,
+    "gate_preopen_ms": 250,
+    "gate_hold_ms": 2000,
+    "stable_frames": 2,
+    "result_max_age_ms": 1000,
+    "gates": {
+      "green_cap": 2,
+      "yellow_cap": 3,
+      "red_cap": 4
+    },
+    "unused_servos": [
+      5,
+      6,
+      7
+    ],
+    "home_pulse_us": [
+      1500,
+      1500,
+      1500,
+      1500,
+      1500,
+      1500,
+      1500
+    ],
+    "action_pulse_us": [
+      2000,
+      2000,
+      2000,
+      2000,
+      2000,
+      2000,
+      2000
+    ],
+    "hardware_verified": false
+  }
+}

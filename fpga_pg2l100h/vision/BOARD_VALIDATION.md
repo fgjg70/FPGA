@@ -1,5 +1,45 @@
 # PG2L100H实际下载与待完成联调
 
+2026-11-04 当前交付为 `build/dual_caps_sorter128_j11/pg2l100h_vision.pds`：95 MHz 双发射 CPU、50 MHz 的 128 MAC NPU，不使用 DDR3；功能为 CoreMark、手势 1～5 和瓶盖识别。17:48 已完成 Flash 写入、工具校验、完整读回和从 Flash 重载，两次状态均为 `0x081ffca0`。瓶盖自动分拣说明见 [CAP_SORTING.md](CAP_SORTING.md)。用户随后反馈舵机无动作，实物供电、接线、PWM 波形及机械动作尚未完成定位和验收。以下保留各版本的下载记录。
+
+## 2026-11-04 17:48：128 MAC 三功能瓶盖分拣版写入 Flash
+
+SW4 执行 CoreMark，SW5 进入瓶盖自动分拣，SW6 进入手势识别，上电默认瓶盖模式。瓶盖模式下 1 号每 5 秒下料，2 号绿色、3 号黄色、4 号红色；5～7 号不自动启用。自动下料需摄像头配置正常且持续完成推理；异常时回位并停止计时，恢复后重新开始 5 秒周期。动作脉宽为 2000 μs，回位为 1500 μs，安装方向仍需实物校准。
+
+原生综合、布局布线及详细时序检查通过，87 项实现输入与仿真工程完全一致。12 项回归、128 MAC 的 10 张图像及 4320 个整数输出比对、两次按键 CoreMark 短测均通过。短测只验证执行和 CRC，没有生成新的实板正式 CoreMark 成绩。
+
+位流大小 3,791,112 字节，SHA256 为 `4b8168d78e5fa5a9ad8363b93e01078594db47d2f4f94d8253cd70d3ca5128b9`。先下载至 RAM 并确认两次 PLL 锁定，再备份旧 Flash、擦除、写入和工具校验。新位流、SFC 与完整 Flash 读回的 SHA256 一致。从 Flash 重载后两次状态均为 `0x081ffca0`，DONE、done_i、PLL 锁定为 1，五项配置错误为 0；未进行实体断电重上电或舵机机械验收。
+
+烧录证据和旧 Flash 备份位于 `validation/hardware_20261104/caps_sorter128_20261104_1725/`，结果见其中 `programming_summary.json`。本次 JTAG 客户端与服务器均已释放。舵机无动作的后续检查需区分摄像头推理条件、J12 信号、独立舵机电源与共地；目前没有确认其中哪一项是实物故障原因。
+
+## 2026-11-04 11:44：修正 95 MHz PLL 带宽并重新写入 Flash
+
+用户反馈白屏，修复前板卡状态为 `0x0817fca0`，PLL 锁定标志为 0。CPU PLL 的 50 MHz 输入经分频 2 后，PFD 为 25 MHz，但配置为 HIGH；本机 PDS 附带 `UG041001_PLL_IP.pdf` 第 33 页要求该范围使用 LOW 或 OPTIMIZED。顶层在两个 PLL 均锁定前持续保持系统复位，因此未锁定会阻止 LCD 和摄像头启动。
+
+将 `experiments/dual_issue/vision_cpu_clock.v` 的带宽改为 OPTIMIZED，CPU 仍配置 95 MHz，NPU/MMIO 仍为 50 MHz。与修复前清单比较，唯一变化的实现输入为该 PLL 文件；CPU 指令和数据二进制均保持一致。为 `sim/tb_board.v` 补充低于 40 MHz PFD 的带宽检查，先确认原 HIGH 配置被回归拒绝，再确认修正版通过。Verilog-2005 语法、Pango PLL 模型板级启动及 SW2 复位、LCD、CDC、DVP 相机五项检查通过。
+
+原生综合、布局布线及详细时序均通过；95 MHz CPU 详细建立裕量为 +0.436 ns、保持裕量为 +0.353 ns，布局布线后建立裕量为 +0.493 ns。修正版位流共 3,791,112 字节，SHA256 为 `51f5eda2d5e2d178380072dd186902d875836bb031a1c0b041208704fe30cf4c`。
+
+先下载至 FPGA RAM，状态由 `0x0817fca0` 恢复为 `0x081ffca0`，两次确认 PLL 锁定后才固化 Flash。11:44:32 写入完成，11:44:38 工具校验通过，11:44:43 配置区完整读回，SHA256 与修正版位流及 SFC 一致。11:44:45 执行 `cfg_reset_fpga` 从 Flash 重载，11:45:02 和 11:45:08 两次状态均为 `0x081ffca0`，DONE、done_i、PLL 锁定为 1，五项配置错误为 0。未进行实体断电重上电、实际频率测量或 LCD 目视确认；3.9572/MHz 仍为原 CPU/固件的 RTL 短测参考值，本轮没有实板跑分。
+
+本次 JTAG 客户端与服务器均已释放。修复前文件、错误带宽负例、修复后回归、时序、RAM 下载、Flash 读回与状态证据位于 `validation/hardware_20261104/pll95_white_screen_20261104_112520/`；机器可读结果为 `validation/pll95_white_screen_summary.json` 与 `validation/flash_programming_summary.json`。
+
+## 2026-11-04 11:17：95 MHz 双发射固件写入 Flash，PLL 未锁定
+
+按用户要求烧录最新 `build/dual_j11/pg2l100h_vision.pds` 的现有产物。源码、模型、固件与工程清单哈希检查通过；CPU 为 95 MHz，外设为 50 MHz，对应 16 次迭代 RTL 诊断结果为 3.957198/MHz。位流共 3,791,112 字节，SHA256 为 `5d7943e3462cb4b0bdf5152511be33d6cdf09eaff6635c015e04157859cd0966`。扫描确认 PG2L100H ID 为 `0x00602899`、W25Q128Q Flash JEDEC ID 为 `0xEF4018`。11:17:26 写入完成，11:17:32 校验通过，11:17:37 配置区完整读回，SHA256 与原位流和 PDS 生成的 SFC 完全一致。此前 125 MHz 固件配置区已备份。
+
+11:17:39 通过 `cfg_reset_fpga` 从 Flash 重新加载；四次状态读数均为 `0x0817fca0`，DONE 和 done_i 为 1，五项配置错误为 0，PLL 锁定标志为 0。检查发现 `experiments/dual_issue/vision_cpu_clock.v` 使用 50 MHz 输入、输入分频 2，即 PFD 为 25 MHz，但带宽仍设为 HIGH；本机 PDS 附带 `UG041001_PLL_IP.pdf` 第 33 页要求 10～40 MHz PFD 使用 LOW 或 OPTIMIZED。这是已确认的参数不匹配和 PLL 未锁定的疑似原因，尚未通过修改后的构建验证。本次保留用户指定的现有位流，未取得实板 CoreMark、LCD、按键或识别验收结果，也未进行实体断电重上电测试。
+
+本次 JTAG 客户端和服务器均已释放。完整证据及旧配置区备份位于 `validation/hardware_20261104/flash_dual95_20261104_111204/`；机器可读结果为 `validation/flash_programming_summary.json`。
+
+## 2026-11-03 23:44：七路PWM固件再次写入Flash
+
+按用户要求重烧同一份七路PWM固件。外部Flash扫描ID为0xEF4018，PDS识别为W25Q128Q；23:43:10完成擦除，23:44:18完成写入，23:44:23校验成功。23:44:44完整读回本次3791112字节配置区，SHA256与待烧录SFC及SBIT一致，均为 `13b0341ea590836020540ff34d75b9cbebb7756e5cb5ae6eb627eeb5d860fb47`。
+
+23:44:45通过cfg_reset_fpga清除当前配置并重新加载Flash；首次读数仍在配置中，23:45:04和23:45:13两次状态均为0x081ffca0，DONE、done_i及PLL锁定均为1，超时、读回CRC、认证、CRC和ID错误均为0。本轮未执行RAM位流下载，因此已验证从Flash重新加载配置。未操作实体电源开关，断电重上电仍待实物核对。客户端和本轮JTAG服务器均已退出。
+
+位流来自23:03完成的当前源码构建，源码及生成文件哈希检查通过，CPU 125 MHz与外设50 MHz时序均通过。七路舵机复位默认关闭，实际管脚波形和机械位置仍待校准。本轮写入、校验、读回和状态日志见 `validation/hardware_20261103/flash_servo_221827/`，最新机器可读结果见 `validation/flash_programming_summary.json`；此前的RAM下载记录保留为历史。
+
 ## 2026-11-03 13:30：发现FPGA未配置，重新下载125/50 MHz版
 
 用户再次反馈白屏、SW2及其他按键无反应。13:28:00扫描确认器件PG2L100H、ID0x00602899，但DONE为0；配置状态0x00180c80，done和done_i均为0，gwen、grsn、gouten也为0。当时没有运行已完成配置的用户逻辑，按SW2逻辑复位不能重新装入工程。之前的JTAG下载均仅写FPGA RAM；断电会丢失，配置清除或重新上电也需重新下载。本轮没有证据区分此前配置被清除的具体原因。未配置状态的pll_lock虽为1，但不能据此认定CPU时钟或应用在运行。

@@ -1,0 +1,18 @@
+TRACE soc cycles=250000 pc=80008004 busy=0 done=0 overlay=0 count=0 panel=00000001
+TRACE soc cycles=500000 pc=80008074 busy=0 done=0 overlay=0 count=0 panel=00000001
+TRACE soc cycles=750000 pc=80008000 busy=0 done=0 overlay=0 count=0 panel=00000001
+TRACE soc RISC-V UART boot prefix received
+TRACE soc NPU started
+TRACE soc cycles=1000000 pc=80008014 busy=0 done=1 overlay=0 count=0 panel=00800f11
+PASS soc_hand real RISC-V firmware + skin snapshot + gesture INT8 bank label=3 box=140,20,356,255 cycles=36758
+TRACE soc cycles=1250000 pc=80008ed4 busy=0 done=0 overlay=0 count=1 panel=00000001
+TRACE soc cycles=1500000 pc=80008014 busy=0 done=0 overlay=0 count=1 panel=00800f11
+TRACE soc cycles=1750000 pc=80008fa0 busy=0 done=0 overlay=0 count=1 panel=00800f11
+TRACE soc cycles=2000000 pc=80008014 busy=0 done=0 overlay=0 count=1 panel=00800f11
+PASS soc_hand physical-key two-mode cycle, busy cancellation, DDR3 diagnostic guard, 4096 silhouette bytes and safe return
+TRACE soc cycles=2250000 pc=80008ed4 busy=0 done=0 overlay=0 count=1 panel=00000001
+PASS soc UART boot/command, frame-atomic commit, RGB/gesture capture-memory bytes, startup interlock, disconnect clear, no illegal instructions
+- C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/sim\tb_soc.v:228: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.050 2026-07-01
+- Verilator: $finish at 48ms; walltime 17.970 s; speed 2.648 ms/s
+- Verilator: cpu 17.250 s on 1 threads; allocated 5 MB

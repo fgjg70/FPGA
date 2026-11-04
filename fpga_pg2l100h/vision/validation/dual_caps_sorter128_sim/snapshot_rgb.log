@@ -1,0 +1,2 @@
+PASS snapshot_rgb 12288 exact RGB565/Q7 bytes; all image edges; padding; busy/reset guards
+C:\Users\chenq\Desktop\RISCV\FPGA-main\fpga_pg2l100h\vision\sim\tb_snapshot_rgb.v:81: $finish called at 798950000 (1ps)

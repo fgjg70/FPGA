@@ -1,0 +1,50 @@
+VISION SOC READY
+CPU_HZ=05A995C0
+MODE BOTTLE CAPS: FEED=1 EVERY 5S; GREEN=2 YELLOW=3 RED=4
+SW2 RESET; SW4 COREMARK; SW5 CAPS; SW6 HAND; k BENCH; p CAPS; g HAND; d FRAME; ? STATUS
+COREMARK27 CPU ONLY; OFFICIAL SOURCE; >=10 SECONDS REQUIRED
+CM64 ticks=000000000020672e clock=50000000 iterations=16 cpu=95000000
+2K performance run parameters for coremark.
+CoreMark Size    : 666
+Total ticks      : 2123566
+Total time (secs): 0
+ERROR! Must execute for at least 10 secs for a valid result!
+Iterations       : 16
+Compiler version : 15.2.0
+Compiler flags   : -march=rv32im -mabi=ilp32 -O2 -ffreestanding -fno-builtin -fno-strict-aliasing -fno-stack-protector -fno-pic -msmall-data-limit=0 -mno-relax -Wall -Wextra -Werror -O3 -funroll-all-loops -mbranch-cost=1 -fira-loop-pressure
+Memory location  : FPGA on-chip DMEM
+seedcrc          : 0xe9f5
+[0]crclist       : 0xe714
+[0]crcmatrix     : 0x1fd7
+[0]crcstate      : 0x8e3a
+[0]crcfinal      : 0xdd50
+Errors detected
+COREMARK RESULT cm_mhz_x10000=39655 score_x100=37672 crc_mask=15 valid=0
+PASS coremark runtime SW4 run 1 CRC=f cm_mhz_x10000=39655 score_x100=37672 SHORT gate preserved
+MODE HAND 1-5
+EXPERIMENTAL LEGACY BANK; BOARD ACCURACY UNVERIFIED
+MODE BOTTLE CAPS: FEED=1 EVERY 5S; GREEN=2 YELLOW=3 RED=4
+COREMARK27 CPU ONLY; OFFICIAL SOURCE; >=10 SECONDS REQUIRED
+CM64 ticks=0000000000206536 clock=50000000 iterations=16 cpu=95000000
+2K performance run parameters for coremark.
+CoreMark Size    : 666
+Total ticks      : 2123062
+Total time (secs): 0
+ERROR! Must execute for at least 10 secs for a valid result!
+Iterations       : 16
+Compiler version : 15.2.0
+Compiler flags   : -march=rv32im -mabi=ilp32 -O2 -ffreestanding -fno-builtin -fno-strict-aliasing -fno-stack-protector -fno-pic -msmall-data-limit=0 -mno-relax -Wall -Wextra -Werror -O3 -funroll-all-loops -mbranch-cost=1 -fira-loop-pressure
+Memory location  : FPGA on-chip DMEM
+seedcrc          : 0xe9f5
+[0]crclist       : 0xe714
+[0]crcmatrix     : 0x1fd7
+[0]crcstate      : 0x8e3a
+[0]crcfinal      : 0xdd50
+Errors detected
+COREMARK RESULT cm_mhz_x10000=39664 score_x100=37681 crc_mask=15 valid=0
+PASS coremark runtime SW4 run 2 CRC=f cm_mhz_x10000=39664 score_x100=37681 SHORT gate preserved
+PASS coremark runtime UART, live LCD decimals, SW4 rerun, SW5 object, SW6 gesture, SW2 reset without camera
+- C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/sim\tb_runtime_coremark.v:95: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.050 2026-07-01
+- Verilator: $finish at 90ms; walltime 30.744 s; speed 2.930 ms/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 6 MB

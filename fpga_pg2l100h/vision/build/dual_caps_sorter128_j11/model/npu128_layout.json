@@ -1,0 +1,11 @@
+{
+  "mac_lanes": 128,
+  "output_lanes": 16,
+  "pixel_lanes": 8,
+  "weight_bank_bytes": 32768,
+  "quant_bank_bytes": 2048,
+  "activation_bytes": 40960,
+  "layers": 6,
+  "result_bits": 32,
+  "ddr3_required": false
+}

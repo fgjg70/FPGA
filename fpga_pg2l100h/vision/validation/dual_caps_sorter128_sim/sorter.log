@@ -1,0 +1,1 @@
+PASS sorter caps: 5-second feeder, 500ms restore, green=2 yellow=3 red=4, exclusive gate preopen/close, consecutive same-color caps, debounce, unknown/multiple/stale frames, inactive servos 5-7, mode exit, delayed service and counter rollover

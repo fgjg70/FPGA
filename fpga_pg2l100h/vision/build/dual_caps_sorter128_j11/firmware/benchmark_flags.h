@@ -1,0 +1,1 @@
+#define COMPILER_FLAGS "-march=rv32im -mabi=ilp32 -O2 -ffreestanding -fno-builtin -fno-strict-aliasing -fno-stack-protector -fno-pic -msmall-data-limit=0 -mno-relax -Wall -Wextra -Werror -O3 -funroll-all-loops -mbranch-cost=1 -fira-loop-pressure"

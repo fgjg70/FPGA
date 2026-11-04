@@ -1,0 +1,2 @@
+PASS lcd 480x272 red_edges=864 label_pixels=4884
+C:\Users\chenq\Desktop\RISCV\FPGA-main\fpga_pg2l100h\vision\sim\tb_lcd.v:125: $finish called at 4472976000 (1ps)

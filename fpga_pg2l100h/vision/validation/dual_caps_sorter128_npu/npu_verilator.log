@@ -1,0 +1,15 @@
+PASS npu sample=0 exact_words=432 cycles=36758
+PASS npu sample=1 exact_words=432 cycles=36758
+PASS npu sample=2 exact_words=432 cycles=36758
+PASS npu sample=3 exact_words=432 cycles=36758
+PASS npu sample=4 exact_words=432 cycles=36758
+PASS npu sample=5 exact_words=432 cycles=36758
+PASS npu sample=6 exact_words=432 cycles=36758
+PASS npu sample=7 exact_words=432 cycles=36758
+PASS npu sample=8 exact_words=432 cycles=36758
+PASS npu sample=9 exact_words=432 cycles=36758
+PASS npu hold/ack/reset/input-write-guard
+- C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/sim\tb_npu.v:103: Verilog $finish
+- S i m u l a t i o n   R e p o r t: Verilator 5.050 2026-07-01
+- Verilator: $finish at 4ms; walltime 2.069 s; speed 2.097 ms/s
+- Verilator: cpu 0.000 s on 1 threads; allocated 5 MB

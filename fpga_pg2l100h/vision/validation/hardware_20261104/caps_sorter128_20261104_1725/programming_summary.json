@@ -1,0 +1,58 @@
+{
+  "success": true,
+  "project": "C:\\Users\\chenq\\Desktop\\RISCV\\FPGA-main\\fpga_pg2l100h\\vision\\build\\dual_caps_sorter128_j11",
+  "stage": "complete",
+  "updated_utc": "2026-11-04T09:48:16.762493+00:00",
+  "bitstream_sha256": "4b8168d78e5fa5a9ad8363b93e01078594db47d2f4f94d8253cd70d3ca5128b9",
+  "bitstream_bytes": 3791112,
+  "npu_mac_lanes": 128,
+  "ddr3_enabled": false,
+  "application_modes": [
+    {
+      "id": 0,
+      "name": "bottle_caps",
+      "model_bank": 0,
+      "available": true,
+      "classes": [
+        "red_cap",
+        "purple_cap",
+        "green_cap",
+        "yellow_cap"
+      ],
+      "reason": "compact INT8 bank selected; board accuracy unverified"
+    },
+    {
+      "id": 1,
+      "name": "gesture",
+      "model_bank": 1,
+      "available": true,
+      "classes": [
+        "hand 1",
+        "hand 2",
+        "hand 3",
+        "hand 4",
+        "hand 5"
+      ],
+      "reason": "compact INT8 bank selected; board accuracy unverified"
+    },
+    {
+      "id": 2,
+      "name": "coremark",
+      "available": true
+    }
+  ],
+  "flash_image_sha256": "4b8168d78e5fa5a9ad8363b93e01078594db47d2f4f94d8253cd70d3ca5128b9",
+  "ram_status": [
+    "0x081ffca0",
+    "0x081ffca0"
+  ],
+  "flash_reload_status": [
+    "0x081ffca0",
+    "0x081ffca0"
+  ],
+  "flash_readback_sha256": "4b8168d78e5fa5a9ad8363b93e01078594db47d2f4f94d8253cd70d3ca5128b9",
+  "previous_flash_sha256": "51f5eda2d5e2d178380072dd186902d875836bb031a1c0b041208704fe30cf4c",
+  "flash_verify_passed": true,
+  "full_readback_match": true,
+  "flash_reload_passed": true
+}

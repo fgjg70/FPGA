@@ -1,0 +1,2 @@
+PASS servo_pwm seven independent widths at 50 MHz; 20 ms period; limits; frame-atomic updates; coincident enable write/falling edge; disable/re-enable and reset
+C:\Users\chenq\Desktop\RISCV\FPGA-main\fpga_pg2l100h\vision\sim\tb_servo_pwm.v:165: $finish called at 161100122000 (1ps)

@@ -1,0 +1,51 @@
+{
+  "success": true,
+  "hardware_tested": false,
+  "ddr3_enabled": false,
+  "mac_lanes": 128,
+  "cpu_clock_hz": 95000000,
+  "npu_clock_hz": 50000000,
+  "source_sha256": {
+    "build\\dual_caps_sorter128_sim\\rtl\\nn_conv_engine.v": "8e9bc2b154b37e93ed69dd304cd1cbffaf2d0c5e79521dfceeaee4a270a47d83",
+    "build\\dual_caps_sorter128_sim\\rtl\\vision_npu.v": "32a916bd1cd7ef0bedda7dddef155c72ac6e4956904b6ec700199cca0d1a616f",
+    "sim\\tb_npu.v": "2e64f6c8246611b92bd10e95ef6d8e19cfdf6e721cfe92cb93d6e474d8f85fca"
+  },
+  "vector_sha256": {
+    "model\\bottle_caps\\vectors\\input_0.hex": "986130f3aec27691b1eb4fd498fcedc6307a3ddedaf8f7aec5130896e55a2850",
+    "model\\bottle_caps\\vectors\\output_0.hex": "cea63dd9895821987d091bdd31bd5fcc560184e064b0e5cae2f92058dbc42684",
+    "model\\bottle_caps\\vectors\\input_1.hex": "dc65686b34bfe043fc0133c7a6f9d1d0efd023667532dddf281263385c09d5ee",
+    "model\\bottle_caps\\vectors\\output_1.hex": "5590acc2bd44e0333a62be2dc65228171f8fbd177876a204c4e1c01758ab462b",
+    "model\\gesture\\vectors\\input_0.hex": "e4a831d067538107963452a74b09d0931b38761c94afd8db6bb18bc9ff36e2fb",
+    "model\\gesture\\vectors\\output_0.hex": "01b02118f975d8dbc5b499aa7f3cb6fc332c3cb77c7086e35035fe7002bb343a",
+    "model\\gesture\\vectors\\input_1.hex": "f4b016c9c4372ca326500dfc29aab2f37357e4ac04ea8cfaa21478118310fc3c",
+    "model\\gesture\\vectors\\output_1.hex": "af636b51f5d6801b92741b913ec974bf806a1570aceb372228c7c63e9273c7ed",
+    "model\\gesture\\vectors\\input_2.hex": "ce256e007002cd6f03c3fd30fbd0887f8fbed316b55aad03f60f65fe5369f74c",
+    "model\\gesture\\vectors\\output_2.hex": "569428ed63ff61561be747bd8318fb06b849b067bfee3a813fda16dcabeee2c4",
+    "model\\gesture\\vectors\\input_3.hex": "c3ff3270f6d563e7d3b1bd649eab953edf42c2ad3061b3bae2dff091fbe4435e",
+    "model\\gesture\\vectors\\output_3.hex": "507d53d71e750997eab3ad170a00e33b1bea4af0f3f6afb2f169c0df1453300f",
+    "model\\gesture\\vectors\\input_4.hex": "ad5535f6e52ab4aff2f4250836db98aa07de9215f33aad8e90c6a8cd615909fd",
+    "model\\gesture\\vectors\\output_4.hex": "b76cd99ab5c531727cda7c24fa466ae4a8b675f7ee5f143cccdde155ee172fe2",
+    "model\\gesture\\vectors\\input_5.hex": "2adcc3c3147187fc10fc52c5a7ac231beb19ccd861395974d5012f2261195ecc",
+    "model\\gesture\\vectors\\output_5.hex": "c455bcc359b2a9ec9d38befa228e89c5c6811b3533b71998479075e640be188d",
+    "model\\gesture\\vectors\\input_6.hex": "f2c58903dbabe564470c1315d82fb2dec12b5ca67b674a878d22e80f05de0fec",
+    "model\\gesture\\vectors\\output_6.hex": "7786064b1db9f5736236fe9a67a5d32eb50fbb04de1bd3b8072855bf0a7bb42f",
+    "model\\gesture\\vectors\\input_7.hex": "54c7dc39e72d8c09a6b3420b657dfb896f4790e19e0838ba3666575bce8144f1",
+    "model\\gesture\\vectors\\output_7.hex": "76846cda6504f559882f2471069c3ccc399b32bb7de9e66c833beadc515b2849"
+  },
+  "simulator": "Verilator 5.050 2026-07-01 rev vUNKNOWN-built20260702",
+  "exact_output_words": 4320,
+  "samples": 10,
+  "cycles": 36758,
+  "compute_milliseconds": 0.73516,
+  "speedup_rgb": 7.594918113063823,
+  "speedup_gesture": 6.592034387072202,
+  "checks": [
+    "six layers and 432 signed int32 outputs per image",
+    "RGB object and grayscale gesture banks",
+    "model selection held during inference",
+    "input writes blocked while busy",
+    "done/acknowledge and missing-bank interlocks"
+  ],
+  "elapsed_seconds": 45.83,
+  "completed_utc": "2026-11-04T09:14:33.359079+00:00"
+}

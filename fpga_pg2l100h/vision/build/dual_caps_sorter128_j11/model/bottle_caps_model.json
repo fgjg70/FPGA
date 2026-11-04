@@ -1,0 +1,90 @@
+{
+  "domain": "bottle_caps",
+  "seed": 20261103,
+  "steps": 6000,
+  "training_images": 3244,
+  "calibration_images": 256,
+  "test_images": 500,
+  "train_grid_collisions": 0,
+  "annotation_sha256": {
+    "train_coco.json": "b6f7104ab8d707b0901e58a5aa7c591c9b84d540544e0f30679f0ebb1b63942c",
+    "test_coco.json": "a056b78112bd1e0d8b9644873fafc6246ebddb3d3441c5916d28b402d5515072"
+  },
+  "source_model_sha256": "a7e345686598b00687a96121d8a8c596fb20f99979e668ac6be119022e4b03b8",
+  "source_model": "C:\\Users\\chenq\\Desktop\\RISCV\\FPGA-main\\fpga_pg2l100h\\bottle_cap_model_training_package_20260819\\runs\\bottle_cap_colors\\enhanced_bottle_cap_color_detector_2m_transfer\\bottle_cap_color_detector_2m.onnx",
+  "training_method": "independent compact student trained on source-package annotations; no weight or teacher-logit distillation",
+  "hardware_deployment": "selected_for_build_not_board_verified",
+  "independent_test_integer": {
+    "images": 500,
+    "true_objects": 1250,
+    "predicted_objects": 1246,
+    "true_positive": 1212,
+    "false_positive": 34,
+    "false_negative": 38,
+    "precision": 0.9727126805778491,
+    "recall": 0.9696,
+    "f1": 0.9711538461538463,
+    "mean_matched_iou": 0.7503581827794141,
+    "per_class": [
+      {
+        "true_positive": 298,
+        "false_positive": 4,
+        "false_negative": 15
+      },
+      {
+        "true_positive": 302,
+        "false_positive": 18,
+        "false_negative": 11
+      },
+      {
+        "true_positive": 305,
+        "false_positive": 3,
+        "false_negative": 7
+      },
+      {
+        "true_positive": 307,
+        "false_positive": 9,
+        "false_negative": 5
+      }
+    ]
+  },
+  "training_seconds": 142,
+  "input": [
+    64,
+    64,
+    3
+  ],
+  "grid": [
+    4,
+    4
+  ],
+  "output_channels": 27,
+  "enabled_classes": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "classes": [
+    "red_cap",
+    "purple_cap",
+    "green_cap",
+    "yellow_cap"
+  ],
+  "weight_bytes": 21816,
+  "bias_bytes": 556,
+  "object_threshold": 64,
+  "class_margin_threshold": 16,
+  "empty_threshold": 40,
+  "max_detections": 4,
+  "architecture": "rgb_micro_yolo_int8_v1",
+  "input_preprocessing": "RGB565 expanded to RGB888; 320x240 even pixels to 160x120 then floor(index*2.5) to 64x48; zero-pad eight rows above/below; RGB interleaved unsigned Q7",
+  "exact_source_model_deployed": false,
+  "board_verified": false,
+  "sha256": {
+    "weights.hex": "ac9276642cadd334b1353277744ba37c1c1bf0bcf801cc671b90141023f3579f",
+    "biases.hex": "e84973dcbe573df87e98bee6884a3e3b6991c0cebe3c416151fa6dab9ef9d8e4",
+    "shifts.hex": "8d6152adeb2b3293e99246e02292127ac9c0aaea22133f1dba759023a30160a9",
+    "micro_yolo.npz": "a6ef2c1e388e6452c1974582789fefad1d8db6c66c34dd45ca40d562835f991e"
+  }
+}

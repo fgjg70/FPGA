@@ -1,0 +1,19 @@
+{
+  "detection": {
+    "category": 3,
+    "name": "hand 1",
+    "objectness": 137,
+    "box": [
+      7,
+      3,
+      61,
+      63
+    ]
+  },
+  "lcd_box": [
+    140,
+    20,
+    356,
+    255
+  ]
+}
