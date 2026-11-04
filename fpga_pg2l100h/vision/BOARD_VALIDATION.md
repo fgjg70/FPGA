@@ -2,6 +2,24 @@
 
 # PG2L100H实际下载与待完成联调
 
+## 【当前版本】2026-11-04 11:41 —— 95 MHz 双发射（`dual_j11`）
+
+| 项 | 值 |
+|---|---|
+| 位流 | `build/dual_j11/generate_bitstream/top_pg2l100h_vision.sbit`，3,791,112 B |
+| SHA256 | `51f5eda2d5e2d178380072dd186902d875836bb031a1c0b041208704fe30cf4c` |
+| CPU | **双发射（2-wide in-order）@ 95 MHz**；PLL: 50→/2(PFD 25)→×38(VCO 950)→/10 |
+| 其他域 | NPU/采集/MMIO 50 MHz、视频 27 MHz、LCD 9 MHz、相机 MCLK 12.5 MHz |
+| 时序 | **All Constraints Met**；CPU 域 WNS **+0.493 ns**；hold WHS +0.350 ns |
+| 资源 | LUT 9980(15%) / FF 6573(5%) / APM 13(6%) / DRM 99(64%) |
+| 功耗 | ≈1.02 W |
+| 上板证据 | 🔲 **未入库**：`build_summary.json` 的 `hardware_tested` 仍为 `false`，无下载日志/配置读回/照片 |
+
+> 完整说明见 [`CURRENT-BUILD.md`](CURRENT-BUILD.md)。**下文均为历史记录**：
+> 上一版为 125 MHz 单发射（位流 `f179a403…`），其数字与本版不可混用。
+
+---
+
 ## 2026-11-03 13:30：发现FPGA未配置，重新下载125/50 MHz版
 
 用户再次反馈白屏、SW2及其他按键无反应。13:28:00扫描确认器件PG2L100H、ID0x00602899，但DONE为0；配置状态0x00180c80，done和done_i均为0，gwen、grsn、gouten也为0。当时没有运行已完成配置的用户逻辑，按SW2逻辑复位不能重新装入工程。之前的JTAG下载均仅写FPGA RAM；断电会丢失，配置清除或重新上电也需重新下载。本轮没有证据区分此前配置被清除的具体原因。未配置状态的pll_lock虽为1，但不能据此认定CPU时钟或应用在运行。

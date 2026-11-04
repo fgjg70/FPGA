@@ -6,7 +6,7 @@
 
 ```
 紫光同创 PG2L100H (Logos2, -6, FBG676)
-├─ CPU 域 125 MHz   : RV32IM 五级流水线 + Zicsr + M-mode；IMEM/DMEM 片上
+├─ CPU 域 95 MHz    : RV32IM 五级流水线 + **双发射(2-wide)** + Zicsr + M-mode；IMEM/DMEM 片上
 ├─ 视觉/NPU 域 50 MHz: OV7670 DVP 采集 → 帧缓冲 → 自研 INT8 NPU 推理 → LCD(AN430 4.3")
 ├─ 跨时钟桥         : 采集/推理(50MHz) ↔ CPU(125MHz)
 └─ 应用             : NUMGUARD 料箱数字标签防错核验（+ 手势/COCO80 实验模式）
@@ -58,7 +58,7 @@ Artix-7 XC7A100T 参照线（[跨厂商对比]，Vivado）
 
 | 结论 | 级别 | 证据 |
 |---|---|---|
-| PG2L100H CPU 125 MHz WNS +0.609 | C | `fpga_pg2l100h/vision/BOARD_VALIDATION.md` |
+| PG2L100H CPU **95 MHz 双发射** WNS **+0.493**（当前烧录版，位流 `51f5eda2…`）/ 上一版单发射 125 MHz +0.609 | C | `fpga_pg2l100h/vision/BOARD_VALIDATION.md` |
 | 摄像头→LCD 预览 | A（目视） | 同文档 2026-11-03 记录 |
 | NPU 纯计算 1,769,238 周期 | B/C | `ACCEPTANCE.md` |
 | Artix 150 MHz WNS +0.007 | C | `results/coremark.csv` 行 `legal150-*` |

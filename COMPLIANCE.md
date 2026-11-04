@@ -33,7 +33,7 @@
 ## 4. 交付边界清单（必须在报告/演示中显式声明）
 
 **已达成（有证据）**
-- PG2L100H：CPU/IMEM/DMEM 125 MHz（WNS +0.609）、NPU/采集/MMIO 50 MHz（WNS +7.052）；LUT 4469/FF 3706/APM 10/DRM 64。
+- PG2L100H（**当前烧录版 = 95 MHz 双发射**，位流 `51f5eda2…`）：CPU/IMEM/DMEM 95 MHz（WNS +0.493）、NPU/采集/MMIO 50 MHz；LUT 9980/FF 6573/APM 13/DRM 99。上一版为 125 MHz 单发射（WNS +0.609，LUT 4469/FF 3706/APM 10/DRM 64，位流 `f179a403…`），仅作历史对照。详见 `fpga_pg2l100h/vision/CURRENT-BUILD.md`。
 - 芯片 ID/DONE/配置错误位/PLL 锁定；摄像头→LCD 预览目视确认；位流 SHA256 已记录。
 - 自研 INT8 NPU 纯计算 1,769,238 周期 @50 MHz = 35.38 ms（应用：NUMGUARD 数字标签核验）。
 - Artix 参照线：150 MHz 交付档 WNS +0.007、QSPI Flash 自启动（2026-10-17）、CoreMark 324.19（实测，`-Os` 旧固件）[跨厂商对比]。

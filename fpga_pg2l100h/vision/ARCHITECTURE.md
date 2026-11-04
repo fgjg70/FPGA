@@ -2,7 +2,7 @@
 
 # 网络、存储与控制接口
 
-当前源码将CPU/IMEM/DMEM独立到125 MHz目标域，NPU、相机采集和MMIO设备继续50 MHz，通过带等待的请求/应答握手交接，详见 `CLOCK_SPLIT.md`。本页MMIO计时器仍是50 MHz，不能用该计时器频率代替CPU频率；原模型结构及固定NPU保持不变。COCO80部署所需的新算子与存储边界见 `model/COCO80_FEASIBILITY.md`。
+当前烧录版将CPU/IMEM/DMEM独立到 **95 MHz 域（双发射）**；上一版为125 MHz单发射目标域，NPU、相机采集和MMIO设备继续50 MHz，通过带等待的请求/应答握手交接，详见 `CLOCK_SPLIT.md`。本页MMIO计时器仍是50 MHz，不能用该计时器频率代替CPU频率；原模型结构及固定NPU保持不变。COCO80部署所需的新算子与存储边界见 `model/COCO80_FEASIBILITY.md`。
 
 ## 数据通路
 

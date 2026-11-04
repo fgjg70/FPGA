@@ -5,6 +5,9 @@
 
 ## 1. 交付主体（PG2L100H）
 
+> **当前烧录版本 = 95 MHz 双发射**（2026-11-04，位流 `51f5eda2…`），详见 [`fpga_pg2l100h/vision/CURRENT-BUILD.md`](../fpga_pg2l100h/vision/CURRENT-BUILD.md)。
+> 下表 P-01~P-05 描述的是**上一版 125 MHz 单发射**（位流 `f179a403…`），保留作历史对照。
+
 | # | 结论/数字 | 级别 | 证据路径 | 状态 |
 |---|---|---|---|---|
 | P-01 | CPU/IMEM/DMEM 125 MHz，WNS +0.609 | C | `fpga_pg2l100h/vision/BOARD_VALIDATION.md`；PDS 时序报告 | ✅（报告需入库） |
@@ -17,6 +20,11 @@
 | P-08 | NUMGUARD 业务核验统计 | A | `competition/ACCEPTANCE.md`（待实测样本） | 🔲 待补 ≥30 样本/类 |
 | P-09 | Pango CoreMark 跑分（赛题主口径） | A | 待产出 `validation/coremark_hardware.json` + 原始串口 | 🔲 **缺失（R-2）** |
 | P-10 | Flash 自启动 | A | 待产出（当前未写入） | 🔲 **缺失（R-1）** |
+| **P-11** | **当前烧录：CPU 95 MHz 双发射，WNS +0.493（All Constraints Met）** | C | `build/dual_j11/place_route/…timing_summary_after_hold_fix.txt` | ✅ 报告已入库 |
+| **P-12** | **当前烧录资源：LUT 9980 / FF 6573 / APM 13 / DRM 99** | C | `build/dual_j11/device_map/run.log` | ✅ |
+| **P-13** | **当前烧录位流 3,791,112 B，SHA256 `51f5eda2…`** | — | `build/dual_j11/generate_bitstream/top_pg2l100h_vision.sbit` | ✅（文件已入库） |
+| **P-14** | 当前烧录功耗 ≈1.02 W（PDS `report_power`） | C | `build/dual_j11/report_power/`、`multiseed_summary.csv` | ✅ |
+| **P-15** | 当前烧录**上板实测记录** | A | —— | 🔲 **缺（`hardware_tested: false`，无下载日志/照片）** |
 
 ## 2. Artix-7 对比线（[跨厂商对比]，不构成交付成绩）
 

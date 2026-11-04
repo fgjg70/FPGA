@@ -12,17 +12,19 @@
 - **证据登记**：[`docs/EVIDENCE.md`](docs/EVIDENCE.md)（每个对外数字对应一行 + 状态）。
 - **提交清单**：[`docs/SUBMISSION-CHECKLIST.md`](docs/SUBMISSION-CHECKLIST.md)（截止 2026-11-04 18:00）。
 - **逐文件合规审计**：[`docs/COMPLIANCE-AUDIT.md`](docs/COMPLIANCE-AUDIT.md)（覆盖全库 836 文件）。
+- **当前烧录版本（单一事实来源）**：[`fpga_pg2l100h/vision/CURRENT-BUILD.md`](fpga_pg2l100h/vision/CURRENT-BUILD.md) —— **95 MHz 双发射**，位流 `51f5eda2…`，CPU 域 WNS **+0.493 ns**。
+- 上一版为 125 MHz 单发射（位流 `f179a403…`，`build/j11/` 已不在仓库）；**两版数字不可混用**。
 - **当前最重要缺口**：① Pango **Flash 未写入**（断电需重新下载）；② Pango CoreMark 原始日志未入库；③ 设计报告（Word/PDF）与演示视频未产出；④ 摄像头预览已目视确认，但 CPU 固件/按键/UART 未逐项确认。
 
 ## 1. 交付主体与关键指标（PG2L100H）
 
 | 项 | 实测值 | 来源 |
 |---|---|---|
-| CPU / IMEM / DMEM | **125 MHz**，建立 WNS **+0.609 ns**（全约束通过） | PDS 时序报告 |
+| CPU / IMEM / DMEM | **95 MHz 双发射**（2-wide in-order），建立 WNS **+0.493 ns**（All Constraints Met） | `fpga_pg2l100h/vision/CURRENT-BUILD.md` §3/§5 |
 | NPU / 摄像头采集 / MMIO | 50 MHz，WNS +7.052 ns | PDS 时序报告 |
-| 资源 | LUT **4469**/66600、FF **3706**/133200、APM(乘法器) **10**/240、DRM(BRAM) **64**/155 | PDS 资源报告 |
+| 资源 | LUT **9980**/66600（15%）、FF **6573**/133200（5%）、APM **13**/240（6%）、DRM **99**/155（64%） | `build/dual_j11/device_map/run.log` |
 | 配置 | 芯片 ID `0x00602899`、DONE=1、5 项配置错误位全 0、PLL 锁定 0→1 | `fpga_pg2l100h/vision/BOARD_VALIDATION.md` |
-| 位流 | 3,791,112 B，SHA256 `f179a403c71df8d6c4075faacc28616d2268e9121c35fcd45d82d7eb1162fef2` | 同上 |
+| 位流（当前烧录） | 3,791,112 B，SHA256 **`51f5eda2d5e2d178380072dd186902d875836bb031a1c0b041208704fe30cf4c`**（`build/dual_j11/`） | `CURRENT-BUILD.md` §1 |
 | 视觉通路 | OV7670 → DVP 采集 → 帧缓冲 → LCD（AN430 4.3"），**摄像头画面已目视确认上屏** | 同上 |
 | 自研 INT8 NPU | 定点检测/核验加速；**纯计算 1,769,238 周期 @50 MHz = 35.38 ms** | `fpga_pg2l100h/vision/competition/ACCEPTANCE.md` |
 | 应用 | **NUMGUARD** 料箱数字标签防错核验（数字 0~9 + 手势实验分支） | `fpga_pg2l100h/vision/competition/DEMO.md` |
@@ -51,7 +53,7 @@
 
 ### 3.1 交付主体（PG2L100H）
 1. 构建/下载说明：`fpga_pg2l100h/README.md`、`fpga_pg2l100h/vision/BOARD_VALIDATION.md`
-2. 时钟域说明：`fpga_pg2l100h/vision/CLOCK_SPLIT.md`（CPU/IMEM/DMEM 125 MHz；NPU/采集/MMIO 50 MHz）
+2. 时钟域说明：`fpga_pg2l100h/vision/CLOCK_SPLIT.md`（当前烧录版：CPU/IMEM/DMEM **95 MHz 双发射**；NPU/采集/MMIO 50 MHz。上一版单发射 125 MHz）
 3. 三模式（HANDWRITE / GESTURE / COCO80）：`fpga_pg2l100h/vision/MODES.md`
 4. 验收与演示脚本：`fpga_pg2l100h/vision/competition/{ACCEPTANCE.md,DEMO.md}`
 

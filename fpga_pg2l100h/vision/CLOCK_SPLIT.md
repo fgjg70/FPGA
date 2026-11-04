@@ -1,6 +1,8 @@
 > **范围/口径声明（交付主体）**：本文属于**紫光同创 PG2L100H** 交付主体线。文中"实测"指上板实测并应附证据路径；"未达成/未部署"项见根 [`COMPLIANCE.md`](https://github.com/fgjg70/FPGA/blob/main/COMPLIANCE.md) §4 边界清单。注意：**Pango 侧 Flash 当前尚未写入**（JTAG RAM 下载），详见 [`fpga_pg2l100h/vision/BOARD_VALIDATION.md`](https://github.com/fgjg70/FPGA/blob/main/fpga_pg2l100h/vision/BOARD_VALIDATION.md)。
 
-# CPU 125 MHz / NPU 50 MHz 时钟解耦
+# CPU 95 MHz（双发射）/ NPU 50 MHz 时钟解耦
+
+> **2026-11-04 更新**：当前烧录版 CPU 为 **95 MHz 双发射**（PLL: 50→/2(PFD 25)→×38(VCO 950)→/10），位流 `51f5eda2…`，CPU 域 WNS **+0.493 ns**。本文下文出现的 125 MHz 是**上一版单发射**的历史配置。完整当前规格见 [`CURRENT-BUILD.md`](CURRENT-BUILD.md)。
 
 目标器件为PG2L100H / -6 / FBG676，所有活动RTL继续使用Verilog-2005。本轮目标为CPU、IMEM、DMEM和寄存器堆125 MHz；NPU、摄像头采集、快照、UART、按键和MMIO设备50 MHz；视频27 MHz、LCD像素9 MHz。当前最终布局布线及下载状态以 `build/j11/build_summary.json` 和 `validation/hardware_summary.json` 为准，PLL仿真通过本身不代表125 MHz时序收敛或实际运行已验证。
 
@@ -12,7 +14,7 @@
 
 ```mermaid
 flowchart LR
-    CPU[RV32IM CPU / IMEM / DMEM 125 MHz] <-->|请求与应答握手| CDC[MMIO跨时钟桥]
+    CPU[RV32IM 双发射 CPU / IMEM / DMEM 95 MHz] <-->|请求与应答握手| CDC[MMIO跨时钟桥]
     CDC <--> BUS[MMIO设备 / UART / 按键 50 MHz]
     BUS <--> NPU[快照与INT8 NPU 50 MHz]
     CAM[OV7670采集 50 MHz] --> NPU
