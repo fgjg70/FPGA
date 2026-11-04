@@ -95,16 +95,21 @@ SEED = 20260819
 # --------------------------------------------------------------------------------------
 # Preprocessing / loss-grid monkeypatches (nut_detector sources stay untouched)
 # --------------------------------------------------------------------------------------
-def make_preprocess(input_size: int):
-    """160-style preprocessing generalized to ``input_size``.
+def make_preprocess(input_size: int, aspect_ratio: float = 0.75):
+    """160-style preprocessing generalized to ``input_size`` and ``aspect_ratio``.
 
-    content is letterboxed to ``input_size x round(0.75*input_size)`` and the
+    content is letterboxed to ``input_size x round(aspect_ratio*input_size)`` and the
     remaining rows are edge-padded top/bottom; boxes are normalized by
     ``/(input_size-1)`` exactly like ``multi_dataset.preprocess_multi``.
-    For input_size=160 this is exactly 160x120 + 20/20 rows; for 96 it is
+    For input_size=160 / ratio=0.75 this is exactly 160x120 + 20/20 rows; for 96 it is
     96x72 + 12/12.
+
+    ``aspect_ratio=1.0`` disables the letterbox and resizes straight to a square:
+    the source images of the nut dataset are square, so the 4:3 letterbox would
+    throw away 25% of the pixels for nothing (the A-buffer peak
+    ``(S/2)^2*32`` is independent of the content height, so capacity is unchanged).
     """
-    fitted_height = int(round(input_size * 0.75))
+    fitted_height = int(round(input_size * aspect_ratio))
     top = (input_size - fitted_height) // 2
     bottom = input_size - fitted_height - top
 
@@ -125,6 +130,7 @@ def make_preprocess(input_size: int):
         "fitted_height": fitted_height,
         "pad_top": top,
         "pad_bottom": bottom,
+        "aspect_ratio": aspect_ratio,
         "normalize": "pixel/127.5-1",
         "label_normalize": "/(input_size-1)",
     }
@@ -179,9 +185,9 @@ def fast_make_multi_targets(
     return heatmaps, flat_indices, box_targets
 
 
-def patch_nut_detector(input_size: int) -> dict:
+def patch_nut_detector(input_size: int, aspect_ratio: float = 0.75) -> dict:
     """Replace module-level preprocess + loss grid size. Returns metadata."""
-    preprocess = make_preprocess(input_size)
+    preprocess = make_preprocess(input_size, aspect_ratio)
     mds.preprocess_multi = preprocess  # MultiNutDataset.__getitem__ resolves this global
     grid = input_size // 4
     maf.make_multi_targets = functools.partial(fast_make_multi_targets, grid_size=grid)
@@ -919,9 +925,24 @@ def detailed_evaluate(model, loader, device, samples) -> tuple[dict, list[dict]]
 # --------------------------------------------------------------------------------------
 # Teacher probe / distillation
 # --------------------------------------------------------------------------------------
-def load_teacher(device) -> tuple[nn.Module, dict]:
-    checkpoint = torch.load(TEACHER_CHECKPOINT, map_location="cpu", weights_only=False)
-    teacher = EnhancedNutAnchorFree(num_classes=4, fpn_channels=72, backbone_width=0.55)
+def load_teacher(
+    device,
+    checkpoint_path: Path | None = None,
+    num_classes: int = 4,
+    fpn_channels: int | None = None,
+    backbone_width: float | None = None,
+) -> tuple[nn.Module, dict]:
+    """Load the 2M teacher. Shape params default to the checkpoint's own config."""
+    path = Path(checkpoint_path) if checkpoint_path is not None else TEACHER_CHECKPOINT
+    checkpoint = torch.load(path, map_location="cpu", weights_only=False)
+    saved = checkpoint.get("config") or {}
+    fpn = int(fpn_channels if fpn_channels is not None
+              else saved.get("fpn_channels", 72))
+    width = float(backbone_width if backbone_width is not None
+                  else saved.get("backbone_width", 0.55))
+    n_cls = int(saved.get("num_classes", num_classes))
+    teacher = EnhancedNutAnchorFree(num_classes=n_cls, fpn_channels=fpn,
+                                    backbone_width=width)
     teacher.load_state_dict(checkpoint["model"])
     teacher.to(device).eval()
     for parameter in teacher.parameters():
@@ -1112,7 +1133,7 @@ def train(args, patch_meta) -> dict:
 
     teacher = None
     if args.distill_weight > 0:
-        teacher, teacher_checkpoint = load_teacher(device)
+        teacher, teacher_checkpoint = load_teacher(device, args.teacher_checkpoint)
         print(f"teacher loaded: epoch={teacher_checkpoint.get('epoch')}", flush=True)
 
     history: list[dict] = []
@@ -1793,14 +1814,31 @@ def main() -> None:
                         help="measure teacher P/R/F1 at 96/160/224 before training")
     parser.add_argument("--teacher-probe-sizes", type=str, default="",
                         help="comma separated, default: <input-size>,160,224")
+    parser.add_argument("--probe-only", action="store_true",
+                        help="run --teacher-probe and exit (decides distill feasibility)")
     parser.add_argument("--dataset-dir", type=Path, default=DEFAULT_DATASET_DIR)
+    parser.add_argument("--teacher-checkpoint", type=Path, default=TEACHER_CHECKPOINT,
+                        help="2M teacher checkpoint (default: the bottle-cap best_model.pt)")
+    parser.add_argument("--class-names", type=str, default="",
+                        help="Comma-separated class names, e.g. chickpea,cashew,almond,walnut")
+    parser.add_argument("--aspect-ratio", type=float, default=0.75,
+                        help="Letterbox content height / input size. 0.75 = 4:3 (bottle-cap); "
+                             "1.0 = square, no wasted padding rows (nut dataset)")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--checkpoint", type=Path, default=None)
     args = parser.parse_args()
     if args.fit_report:
         args.mode = "fit-report"
+    global CLASS_NAMES
+    if args.class_names:
+        parsed_names = [item.strip() for item in args.class_names.split(",") if item.strip()]
+        if len(parsed_names) != 4:
+            parser.error(
+                f"--class-names needs exactly 4 names (num_classes=4), got {len(parsed_names)}"
+            )
+        CLASS_NAMES = parsed_names
     os.environ["SLIM_INPUT_SIZE"] = str(args.input_size)
-    patch_meta = patch_nut_detector(args.input_size)
+    patch_meta = patch_nut_detector(args.input_size, args.aspect_ratio)
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     if args.mode == "fit-report":
@@ -1861,11 +1899,11 @@ def main() -> None:
             args.input_size, 160, 224
         ]
         teacher_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        teacher, teacher_checkpoint = load_teacher(teacher_device)
+        teacher, teacher_checkpoint = load_teacher(teacher_device, args.teacher_checkpoint)
         teacher_rows = []
         test_samples = read_multi_split(args.dataset_dir, "test")
         for size in sizes:
-            mds.preprocess_multi = make_preprocess(size)
+            mds.preprocess_multi = make_preprocess(size, args.aspect_ratio)
             dataset = MultiNutDataset(test_samples, training=False, seed=args.seed)
             # num_workers=0: each probe size needs its own preprocess patch in-process.
             loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False,
@@ -1874,13 +1912,16 @@ def main() -> None:
             row["teacher_epoch"] = teacher_checkpoint.get("epoch")
             teacher_rows.append(row)
             print("teacher " + json.dumps(row), flush=True)
-        patch_nut_detector(args.input_size)  # restore student preprocessing
+        patch_nut_detector(args.input_size, args.aspect_ratio)  # restore student preprocessing
         (args.output_dir / "teacher_probe.json").write_text(
-            json.dumps({"checkpoint": str(TEACHER_CHECKPOINT), "rows": teacher_rows}, indent=2),
+            json.dumps({"checkpoint": str(args.teacher_checkpoint), "rows": teacher_rows}, indent=2),
             encoding="utf-8",
         )
         del teacher
         torch.cuda.empty_cache()
+        if args.probe_only:
+            print("probe-only: teacher measurement done, exiting before training", flush=True)
+            return
 
     if args.mode == "eval":
         checkpoint_path = args.checkpoint or (args.output_dir / "best_model.pt")
@@ -1890,7 +1931,7 @@ def main() -> None:
         if eval_input_size != args.input_size:
             args.input_size = eval_input_size
             os.environ["SLIM_INPUT_SIZE"] = str(args.input_size)
-            patch_meta = patch_nut_detector(args.input_size)
+            patch_meta = patch_nut_detector(args.input_size, args.aspect_ratio)
         model = SlimMobileNetNutAnchorFree(
             num_classes=int(config.get("num_classes", 4)),
             width_multiplier=float(config.get("width_multiplier", args.width_multiplier)),
