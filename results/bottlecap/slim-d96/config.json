@@ -1,0 +1,42 @@
+{
+  "num_classes": 4,
+  "width_multiplier": 0.4,
+  "fpn_channels": 64,
+  "input_size": 96,
+  "class_names": [
+    "red_cap",
+    "purple_cap",
+    "green_cap",
+    "yellow_cap"
+  ],
+  "preprocess": {
+    "target_size": 96,
+    "fitted_height": 72,
+    "pad_top": 12,
+    "pad_bottom": 12,
+    "aspect_ratio": 0.75,
+    "normalize": "pixel/127.5-1",
+    "label_normalize": "/(input_size-1)"
+  },
+  "grid_size": 24,
+  "decode": "3x3 local peaks + confidence Top-K (40) + class-aware NMS (0.35) + Top-4",
+  "confidence_threshold": 0.2,
+  "nms_iou_threshold": 0.35,
+  "model_variant": "slim_mobilenetv2_fpn_anchorfree",
+  "dataset_dir": "D:\\USER\\Desktop\\bottle_cap_model_training_package_20260819\\bottle_cap_model_training_package_20260819\\bottle_cap_color_dataset_multi_augmented_7to1",
+  "train_images": 3500,
+  "test_images": 500,
+  "epochs": 80,
+  "batch_size": 64,
+  "num_workers": 0,
+  "learning_rate": 0.0012,
+  "weight_decay": 0.0002,
+  "scheduler": "cosine",
+  "optimizer": "AdamW",
+  "amp": true,
+  "seed": 20260819,
+  "patience": 15,
+  "distill_weight": 0.6,
+  "parameter_count": 136321,
+  "selection_score": "test_f1 + test_mean_iou"
+}

@@ -113,3 +113,39 @@ python tools/bottlecap/train_slim.py \
 |---|---|---|
 | `size of tensor a (56) must match tensor b (24)` | Windows `num_workers>0` 会 spawn 新解释器，`preprocess_multi` / `make_multi_targets` 的 monkeypatch 丢失 | `--num-workers 0`（`teacher_fit.py` 默认已是 0） |
 | `python` 报无 torch | 指向 WorkBuddy 内置 3.13.12 | 用 `C:/Users/19716/AppData/Local/Programs/Python/Python313/python.exe` |
+
+---
+
+## 6. 蒸馏实测结果（2026-11-04 15:28 跑完）
+
+命令：`train_slim.py --teacher-checkpoint /tmp/tfit96/best_model.pt --distill-weight 0.6
+--width-multiplier 0.4 --fpn-channels 64 --input-size 96 --epochs 80 --batch-size 64 --patience 15`
+
+- **63 epoch 早停**（patience 15），1,975.8 s = 32.9 min，best epoch **48**
+- 产出 `results/bottlecap/slim-d96/`（best_model.pt / FIT-CHECK.json / SLIM-REPORT.md / test_report.json）
+
+| | 蒸馏 slim-d96 | 纯监督 slim（基线） | 差 |
+|---|---|---|---|
+| F1 | **0.9992** | 0.9984 | **+0.0008** |
+| Precision | 0.9992 | 0.9984 | +0.0008 |
+| Recall | 0.9992 | 0.9984 | +0.0008 |
+| 平均匹配 IoU | 0.9475 | **0.9495** | **−0.0020** |
+| 整图全对率 | **0.9980** | 0.9960 | +0.0020 |
+| 计数正确率 | 1.0000 | 1.0000 | 0 |
+
+### 怎么读这张表（别过度解读）
+
+测试集 500 张 / 1,250 个目标。**+0.0008 的 F1 精确等于 1 个目标**，exact +0.0020 也精确等于 1 张图。
+⇒ 这是**噪声量级的差异，不能声称"蒸馏提升了精度"**。
+
+真正的结论只有两条：
+
+1. **蒸馏路径第一次真正跑通并证明了"不伤精度"**——此前瓶盖把 `distill_weight` 设成 0，
+   这条代码路径从未被执行过；现在教师 96 适配后同尺寸蒸馏跑满 63 epoch，精度持平。
+2. **mIoU 略降 0.0020**：软标签带来的是分类/计数上的收益，框的紧致度反而输给纯标签监督。
+   若下游更看重框贴合（例如按面积估大小），纯监督仍更优。
+
+### 容量核算（同一份 slim 结构，与是否蒸馏无关）
+
+W 130,448 B / Q 22,608 B / A 峰值 73,728 B（`backbone_stage2_0_block_0_0`）/ B 27,648 B /
+71 op（39 conv + 18 dwconv + 3 upsample + 11 add）/ IC-OC 峰值 256 —— **全部 PASS**（`FIT-CHECK all_pass = True`）。

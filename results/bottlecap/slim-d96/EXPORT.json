@@ -1,0 +1,300 @@
+{
+  "format_version": "slim-export-v1",
+  "generated_at": "2026-11-04T15:28:51+0800",
+  "arch": "SlimMobileNetNutAnchorFree",
+  "model_variant": "slim_mobilenetv2_fpn_anchorfree",
+  "num_classes": 4,
+  "width_multiplier": 0.4,
+  "fpn_channels": 64,
+  "input_size": 96,
+  "input_layout": "NCHW float32 (torch) -> NHWC int8 activations; conv0 consumes PACKED3 (3B/pixel)",
+  "letterbox": {
+    "content_w": 96,
+    "content_h": 72,
+    "pad_top": 12,
+    "pad_bottom": 12,
+    "resize": "bilinear",
+    "pad_mode": "edge"
+  },
+  "norm": "/127.5-1",
+  "classes": [
+    "red_cap",
+    "purple_cap",
+    "green_cap",
+    "yellow_cap"
+  ],
+  "input_quant": {
+    "range": [
+      -1.0,
+      1.0
+    ],
+    "s_a_in": 0.00784313725490196,
+    "zp_in": 0,
+    "a_q": "clip(round(a / s_a_in) + zp_in, -128, 127)",
+    "packed3_layout": "addr = y*iw*3 + x*3 + c (c<3)"
+  },
+  "decode": {
+    "grid_hw": [
+      24,
+      24
+    ],
+    "objectness_activation": "sigmoid",
+    "local_max": "sigmoid(obj) == max_pool2d(sigmoid(obj), 3, stride=1, pad=1)",
+    "confidence": "sigmoid(obj) * softmax(class).max",
+    "confidence_threshold": 0.2,
+    "pre_nms_topk": 40,
+    "nms": "class-aware greedy NMS",
+    "nms_iou_threshold": 0.35,
+    "max_detections": 4,
+    "box_decode": "(cx,cy) = (gx + sigmoid(tx), gy + sigmoid(ty)) / G ; (w,h) = sigmoid(tw, th)",
+    "iou_match_threshold": 0.5
+  },
+  "capacity": {
+    "w_bytes": 130448,
+    "q_bytes_conv_only": 22608,
+    "q_bytes_with_add_blocks": 22784,
+    "q_bytes": 22608,
+    "a_single_tensor_peak_bytes": 73728,
+    "a_peak_tensor": "backbone_stage2_0_block_0_0",
+    "b_peak_bytes": 27648,
+    "op_count": {
+      "conv": 39,
+      "dwconv": 18,
+      "upsample": 3,
+      "add": 11,
+      "pool": 0,
+      "copy": 0,
+      "total": 71
+    },
+    "num_layers": 57,
+    "ic_max": 256,
+    "oc_max": 256,
+    "all_pass": true,
+    "checks": [
+      {
+        "item": "W 区 int8 权重（BN 折叠后，8 通道对齐）",
+        "actual_bytes": 130448,
+        "actual": "130,448 B / 127.4 KB",
+        "limit_bytes": 327680,
+        "limit": "320 KB (327,680 B)",
+        "pass": true
+      },
+      {
+        "item": "Q 区量化参数 Σ(6*OC_pad+16)",
+        "actual_bytes": 22608,
+        "actual": "22,608 B",
+        "limit_bytes": 49152,
+        "limit": "48 KB (49,152 B)",
+        "pass": true
+      },
+      {
+        "item": "A 缓冲单张量峰值（NHWC int8，8ch 对齐；含 PACKED3 输入图）",
+        "actual_bytes": 73728,
+        "actual": "73,728 B / 72.0 KB",
+        "limit_bytes": 98304,
+        "limit": "96 KB (98,304 B)",
+        "pass": true,
+        "peak_tensor": "backbone_stage2_0_block_0_0"
+      },
+      {
+        "item": "B 缓冲（A/B 可行摆放下的并发峰值）",
+        "actual_bytes": 27648,
+        "actual": "27,648 B / 27.0 KB",
+        "limit_bytes": 32768,
+        "limit": "32 KB (32,768 B)",
+        "pass": true,
+        "placement_feasible": true
+      },
+      {
+        "item": "op 总数（conv/dwconv/pool/upsample/add/copy）",
+        "actual_bytes": 71,
+        "actual": "71 ops",
+        "limit_bytes": 128,
+        "limit": "128 op (ROM 深度)",
+        "pass": true
+      },
+      {
+        "item": "描述符 IC/OC 上限",
+        "actual_bytes": 256,
+        "actual": "IC_max=256, OC_max=256",
+        "limit_bytes": 256,
+        "limit": "256",
+        "pass": true
+      }
+    ]
+  },
+  "parameters": {
+    "parameter_count": 136321,
+    "fp32_bytes": 545284,
+    "int8_weight_bytes_padded": 130448
+  },
+  "checkpoint": "results/bottlecap/slim/best_model.pt",
+  "metrics": {
+    "test_images": 500,
+    "true_objects": 1250,
+    "predicted_objects": 1250,
+    "true_positive": 1249,
+    "false_positive": 1,
+    "false_negative": 1,
+    "precision": 0.9992,
+    "recall": 0.9992,
+    "f1": 0.9992,
+    "mean_matched_iou": 0.9475283905732527,
+    "count_accuracy": 1.0,
+    "exact_image_accuracy": 0.998,
+    "per_class": {
+      "red_cap": {
+        "true_objects": 313,
+        "predicted_objects": 312,
+        "matched_objects": 312,
+        "precision": 1.0,
+        "recall": 0.9968051118210862
+      },
+      "purple_cap": {
+        "true_objects": 313,
+        "predicted_objects": 314,
+        "matched_objects": 313,
+        "precision": 0.9968152866242038,
+        "recall": 1.0
+      },
+      "green_cap": {
+        "true_objects": 312,
+        "predicted_objects": 312,
+        "matched_objects": 312,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "yellow_cap": {
+        "true_objects": 312,
+        "predicted_objects": 312,
+        "matched_objects": 312,
+        "precision": 1.0,
+        "recall": 1.0
+      }
+    },
+    "by_true_object_count": {
+      "1": {
+        "images": 125,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "count_accuracy": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "2": {
+        "images": 125,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "count_accuracy": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "3": {
+        "images": 125,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "count_accuracy": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "4": {
+        "images": 125,
+        "precision": 0.998,
+        "recall": 0.998,
+        "f1": 0.998,
+        "count_accuracy": 1.0,
+        "exact_image_accuracy": 0.992
+      }
+    },
+    "by_lighting_profile": {
+      "bright": {
+        "images": 69,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "cool": {
+        "images": 68,
+        "precision": 0.9938271604938271,
+        "recall": 0.9938271604938271,
+        "f1": 0.9938271604938271,
+        "exact_image_accuracy": 0.9852941176470589
+      },
+      "dim": {
+        "images": 76,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "low_contrast": {
+        "images": 69,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "neutral": {
+        "images": 78,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "transition": {
+        "images": 61,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "exact_image_accuracy": 1.0
+      },
+      "warm": {
+        "images": 79,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "exact_image_accuracy": 1.0
+      }
+    }
+  },
+  "reference_heads": "results/bottlecap/slim/ref_heads.npz",
+  "ref_heads_layout": {
+    "file": "results/bottlecap/slim/ref_heads.npz",
+    "num_images": 8,
+    "head_order": [
+      "objectness",
+      "class",
+      "box"
+    ],
+    "activation": "raw logits: apply sigmoid(objectness), softmax(class, dim=1), sigmoid(box, every element) externally; nothing is pre-activated",
+    "arrays": {
+      "objectness": "(N,1,24,24) float32 raw objectness logits",
+      "class_logits": "(N,4,24,24) float32 raw class logits",
+      "box_logits": "(N,4,24,24) float32 raw box logits (tx,ty,tw,th)",
+      "inputs_int8_packed3": "(N,96,96,3) int8 HWC PACKED3 input bytes",
+      "inputs_float_nchw": "(N,3,96,96) float32 model input (reference only)",
+      "image_names": "(N,) test image file names",
+      "indices": "(N,) int64 indices in the sorted test split",
+      "meta": "(1,) JSON string: input_quant, decode, parameter_count, metrics"
+    },
+    "select_rule": "indices = round(i*499/7) for i in 0..7 over the sorted test split",
+    "reference_forward": "single batched float32 forward with TF32 disabled (cudnn.allow_tf32=False, cuda.matmul.allow_tf32=False); replay bit-identical"
+  },
+  "reconstruct": {
+    "class": "nut_detector.mobilenet_anchor_free_slim.SlimMobileNetNutAnchorFree",
+    "kwargs": {
+      "num_classes": 4,
+      "width_multiplier": 0.4,
+      "fpn_channels": 64
+    },
+    "python": "import torch\nfrom nut_detector.mobilenet_anchor_free_slim import SlimMobileNetNutAnchorFree\nckpt = torch.load(\"results/bottlecap/slim/best_model.pt\", map_location=\"cpu\", weights_only=False)\ncfg = {k: ckpt[\"config\"][k] for k in (\"num_classes\", \"width_multiplier\", \"fpn_channels\")}\nmodel = SlimMobileNetNutAnchorFree(**cfg)\nmodel.load_state_dict(ckpt[\"model\"])\nmodel.eval()\n"
+  },
+  "weights_layout": {
+    "dense": "[tap][IC_pad][OC_pad], OC at lowest bits, pad 0 (CONTRACT §6)",
+    "depthwise": "[tap][OC_pad], pad 0",
+    "channel_align": 8
+  },
+  "q_layout": "bias_adj int32[OC_pad] | M_pos int16[OC_pad] | tail 16B = 6*OC_pad+16 (CONTRACT §7)",
+  "checkpoint_epoch": 48
+}
