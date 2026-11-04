@@ -1,0 +1,50 @@
+﻿
+****** xsim v2018.3 (64-bit)
+  **** SW Build 2405991 on Thu Dec  6 23:38:27 MST 2018
+  **** IP Build 2404404 on Fri Dec  7 01:43:56 MST 2018
+    ** Copyright 1986-2018 Xilinx, Inc. All Rights Reserved.
+
+source xsim.dir/tc_sim/xsim_script.tcl
+# xsim {tc_sim} -autoloadwcfg -runall
+Vivado Simulator 2018.3
+Time resolution is 1 ps
+run -all
+[nn_tilecache] CONFIG IB=16384 B/bank x2, OB=12288 B/bank x2, total=57344 B
+[beh_ddr3] CONFIG MEM_BYTES=2097152 (262144 x64b words) READ_LAT=40 BEAT_GAP=4
+[nn_tilecache] CONFIG IB=40960 B/bank x2, OB=12288 B/bank x2, total=106496 B
+[beh_ddr3] CONFIG MEM_BYTES=2097152 (262144 x64b words) READ_LAT=40 BEAT_GAP=16
+[TILECACHE] reset released @315000
+================================================================
+[TILECACHE] tb_nn_tilecache start (clk=100MHz)
+================================================================
+
+[TILECACHE] ---- case_a: 96x96x8 conv3x3/s1/pad1, 6 bands ----
+[TILECACHE] case_a: PASS
+
+[TILECACHE] ---- case_b: 96x96x8 conv3x3/s2/pad1 -> 48x48, 6 bands ----
+[TILECACHE] case_b: PASS
+
+[TILECACHE] ---- case_c: 8x8x8 conv3x3/s1/pad1, 1 band, pad edges ----
+[TILECACHE] case_c: PASS
+
+[TILECACHE] ---- case_e: ADD src+dst bands (a_sel=0/1), 16x16x8 ----
+[TILECACHE] case_e: PASS
+
+[TILECACHE] ---- case_d: slow DDR (BEAT_GAP=16), 8x8x8 conv band ----
+[TILECACHE] case_d: slow fill took 755 cycles (BEAT_GAP=16)
+[TILECACHE] case_d: slow flush took 49 cycles (BEAT_GAP=16)
+[TILECACHE] case_d: PASS
+
+[TILECACHE] ---- case_f: B=1 bands (8x8x8 conv3x3/s1/pad1) ----
+[TILECACHE] case_f: PASS
+
+[TILECACHE] ---- case_g: 32KiB IBUF config, 112x112x96 B=1 band ----
+[TILECACHE] case_g: PASS
+
+================================================================
+[TILECACHE] SUMMARY: 7/7 cases pass, errors=0
+================================================================
+TILECACHE_TB: PASS
+$finish called at time : 1677075 ns : File "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/nn2v/out2/tb_nn_tilecache.sv" Line 972
+exit
+INFO: [Common 17-206] Exiting xsim at Wed Nov  4 13:36:09 2026...

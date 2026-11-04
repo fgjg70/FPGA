@@ -107,6 +107,68 @@ xsim tb_sim -R --testplusarg "vec=<repo>/results/ai-accel/proto/engine/vec" --te
 
 ---
 
+## 7. 【补充】完整子系统转换 + 4 套仿真 + 综合与时序（同日完成）
+
+在完成引擎核心后，把**整套 NPU 子系统**（含 DDR3 流式链与微码 ROM）一并转换并全部验证：
+
+### 7.1 转换范围扩大到 9 个文件 → `nn_full.v`
+
+| 输入 | 行数 | 输出模块 |
+|---|---|---|
+| `nn_pkg.sv` | 191 | （包，被拍平） |
+| `rv32_pkg.sv` | 463 | （包，被拍平） |
+| `nn_rom_pkg.sv` | 144 | （包，被拍平） |
+| `nn_conv_engine.sv` | 1,574 | `nn_conv_engine` |
+| `nn_mem.sv` | 867 | `nn_mem` |
+| `nn_seq.sv` | 540 | `nn_seq` |
+| `nn_wload.sv` | 638 | `nn_wload` + `nn_wload_afifo` |
+| `nn_tilecache.sv` | 503 | `nn_tilecache` |
+| `nn_subsys.sv` | 672 | `nn_subsys` |
+| **合计** | **5,592 行** | **`nn_full.v` 4,817 行纯 Verilog（7 个模块）** |
+
+修补与引擎版相同（`string`×2 → 定宽 reg；补 `` `timescale ``），另确认 **`(* ram_style = "block" *)` 属性被 sv2v 完整保留**（`w_mem_a/b/c/d`、`q_mem_lo` 均在）。
+
+### 7.2 四套仿真全部 PASS
+
+| TB | 判据 | 结果 |
+|---|---|---|
+| `tb_nn_engine` | `ENGINE_TB: PASS (58 cases, mismatch=0)` | ✅ 47 基线 + 9 M1 + 2 SA |
+| `tb_nn_tilecache` | `TILECACHE_TB: PASS` | ✅ **7/7 cases**，含慢速 DDR（BEAT_GAP=16）、ADD 双 band、32KiB IBUF 配置 |
+| `tb_nn_wstream` | `WSTREAM_TB: PASS` | ✅ **6/6 cases**，102 层流式，W=319,792 B / Q=44,544 B（与 A7a 记录一致），FIFO 压力/延迟敏感性/长度对齐边界全过 |
+| `tb_nn_seq` | `NN_SEQ_TB: PASS` | ✅ legacy 112 starts / 336 cycles；band 模式 112 ops / **4,242 bands** / 72,114 cycles；错误注入（wlen>128K、pre_err）正确 E6 |
+
+日志：`fpga_pg2l100h/vision/rtl/nn/sim/xsim_{,tilecache_,wstream_,seq_}pass.txt`
+
+### 7.3 综合与 122.22 MHz 时序（Artix-7 XC7A100T 代理，对齐 A7a 的 OOC 口径）
+
+| 项 | 转换版实测 | 你 A7a 记录 | 一致性 |
+|---|---|---|---|
+| Slice LUTs | **30,996**（48.89%） | 30,700 | +296 |
+| Slice Registers | **19,759**（15.58%） | 19,731 | +28 |
+| DSPs | **200**（83.33%） | 200 | 完全一致 |
+| Block RAM | 0（引擎不含 mem） | — | — |
+| **Setup WNS @8.182ns** | **+1.108 ns** | +1.048 ns | 同量级 ✅ |
+| **Hold WHS** | **+0.158 ns** | — | ✅ |
+
+证据：`fpga_pg2l100h/vision/rtl/nn/synth/eng_util.txt`、`eng_timing_122mhz.txt`
+
+> **结论：转换后的 Verilog 在功能（4 套 TB）、周期（逐拍一致）、资源（±1%）、时序（同量级）四个维度都与原 SV 版对齐。**
+
+### 7.4 一个已知限制（不是转换引入的）
+
+`nn_mem` 的 W ROM（320 KB，4 段 64-bit 数组）**在整机综合里无法被 Vivado 推断为 BRAM**（报 `Synth 8-3391 memory pattern not supported`）。
+**原设计本来就绕开了这一点**：`fpga/nn_mem_bb.sv` 把它做成**黑盒 + OOC DCP 链接**。所以：
+- 引擎单独综合完全正常（本文 §7.3 的 30,996 LUT）；
+- 整机综合必须沿用原有的 **`nn_mem` 黑盒 OOC 流程**，或按原注释说明改成 4 段 BRAM 显式例化。
+
+### 7.5 仍未做（受环境限制，非本机可完成）
+
+- ❌ **Pango PDS 综合/布局布线**（本机只装了 Vivado 2018.3，没装 PDS）
+- ❌ 上板验证（按你的指示不做）
+- ❌ Vivado 的 Artix 结果只作**量级代理**，不能当 Pango 的实测数字
+
+---
+
 ## 6. 下一步（同一条链路可直接复用）
 
 1. **同法转换剩余 4 个模块**：`nn_seq.sv`(540) / `nn_subsys.sv`(672) / `nn_wload.sv`(638) / `nn_tilecache.sv`(503) —— 用同一 sv2v 命令 + 同样的 3 类修补。

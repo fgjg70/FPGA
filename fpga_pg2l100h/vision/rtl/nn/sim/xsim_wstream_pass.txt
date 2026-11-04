@@ -1,0 +1,66 @@
+﻿
+****** xsim v2018.3 (64-bit)
+  **** SW Build 2405991 on Thu Dec  6 23:38:27 MST 2018
+  **** IP Build 2404404 on Fri Dec  7 01:43:56 MST 2018
+    ** Copyright 1986-2018 Xilinx, Inc. All Rights Reserved.
+
+source xsim.dir/ws_sim/xsim_script.tcl
+# xsim {ws_sim} -testplusarg img=D:/USER/Desktop/FPGA/FPGA/results/bottlecap/stream/yolo_ddr_img.hex -testplusarg layers=D:/USER/Desktop/FPGA/FPGA/results/bottlecap/stream/yolo_layers.txt -testplusarg stream_img=D:/USER/Desktop/FPGA/FPGA/results/bottlecap/stream/yolo_ddr_stream_img.hex -testplusarg stream_layers=D:/USER/Desktop/FPGA/FPGA/results/bottlecap/stream/yolo_stream_layers.txt -autoloadwcfg -runall
+Vivado Simulator 2018.3
+Time resolution is 1 ps
+run -all
+[nn_wload] CONFIG MAX_PRE_WLEN=131072 W_FILL_W64=20480 Q_FILL_W64=1024 FIFO_AW=5 (fifo=512 B)
+[beh_ddr3] CONFIG MEM_BYTES=2097152 (262144 x64b words) READ_LAT=40 BEAT_GAP=4
+[nn_wload] CONFIG MAX_PRE_WLEN=131072 W_FILL_W64=20480 Q_FILL_W64=1024 FIFO_AW=5 (fifo=512 B)
+[beh_ddr3] CONFIG MEM_BYTES=2097152 (262144 x64b words) READ_LAT=200 BEAT_GAP=4
+[nn_wload] CONFIG MAX_PRE_WLEN=131072 W_FILL_W64=20480 Q_FILL_W64=1024 FIFO_AW=5 (fifo=512 B)
+[beh_ddr3] CONFIG MEM_BYTES=2097152 (262144 x64b words) READ_LAT=22 BEAT_GAP=1
+================================================================
+[WSTREAM] tb_nn_wstream start: clk=100MHz ddr_div=1
+================================================================
+[WSTREAM] image        : D:/USER/Desktop/FPGA/FPGA/results/bottlecap/stream/yolo_ddr_img.hex
+[WSTREAM] layers       : D:/USER/Desktop/FPGA/FPGA/results/bottlecap/stream/yolo_layers.txt
+[WSTREAM] stream image : D:/USER/Desktop/FPGA/FPGA/results/bottlecap/stream/yolo_ddr_stream_img.hex
+[WSTREAM] stream layers: D:/USER/Desktop/FPGA/FPGA/results/bottlecap/stream/yolo_stream_layers.txt
+[WSTREAM] layers parsed: 102
+[WSTREAM] stream layers parsed: 102
+
+[WSTREAM] ---- case_a: random 1024B prefetch (aligned) ----
+[WSTREAM] case_a: PASS (busy=315 cyc)
+
+[WSTREAM] ---- case_b: real YOLO image, 102 streaming layers ----
+[beh_ddr3] BACKDOOR load_hex("D:/USER/Desktop/FPGA/FPGA/results/bottlecap/stream/yolo_ddr_img.hex") at word_off=0
+[WSTREAM] case_b: 20/102 layers done
+[WSTREAM] case_b: 40/102 layers done
+[WSTREAM] case_b: 60/102 layers done
+[WSTREAM] case_b: 80/102 layers done
+[WSTREAM] case_b: 100/102 layers done
+[WSTREAM] case_b: totals W=319792 B Q=44544 B, 8B-misaligned W layers=47
+[WSTREAM] case_b: prefetch busy cycles total=100734 over 102 layers (avg 987), 3.62 B/cycle
+[WSTREAM] case_b: PASS
+
+[WSTREAM] ---- case_c: length/alignment boundaries ----
+[WSTREAM] case_c4: 124416 B prefetch, 31167 cycles
+[nn_wload] ERROR @1407565000: pre_wlen=131080 > MAX_PRE_WLEN=131072
+[WSTREAM] case_c: PASS
+
+[WSTREAM] ---- case_d: FIFO stress (BEAT_GAP=1), 16KiB ----
+[WSTREAM] case_d: 16KiB at BEAT_GAP=1, busy=3106 cyc, FIFO full cycles=1869
+[WSTREAM] case_d: PASS
+
+[WSTREAM] ---- case_e: latency sensitivity (READ_LAT 40 vs 200) ----
+[WSTREAM] case_e: busy cycles A(READ_LAT=40)=2107 B(READ_LAT=200)=2267 delta=160 (expect ~160)
+[WSTREAM] case_e: PASS
+
+[WSTREAM] ---- case_h: stream layout, running-pointer accumulation ----
+[beh_ddr3] BACKDOOR load_hex("D:/USER/Desktop/FPGA/FPGA/results/bottlecap/stream/yolo_ddr_stream_img.hex") at word_off=0
+[WSTREAM] case_h: 102 layers, pointers W=319792/Q=44544, total busy=130494 cyc, 2.79 B/cycle
+[WSTREAM] case_h: PASS
+
+================================================================
+[WSTREAM] SUMMARY: 6/6 cases pass, errors=0 (ddr_div=1)
+================================================================
+WSTREAM_TB: PASS
+$finish called at time : 2811455 ns : File "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/nn2v/out2/tb_nn_wstream.sv" Line 1202
+exit
+INFO: [Common 17-206] Exiting xsim at Wed Nov  4 13:36:14 2026...

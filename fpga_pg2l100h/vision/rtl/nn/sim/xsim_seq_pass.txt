@@ -1,0 +1,20 @@
+﻿
+****** xsim v2018.3 (64-bit)
+  **** SW Build 2405991 on Thu Dec  6 23:38:27 MST 2018
+  **** IP Build 2404404 on Fri Dec  7 01:43:56 MST 2018
+    ** Copyright 1986-2018 Xilinx, Inc. All Rights Reserved.
+
+source xsim.dir/seq_sim/xsim_script.tcl
+# xsim {seq_sim} -autoloadwcfg -runall
+Vivado Simulator 2018.3
+Time resolution is 1 ps
+run -all
+[legacy] PASS starts=112 cycles=336 done_ops=112 rom_len=112
+[legacy] err-inject PASS
+[band] PASS ops=112 bands=4242 pre=112 eng=4242 cycles=72114
+[band] err-inject wlen>128K -> E6 PASS
+[band] err-inject pre_err -> E6 PASS
+NN_SEQ_TB: PASS (legacy starts=112 cycles=336 | band ops=112 bands=4242 pre=112 eng=4242)
+$finish called at time : 735245 ns : File "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/nn2v/out2/tb_nn_seq.sv" Line 820
+exit
+INFO: [Common 17-206] Exiting xsim at Wed Nov  4 13:36:17 2026...
