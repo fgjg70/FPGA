@@ -195,7 +195,7 @@ module core
   //      "C-12c+E′"读出; 两者与 `-no-lc` 叠加构成战役的三笔。
   //      (C-12c 单独在 A+C 树上仍是净亏 −0.082ns, 它的价值是**解锁** DSP 墙。)
   logic [31:0] md_a_r, md_b_r;
-  logic [4:0]  md_op_r;
+  alu_op_e     md_op_r;
   logic        md_served;        // EX 里这条 M/D 已经发射过 (一次性; 指令离开 EX 自动清)
   logic        md_busy_raw;      // muldiv 自己的 busy (原 `md_busy` 这个名字留给"有效 busy")
   logic        ex_taken;
@@ -875,7 +875,7 @@ module core
   wire is_muldiv_eff = is_muldiv && !redir_kill;
   wire md_start      = is_muldiv_eff && !md_served;
   wire md_done       = md_served && !md_busy_raw;   // muldiv 报完成那一拍 (busy 落下的拍)
-  wire [4:0] md_op_eff = md_served ? md_op_r : ALU_ADD;
+  wire alu_op_e md_op_eff = md_served ? md_op_r : ALU_ADD;
   assign md_busy     = md_start || (md_served && !md_done);
 
   always_ff @(posedge clk or posedge rst) begin
