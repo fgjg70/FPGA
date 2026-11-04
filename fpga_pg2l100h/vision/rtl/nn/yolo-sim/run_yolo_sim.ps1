@@ -7,7 +7,7 @@
 # DUT:      nn_full.v (7 个模块的纯 Verilog 版, 由 SV 经 sv2v 转换)
 # TB:       tb_nn_seq.sv (跑真实 YOLO ROM 的 112 个 op + band 循环/预取)
 # 判据:     "NN_SEQ_TB: PASS (legacy starts=112 cycles=336 | band ops=112 bands=4242 ...)"
-# 用时:     约 40 秒 (7.2 万拍)
+# 用时:     约 10 秒 (7.2 万拍)
 #
 # 依赖: Vivado 2018.3 xsim (xvlog/xelab/xsim)
 # 用法: powershell -ExecutionPolicy Bypass -File run_yolo_sim.ps1
@@ -16,6 +16,17 @@ $ErrorActionPreference = 'Stop'
 $X = 'D:\software\Learn\Xilinx\Vivado\2018.3\bin'
 if (-not (Test-Path "$X\xvlog.bat")) { Write-Host "找不到 Vivado xsim: $X"; exit 1 }
 
+# 清理 xsim 运行产物（保持目录干净，配合 .gitignore）
+function Invoke-Cleanup {
+    Get-ChildItem $PSScriptRoot -File -EA SilentlyContinue |
+        Where-Object { $_.Name -match '\.(log|jou|pb|wdb)$' -or $_.Name -match 'backup\.' } |
+        Remove-Item -Force -EA SilentlyContinue
+    foreach ($d in 'xsim.dir','Xil','.Xil') {
+        Remove-Item (Join-Path $PSScriptRoot $d) -Recurse -Force -EA SilentlyContinue
+    }
+}
+
+Invoke-Cleanup
 Push-Location $PSScriptRoot
 try {
     Write-Host "== [1/3] 编译 (包 -> RTL -> TB) =="
@@ -32,7 +43,10 @@ try {
     $out | ForEach-Object { Write-Host $_ }
 
     $pass = ($out | Select-String -Pattern 'NN_SEQ_TB: PASS' -Quiet)
-    if ($pass) { Write-Host "`n>>> YOLO 仿真 PASS" ; exit 0 }
-    else       { Write-Host "`n>>> YOLO 仿真 FAIL" ; exit 1 }
+    if ($pass) { Write-Host "`n>>> YOLO 仿真 PASS"; exit 0 }
+    else       { Write-Host "`n>>> YOLO 仿真 FAIL"; exit 1 }
 }
-finally { Pop-Location }
+finally {
+    Invoke-Cleanup
+    Pop-Location
+}
