@@ -1,0 +1,85 @@
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/alu.v" into library work
+INFO: [VRFC 10-311] analyzing module alu
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/bht.v" into library work
+INFO: [VRFC 10-311] analyzing module bht
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/branch_unit.v" into library work
+INFO: [VRFC 10-311] analyzing module branch_unit
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/btb.v" into library work
+INFO: [VRFC 10-311] analyzing module btb
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/camera_config.v" into library work
+INFO: [VRFC 10-311] analyzing module camera_config
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/camera_dvp_capture.v" into library work
+INFO: [VRFC 10-311] analyzing module camera_dvp_capture
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/camera_sccb.v" into library work
+INFO: [VRFC 10-311] analyzing module camera_sccb
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/control_unit.v" into library work
+INFO: [VRFC 10-311] analyzing module control_unit
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/core.v" into library work
+INFO: [VRFC 10-311] analyzing module core
+INFO: [VRFC 10-311] analyzing module dual_regfile
+INFO: [VRFC 10-311] analyzing module dual_forward
+INFO: [VRFC 10-311] analyzing module dual_muldiv
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/csr_file.v" into library work
+INFO: [VRFC 10-311] analyzing module csr_file
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/debug_keys.v" into library work
+INFO: [VRFC 10-311] analyzing module debug_keys
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/debug_uart.v" into library work
+INFO: [VRFC 10-311] analyzing module debug_uart
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/dmem.v" into library work
+INFO: [VRFC 10-311] analyzing module dmem
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/ex_mem_reg.v" into library work
+INFO: [VRFC 10-311] analyzing module ex_mem_reg
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/hazard_unit.v" into library work
+INFO: [VRFC 10-311] analyzing module hazard_unit
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/id_ex_reg.v" into library work
+INFO: [VRFC 10-311] analyzing module id_ex_reg
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/imem.v" into library work
+INFO: [VRFC 10-311] analyzing module imem
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/imm_gen.v" into library work
+INFO: [VRFC 10-311] analyzing module imm_gen
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/load_store_unit.v" into library work
+INFO: [VRFC 10-311] analyzing module load_store_unit
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/mem_wb_reg.v" into library work
+INFO: [VRFC 10-311] analyzing module mem_wb_reg
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/muldiv.v" into library work
+INFO: [VRFC 10-311] analyzing module muldiv
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/pc.v" into library work
+INFO: [VRFC 10-311] analyzing module pc
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/pg2l100h_clock.v" into library work
+INFO: [VRFC 10-311] analyzing module pg2l100h_clock
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/ras.v" into library work
+INFO: [VRFC 10-311] analyzing module ras
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/regfile.v" into library work
+INFO: [VRFC 10-311] analyzing module regfile
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/top_pg2l100h_vision.v" into library work
+INFO: [VRFC 10-311] analyzing module top_pg2l100h_vision
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/vision_cpu_clock.v" into library work
+INFO: [VRFC 10-311] analyzing module vision_cpu_clock
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/vision_dcache.v" into library work
+INFO: [VRFC 10-311] analyzing module vision_dcache
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/vision_ddr3_bist.v" into library work
+INFO: [VRFC 10-311] analyzing module vision_ddr3_bist
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/vision_ddr3_memory.v" into library work
+INFO: [VRFC 10-311] analyzing module vision_ddr3_memory
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/vision_ddr3_port.v" into library work
+INFO: [VRFC 10-311] analyzing module vision_ddr3_port
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/vision_framebuffer.v" into library work
+INFO: [VRFC 10-311] analyzing module vision_framebuffer
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/vision_lcd.v" into library work
+INFO: [VRFC 10-311] analyzing module vision_lcd
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/vision_mmio_bridge.v" into library work
+INFO: [VRFC 10-311] analyzing module vision_mmio_bridge
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/vision_npu.v" into library work
+INFO: [VRFC 10-311] analyzing module vision_npu
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/vision_servo_pwm.v" into library work
+INFO: [VRFC 10-311] analyzing module vision_servo_pwm
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/vision_snapshot.v" into library work
+INFO: [VRFC 10-311] analyzing module vision_snapshot
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/vision_soc.v" into library work
+INFO: [VRFC 10-311] analyzing module vision_soc
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/vision_video_bridge.v" into library work
+INFO: [VRFC 10-311] analyzing module vision_video_bridge
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "E:/pango/PDS_2022.2-SP6.1/arch/vendor/pango/verilog/simulation/GTP_GPLL.v" into library work
+INFO: [VRFC 10-311] analyzing module GTP_GPLL
+INFO: [VRFC 10-2263] Analyzing SystemVerilog file "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/sim/tb_board.v" into library work
+INFO: [VRFC 10-311] analyzing module tb_board

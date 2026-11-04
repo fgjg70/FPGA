@@ -1,0 +1,7 @@
+Running: xsim.dir/vision_board/xsimk.exe -runall -simmode gui -testplusarg cpu_clock_hz=95000000 -wdb vision_board.wdb -simrunnum 0 -socket 60160
+Design successfully loaded
+Design Loading Memory Usage: 9596 KB (Peak: 9596 KB)
+Design Loading CPU Usage: 15 ms
+Simulation completed
+Simulation Memory Usage: 11540 KB (Peak: 11540 KB)
+Simulation CPU Usage: 2671 ms

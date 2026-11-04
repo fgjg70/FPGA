@@ -1,0 +1,1 @@
+"tb_soc_hand" -s "vision_soc_hand" -debug "typical" 

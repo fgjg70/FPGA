@@ -1,0 +1,52 @@
+Vivado Simulator 2018.3
+Copyright 1986-1999, 2001-2018 Xilinx, Inc. All Rights Reserved.
+Running: E:/Vivado/2018.3/bin/unwrapped/win64.o/xelab.exe tb_board -s vision_board -debug typical 
+Multi-threading is on. Using 6 slave threads.
+Starting static elaboration
+WARNING: [VRFC 10-3645] port 'servo_pwm' remains unconnected for this instance [C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/sim/tb_board.v:26]
+WARNING: [VRFC 10-3645] port 'CLKOUT0N' remains unconnected for this instance [C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/pg2l100h_clock.v:9]
+WARNING: [VRFC 10-3645] port 'CLKOUT0N' remains unconnected for this instance [C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/rtl/vision_cpu_clock.v:9]
+Completed static elaboration
+Starting simulation data flow analysis
+Completed simulation data flow analysis
+Time Resolution for simulation is 1fs
+Compiling module work.GTP_GPLL(LOCK_MODE=0,STATIC_RATI...
+Compiling module work.pg2l100h_clock
+Compiling module work.GTP_GPLL(LOCK_MODE=0,STATIC_RATI...
+Compiling module work.vision_cpu_clock
+Compiling module work.camera_sccb(CLOCK_HZ=50000000,BU...
+Compiling module work.camera_config(CLOCK_HZ=50000000,...
+Compiling module work.camera_dvp_capture
+Compiling module work.vision_framebuffer
+Compiling module work.vision_servo_pwm_default
+Compiling module work.vision_dcache(DDR_PRESENT=0)
+Compiling module work.vision_mmio_bridge(WAIT_PERIPHER...
+Compiling module work.imem(BASE=32'b100000000000000000...
+Compiling module work.control_unit
+Compiling module work.imm_gen
+Compiling module work.id_ex_reg
+Compiling module work.alu(ENABLE_AMO=0)
+Compiling module work.ex_mem_reg
+Compiling module work.mem_wb_reg
+Compiling module work.dual_forward
+Compiling module work.pc(XLEN=32'b0100000,RESET_PC=32'...
+Compiling module work.bht(IDX_BITS=32'b01101,GH_BITS=3...
+Compiling module work.btb(PC_TOP=32'b010000,PC_BASE=32...
+Compiling module work.dual_regfile(XLEN=32'b0100000)
+Compiling module work.alu(XLEN=32'b0100000,ENABLE_AMO=...
+Compiling module work.dual_muldiv(XLEN=32'b0100000)
+Compiling module work.branch_unit(XLEN=32'b0100000)
+Compiling module work.csr_file
+Compiling module work.load_store_unit
+Compiling module work.dmem(BASE=32'b100100000000000000...
+Compiling module work.core(EXTERNAL_WAIT=1,IMEM_BYTES=...
+Compiling module work.debug_keys(DEBOUNCE_CYCLES=6)
+Compiling module work.debug_uart(CLOCK_HZ=50000000)
+Compiling module work.vision_snapshot
+Compiling module work.vision_npu
+Compiling module work.vision_soc(KEY_DEBOUNCE_CYCLES=6...
+Compiling module work.vision_video_bridge(PAYLOAD_BITS...
+Compiling module work.vision_lcd
+Compiling module work.top_pg2l100h_vision
+Compiling module work.tb_board
+Built simulation snapshot vision_board

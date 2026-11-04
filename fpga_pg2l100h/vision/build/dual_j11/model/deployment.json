@@ -1,0 +1,57 @@
+{
+  "banks": [
+    {
+      "name": "nuts",
+      "available": false,
+      "model_sha256": null
+    },
+    {
+      "name": "gesture",
+      "available": true,
+      "model_sha256": "2872a84f4d6aa1d62dd7082b002a00ece66a819463af79ff668193c7e78343bf"
+    }
+  ],
+  "padded_weight_rom_bytes": 65536,
+  "padded_bias_rom_bytes": 2048,
+  "parallel_mac_lanes": 4,
+  "runtime_mode_register": "0xa100005c",
+  "available_mode_mask": 2,
+  "capabilities_register": "0xa1000064",
+  "application_modes": [
+    {
+      "id": 0,
+      "name": "nuts",
+      "model_bank": null,
+      "available": false,
+      "classes": [],
+      "reason": "source ONNX exists; no calibrated FPGA student/data supplied"
+    },
+    {
+      "id": 1,
+      "name": "gesture",
+      "model_bank": 1,
+      "available": true,
+      "classes": [
+        "hand 1",
+        "hand 2",
+        "hand 3",
+        "hand 4",
+        "hand 5"
+      ],
+      "reason": "compact INT8 bank selected; board accuracy unverified"
+    }
+  ],
+  "rom_sha256": {
+    "weights.hex": "50348d9bb890255b979e33d43b9acde9ca76531004a4ad02e704da33e960ba73",
+    "biases.hex": "0fa2fc7e5dcee20441f0b5f89a1739c0f1ca9cc03a0300e554ad6de22fbab158",
+    "shifts.hex": "d62c9eb1d202a90114cafa704d996c2403f1cc68005dd3c161bb04f4192b0b57",
+    "weights_0.hex": "00862aa62682f24d571af07fc2425b589d1c382ff1683c038edf2d8f0abe03b5",
+    "biases_0.hex": "78b85ed8b2b320fecb904062ebf96d40f4c5f5da391db68bd8c0267d6379318e",
+    "weights_1.hex": "f8367f602d48775bd5bf1863efc5eed8345c03c61a427425e82925dc1c3339dc",
+    "biases_1.hex": "7fce30c820bdff0ee6d4e9dfe645c6f21a33ec65ae96c991c932e015650349a1",
+    "weights_2.hex": "de85c36116bd657e4dc8b7645b77ac3846e64e07126cc19f64a25165ca14347f",
+    "biases_2.hex": "94ef013fc439f1fc5a9c9f8cce73540cea9d37b9512858c2e8b1f7a7b139d1c0",
+    "weights_3.hex": "52f711826a50e9c1cad9783ba56b78e84c5dc1ec2224680995813f9b095c1f45",
+    "biases_3.hex": "b17ca14db6f2463f26ecd98e61c821bd81a31e6e6517edc8948af66859f7e7dd"
+  }
+}

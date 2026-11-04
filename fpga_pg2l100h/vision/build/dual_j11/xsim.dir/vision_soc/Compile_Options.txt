@@ -1,0 +1,1 @@
+"tb_soc" -s "vision_soc" -debug "typical" 

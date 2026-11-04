@@ -1,0 +1,234 @@
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Detailed RTL Component Info :
+-----Module Name :
+                    top_pg2l100h_vision
+
+-----Multipliers :
+                    4 x 2     Multipliers := 1
+                    6 x 2     Multipliers := 2
+                    6 x 6     Multipliers := 1
+                    7 x 2     Multipliers := 1
+                    8 x 8     Multipliers := 4
+                    10 x 6     Multipliers := 1
+                    13 x 6     Multipliers := 1
+                    14 x 7     Multipliers := 1
+                    14 x 8     Multipliers := 1
+                    17 x 17     Multipliers := 4
+
+-----Adders :
+
+APM: Final Mapping Report
+|---------------------------------|-------------------------------------------|--------------|--------------|---------|---------|---------|---------|---------|---------|---------|---------|--------------|--------------|--------------|--------------|--------------|--------------|
+| APM Inst Name                   | APM Cascade                               | X Size       | Y Size       | Z Size  | XB Size | P Size  | X_REG   | Y_REG   | Z_REG   | XB_REG  | P_REG   | MULT_REG     | PREADD_REG   | USE_PREADD   | USE_POSTADD  | USE_MULT     | Primitives   |
+|---------------------------------|-------------------------------------------|--------------|--------------|---------|---------|---------|---------|---------|---------|---------|---------|--------------|--------------|--------------|--------------|--------------|--------------|
+| system/processor/u_muldiv/N16   | /                                         | 16(unsigned) | 16(unsigned) | /       | /       | 34      | 0       | 0       | /       | /       | 0       | 1            | 0            | 0            | 0            | 1            | GTP_APM_E2   |
+|---------------------------------|-------------------------------------------|--------------|--------------|---------|---------|---------|---------|---------|---------|---------|---------|--------------|--------------|--------------|--------------|--------------|--------------|
+| system/processor/u_muldiv/N19   | /                                         | 16(unsigned) | 17(signed)   | /       | /       | 34      | 0       | 0       | /       | /       | 0       | 1            | 0            | 0            | 0            | 1            | GTP_APM_E2   |
+|---------------------------------|-------------------------------------------|--------------|--------------|---------|---------|---------|---------|---------|---------|---------|---------|--------------|--------------|--------------|--------------|--------------|--------------|
+| system/processor/u_muldiv/N22   | /                                         | 17(signed)   | 16(unsigned) | /       | /       | 34      | 0       | 0       | /       | /       | 0       | 1            | 0            | 0            | 0            | 1            | GTP_APM_E2   |
+|---------------------------------|-------------------------------------------|--------------|--------------|---------|---------|---------|---------|---------|---------|---------|---------|--------------|--------------|--------------|--------------|--------------|--------------|
+| system/processor/u_muldiv/N25   | /                                         | 17(signed)   | 17(signed)   | /       | /       | 32      | 0       | 0       | /       | /       | 0       | 1            | 0            | 0            | 0            | 1            | GTP_APM_E2   |
+|---------------------------------|-------------------------------------------|--------------|--------------|---------|---------|---------|---------|---------|---------|---------|---------|--------------|--------------|--------------|--------------|--------------|--------------|
+| system/accelerator/N228         | /                                         | 14(signed)   | 6(unsigned)  | 6       | /       | 14      | 0       | 0       | 1       | /       | 0       | 0            | 0            | 0            | 1            | 1            | GTP_APM_E2   |
+|---------------------------------|-------------------------------------------|--------------|--------------|---------|---------|---------|---------|---------|---------|---------|---------|--------------|--------------|--------------|--------------|--------------|--------------|
+| system/accelerator/N225         | /                                         | 10(signed)   | 7(unsigned)  | 10      | /       | 14      | 0       | 0       | 0       | /       | 0       | 0            | 0            | 0            | 1            | 1            | GTP_APM_E2   |
+|---------------------------------|-------------------------------------------|--------------|--------------|---------|---------|---------|---------|---------|---------|---------|---------|--------------|--------------|--------------|--------------|--------------|--------------|
+| system/accelerator/N255         | /                                         | 13(unsigned) | 6(unsigned)  | 7       | /       | 13      | 0       | 0       | 0       | /       | 0       | 0            | 0            | 0            | 1            | 1            | GTP_APM_E2   |
+|---------------------------------|-------------------------------------------|--------------|--------------|---------|---------|---------|---------|---------|---------|---------|---------|--------------|--------------|--------------|--------------|--------------|--------------|
+| system/accelerator/N52          | /                                         | 8(signed)    | 8(signed)    | 32      | /       | 32      | 0       | 0       | 1       | /       | 0       | 0            | 0            | 0            | 1            | 1            | GTP_APM_E2   |
+|---------------------------------|-------------------------------------------|--------------|--------------|---------|---------|---------|---------|---------|---------|---------|---------|--------------|--------------|--------------|--------------|--------------|--------------|
+| system/accelerator/N84          | /                                         | 8(signed)    | 8(signed)    | 32      | /       | 32      | 0       | 0       | 1       | /       | 0       | 0            | 0            | 0            | 1            | 1            | GTP_APM_E2   |
+|---------------------------------|-------------------------------------------|--------------|--------------|---------|---------|---------|---------|---------|---------|---------|---------|--------------|--------------|--------------|--------------|--------------|--------------|
+| system/accelerator/N116         | /                                         | 8(signed)    | 8(signed)    | 32      | /       | 32      | 0       | 0       | 1       | /       | 0       | 0            | 0            | 0            | 1            | 1            | GTP_APM_E2   |
+|---------------------------------|-------------------------------------------|--------------|--------------|---------|---------|---------|---------|---------|---------|---------|---------|--------------|--------------|--------------|--------------|--------------|--------------|
+| system/accelerator/N148         | /                                         | 8(signed)    | 8(signed)    | 32      | /       | 32      | 0       | 0       | 1       | /       | 0       | 0            | 0            | 0            | 1            | 1            | GTP_APM_E2   |
+|---------------------------------|-------------------------------------------|--------------|--------------|---------|---------|---------|---------|---------|---------|---------|---------|--------------|--------------|--------------|--------------|--------------|--------------|
+| system/accelerator/N244         | /                                         | 9(unsigned)  | 6(unsigned)  | 13      | 2       | 13      | 0       | 0       | 0       | 1       | 0       | 0            | 0            | 1            | 1            | 1            | GTP_APM_E2   |
+|---------------------------------|-------------------------------------------|--------------|--------------|---------|---------|---------|---------|---------|---------|---------|---------|--------------|--------------|--------------|--------------|--------------|--------------|
+| system/accelerator/N250         | /                                         | 6(unsigned)  | 6(unsigned)  | 6       | /       | 13      | 1       | 0       | 1       | /       | 0       | 0            | 0            | 0            | 1            | 1            | GTP_APM_E2   |
+|---------------------------------|-------------------------------------------|--------------|--------------|---------|---------|---------|---------|---------|---------|---------|---------|--------------|--------------|--------------|--------------|--------------|--------------|
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Detailed RTL Component Info :
+-----Module Name :
+                    top_pg2l100h_vision
+
+-----ROMs :
+            16K Bit    (128 x 128 bit)          ROMs := 1
+            5K Bit    (1024 x 5 bit)          ROMs := 1
+            480K Bit    (16384 x 30 bit)          ROMs := 2
+            512K Bit    (16384 x 32 bit)          ROMs := 1
+
+-----RAMs :
+            256 Bit    (32 x 8 bit)          RAMs := 1
+            5K Bit    (256 x 20 bit)          RAMs := 1
+            32K Bit    (256 x 128 bit)          RAMs := 1
+            512 Bit    (512 x 1 bit)          RAMs := 2
+            2K Bit    (512 x 5 bit)          RAMs := 1
+            8K Bit    (512 x 16 bit)          RAMs := 1
+            16K Bit    (512 x 32 bit)          RAMs := 1
+            32K Bit    (4096 x 8 bit)          RAMs := 4
+            16K Bit    (8192 x 2 bit)          RAMs := 1
+            64K Bit    (8192 x 8 bit)          RAMs := 1
+            128K Bit    (16384 x 8 bit)          RAMs := 2
+            1024K Bit    (65536 x 16 bit)          RAMs := 1
+
+Distributed RAM and Block RAM: Final Mapping Report
+|----------------------------------------------------|------------------------|-------------------|---------|
+| DPRAM Inst Name                                    | Size (Depth x Width)   | Primitives        | Count   |
+|----------------------------------------------------|------------------------|-------------------|---------|
+| system/cache/data_lines                            | 256 x 128              |                   |         |
+|                                                    | 256 x 1                | GTP_RAM256X1SP    | 128     |
+|----------------------------------------------------|------------------------|-------------------|---------|
+| system/rx_fifo                                     | 32 x 8                 |                   |         |
+|                                                    | 32 x 2                 | GTP_RAM32X2DP     | 4       |
+|----------------------------------------------------|------------------------|-------------------|---------|
+
+|-------------------------------------------------------|------------------------|-------------------|-------------------|-------------------|-------------------|
+| Inst Name                                             | Size (Depth x Width)   | Write_Mode_A      | Write_Mode_B      | Ram_Mode          | Primitives        |
+|-------------------------------------------------------|------------------------|-------------------|-------------------|-------------------|-------------------|
+| framebuffer/memory                                    | 64 K x 16              |                   |                   |                   |                   |
+|             memory_14_lower                           | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_13_lower                           | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_12_lower                           | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_11_lower                           | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_2_lower                            | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_3_lower                            | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_4_lower                            | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_5_lower                            | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_6_lower                            | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_7_lower                            | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_1_lower                            | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_8_lower                            | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_9_lower                            | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_10_lower                           | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_1_upper                            | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_2_upper                            | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_3_upper                            | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_4_upper                            | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_5_upper                            | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_6_upper                            | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_7_upper                            | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_8_upper                            | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_9_upper                            | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_10_upper                           | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_11_upper                           | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_12_upper                           | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_13_upper                           | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_14_upper                           | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_15_upper                           | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_15_lower                           | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_0_upper                            | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|             memory_0_lower                            | 32 K x 1               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|-------------------------------------------------------|------------------------|-------------------|-------------------|-------------------|-------------------|
+| system/accelerator/activation_first                   | 16 K x 8               |                   |                   |                   |                   |
+|                    activation_first_0                 | 16 K x 2               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|                    activation_first_1                 | 16 K x 2               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|                    activation_first_2                 | 16 K x 2               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|                    activation_first_3                 | 16 K x 2               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|-------------------------------------------------------|------------------------|-------------------|-------------------|-------------------|-------------------|
+| system/accelerator/activation_second                  | 8 K x 8                |                   |                   |                   |                   |
+|                    activation_second_0                | 8 K x 4                | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|                    activation_second_1                | 8 K x 4                | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|-------------------------------------------------------|------------------------|-------------------|-------------------|-------------------|-------------------|
+| system/accelerator/mac_lanes[0].biases_concat_4       | 128 x 128              |                   |                   |                   |                   |
+|                    mac_lanes[0].biases_concat_4_0     | 128 x 64               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                    mac_lanes[0].biases_concat_4_1     | 128 x 64               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|-------------------------------------------------------|------------------------|-------------------|-------------------|-------------------|-------------------|
+| system/accelerator/mac_lanes[0].weights_concat_4      | 16 K x 32              |                   |                   |                   |                   |
+|                    mac_lanes[0].weights_concat_4_0    | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                    mac_lanes[0].weights_concat_4_1    | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                    mac_lanes[0].weights_concat_4_2    | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                    mac_lanes[0].weights_concat_4_3    | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                    mac_lanes[0].weights_concat_4_4    | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                    mac_lanes[0].weights_concat_4_5    | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                    mac_lanes[0].weights_concat_4_6    | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                    mac_lanes[0].weights_concat_4_7    | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                    mac_lanes[0].weights_concat_4_8    | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                    mac_lanes[0].weights_concat_4_9    | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                    mac_lanes[0].weights_concat_4_10   | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                    mac_lanes[0].weights_concat_4_11   | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                    mac_lanes[0].weights_concat_4_12   | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                    mac_lanes[0].weights_concat_4_13   | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                    mac_lanes[0].weights_concat_4_14   | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                    mac_lanes[0].weights_concat_4_15   | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|-------------------------------------------------------|------------------------|-------------------|-------------------|-------------------|-------------------|
+| system/accelerator/results                            | 512 x 32               |                   |                   |                   |                   |
+|                    results                            | 512 x 32               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM18K_E1     |
+|-------------------------------------------------------|------------------------|-------------------|-------------------|-------------------|-------------------|
+| system/cache/data_lines                               | 256 x 128              |                   |                   |                   |                   |
+|              data_lines_b_0                           | 256 x 64               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|              data_lines_b_1                           | 256 x 64               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|-------------------------------------------------------|------------------------|-------------------|-------------------|-------------------|-------------------|
+| system/cache/tag_lines                                | 256 x 20               |                   |                   |                   |                   |
+|              tag_lines                                | 256 x 20               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM18K_E1     |
+|-------------------------------------------------------|------------------------|-------------------|-------------------|-------------------|-------------------|
+| system/processor/u_btb/tgt                            | 512 x 16               |                   |                   |                   |                   |
+| system/processor/u_btb/tag                            | 512 x 5                |                   |                   |                   |                   |
+| system/processor/u_btb/is_cond                        | 512 x 1                |                   |                   |                   |                   |
+| system/processor/u_btb/vld                            | 512 x 1                |                   |                   |                   |                   |
+|                        tgt_bwe_4                      | 512 x 23               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|-------------------------------------------------------|------------------------|-------------------|-------------------|-------------------|-------------------|
+| system/processor/u_btb/u_bht/mem                      | 8 K x 2                |                   |                   |                   |                   |
+|                              mem                      | 8 K x 2                | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM18K_E1     |
+|-------------------------------------------------------|------------------------|-------------------|-------------------|-------------------|-------------------|
+| system/processor/u_dmem/mem                           | 4 K x 8                |                   |                   |                   |                   |
+|                         mem                           | 4 K x 8                | READ_BEFORE_WRITE | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|-------------------------------------------------------|------------------------|-------------------|-------------------|-------------------|-------------------|
+| system/processor/u_dmem/mem_1                         | 4 K x 8                |                   |                   |                   |                   |
+|                         mem_1                         | 4 K x 8                | READ_BEFORE_WRITE | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|-------------------------------------------------------|------------------------|-------------------|-------------------|-------------------|-------------------|
+| system/processor/u_dmem/mem_2                         | 4 K x 8                |                   |                   |                   |                   |
+|                         mem_2                         | 4 K x 8                | READ_BEFORE_WRITE | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|-------------------------------------------------------|------------------------|-------------------|-------------------|-------------------|-------------------|
+| system/processor/u_dmem/mem_3                         | 4 K x 8                |                   |                   |                   |                   |
+|                         mem_3                         | 4 K x 8                | READ_BEFORE_WRITE | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|-------------------------------------------------------|------------------------|-------------------|-------------------|-------------------|-------------------|
+| system/processor/u_imem/mem_1                         | 16 K x 30              |                   |                   |                   |                   |
+|                         mem_1_0                       | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                         mem_1_1                       | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                         mem_1_2                       | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                         mem_1_3                       | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                         mem_1_4                       | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                         mem_1_5                       | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                         mem_1_6                       | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                         mem_1_7                       | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                         mem_1_8                       | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                         mem_1_9                       | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                         mem_1_10                      | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                         mem_1_11                      | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                         mem_1_12                      | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                         mem_1_13                      | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                         mem_1_14                      | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|-------------------------------------------------------|------------------------|-------------------|-------------------|-------------------|-------------------|
+| system/processor/u_imem1/mem_1                        | 16 K x 30              |                   |                   |                   |                   |
+|                          mem_1_0                      | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                          mem_1_1                      | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                          mem_1_2                      | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                          mem_1_3                      | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                          mem_1_4                      | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                          mem_1_5                      | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                          mem_1_6                      | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                          mem_1_7                      | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                          mem_1_8                      | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                          mem_1_9                      | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                          mem_1_10                     | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                          mem_1_11                     | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                          mem_1_12                     | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                          mem_1_13                     | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|                          mem_1_14                     | 16 K x 2               | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM36K_E1     |
+|-------------------------------------------------------|------------------------|-------------------|-------------------|-------------------|-------------------|
+| system/sample_memory                                  | 16 K x 8               |                   |                   |                   |                   |
+|        sample_memory_0                                | 16 K x 2               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|        sample_memory_1                                | 16 K x 2               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|        sample_memory_2                                | 16 K x 2               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|        sample_memory_3                                | 16 K x 2               | NORMAL_WRITE      | NORMAL_WRITE      | SIMPLE_DUAL_PORT  | GTP_DRM36K_E1     |
+|-------------------------------------------------------|------------------------|-------------------|-------------------|-------------------|-------------------|
+| video/font_1                                          | 1 K x 5                |                   |                   |                   |                   |
+|       font_1                                          | 1 K x 5                | NORMAL_WRITE      | /                 | SINGLE_PORT       | GTP_DRM18K_E1     |
+|-------------------------------------------------------|------------------------|-------------------|-------------------|-------------------|-------------------|
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+

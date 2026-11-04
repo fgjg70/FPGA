@@ -1,0 +1,224 @@
+##### Written on 2026/11/04 11:29:56 ###############################
+
+
+##### INFO ##################################################
+
+Current device : 
+	PG2L100H-6FBG676
+
+Top Module : 
+	top_pg2l100h_vision
+
+Constraint File(s) : 
+	C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/pg2l100h_camera_lcd.fdc
+
+##### SUMMARY ######################################################
+
+Found 0 error(s), 11 critical warning(s), 0 warning(s), out of 390 constraint(s)
+
+
+Inapplicable constraints(except overwritten constraints):
+********************************************
+
+define_attribute {p:reset_n} {PAP_IO_LOC} {G25}
+	C: ConstraintEditor-2002: [C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/pg2l100h_camera_lcd.fdc(line number: 31)] | Port reset_n has been placed at location G25, whose type is share pin.
+
+define_attribute {p:keys_n[0]} {PAP_IO_LOC} {K25}
+	C: ConstraintEditor-2002: [C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/pg2l100h_camera_lcd.fdc(line number: 36)] | Port keys_n[0] has been placed at location K25, whose type is share pin.
+
+define_attribute {p:keys_n[1]} {PAP_IO_LOC} {K26}
+	C: ConstraintEditor-2002: [C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/pg2l100h_camera_lcd.fdc(line number: 41)] | Port keys_n[1] has been placed at location K26, whose type is share pin.
+
+define_attribute {p:keys_n[2]} {PAP_IO_LOC} {P26}
+	C: ConstraintEditor-2002: [C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/pg2l100h_camera_lcd.fdc(line number: 46)] | Port keys_n[2] has been placed at location P26, whose type is share pin.
+
+define_attribute {p:keys_n[3]} {PAP_IO_LOC} {R26}
+	C: ConstraintEditor-2002: [C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/pg2l100h_camera_lcd.fdc(line number: 51)] | Port keys_n[3] has been placed at location R26, whose type is share pin.
+
+define_attribute {p:led[0]} {PAP_IO_LOC} {N23}
+	C: ConstraintEditor-2002: [C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/pg2l100h_camera_lcd.fdc(line number: 56)] | Port led[0] has been placed at location N23, whose type is share pin.
+
+define_attribute {p:led[1]} {PAP_IO_LOC} {N24}
+	C: ConstraintEditor-2002: [C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/pg2l100h_camera_lcd.fdc(line number: 62)] | Port led[1] has been placed at location N24, whose type is share pin.
+
+define_attribute {p:uart_rxd} {PAP_IO_LOC} {L25}
+	C: ConstraintEditor-2002: [C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/pg2l100h_camera_lcd.fdc(line number: 86)] | Port uart_rxd has been placed at location L25, whose type is share pin.
+
+define_attribute {p:touch_mosi} {PAP_IO_LOC} {N18}
+	C: ConstraintEditor-2002: [C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/pg2l100h_camera_lcd.fdc(line number: 271)] | Port touch_mosi has been placed at location N18, whose type is share pin.
+
+
+Constraints with issues:
+********************************************
+
+get_cells {capture/pclk_sync[0] capture/href_sync[0] capture/vsync_sync[0] capture/data_meta[*]}
+	C: Timing-4005: Instance 'capture/pclk_sync[0]' is not found in current design.
+	C: Timing-4005: Instance 'capture/href_sync[0]' is not found in current design.
+	C: Timing-4005: Instance 'capture/vsync_sync[0]' is not found in current design.
+
+
+Issues without commands:
+********************************************
+
+C: ConstraintEditor-2009: p:cam_sda is lack of PAP_IO_DRIVE, OUTPUT or INOUT PORT had better set PAP_IO_DRIVE, the optional value is {4, 8, 12, 16}.
+C: ConstraintEditor-2009: p:cam_sda is lack of PAP_IO_SLEW, OUTPUT or INOUT PORT had better set PAP_IO_SLEW, the optional value is {FAST, SLOW}.
+
+Unconstrained ports:
+********************************************
+
+
+Constraints with matching wildcard expressions:
+********************************************
+
+set_false_path -from [get_ports {cam_pclk cam_href cam_vsync cam_data[*]}] -to [get_cells {capture/pclk_sync[0] capture/href_sync[0] capture/vsync_sync[0] capture/data_meta[*]}]
+	I: The pattern 'cam_data[*]' in command 'get_ports {cam_pclk cam_href cam_vsync cam_data[*]}' match 8 objects below:
+	I: port cam_data[0]
+	I: port cam_data[1]
+	I: port cam_data[2]
+	I: port cam_data[3]
+	I: port cam_data[4]
+	I: port cam_data[5]
+	I: port cam_data[6]
+	I: port cam_data[7]
+
+set_false_path -from [get_ports {reset_n keys_n[*] uart_rxd cam_sda touch_busy}]
+	I: The pattern 'keys_n[*]' in command 'get_ports {reset_n keys_n[*] uart_rxd cam_sda touch_busy}' match 4 objects below:
+	I: port keys_n[0]
+	I: port keys_n[1]
+	I: port keys_n[2]
+	I: port keys_n[3]
+
+set_false_path -to [get_pins {cpu_reset_sync[*]/P}]
+	I: The pattern 'cpu_reset_sync[*]/P' in command 'get_pins {cpu_reset_sync[*]/P}' match 1 objects below:
+	I: pin cpu_reset_sync[2:0]/P
+
+set_false_path -to [get_pins {video_reset_sync[*]/P framebuffer/reset_sync[*]/P}]
+	I: The pattern 'video_reset_sync[*]/P' in command 'get_pins {video_reset_sync[*]/P framebuffer/reset_sync[*]/P}' match 1 objects below:
+	I: pin video_reset_sync[2:0]/P
+	I: The pattern 'framebuffer/reset_sync[*]/P' in command 'get_pins {video_reset_sync[*]/P framebuffer/reset_sync[*]/P}' match 1 objects below:
+	I: pin framebuffer/reset_sync[1:0]/P
+
+set_false_path -to [get_ports {led[*] uart_txd touch_sclk touch_cs_n touch_mosi cam_scl cam_sda cam_reset_n cam_pwdn}]
+	I: The pattern 'led[*]' in command 'get_ports {led[*] uart_txd touch_sclk touch_cs_n touch_mosi cam_scl cam_sda cam_reset_n cam_pwdn}' match 4 objects below:
+	I: port led[0]
+	I: port led[1]
+	I: port led[2]
+	I: port led[3]
+
+set_false_path -to [get_ports {servo_pwm[*]}]
+	I: The pattern 'servo_pwm[*]' in command 'get_ports {servo_pwm[*]}' match 7 objects below:
+	I: port servo_pwm[0]
+	I: port servo_pwm[1]
+	I: port servo_pwm[2]
+	I: port servo_pwm[3]
+	I: port servo_pwm[4]
+	I: port servo_pwm[5]
+	I: port servo_pwm[6]
+
+set_max_delay 10.5263 -datapath_only -from [get_cells {system/cpu_bus/held_response[*]}] -to [get_cells {system/cpu_bus/response_data[*]}]
+	I: The pattern 'system/cpu_bus/held_response[*]' in command 'get_cells {system/cpu_bus/held_response[*]}' match 1 objects below:
+	I: instance system/cpu_bus/held_response[31:0]
+
+set_max_delay 10.5263 -datapath_only -from [get_cells {system/cpu_bus/held_response[*]}] -to [get_cells {system/cpu_bus/response_data[*]}]
+	I: The pattern 'system/cpu_bus/response_data[*]' in command 'get_cells {system/cpu_bus/response_data[*]}' match 1 objects below:
+	I: instance system/cpu_bus/response_data[31:0]
+
+set_max_delay 20 -datapath_only -from [get_cells {system/cpu_bus/held_request[*]}] -to [get_cells {system/cpu_bus/active_request[*]}]
+	I: The pattern 'system/cpu_bus/held_request[*]' in command 'get_cells {system/cpu_bus/held_request[*]}' match 1 objects below:
+	I: instance system/cpu_bus/held_request[69:0]
+
+set_max_delay 20 -datapath_only -from [get_cells {system/cpu_bus/held_request[*]}] -to [get_cells {system/cpu_bus/active_request[*]}]
+	I: The pattern 'system/cpu_bus/active_request[*]' in command 'get_cells {system/cpu_bus/active_request[*]}' match 1 objects below:
+	I: instance system/cpu_bus/active_request[69:0]
+
+set_max_delay 20 -datapath_only -from [get_cells {video_bridge/held_payload[*]}] -to [get_cells {video_bridge/pending_payload[*]}]
+	I: The pattern 'video_bridge/held_payload[*]' in command 'get_cells {video_bridge/held_payload[*]}' match 1 objects below:
+	I: instance video_bridge/held_payload[388:0]
+
+set_max_delay 20 -datapath_only -from [get_cells {video_bridge/held_payload[*]}] -to [get_cells {video_bridge/pending_payload[*]}]
+	I: The pattern 'video_bridge/pending_payload[*]' in command 'get_cells {video_bridge/pending_payload[*]}' match 1 objects below:
+	I: instance video_bridge/pending_payload[388:0]
+
+set_min_delay 0 -from [get_cells {system/cpu_bus/held_request[*]}] -to [get_cells {system/cpu_bus/active_request[*]}]
+	I: The pattern 'system/cpu_bus/held_request[*]' in command 'get_cells {system/cpu_bus/held_request[*]}' match 1 objects below:
+	I: instance system/cpu_bus/held_request[69:0]
+
+set_min_delay 0 -from [get_cells {system/cpu_bus/held_request[*]}] -to [get_cells {system/cpu_bus/active_request[*]}]
+	I: The pattern 'system/cpu_bus/active_request[*]' in command 'get_cells {system/cpu_bus/active_request[*]}' match 1 objects below:
+	I: instance system/cpu_bus/active_request[69:0]
+
+set_min_delay 0 -from [get_cells {system/cpu_bus/held_response[*]}] -to [get_cells {system/cpu_bus/response_data[*]}]
+	I: The pattern 'system/cpu_bus/held_response[*]' in command 'get_cells {system/cpu_bus/held_response[*]}' match 1 objects below:
+	I: instance system/cpu_bus/held_response[31:0]
+
+set_min_delay 0 -from [get_cells {system/cpu_bus/held_response[*]}] -to [get_cells {system/cpu_bus/response_data[*]}]
+	I: The pattern 'system/cpu_bus/response_data[*]' in command 'get_cells {system/cpu_bus/response_data[*]}' match 1 objects below:
+	I: instance system/cpu_bus/response_data[31:0]
+
+set_min_delay 0 -from [get_cells {video_bridge/held_payload[*]}] -to [get_cells {video_bridge/pending_payload[*]}]
+	I: The pattern 'video_bridge/held_payload[*]' in command 'get_cells {video_bridge/held_payload[*]}' match 1 objects below:
+	I: instance video_bridge/held_payload[388:0]
+
+set_min_delay 0 -from [get_cells {video_bridge/held_payload[*]}] -to [get_cells {video_bridge/pending_payload[*]}]
+	I: The pattern 'video_bridge/pending_payload[*]' in command 'get_cells {video_bridge/pending_payload[*]}' match 1 objects below:
+	I: instance video_bridge/pending_payload[388:0]
+
+set_output_delay -clock [get_clocks {lcd_pixel}] -max 10 [get_ports {lcd_r[*] lcd_g[*] lcd_b[*] lcd_hsync lcd_vsync lcd_de}]
+	I: The pattern 'lcd_r[*]' in command 'get_ports {lcd_r[*] lcd_g[*] lcd_b[*] lcd_hsync lcd_vsync lcd_de}' match 8 objects below:
+	I: port lcd_r[0]
+	I: port lcd_r[1]
+	I: port lcd_r[2]
+	I: port lcd_r[3]
+	I: port lcd_r[4]
+	I: port lcd_r[5]
+	I: port lcd_r[6]
+	I: port lcd_r[7]
+	I: The pattern 'lcd_g[*]' in command 'get_ports {lcd_r[*] lcd_g[*] lcd_b[*] lcd_hsync lcd_vsync lcd_de}' match 8 objects below:
+	I: port lcd_g[0]
+	I: port lcd_g[1]
+	I: port lcd_g[2]
+	I: port lcd_g[3]
+	I: port lcd_g[4]
+	I: port lcd_g[5]
+	I: port lcd_g[6]
+	I: port lcd_g[7]
+	I: The pattern 'lcd_b[*]' in command 'get_ports {lcd_r[*] lcd_g[*] lcd_b[*] lcd_hsync lcd_vsync lcd_de}' match 8 objects below:
+	I: port lcd_b[0]
+	I: port lcd_b[1]
+	I: port lcd_b[2]
+	I: port lcd_b[3]
+	I: port lcd_b[4]
+	I: port lcd_b[5]
+	I: port lcd_b[6]
+	I: port lcd_b[7]
+
+set_output_delay -clock [get_clocks {lcd_pixel}] -min 2 [get_ports {lcd_r[*] lcd_g[*] lcd_b[*] lcd_hsync lcd_vsync lcd_de}]
+	I: The pattern 'lcd_r[*]' in command 'get_ports {lcd_r[*] lcd_g[*] lcd_b[*] lcd_hsync lcd_vsync lcd_de}' match 8 objects below:
+	I: port lcd_r[0]
+	I: port lcd_r[1]
+	I: port lcd_r[2]
+	I: port lcd_r[3]
+	I: port lcd_r[4]
+	I: port lcd_r[5]
+	I: port lcd_r[6]
+	I: port lcd_r[7]
+	I: The pattern 'lcd_g[*]' in command 'get_ports {lcd_r[*] lcd_g[*] lcd_b[*] lcd_hsync lcd_vsync lcd_de}' match 8 objects below:
+	I: port lcd_g[0]
+	I: port lcd_g[1]
+	I: port lcd_g[2]
+	I: port lcd_g[3]
+	I: port lcd_g[4]
+	I: port lcd_g[5]
+	I: port lcd_g[6]
+	I: port lcd_g[7]
+	I: The pattern 'lcd_b[*]' in command 'get_ports {lcd_r[*] lcd_g[*] lcd_b[*] lcd_hsync lcd_vsync lcd_de}' match 8 objects below:
+	I: port lcd_b[0]
+	I: port lcd_b[1]
+	I: port lcd_b[2]
+	I: port lcd_b[3]
+	I: port lcd_b[4]
+	I: port lcd_b[5]
+	I: port lcd_b[6]
+	I: port lcd_b[7]
+
+

@@ -1,0 +1,27 @@
+#-----------------------------------------------------------
+# xsim v2018.3 (64-bit)
+# SW Build 2405991 on Thu Dec  6 23:38:27 MST 2018
+# IP Build 2404404 on Fri Dec  7 01:43:56 MST 2018
+# Start of session at: Wed Nov  4 11:43:28 2026
+# Process ID: 24960
+# Current directory: C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11
+# Command line: xsim.exe -mode tcl -source {xsim.dir/vision_soc/xsim_script.tcl}
+# Log file: C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11/xsim.log
+# Journal file: C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/build/dual_j11\xsim.jou
+#-----------------------------------------------------------
+source xsim.dir/vision_soc/xsim_script.tcl
+# xsim {vision_soc} -testplusarg cpu_clock_hz=95000000 -autoloadwcfg -runall
+Vivado Simulator 2018.3
+Time resolution is 1 ps
+run -all
+TRACE soc cycles=250000 pc=800088c4 busy=0 done=0 overlay=0 count=0 panel=00800f11
+TRACE soc cycles=500000 pc=80007e70 busy=0 done=0 overlay=0 count=0 panel=00800f11
+TRACE soc cycles=750000 pc=80007e70 busy=0 done=0 overlay=0 count=0 panel=00800f11
+TRACE soc RISC-V UART boot prefix received
+TRACE soc cycles=1000000 pc=8000890c busy=0 done=0 overlay=0 count=0 panel=02000006
+TRACE soc cycles=1250000 pc=800088c4 busy=0 done=0 overlay=0 count=0 panel=00800f11
+PASS soc SW5 nuts missing-model interlock, SW6 gesture restore, mode cancellation, UART boot, no fabricated recognition and no illegal instructions
+$finish called at time : 29081120 ns : File "C:/Users/chenq/Desktop/RISCV/FPGA-main/fpga_pg2l100h/vision/sim/tb_soc.v" Line 148
+run: Time (s): cpu = 00:00:01 ; elapsed = 00:02:08 . Memory (MB): peak = 218.340 ; gain = 0.000
+exit
+INFO: [Common 17-206] Exiting xsim at Wed Nov  4 11:45:39 2026...
