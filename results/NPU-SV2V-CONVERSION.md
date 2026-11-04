@@ -147,7 +147,9 @@ xsim tb_sim -R --testplusarg "vec=<repo>/results/ai-accel/proto/engine/vec" --te
 | Slice Registers | **19,759**（15.58%） | 19,731 | +28 |
 | DSPs | **200**（83.33%） | 200 | 完全一致 |
 | Block RAM | 0（引擎不含 mem） | — | — |
-| **Setup WNS @8.182ns** | **+1.108 ns** | +1.048 ns | 同量级 ✅ |
+| **Setup WNS @8.182ns（synth-only）** | +1.108 ns | +1.048 ns | 同量级 |
+| **Setup WNS @8.182ns（post-route 实测）** | **−0.075 ns**（5 端点，−0.251 总违例） | — | ⚠️ **见 §7.6** |
+| **@100 MHz（10ns）post-route** | **+1.743 ns MET** | — | ✅ 交付档无压力 |
 | **Hold WHS** | **+0.158 ns** | — | ✅ |
 
 证据：`fpga_pg2l100h/vision/rtl/nn/synth/eng_util.txt`、`eng_timing_122mhz.txt`
@@ -175,3 +177,34 @@ xsim tb_sim -R --testplusarg "vec=<repo>/results/ai-accel/proto/engine/vec" --te
 2. **接 DDR3 行为模型**：仓库已有 `sim/beh_ddr3.sv`（在 `feat/ai-accel` 分支），可与 `nn_wload` 一起做流式仿真。
 3. **综合验证**：先用 Vivado 2018.3 综合 `nn_core.v` 确认可收敛（资源/时序），再交 Pango PDS 工程。
 4. **把 TB 也转 Verilog**（可选）：`string`/`int` 在 TB 里较多，sv2v 转换后仍需少量修补；保持 SV TB 也能被 xsim/ModelSim 正常编译。
+
+### 7.6 布局布线可行性验证（2026-11-04 补做，Artix-7 代理）
+
+在 122.22 MHz（8.182 ns）约束下跑完整 `synth → opt → place → route`：
+
+| 阶段 | 结果 |
+|---|---|
+| `synth_design` | 0 errors |
+| `opt_design` | 0 errors |
+| `place_design` | 0 errors |
+| `route_design` | **0 条未布线 / 0 条部分布线** |
+| **总耗时** | **6.3 分钟**（30 分钟上限的 1/5） |
+| 资源 | LUT **30,987**（48.88%）/ FF **19,758**（15.58%）/ BRAM 0 |
+
+**时序（post-route 实测，与 synth-only 差约 1.1 ns，属正常 P&R 代价）**
+
+| 频率 | 周期 | Slack | 判定 |
+|---|---|---|---|
+| **100 MHz** | 10.000 ns | **+1.743 ns** | ✅ MET |
+| 110 MHz | 9.091 ns | +0.834 ns | ✅ MET |
+| **122.22 MHz** | 8.182 ns | **−0.075 ns** | ❌ FAIL（5 端点） |
+| 125 MHz | 8.000 ns | −0.257 ns | ❌ FAIL |
+
+- post-route 关键路径 **8.257 ns** ⇒ **实际最高频率 ≈ 121 MHz**
+- Hold：0 失败，最差 +0.098 ns ✅
+
+**⚠️ 重要纠正**：`A7A-RESULTS.md` 里 "OOC @122MHz Slack (MET) +1.048 ns" 是 **synth-only** 口径；
+真正的 post-route 是 **−0.075 ns**。这不影响 100 MHz 交付档（+1.743 ns 余量），但
+**"122.22 MHz 已收敛"的说法不成立**。
+
+证据：`fpga_pg2l100h/vision/rtl/nn/synth/impl_util.txt`、`impl_timing_122mhz.txt`、`impl_congestion.txt`
