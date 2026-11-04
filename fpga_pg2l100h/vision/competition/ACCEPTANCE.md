@@ -42,7 +42,7 @@
 
 ## 性能与CPU
 
-NPU的1769238周期只覆盖计算；50 MHz下35.38 ms是纯计算时间。板上另测采集启动→NPU启动、NPU启动→CPU判定、判定→LCD帧提交、三次确认后的业务总延迟。串口事件中的DEC是NPU启动→CPU完成判定，包含这次NPU计算，不是纯CPU开销；正常测量关闭d采集。
+NPU周期分两个口径，引用时必须写明是哪一个：**板上 4-lane 版 = 242,310 拍**（@50 MHz 纯计算 4.85 ms；`build/dual_j11/rtl/vision_npu.v`，`xsim soc_hand PASS cycles=242310`，与逐层周期推导差 0）；**`rtl/vision_npu.v` 主 RTL 仍是单 lane 旧版 = 1,769,238 拍**（35.38 ms，`tb_npu.v` 硬断言）。两者差 7.30×（4× OC 并行 × 1.83× tap 流水），**不可混用**。板上另测采集启动→NPU启动、NPU启动→CPU判定、判定→LCD帧提交、三次确认后的业务总延迟。串口事件中的DEC是NPU启动→CPU完成判定，包含这次NPU计算，不是纯CPU开销；正常测量关闭d采集。全量盘点见 [`results/NPU-INVENTORY.md`](../../../results/NPU-INVENTORY.md)。
 
 使用者侧曾做过 CoreMark 跑分，但**原始日志目前尚未入库**（`docs/EVIDENCE.md` P-09 状态 🔲）；本仓库与报告**不得引用未入库分数**。下面的独立工程用于需要时复现并把原始日志入库：
 

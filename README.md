@@ -26,7 +26,7 @@
 | 配置 | 芯片 ID `0x00602899`、DONE=1、5 项配置错误位全 0、PLL 锁定 0→1 | `fpga_pg2l100h/vision/BOARD_VALIDATION.md` |
 | 位流（当前烧录） | 3,791,112 B，SHA256 **`51f5eda2d5e2d178380072dd186902d875836bb031a1c0b041208704fe30cf4c`**（`build/dual_j11/`） | `CURRENT-BUILD.md` §1 |
 | 视觉通路 | OV7670 → DVP 采集 → 帧缓冲 → LCD（AN430 4.3"），**摄像头画面已目视确认上屏** | 同上 |
-| 自研 INT8 NPU | 定点检测/核验加速；**纯计算 1,769,238 周期 @50 MHz = 35.38 ms** | `fpga_pg2l100h/vision/competition/ACCEPTANCE.md` |
+| 自研 INT8 NPU | **4-lane** 定点检测/核验加速；**纯计算 242,310 周期 @50 MHz = 4.85 ms**（板上实际版本） | 周期推导 = 实测（`xsim ... PASS cycles=242310`）；单 lane 旧版为 1,769,238 拍 = 35.38 ms，见 [`results/NPU-INVENTORY.md`](results/NPU-INVENTORY.md) |
 | 应用 | **NUMGUARD** 料箱数字标签防错核验（数字 0~9 + 手势实验分支） | `fpga_pg2l100h/vision/competition/DEMO.md` |
 
 > ⚠️ **当前状态（务必先读）**：位流通过 **JTAG 下载到 FPGA RAM**，**尚未写入 Flash**——断电/重新上电后需重新下载；`SW2` 只能复位已加载逻辑。上电自启动（Flash 烧写）是决赛演示前必须完成的一项。
@@ -61,7 +61,9 @@
 见 [`README-ARTIX.md`](README-ARTIX.md)；仿真回归：`python tools/fpga_workflow.py verify`（**PASS 12**；`feat/ai-accel` 分支另含 4 项 NN 回归共 16）。
 
 ### 3.3 自研 INT8 NPU 对比材料（feat/ai-accel 分支）
-`feat/ai-accel` 分支（远端已推送）包含：YOLO-Fastest v1.1 int8 **112 op 全硬件 E2E 位精确 PASS**、NPU **1,191,020 周期**、CPU 软件基线 **473,254,313 周期** ⇒ **加速比 401.9×**、XC7A100T **100 MHz 位流**（sha `537af245…`）与最高已验证 **122.22 MHz**。
+`feat/ai-accel` 分支（远端已推送）包含：YOLO-Fastest v1.1 int8 **112 op 全硬件 E2E 位精确 PASS**、NPU **1,049,089 周期**（A7a：dw 16-lane；此前 1,191,020）、CPU 软件基线 **473,254,313 周期** ⇒ **加速比 401.9×（按 1,177,320 口径）/ 451.1×（按 A7a 1,049,089）**、XC7A100T **100 MHz 位流**（sha `537af245…`）与最高已验证 **122.22 MHz**；另有瓶盖 slim 模型 E2E（653,129 拍，F1 0.9976）。
+
+> **三个 NPU 家族的完整盘点（算力/利用率/资源/精度/证据级别）见 [`results/NPU-INVENTORY.md`](results/NPU-INVENTORY.md)** —— 板上 4-lane 为 **0.40 GOPS**，`feat/ai-accel` 的 128-MAC 引擎为 **31.29 GOPS**，两者差 78 倍且不可互换。
 
 ## 4. 提交物状态（2026-11-03）
 
@@ -76,7 +78,7 @@
 
 - **交付主体只能是紫光同创器件**；Artix-7 的数字（如 CoreMark 324.19 实测、405.9 派生）**仅作跨厂商对比**，不是本次交付成绩。
 - **未达成/未部署**：无 OS/RTOS、无 MicroPython/Arduino 移植、无自研 IDE；手势识别当前正确率约 35%，不作主线宣称；COCO80 仅主机前向/资源核查，未在板上部署；无 I-Cache、无板上中断演示。
-- **NPU 周期口径**：1,769,238 拍是**纯计算**时间（@50 MHz = 35.38 ms）；端到端延迟需另测（采集→NPU→CPU→LCD→业务判定）。
+- **NPU 周期口径**：板上跑的是 **4-lane** 版，**242,310 拍纯计算 = 4.85 ms @50 MHz**（相对单 lane 快 7.30×，其中 4× 来自 OC 并行、1.83× 来自 tap 流水）；`rtl/vision_npu.v`（主 RTL）仍是**单 lane 旧版 1,769,238 拍 = 35.38 ms**，重建板上位流必须用 `build/dual_j11/rtl/` 快照。端到端延迟需另测（采集→NPU→CPU→LCD→业务判定）。全量 NPU 盘见 [`results/NPU-INVENTORY.md`](results/NPU-INVENTORY.md)。
 - **Flash 未写入**：当前为 JTAG RAM 下载；现场演示前需完成 Flash 自启动或固化下载流程（含备机/兜底视频）。
 
 ## 6. 技术文档入口
