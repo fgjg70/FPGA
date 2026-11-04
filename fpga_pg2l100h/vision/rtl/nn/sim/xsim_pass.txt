@@ -1,0 +1,90 @@
+﻿
+****** xsim v2018.3 (64-bit)
+  **** SW Build 2405991 on Thu Dec  6 23:38:27 MST 2018
+  **** IP Build 2404404 on Fri Dec  7 01:43:56 MST 2018
+    ** Copyright 1986-2018 Xilinx, Inc. All Rights Reserved.
+
+source xsim.dir/tb_sim/xsim_script.tcl
+# xsim {tb_sim} -testplusarg vec=D:/USER/Desktop/FPGA/FPGA/results/ai-accel/proto/engine/vec -testplusarg misall -autoloadwcfg -runall
+Vivado Simulator 2018.3
+Time resolution is 1 ps
+run -all
+[nn_mem] v0.7 CONFIG W=320KB(81920 words) Q=48KB(6144 x64b) A=96KB B=32KB
+[nn_mem] v0.7 A_OFF=0x60000 B_OFF=0x78000 B_END=0x80000 Q_END=0x5c000 CPU_WIN=0x80000
+[nn_mem] M2 CONFIG W banks=2 x 160KB (20480 x64b words/bank) Q shadow=2 x 8KB, wlen<=128KiB
+[nn_mem] ACT CONFIG A=96KB B=32KB A_OFF=0x60000 B_OFF=0x78000 B_END=0x80000 words=8192 idx=       ABS-SLICE(default)
+[nn_mem] WARN: no +nnw / +nnwq; W arrays stay zero
+[nn_mem] WARN: no +nnq / +nnwq; Q stays zero
+TB_CFG A_BYTES=98304 B_BYTES=32768 A_BASE=0x00060000 B_BASE=0x00078000 (NN_B_OFF=0x00078000)
+TB: nn_conv_engine self-check; vectors = D:/USER/Desktop/FPGA/FPGA/results/ai-accel/proto/engine/vec
+CASE       conv1x1_s1 op=0 k=1 st=1 pad=0 ih=8 iw=10 ic=8 oc=8 : cyc=659 misA=0 misB=0 err=00 PASS
+CASE  conv1x1_s1_i3o5 op=0 k=1 st=1 pad=0 ih=6 iw=7 ic=3 oc=5 : cyc=259 misA=0 misB=0 err=00 PASS
+CASE       conv1x1_s2 op=0 k=1 st=2 pad=0 ih=12 iw=12 ic=8 oc=8 : cyc=259 misA=0 misB=0 err=00 PASS
+CASE     conv1x1_oc24 op=0 k=1 st=1 pad=0 ih=5 iw=20 ic=8 oc=24 : cyc=1356 misA=0 misB=0 err=00 PASS
+CASE   conv1x1_i13o13 op=0 k=1 st=1 pad=0 ih=6 iw=6 ic=13 oc=13 : cyc=367 misA=0 misB=0 err=00 PASS
+CASE     conv3x3_s1p1 op=0 k=3 st=1 pad=1 ih=9 iw=10 ic=8 oc=8 : cyc=2377 misA=0 misB=0 err=00 PASS
+CASE     conv3x3_s1p0 op=0 k=3 st=1 pad=0 ih=7 iw=5 ic=8 oc=8 : cyc=674 misA=0 misB=0 err=00 PASS
+CASE     conv3x3_s2p1 op=0 k=3 st=2 pad=1 ih=14 iw=13 ic=8 oc=16 : cyc=1089 misA=0 misB=0 err=00 PASS
+CASE     conv3x3_s2p0 op=0 k=3 st=2 pad=0 ih=12 iw=11 ic=16 oc=8 : cyc=1424 misA=0 misB=0 err=00 PASS
+CASE   conv3x3_i13o13 op=0 k=3 st=1 pad=1 ih=8 iw=9 ic=13 oc=13 : cyc=3849 misA=0 misB=0 err=00 PASS
+CASE     conv5x5_s1p2 op=0 k=5 st=1 pad=2 ih=9 iw=8 ic=8 oc=8 : cyc=2656 misA=0 misB=0 err=00 PASS
+CASE     conv5x5_s2p2 op=0 k=5 st=2 pad=2 ih=14 iw=13 ic=8 oc=8 : cyc=2315 misA=0 misB=0 err=00 PASS
+CASE   conv5x5_i16o16 op=0 k=5 st=1 pad=2 ih=8 iw=8 ic=16 oc=16 : cyc=4529 misA=0 misB=0 err=00 PASS
+CASE     conv1x1_bigM op=0 k=1 st=1 pad=0 ih=5 iw=5 ic=8 oc=8 : cyc=219 misA=0 misB=0 err=00 PASS
+CASE     conv1x1_mixM op=0 k=1 st=1 pad=0 ih=6 iw=6 ic=8 oc=8 : cyc=259 misA=0 misB=0 err=00 PASS
+CASE  conv3x3_shift10 op=0 k=3 st=1 pad=1 ih=7 iw=7 ic=8 oc=8 : cyc=936 misA=0 misB=0 err=00 PASS
+CASE  conv1x1_srcoff8 op=0 k=1 st=1 pad=0 ih=5 iw=6 ic=8 oc=8 : cyc=219 misA=0 misB=0 err=00 PASS
+CASE     conv1x1_srcB op=0 k=1 st=1 pad=0 ih=6 iw=6 ic=8 oc=8 : cyc=259 misA=0 misB=0 err=00 PASS
+CASE     conv3x3_srcB op=0 k=3 st=1 pad=1 ih=8 iw=8 ic=16 oc=8 : cyc=1931 misA=0 misB=0 err=00 PASS
+CASE  conv1x1_bigbias op=0 k=1 st=1 pad=0 ih=5 iw=5 ic=8 oc=8 : cyc=219 misA=0 misB=0 err=00 PASS
+CASE         dw3x3_c8 op=0 k=3 st=1 pad=1 ih=9 iw=10 ic=8 oc=8 : cyc=1243 misA=0 misB=0 err=00 PASS
+CASE        dw3x3_c16 op=0 k=3 st=1 pad=1 ih=8 iw=8 ic=16 oc=16 : cyc=569 misA=0 misB=0 err=00 PASS
+CASE        dw3x3_c24 op=0 k=3 st=1 pad=1 ih=6 iw=7 ic=24 oc=24 : cyc=1265 misA=0 misB=0 err=00 PASS
+CASE        dw3x3_c13 op=0 k=3 st=1 pad=0 ih=7 iw=8 ic=13 oc=13 : cyc=710 misA=0 misB=0 err=00 PASS
+CASE         dw3x3_s2 op=0 k=3 st=2 pad=1 ih=12 iw=11 ic=8 oc=8 : cyc=553 misA=0 misB=0 err=00 PASS
+CASE         dw5x5_c8 op=0 k=5 st=1 pad=2 ih=9 iw=8 ic=8 oc=8 : cyc=1081 misA=0 misB=0 err=00 PASS
+CASE        dw5x5_c16 op=0 k=5 st=1 pad=2 ih=8 iw=9 ic=16 oc=16 : cyc=1913 misA=0 misB=0 err=00 PASS
+CASE         dw5x5_s2 op=0 k=5 st=2 pad=2 ih=14 iw=13 ic=8 oc=8 : cyc=1090 misA=0 misB=0 err=00 PASS
+CASE       pool2_s2p0 op=1 k=2 st=2 pad=0 ih=8 iw=8 ic=8 oc=8 : cyc=212 misA=0 misB=0 err=00 PASS
+CASE       pool2_s2p1 op=1 k=2 st=2 pad=1 ih=8 iw=7 ic=8 oc=8 : cyc=263 misA=0 misB=0 err=00 PASS
+CASE       pool3_s1p1 op=1 k=3 st=1 pad=1 ih=7 iw=9 ic=8 oc=8 : cyc=792 misA=0 misB=0 err=00 PASS
+CASE       pool3_s2p1 op=1 k=3 st=2 pad=1 ih=12 iw=13 ic=8 oc=8 : cyc=470 misA=0 misB=0 err=00 PASS
+CASE       pool5_s1p2 op=1 k=5 st=1 pad=2 ih=8 iw=8 ic=16 oc=16 : cyc=1704 misA=0 misB=0 err=00 PASS
+CASE       pool9_s1p4 op=1 k=9 st=1 pad=4 ih=12 iw=11 ic=8 oc=8 : cyc=6104 misA=0 misB=0 err=00 PASS
+CASE        pool9_c13 op=1 k=9 st=1 pad=4 ih=10 iw=10 ic=13 oc=13 : cyc=10168 misA=0 misB=0 err=00 PASS
+CASE     pool2_s2_c24 op=1 k=2 st=2 pad=0 ih=9 iw=9 ic=24 oc=24 : cyc=620 misA=0 misB=0 err=00 PASS
+CASE       pool3_srcB op=1 k=3 st=1 pad=1 ih=7 iw=7 ic=8 oc=8 : cyc=400 misA=0 misB=0 err=00 PASS
+CASE             copy op=2 k=1 st=1 pad=0 ih=7 iw=6 ic=8 oc=8 : cyc=92 misA=0 misB=0 err=00 PASS
+CASE         copy_c16 op=2 k=1 st=1 pad=0 ih=5 iw=6 ic=16 oc=16 : cyc=128 misA=0 misB=0 err=00 PASS
+CASE        copy_oc16 op=2 k=1 st=1 pad=0 ih=4 iw=5 ic=8 oc=16 : cyc=48 misA=0 misB=0 err=00 PASS
+CASE            ups2x op=2 k=1 st=1 pad=0 ih=5 iw=4 ic=8 oc=8 : cyc=108 misA=0 misB=0 err=00 PASS
+CASE        ups2x_c16 op=2 k=1 st=1 pad=0 ih=4 iw=5 ic=16 oc=16 : cyc=208 misA=0 misB=0 err=00 PASS
+CASE              add op=3 k=1 st=1 pad=0 ih=6 iw=7 ic=8 oc=8 : cyc=218 misA=0 misB=0 err=00 PASS
+CASE          add_c24 op=3 k=1 st=1 pad=0 ih=5 iw=5 ic=24 oc=24 : cyc=383 misA=0 misB=0 err=00 PASS
+CASE         add_srcB op=3 k=1 st=1 pad=0 ih=6 iw=6 ic=8 oc=8 : cyc=188 misA=0 misB=0 err=00 PASS
+CASE     add_same_buf op=3 k=1 st=1 pad=0 ih=5 iw=6 ic=16 oc=16 : cyc=308 misA=0 misB=0 err=00 PASS
+CASE  replay_l0_conv0 op=0 k=3 st=2 pad=1 ih=128 iw=128 ic=3 oc=8 : cyc=130067 misA=0 misB=0 err=00 PASS
+ERRCASE invalid-desc : PASS (err=11, cyc=2)
+M1CASE       m1_relu_conv flags=80 k=3 st=1 pad=1 ih=9 iw=10 ic=8 oc=8 : cyc=2377 mis=0 below=0 relu_hits=361 err=00 PASS
+M1CASE       m1_relu_prio flags=82 k=1 st=1 pad=0 ih=5 iw=5 ic=8 oc=8 : cyc=219 mis=0 below=0 relu_hits=124 err=00 PASS
+M1CASE   m1_ic864_conv1x1 flags=00 k=1 st=1 pad=0 ih=8 iw=8 ic=864 oc=144 : cyc=134009 mis=0 below=0 relu_hits=0 err=00 PASS
+M1CASE     m1_ic864_dw3x3 flags=01 k=3 st=1 pad=1 ih=6 iw=6 ic=864 oc=864 : cyc=22958 mis=0 below=0 relu_hits=0 err=00 PASS
+M1CASE    m1_add_relu_mix flags=80 ih=6 iw=7 ic=8 : cyc=219 mis=0 relu_hits=185 err=00 PASS
+M1CASE m1_add_relu_allneg flags=80 ih=4 iw=4 ic=8 : cyc=89 mis=0 relu_hits=128 err=00 PASS
+M1CASE       m1_addr_relu flags=c0 ih=6 iw=6 ic=8 : cyc=189 mis=0 relu_hits=139 err=00 PASS
+M1CASE       m1_add_ic864 flags=00 ih=2 iw=2 ic=864 : cyc=2168 mis=0 relu_hits=0 err=00 PASS
+M1CASE      m1_copy_ic864 flags=00 ih=1 iw=1 ic=864 oc=864 : cyc=224 mis=0 err=00 PASS
+SACASE        sa_cvadd_nr flags=40 k=1 st=1 pad=0 ih=4 iw=4 ic=8 oc=16 : cyc=237 mis=0 relu_hits=0 err=00 PASS
+SACASE        sa_cvadd_rl flags=c0 k=3 st=1 pad=1 ih=4 iw=4 ic=8 oc=16 : cyc=601 mis=0 relu_hits=70 err=00 PASS
+SUMMARY cases=47 pass=47 fail=0 total_mismatch=0
+  op=0 ( conv/dw) cases=29 fail=0 mismatch=0 max_cycles=130067
+  op=1 (    pool) cases=9 fail=0 mismatch=0 max_cycles=10168
+  op=2 (copy/ups) cases=5 fail=0 mismatch=0 max_cycles=208
+  op=3 (     add) cases=4 fail=0 mismatch=0 max_cycles=383
+M1SUMMARY cases=9 pass=9 fail=0 mismatch=0
+SASUMMARY cases=2 pass=2 fail=0 mismatch=0
+ENGINE_TB: PASS (58 cases, mismatch=0)
+$finish called at time : 5654160 ns : File "D:/USER/Desktop/FPGA/FPGA/.fpga-cache/nn2v/out/tb_nn_engine.sv" Line 1187
+run: Time (s): cpu = 00:00:00 ; elapsed = 00:00:21 . Memory (MB): peak = 217.859 ; gain = 0.000
+exit
+INFO: [Common 17-206] Exiting xsim at Wed Nov  4 13:25:09 2026...
