@@ -1,22 +1,25 @@
 # ============================================================================
-# run_yolo_sim.ps1 —— COCO-80 YOLO-Fastest v1.1 的 NPU 仿真（一键）
+# run_yolo_sim.ps1 -- COCO-80 YOLO-Fastest v1.1 NPU simulation (one command)
 #
-# 被测模型: YOLO-Fastest v1.1 (darknet), COCO 80 类, 131 层
-#           冻结记录: results/ai-accel/MODEL-FREEZE.md
-#           层序列:   112 op (nn_rom_pkg::NN_ROM)
-# DUT:      nn_full.v (7 个模块的纯 Verilog 版, 由 SV 经 sv2v 转换)
-# TB:       tb_nn_seq.sv (跑真实 YOLO ROM 的 112 个 op + band 循环/预取)
-# 判据:     "NN_SEQ_TB: PASS (legacy starts=112 cycles=336 | band ops=112 bands=4242 ...)"
-# 用时:     约 10 秒 (7.2 万拍)
+# Model : YOLO-Fastest v1.1 (darknet), COCO 80 classes, 131 layers
+#         frozen spec : results/ai-accel/MODEL-FREEZE.md
+#         op sequence : 112 ops (nn_rom_pkg::NN_ROM)
+# DUT   : nn_full.v  (7 modules, pure Verilog converted from SV by sv2v)
+# TB    : tb_nn_seq.sv (runs the real YOLO ROM 112 ops + band loop/prefetch)
+# Pass  : "NN_SEQ_TB: PASS (legacy starts=112 cycles=336 | band ops=112 bands=4242 ...)"
+# Time  : about 10 seconds (72k cycles)
 #
-# 依赖: Vivado 2018.3 xsim (xvlog/xelab/xsim)
-# 用法: powershell -ExecutionPolicy Bypass -File run_yolo_sim.ps1
+# Requires: Vivado 2018.3 xsim (xvlog / xelab / xsim)
+# Usage   : powershell -ExecutionPolicy Bypass -File run_yolo_sim.ps1
+#
+# NOTE: keep this file ASCII-only. Windows PowerShell 5.1 reads .ps1 as ANSI
+#       when there is no BOM, so non-ASCII comments break the parser (R2 rule).
 # ============================================================================
 $ErrorActionPreference = 'Stop'
 $X = 'D:\software\Learn\Xilinx\Vivado\2018.3\bin'
-if (-not (Test-Path "$X\xvlog.bat")) { Write-Host "找不到 Vivado xsim: $X"; exit 1 }
+if (-not (Test-Path "$X\xvlog.bat")) { Write-Host "Vivado xsim not found: $X"; exit 1 }
 
-# 清理 xsim 运行产物（保持目录干净，配合 .gitignore）
+# Remove xsim run artifacts so the directory stays clean (see .gitignore)
 function Invoke-Cleanup {
     Get-ChildItem $PSScriptRoot -File -EA SilentlyContinue |
         Where-Object { $_.Name -match '\.(log|jou|pb|wdb)$' -or $_.Name -match 'backup\.' } |
@@ -29,22 +32,22 @@ function Invoke-Cleanup {
 Invoke-Cleanup
 Push-Location $PSScriptRoot
 try {
-    Write-Host "== [1/3] 编译 (包 -> RTL -> TB) =="
+    Write-Host "== [1/3] compile (packages -> RTL -> TB) =="
     $srcs = @('rv32_pkg.sv','nn_pkg.sv','nn_rom_pkg.sv','nn_full.v','tb_nn_seq.sv')
     cmd /c "`"$X\xvlog.bat`" -sv $($srcs -join ' ')"
-    if ($LASTEXITCODE -ne 0) { Write-Host "编译失败"; exit 1 }
+    if ($LASTEXITCODE -ne 0) { Write-Host "compile FAILED"; exit 1 }
 
     Write-Host "== [2/3] elaborate =="
     cmd /c "`"$X\xelab.bat`" -L work tb_nn_seq --snapshot yolo_sim --debug typical"
-    if ($LASTEXITCODE -ne 0) { Write-Host "elaborate 失败"; exit 1 }
+    if ($LASTEXITCODE -ne 0) { Write-Host "elaborate FAILED"; exit 1 }
 
-    Write-Host "== [3/3] 运行仿真 =="
+    Write-Host "== [3/3] run simulation =="
     $out = cmd /c "`"$X\xsim.bat`" yolo_sim -R --nolog 2>&1"
     $out | ForEach-Object { Write-Host $_ }
 
     $pass = ($out | Select-String -Pattern 'NN_SEQ_TB: PASS' -Quiet)
-    if ($pass) { Write-Host "`n>>> YOLO 仿真 PASS"; exit 0 }
-    else       { Write-Host "`n>>> YOLO 仿真 FAIL"; exit 1 }
+    if ($pass) { Write-Host "" ; Write-Host ">>> YOLO simulation PASS"; exit 0 }
+    else       { Write-Host "" ; Write-Host ">>> YOLO simulation FAIL"; exit 1 }
 }
 finally {
     Invoke-Cleanup
