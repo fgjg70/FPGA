@@ -31,6 +31,11 @@ fig1()/fig2() 的数据区，改样式不动内容，改内容不动样式。
    连接线走廊，跨区连线不再压住标题与节点文字。
 6. 数据标签：节点内主文/辅助小字/彩色强调行分三层排版；
    判断分支标签加浅色底衬；连线按"流"着色并统一箭头尺寸。
+7. 疏排（v2）：图 1 画布 1200×604 → 1480×800，节点放大 1.2×、字号 1.12×、
+   间距放大更多；跨区连线按 y=152 / 410 / 428 / 495 / 600 / 746 分配独立
+   通道，绿/橙两路不再汇合共线，「未通过」回环改走右侧外通道，紫色回卷
+   改走左侧外通道，全程不与任何节点、文字或其他连线重叠。图 2 采用
+   几何 ×1.18、字号 ×1.12 的等比疏排，连线拓扑保持不变。
 """
 
 from __future__ import annotations
@@ -93,11 +98,14 @@ STYLE = {
 
 # ---------------------------------------------------------------------------
 # 内容数据：文字与拓扑的唯一来源。优化视觉时不要改动这一段的语义。
+# 频率口径：以 fpga_pg2l100h/vision/CURRENT-BUILD.md（当前烧录版）为准 ——
+#   CPU / IMEM / DMEM = 95 MHz（双发射），MMIO / NPU / 采集 = 50 MHz。
+#   125 MHz 是上一版单发射的历史配置，仓库里 CLOCK_SPLIT.md 等旧文档仍写 125，勿据此回填。
 # ---------------------------------------------------------------------------
 FIG1_FLOW = {
     "blue": ["RV32IM指令集\n与功能划分", "五级流水线\n结构设计", "分支预测 · 旁路\n冒险处理",
              "CPU模块化\nRTL实现", "指令与流水线\n仿真验证"],
-    "green": ["IMEM / DMEM\nMMIO地址空间", "请求应答桥\n125 ↔ 50\nMHz",
+    "green": ["IMEM / DMEM\nMMIO\n地址空间", "请求应答桥\n95 ↔ 50\nMHz",
               "摄像头 ·\nLCD\nUART外设", "INT8卷积\n加速器"],
     "amber": ["视觉模型\n训练", "INT8\n量化转换", "权重 · 偏置\n移位参数", "阈值 · 解码\nNMS固件"],
     "violet_top": ["CPU调度NPU\n结果读取", "严格Verilog\n编译", "模块仿真", "整机仿真",
@@ -114,9 +122,9 @@ FIG2_BOARD = {
         ("电源分配", "核心板 · 摄像头 · LCD ·\n外设", ""),
     ],
     "modules": [
-        ("RV32IM处理器", "五级流水 · CSR · 中断", "125 MHz CPU域", "blue"),
+        ("RV32IM处理器", "五级流水 · CSR · 中断", "95 MHz CPU域", "blue"),
         ("片上存储系统", "IMEM 32 KiB · DMEM 16 KiB\n帧缓冲 · 模型 ROM", "", "slate"),
-        ("MMIO与CDC桥", "请求/应答握手", "125 ↔ 50 MHz", "violet"),
+        ("MMIO与CDC桥", "请求/应答握手", "95 ↔ 50 MHz", "violet"),
         ("视频采集与显示", "DVP 采集 · 双缓冲\nLCD 时序与检测叠加", "", "green"),
         ("INT8卷积加速器", "64 × 64 模型输入", "50 MHz NPU域", "amber"),
         ("外设控制逻辑", "UART · 按键 · LED\n定时器 · PWM · JTAG", "", "slate"),
@@ -151,23 +159,27 @@ def fix_glyphs(s: str) -> str:
 class Canvas:
     """逻辑坐标画布；所有绘制统一按 scale 放大，保证高分输出。"""
 
-    def __init__(self, width: int, height: int, scale: int = 2):
+    def __init__(self, width: int, height: int, scale: int = 2,
+                 font_scale: float = 1.0, layout_scale: float = 1.0):
         self.w, self.h, self.s = width, height, scale
-        self.im = Image.new("RGB", (width * scale, height * scale), STYLE["paper"])
+        # 几何放大系数 > 字号放大系数 ⇒ 净增留白；两者比例不变 ⇒ 风格不变
+        self.layout_scale, self.font_scale = layout_scale, font_scale
+        self.im = Image.new("RGB", (self.P(width), self.P(height)), STYLE["paper"])
         self.d = ImageDraw.Draw(self.im)
         self._fonts: dict = {}
 
     def P(self, v: float) -> int:
-        return int(round(v * self.s))
+        return int(round(v * self.s * self.layout_scale))
 
     def box(self, b: Sequence[float]):
         return tuple(self.P(v) for v in b)
 
     def font(self, size: float, bold: bool = False):
-        key = (round(size * self.s, 1), bold)
+        px = max(1, int(round(size * self.s * self.font_scale)))
+        key = (px, bold)
         if key not in self._fonts:
             path = STYLE["font_bold"] if bold else STYLE["font_regular"]
-            self._fonts[key] = ImageFont.truetype(path, self.P(size))
+            self._fonts[key] = ImageFont.truetype(path, px)
         return self._fonts[key]
 
     def color(self, tone: str, role: str = "main") -> str:
@@ -340,8 +352,8 @@ class Canvas:
                   STYLE["fs"]["chip"], self.color(tone, "deep"), bold=True)
 
     def branch_label(self, x, y, text, tone):
-        b = (x - 24, y - 11, x + 24, y + 11)
-        self.rr(b, 9, self.color(tone, "tint"), None)
+        b = (x - 30, y - 13, x + 30, y + 13)
+        self.rr(b, 10, self.color(tone, "tint"), None)
         self.text(x, y, text, STYLE["fs"]["branch"],
                   self.color(tone, "deep"), bold=True)
 
@@ -360,68 +372,78 @@ class Canvas:
 # 图 1：处理器设计与系统联调流程
 # ---------------------------------------------------------------------------
 def fig1(scale: int = 2) -> Image.Image:
-    W, H = 1200, 604
-    c = Canvas(W, H, scale)
+    """疏排版：画布与间距放大，跨区连线各自占用独立通道，互不共线/交叉/穿节点。
+
+    通道分配（逻辑 y 坐标，全部落在分区之间的空白走廊内）：
+      y=152  蓝区 → SoC / 模型部署（左右两段，x 区间不重叠）
+      y=410  SoC → 系统联调        绿，落点 x=100
+      y=428  模型部署 → 系统联调  橙，落点 x=250（与绿线平行分离）
+      y=495  红色「未通过」回环    走第一行上方 + 右侧外通道
+      y=600  紫色回卷              走两行之间 + 左侧外通道
+      y=746  回环下行              走第二行下方
+    """
+    W, H = 1480, 800
+    c = Canvas(W, H, scale, font_scale=1.12)
     fs = STYLE["fs"]
 
-    TOP = (16, 12, 1184, 108)
-    GREEN = (16, 124, 588, 312)
-    AMBER = (596, 124, 1184, 312)
-    BOT = (16, 324, 1184, 592)
+    TOP = (22, 16, 1458, 140)
+    GREEN = (22, 170, 720, 400)
+    AMBER = (760, 170, 1458, 400)
+    BOT = (22, 436, 1458, 784)
 
     # 分区（先画底，连接线随后，节点最后覆盖线端）
-    c.panel(TOP, "处理器设计", "blue", title_y=29)
-    c.panel(GREEN, "SoC与外设集成", "green", title_y=148)
-    c.panel(AMBER, "模型与固件部署", "amber", title_y=148)
-    c.panel(BOT, "系统联调与逐级验证", "violet", title_y=348)
+    c.panel(TOP, "处理器设计", "blue", title_y=44)
+    c.panel(GREEN, "SoC与外设集成", "green", title_y=202)
+    c.panel(AMBER, "模型与固件部署", "amber", title_y=202)
+    # 底部让出 y≈495 的回环通道，故不画标题分隔线
+    c.panel(BOT, "系统联调与逐级验证", "violet", title_y=464, divider=False)
 
-    # 节点几何
-    top_boxes, top_y, top_w, top_gap = [], 56, 200, 32
-    for i in range(5):
-        x = 34 + i * (top_w + top_gap)
-        top_boxes.append((x, top_y, x + top_w, top_y + 48))
+    # 节点几何：节点放大 1.2 倍，间距放大更多 ⇒ 净增留白
+    top_w, top_gap, top_y, top_h = 240, 42, 76, 56
+    top_boxes = [(56 + i * (top_w + top_gap), top_y,
+                  56 + i * (top_w + top_gap) + top_w, top_y + top_h)
+                 for i in range(5)]
 
-    side_w, side_gap, side_y, side_h = 126, 14, 178, 80
-    green_boxes = [(28 + i * (side_w + side_gap), side_y,
-                    28 + i * (side_w + side_gap) + side_w, side_y + side_h)
+    side_w, side_gap, side_y, side_h = 150, 26, 236, 94
+    green_boxes = [(32 + i * (side_w + side_gap), side_y,
+                    32 + i * (side_w + side_gap) + side_w, side_y + side_h)
                    for i in range(4)]
-    amber_boxes = [(608 + i * (side_w + side_gap), side_y,
-                    608 + i * (side_w + side_gap) + side_w, side_y + side_h)
+    amber_boxes = [(770 + i * (side_w + side_gap), side_y,
+                    770 + i * (side_w + side_gap) + side_w, side_y + side_h)
                    for i in range(4)]
 
-    vt_y, vt_h = 378, 52
-    vt_boxes = [(34 + i * (top_w + top_gap), vt_y,
-                 34 + i * (top_w + top_gap) + top_w, vt_y + vt_h) for i in range(5)]
-    vb_y, vb_h = 470, 52
-    vb_boxes = [(34 + i * (top_w + top_gap), vb_y,
-                 34 + i * (top_w + top_gap) + top_w, vb_y + vb_h) for i in range(3)]
-    dia_cx, dia_cy, dia_w, dia_h = 818, 496, 140, 76
-    done_box = (952, 468, 1162, 524)
-    loop_pill = (620, 550, 900, 582)
+    vt_y, vt_h = 518, 62
+    vt_boxes = [(56 + i * (top_w + top_gap), vt_y,
+                 56 + i * (top_w + top_gap) + top_w, vt_y + vt_h) for i in range(5)]
+    vb_y, vb_h = 636, 62
+    vb_boxes = [(56 + i * (top_w + top_gap), vb_y,
+                 56 + i * (top_w + top_gap) + top_w, vb_y + vb_h) for i in range(3)]
+    dia_cx, dia_cy, dia_w, dia_h = 1010, 667, 170, 92
+    done_box = (1180, 632, 1424, 704)
+    loop_pill = (780, 728, 1160, 764)
 
-    # --- 跨区连接（走分区间预留走廊，不压标题） ---
-    c.link([(100, 104), (100, 178)], "green")                   # 处理器设计 → SoC
-    c.link([(1162, 78), (1172, 78), (1172, 116),
-            (672, 116), (672, 178)], "amber")                   # 处理器设计 → 模型部署
-    c.link([(518, 258), (518, 318)], "green", arrow=False)      # SoC → 联调汇合点
-    c.link([(1114, 258), (1114, 318), (134, 318), (134, 378)], "amber")
-    c.d.ellipse((c.P(514), c.P(314), c.P(522), c.P(322)), fill=c.color("green"))
-    c.link([(1062, 430), (1062, 450), (134, 450), (134, 470)], "violet")  # 回卷到第二行
+    # --- 跨区连接：每条独立通道，不共线、不交叉 ---
+    c.link([(176, 132), (176, 152), (107, 152), (107, 236)], "green")
+    c.link([(1424, 104), (1444, 104), (1444, 152), (845, 152), (845, 236)], "amber")
+    c.link([(635, 330), (635, 410), (100, 410), (100, 518)], "green")
+    c.link([(1373, 330), (1373, 428), (250, 428), (250, 518)], "amber")
+    c.link([(1304, 580), (1304, 600), (40, 600), (40, 667), (56, 667)], "violet")
 
     # --- 区内水平箭头 ---
-    for boxes, tone, y in ((top_boxes, "blue", 80), (green_boxes, "green", 218),
-                           (amber_boxes, "amber", 218), (vt_boxes, "violet", 404)):
+    for boxes, tone, y in ((top_boxes, "blue", 104), (green_boxes, "green", 283),
+                           (amber_boxes, "amber", 283), (vt_boxes, "violet", 549)):
         for a, b in zip(boxes, boxes[1:]):
-            c.link([(a[2] + 4, y), (b[0] - 5, y)], tone, width=1.9)
+            c.link([(a[2] + 5, y), (b[0] - 6, y)], tone, width=1.9)
     for a, b in zip(vb_boxes, vb_boxes[1:]):
-        c.link([(a[2] + 4, 496), (b[0] - 5, 496)], "violet", width=1.9)
-    c.link([(vb_boxes[2][2] + 4, 496), (dia_cx - dia_w / 2 - 5, 496)], "violet")
+        c.link([(a[2] + 5, 667), (b[0] - 6, 667)], "violet", width=1.9)
+    c.link([(vb_boxes[2][2] + 5, 667), (dia_cx - dia_w / 2 - 6, 667)], "violet")
 
-    # 判断分支
-    c.link([(dia_cx + dia_w / 2 + 4, 496), (done_box[0] - 5, 496)], "green")
-    c.link([(dia_cx, dia_cy + dia_h / 2 + 2), (dia_cx, 550)], "red", arrow=False, dash=True)
-    c.link([(loop_pill[0] - 4, 566), (366, 566), (366, vt_y + vt_h + 5)],
-           "red", dash=True)
+    # 判断分支与回路
+    c.link([(dia_cx + dia_w / 2 + 5, 667), (done_box[0] - 6, 667)], "green")
+    c.link([(dia_cx, dia_cy + dia_h / 2 + 2), (dia_cx, 728)], "red",
+           arrow=False, dash=True)
+    c.link([(loop_pill[2] + 4, 746), (1430, 746), (1430, 495),
+            (458, 495), (458, 518)], "red", dash=True)
 
     # --- 节点 ---
     for b, t in zip(top_boxes, FIG1_FLOW["blue"]):
@@ -444,9 +466,8 @@ def fig1(scale: int = 2) -> Image.Image:
            "设计完成", fs["node"] + 1, STYLE["green"]["deep"], bold=True)
     c.pill(loop_pill, "问题定位：修改RTL / 约束 / 器件")
 
-    c.branch_label(906, 474, "通过", "green")
-    # 标签避开菱形正下方的红色虚线，避免遮住「未通过」回路
-    c.branch_label(886, 540, "未通过", "red")
+    c.branch_label(1137, 645, "通过", "green")
+    c.branch_label(1130, 714, "未通过", "red")
     return c.im
 
 
@@ -455,7 +476,8 @@ def fig1(scale: int = 2) -> Image.Image:
 # ---------------------------------------------------------------------------
 def fig2(scale: int = 2) -> Image.Image:
     W, H = 1200, 548
-    c = Canvas(W, H, scale)
+    # 等比疏排：几何 ×1.18、字号 ×1.12 ⇒ 净增留白；连线拓扑与上一版一致
+    c = Canvas(W, H, scale, font_scale=1.12, layout_scale=1.18)
     fs = STYLE["fs"]
 
     POWER = (12, 10, 206, 432)
