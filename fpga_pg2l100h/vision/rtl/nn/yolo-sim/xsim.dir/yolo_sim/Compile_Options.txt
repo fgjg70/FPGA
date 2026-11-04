@@ -1,1 +1,0 @@
--L "work" "tb_nn_seq" --snapshot "yolo_sim" --debug "typical" 

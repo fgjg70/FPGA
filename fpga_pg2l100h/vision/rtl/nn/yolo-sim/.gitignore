@@ -1,0 +1,9 @@
+# Vivado xsim ?????????
+xsim.dir/
+Xil/
+.Xil/
+*.log
+*.jou
+*.pb
+*.wdb
+*.backup.*
